@@ -133,10 +133,65 @@ export async function testPlaygroundChat(
       conversationId: `playground-${user.id}`,
     })
 
-    return { response: response.text, quotaExceeded: response.quotaExceeded === true }
+    let text = response.text
+
+    // The Playground never runs the real Tool Call Dispatcher (unlike the
+    // LINE webhook) since it must never create real orders/bookings/etc. For
+    // the read-only lookup tools we run the same query live so a tester can
+    // confirm search actually returns real data; for anything else we show a
+    // clear preview line instead of silently returning blank/generic text.
+    if (response.toolCall) {
+      const preview = await previewToolCall(supabase, shop.id, response.toolCall)
+      text = text ? `${text}\n\n${preview}` : preview
+    }
+
+    return { response: text, quotaExceeded: response.quotaExceeded === true }
   } catch (err: any) {
     return { response: `เกิดข้อผิดพลาด: ${err.message}` }
   }
+}
+
+/** Read-only preview of a tool the AI chose to call, for the Chat Playground only — never executes side effects (no orders/bookings/DB writes). */
+async function previewToolCall(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  shopId: string,
+  toolCall: { name: string; args: Record<string, any> }
+): Promise<string> {
+  const { name, args } = toolCall
+
+  if (name === 'search_products') {
+    const limit = Math.min(Number(args.limit) || 5, 10)
+    let q = supabase.from('products').select('name,price,stock,description').eq('shop_id', shopId).eq('status', 'active').limit(limit)
+    if (args.keyword) q = q.ilike('name', `%${args.keyword}%`)
+    if (args.category) q = q.eq('category', args.category)
+    if (args.max_price) q = q.lte('price', Number(args.max_price))
+    const { data: prods } = await q
+    if (!prods || prods.length === 0) return `[ทดสอบ] เรียกใช้เครื่องมือ search_products แต่ไม่พบสินค้าที่ตรงกับ "${args.keyword || ''}"`
+    const list = prods.map((p: any, i: number) => `${i + 1}. ${p.name} - ${Number(p.price).toLocaleString()} บาท ${p.stock > 0 ? `(${p.stock} ชิ้น)` : '(หมดสต๊อก)'}`).join('\n')
+    return `[ทดสอบ] เรียกใช้เครื่องมือ search_products:\n${list}`
+  }
+
+  if (name === 'check_stock') {
+    const { data: prods } = await supabase.from('products').select('name,stock,price').eq('shop_id', shopId).eq('status', 'active').ilike('name', `%${args.product_name || ''}%`).limit(3)
+    if (!prods || prods.length === 0) return `[ทดสอบ] เรียกใช้เครื่องมือ check_stock แต่ไม่พบสินค้า "${args.product_name || ''}"`
+    const info = prods.map((p: any) => `• ${p.name}: ${p.stock > 0 ? `${p.stock} ชิ้น | ${Number(p.price).toLocaleString()} บาท` : 'หมดสต๊อก'}`).join('\n')
+    return `[ทดสอบ] เรียกใช้เครื่องมือ check_stock:\n${info}`
+  }
+
+  if (name === 'get_active_promotions') {
+    const today = new Date().toISOString().split('T')[0]
+    const { data: promos } = await supabase.from('promotions').select('name,discount_type,discount_value,end_date,code').eq('shop_id', shopId).eq('status', 'active').or(`end_date.is.null,end_date.gte.${today}`).order('created_at', { ascending: false }).limit(5)
+    if (!promos || promos.length === 0) return `[ทดสอบ] เรียกใช้เครื่องมือ get_active_promotions แต่ไม่พบโปรโมชั่นที่ใช้งานอยู่`
+    const list = promos.map((p: any) => {
+      const d = p.discount_type === 'percent' ? `ลด ${p.discount_value}%` : `ลด ${Number(p.discount_value).toLocaleString()} บาท`
+      return `• ${p.name} - ${d}${p.code ? ` (โค้ด: ${p.code})` : ''}`
+    }).join('\n')
+    return `[ทดสอบ] เรียกใช้เครื่องมือ get_active_promotions:\n${list}`
+  }
+
+  // Any other tool (take_order, book_appointment, send_payment_qr, save_lead, ...)
+  // is a real side effect on the live LINE webhook — never execute it here.
+  return `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ "${name}" (${JSON.stringify(args)}) — ในโหมดทดสอบจะไม่มีการบันทึกข้อมูลจริง`
 }
 
 /** Current-period usage vs. plan limit, for display in the Chat Playground so a shop owner can see real quota state while testing. */

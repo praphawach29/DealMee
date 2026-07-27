@@ -598,6 +598,10 @@ const SUPPORT_TOOL_NAMES: AgentToolName[] = [
 
 const GENERAL_TOOL_NAMES: AgentToolName[] = [
   'search_knowledge_base', 'request_human_agent', 'transfer_to_agent', 'get_shop_info',
+  // Product lookup tools — ordinary "what do you have / is this in stock"
+  // questions rarely contain negotiation keywords, so without these here the
+  // bot could never actually query real product data for the common case.
+  'search_products', 'check_stock', 'get_active_promotions',
 ]
 
 function filterTools(names: AgentToolName[]) {

@@ -298,9 +298,11 @@ export async function POST(
 
           // ── 📦 PRODUCT TOOLS ─────────────────────────────────────────────
           else if (toolName === 'search_products') {
-            let q = supabase.from('products').select('name,price,stock,description').eq('shop_id', shop_id).eq('status', 'active').limit(5)
-            if (args.query) q = q.ilike('name', `%${args.query}%`)
+            const limit = Math.min(Number(args.limit) || 5, 10)
+            let q = supabase.from('products').select('name,price,stock,description').eq('shop_id', shop_id).eq('status', 'active').limit(limit)
+            if (args.keyword) q = q.ilike('name', `%${args.keyword}%`)
             if (args.category) q = q.eq('category', args.category)
+            if (args.max_price) q = q.lte('price', Number(args.max_price))
             const { data: prods } = await q
             if (prods && prods.length > 0 && lineToken) {
               const list = prods.map((p: any, i: number) => `${i + 1}. ${p.name}\n   💰 ${Number(p.price).toLocaleString()} บาท ${p.stock > 0 ? `| ${p.stock} ชิ้น` : '| หมดสต๊อก'}`).join('\n\n')
