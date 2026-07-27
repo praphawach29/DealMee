@@ -299,7 +299,7 @@ export async function POST(
           // ── 📦 PRODUCT TOOLS ─────────────────────────────────────────────
           else if (toolName === 'search_products') {
             const limit = Math.min(Number(args.limit) || 5, 10)
-            let q = supabase.from('products').select('name,price,stock,description').eq('shop_id', shop_id).eq('status', 'active').limit(limit)
+            let q = supabase.from('products').select('name,price,stock,description').eq('shop_id', shop_id).limit(limit)
             if (args.keyword) q = q.ilike('name', `%${args.keyword}%`)
             if (args.category) q = q.eq('category', args.category)
             if (args.max_price) q = q.lte('price', Number(args.max_price))
@@ -313,7 +313,7 @@ export async function POST(
           }
 
           else if (toolName === 'check_stock') {
-            const { data: prods } = await supabase.from('products').select('name,stock,price').eq('shop_id', shop_id).eq('status', 'active').ilike('name', `%${args.product_name}%`).limit(3)
+            const { data: prods } = await supabase.from('products').select('name,stock,price').eq('shop_id', shop_id).ilike('name', `%${args.product_name}%`).limit(3)
             if (prods && prods.length > 0 && lineToken) {
               const info = prods.map((p: any) => `• ${p.name}: ${p.stock > 0 ? `${p.stock} ชิ้น | ${Number(p.price).toLocaleString()} บาท` : '❌ หมดสต๊อก'}`).join('\n')
               await sendLinePush(userId, `📦 สต๊อกสินค้า:\n\n${info}`, lineToken)
