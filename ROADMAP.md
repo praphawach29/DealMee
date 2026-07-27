@@ -2,16 +2,8 @@
 
 > อัปเดต: 28 กรกฎาคม 2026
 > เป้าหมาย: Production-Ready SaaS ที่ร้านค้าสมัครและจ่ายเงินได้จริง
-
----
-
-## สรุปสถานะปัจจุบัน
-
-Foundation    ████████████░░░░░░░░  60%
-AI Engine     ██████████████████░░  90%
-Billing       ░░░░░░░░░░░░░░░░░░░░   0%
-Core UX       █████████████░░░░░░░  65%
-Reliability   ████░░░░░░░░░░░░░░░░  20%
+>
+> เอกสารนี้คือแผนพัฒนาในอนาคตฉบับเดียว (single source of truth) — สำหรับสถานะปัจจุบันของโปรเจกต์ (progress bar, feature ที่เสร็จแล้ว, บั๊กที่พบ) ดูที่ [PROJECT_STATUS.md](./PROJECT_STATUS.md) แทน เพื่อไม่ให้ตัวเลข % ค้างเก่าไม่ตรงกันระหว่างสองไฟล์
 
 ---
 
@@ -135,6 +127,8 @@ Flow:
   -> UPDATE orders.payment_status = 'paid'
   -> แจ้งยืนยันให้ลูกค้า + เจ้าของร้าน
 
+เวอร์ชันขั้นสูงกว่า (ในอนาคต หลัง SlipOK/EasySlip เสถียรแล้ว): เชื่อมต่อ API ธนาคารโดยตรง (Automated Bank Slip Verification API) แทนการพึ่งพา 3rd-party aggregator
+
 ### 3.2 Landing Page (Marketing Site)
 
 / (Landing Page):
@@ -157,7 +151,7 @@ Flow:
 | quota 80% | เตือน upgrade |
 | quota หมด | แจ้งด่วน + ลิงก์ upgrade |
 
-### 3.4 Analytics Dashboard
+### 3.4 Analytics / ROI & Performance Dashboard
 
 /dashboard/analytics:
   - ยอดขายรายวัน/เดือน (Chart)
@@ -166,6 +160,13 @@ Flow:
   - ชั่วโมงที่ลูกค้าแชทมากที่สุด
   - Leads ที่ยังไม่ปิดการขาย
   - AI Tools ที่ถูกเรียกมากที่สุด
+  - Cost Per Conversation (CPC) — ต้นทุน AI ต่อบทสนทนา
+  - Average Response Time — เวลาตอบเฉลี่ยของบอท
+  - CSAT Score — ความพึงพอใจลูกค้า
+
+### 3.6 Customer Memory Graph (Entity Profile)
+
+บันทึกรสนิยม ไซส์สินค้า และประวัติสั่งซื้อของลูกค้าแต่ละคนแบบ Graph/Entity แทนการดึงแค่ chat history ย้อนหลัง 10 ข้อความ เพื่อให้ AI ทำตัวเป็น Personal Shopper ที่จำลูกค้าได้ข้ามบทสนทนา ไม่ใช่แค่ภายในบทสนทนาเดียว
 
 ### 3.5 Onboarding ที่สมบูรณ์
 
@@ -227,6 +228,7 @@ Definition of Done Phase 4:
 | Facebook Messenger | High |
 | WhatsApp Business API | High |
 | Instagram Direct | Medium |
+| TikTok Shop | Medium |
 | Web Chat Widget | Medium |
 
 ### 5.2 White-Label Solution
@@ -241,7 +243,7 @@ Definition of Done Phase 4:
 
 - Shopee/Lazada sync
 - Google Sheets sync
-- Flash/Kerry API (ยิง label จัดส่ง)
+- Automated Shipping & Tracking: เชื่อมต่อ Flash Express / Kerry / J&T / ไปรษณีย์ไทย สำหรับสร้างเลขพัสดุและแจ้งลูกค้าอัตโนมัติใน LINE OA (ทำให้ tools `track_parcel`/`calculate_shipping` ที่ตอนนี้เป็นแค่ "Defined" กลายเป็น LIVE)
 
 ---
 

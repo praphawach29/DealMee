@@ -3,7 +3,11 @@
 
 > อัปเดตล่าสุด: 28 กรกฎาคม 2026
 > GitHub: praphawach29/ai-agent-google-SDK branch main
-> Last Commit: 0f88be0 - feat(phase-2): implement Phase 2 Billing & Monetization
+> Last Commit: 64f1020 - fix(playground): give Chat Playground real conversation memory
+>
+> เอกสารนี้คือแหล่งข้อมูลสถานะปัจจุบันของโปรเจกต์ฉบับเดียว (single source of truth)
+> สำหรับแผนพัฒนาในอนาคตดูที่ [ROADMAP.md](./ROADMAP.md)
+> (เดิมมีไฟล์ `DEVELOPMENT_STATUS.md` แยกต่างหากซึ่งเนื้อหาไม่ตรงกับไฟล์นี้ — ได้รวมเข้าด้วยกันแล้วและลบไฟล์นั้นทิ้งเพื่อไม่ให้มีสองแหล่งข้อมูลที่ขัดแย้งกัน)
 
 ---
 
@@ -27,7 +31,7 @@ Core UX       █████████████░░░░░░░  65%
 | Styling | Tailwind CSS + tw-animate-css |
 | Database | Supabase (PostgreSQL + RLS + Storage) |
 | Auth | Supabase Auth (Email/Password) |
-| AI Providers | Gemini (primary) -> Claude -> OpenAI (fallback) |
+| AI Providers | Gemini 3.6 Flash (primary) -> Claude Sonnet 5 (high-persuasion) -> GPT-5.6 Luna (fallback) |
 | LINE Integration | LINE Messaging API (Reply + Push) |
 | QR Generation | promptpay-qr + qrcode |
 | Slip Verification | EasySlip API (developer.easyslip.com) |
@@ -47,7 +51,7 @@ src/app/dashboard/
   page.tsx                    - Dashboard Home (Stats)
   inbox/                      - Live Chat Inbox
   orders/                     - Order Management
-  products/                   - Product Catalog
+  products/                   - Product Catalog (Custom Categories, Local Image Upload + preview, AI Copywriter [Pro/Agency/BYOK only], CSV Bulk Import + template download)
   bookings/                   - Booking Calendar
   knowledge/                  - Knowledge Base (FAQ)
   services/                   - Services Management
@@ -235,6 +239,18 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 
 ---
 
+## Completed Features [Bug Fixes - 28 กรกฎาคม 2026 หลัง Phase 2]
+
+พบและแก้ระหว่างทดสอบ Chat Playground หลัง Phase 2 (ไม่เกี่ยวกับ billing โดยตรง แต่กระทบการทำงานจริงของบอท):
+
+- [x] Gemini function-calling schema ผิด 2 จุด ทำให้ Gemini ปฏิเสธ tools ทั้งหมด (400 INVALID_ARGUMENT) — บอทตอบข้อความทักทายซ้ำๆ แทนที่จะตอบจริง:
+  1. tools ที่ไม่มี argument (get_shop_info, get_active_promotions ฯลฯ) ส่ง `properties: {}` ว่างเปล่า ซึ่ง Gemini ไม่ยอมรับ
+  2. โค้ดแปลง `type` เป็นตัวพิมพ์ใหญ่ (`OBJECT`/`STRING`) ซึ่ง Gemini เวอร์ชันปัจจุบันไม่ยอมรับเช่นกัน (ต้องเป็น lowercase เหมือน Claude/OpenAI)
+- [x] คำถามสินค้าทั่วไป (ไม่มีคำต่อรองราคา) ไม่เคยได้รับเครื่องมือ search_products/check_stock/get_active_promotions เลย เพราะ intent routing ให้เฉพาะคำถามที่มีคีย์เวิร์ดต่อรองราคาเท่านั้น
+- [x] search_products บน webhook จริงอ่าน `args.query` แต่ schema ของ tool ประกาศพารามิเตอร์ชื่อ `keyword` — คำค้นหาของลูกค้าถูกเพิกเฉยเงียบๆ มาโดยตลอด
+- [x] Chat Playground ไม่เคยมี "ความจำ" ระหว่างข้อความ เพราะไม่ได้บันทึกลง chat_messages เหมือน LINE webhook จริง — แก้โดยส่งประวัติแชทจาก client ตรงเข้า AI engine แทน
+- [x] **พบ schema drift สำคัญ:** ฐานข้อมูล Supabase จริงไม่ตรงกับ `supabase_schema_update.sql` ในเรโป — ดูหัวข้อ "Known Issues" ด้านล่าง
+
 ## Completed Features [Phase 2 DONE]
 
 - [x] PHASE 2: Stripe Subscription (Checkout Session, Billing Portal, webhook lifecycle)
@@ -271,6 +287,29 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 - [x] PHASE 1: promotions table + RLS
 - [x] PHASE 1: leads table + RLS
 - [x] PHASE 1: conversations.customer_note + customer_tag
+
+## Completed Features [Products Dashboard]
+
+(เดิมบันทึกไว้เฉพาะใน DEVELOPMENT_STATUS.md ที่ถูกรวมเข้ามาในไฟล์นี้แล้ว — ตรวจสอบโค้ดจริงยืนยันว่ามีจริงทุกข้อ)
+
+- [x] Custom Categories: สร้างหมวดหมู่สินค้าใหม่ได้เองแบบไดนามิก
+- [x] Local Image Upload พร้อม Live Preview Thumbnail (FileReader)
+- [x] AI Copywriter (`generateAiProductDescription`): ให้ AI ช่วยแต่งคำอธิบายสินค้า สงวนสิทธิ์เฉพาะแพ็กเกจ Pro/Agency/BYOK
+- [x] Bulk CSV Import & Template Download: ดาวน์โหลดไฟล์ตัวอย่าง CSV และนำเข้าสินค้าจำนวนมากได้
+
+---
+
+## Known Issues — Database Schema Drift
+
+**สำคัญ:** ฐานข้อมูล Supabase จริง (production) มีโครงสร้างต่างจากไฟล์ `supabase_schema_update.sql` ในเรโปนี้อย่างมีนัยสำคัญ — พบระหว่างดีบัก Chat Playground เมื่อ 28 กรกฎาคม 2026 ด้วยการ query `information_schema.columns` ตรงจริง (ดู `supabase_check_schema.sql`):
+
+| จุดที่ต่างจากไฟล์ในเรโป | ผลกระทบ |
+|---|---|
+| `shops` ไม่มีคอลัมน์ `user_id` | `shopHelper.ts` เขียนโค้ดให้ query `.eq('user_id', ...)` เป็นทางเลือกแรก แต่ query นี้ error เงียบๆ ทุกครั้ง แล้ว fallback ไปใช้ `public.users.workspace_id` แทนโดยอัตโนมัติ (ใช้งานได้ แต่โค้ด path แรกตายเปล่า ควรลบทิ้งหรือแก้ schema ให้ตรง) |
+| `products` ไม่มีคอลัมน์ `status` เลย | ทุก query ที่ทำ `.eq('status','active')` บน products error เงียบๆ — แก้ไปแล้วในโค้ด (ลบ filter ออก) แต่ไฟล์ schema เดิมยังเข้าใจผิดว่ามีคอลัมน์นี้ |
+| `products.stock` เป็น `TEXT` ไม่ใช่ตัวเลข (ดีฟอลต์ `'มี'`) | Dashboard เขียนเป็นเลขที่แปลงเป็น string (`"30"`, `"0"`) ผ่าน `parseInt`, โค้ด AI/webhook เทียบเป็นตัวเลขได้พอดีเพราะ JS coerce string อัตโนมัติ แต่ฝั่ง Postgres/PostgREST (`.gt('stock', 0)`) เป็นการเทียบ string แบบ lexicographic ซึ่งบังเอิญถูกต้องกับข้อมูลปัจจุบัน แต่เปราะบางในกรณี edge case |
+
+**ข้อควรระวัง:** ห้ามเขียน SQL migration ใหม่โดยอ้างอิงจาก `supabase_schema_update.sql` เพียงอย่างเดียวโดยไม่ตรวจสอบ schema จริงก่อน — ให้รัน `supabase_check_schema.sql` ใน Supabase SQL Editor เพื่อดูโครงสร้างจริงทุกครั้งก่อนเขียนไฟล์ migration ใหม่
 
 ---
 
@@ -314,8 +353,8 @@ GEMINI_API_KEY=                    # Primary AI
 CLAUDE_API_KEY=                    # High-Persuasion (ต่อรองราคา)
 OPENAI_API_KEY=                    # Fallback
 EASYSLIP_API_KEY=                  # Slip Verification [Phase 1]
-GEMINI_MODEL=gemini-2.5-flash      # optional
-OPENAI_MODEL=gpt-4o-mini           # optional
+GEMINI_MODEL=gemini-3.6-flash      # optional
+OPENAI_MODEL=gpt-5.6-luna          # optional (fast/cheap tier — only used as final fallback)
 STRIPE_SECRET_KEY=                 # [Phase 2] Stripe subscription billing
 STRIPE_WEBHOOK_SECRET=             # [Phase 2] Stripe webhook signature verification
 OMISE_SECRET_KEY=                  # [Phase 2] Omise/Opn Payments PromptPay charges
@@ -327,6 +366,12 @@ NEXT_PUBLIC_APP_URL=               # [Phase 2] Stripe Checkout success/cancel + 
 
 ## Git History
 
+64f1020  fix(playground): give Chat Playground real conversation memory
+35591c1  fix(products): remove filters on a status column that doesn't exist in production
+cb4ed28  fix(ai): grant product tools to general queries + fix search_products arg mismatch
+44973b9  fix(ai): stop uppercasing Gemini function-call parameter types
+bd640ae  fix(ai): omit Gemini function-call parameters for no-arg tools
+e33bf93  docs: update PROJECT_STATUS.md - Phase 2 complete
 0f88be0  feat(phase-2): implement Phase 2 Billing & Monetization
 632a7b7  docs: update PROJECT_STATUS.md - Phase 1 complete
 e78ff62  feat(phase-1): implement Phase 1 Core Reliability
