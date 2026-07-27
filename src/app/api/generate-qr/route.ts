@@ -16,11 +16,9 @@ export async function POST(req: NextRequest) {
     const payload = generatePayload(promptpayId, { amount: amount ? parseFloat(amount) : undefined });
     
     // Generate QR Code Image as Data URL
-    // ts-ignore to bypass TS errors if @types/qrcode is not installed
-    // @ts-ignore
-    const options = { type: 'image/png', color: { dark: '#000', light: '#fff' } };
-    // @ts-ignore
-    const qrImage = await qrcode.toDataURL(payload, options);
+    const qrImage = await qrcode.toDataURL(payload, {
+      color: { dark: '#000', light: '#fff' },
+    });
 
     return NextResponse.json({ 
       payload,
