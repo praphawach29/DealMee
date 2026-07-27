@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
+import generatePayload from 'promptpay-qr'
+import qrcode from 'qrcode'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
+// Use service role key for storage uploads (bypasses RLS), fall back to anon key
+const supabaseStorageKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
+const supabaseAdmin = createClient(supabaseUrl, supabaseStorageKey)
+
+const QR_BUCKET = 'qr-codes'
 
 export async function GET() {
   return new NextResponse('LINE Webhook Endpoint Active', { status: 200 })
@@ -114,35 +121,74 @@ export async function POST(
           continue
         }
 
-        // 5. Call AI Sales Employee Engine (Gemini 3.6 Flash + Sales Pipeline & Memory)
-        const aiReplyText = await processSalesAgentChat({
+        // 5. Call AI Sales Agent Engine → returns AgentResult { text, toolCall? }
+        const agentResult = await processSalesAgentChat({
           shop,
           userQuery: userText,
           userId,
           conversationId: conv.id,
         })
 
+        const aiReplyText = agentResult.text || ''
+
         // 6. Save AI Reply to chat_messages
-        await supabase.from('chat_messages').insert({
-          conversation_id: conv.id,
-          shop_id,
-          sender_type: 'bot',
-          sender_name: shop.bot_name || 'น้อง Botify',
-          message: aiReplyText,
-        })
+        if (aiReplyText) {
+          await supabase.from('chat_messages').insert({
+            conversation_id: conv.id,
+            shop_id,
+            sender_type: 'bot',
+            sender_name: shop.bot_name || 'น้อง Botify',
+            message: aiReplyText,
+          })
+        }
 
         // Update conversation last_message
         await supabase
           .from('conversations')
           .update({
-            last_message: aiReplyText,
+            last_message: aiReplyText || '[ส่ง QR Code]',
             last_message_at: new Date().toISOString(),
           })
           .eq('id', conv.id)
 
-        // 7. Reply back via LINE Messaging API
-        if (replyToken && lineToken) {
+        // 7. Reply text back via LINE Reply API
+        if (replyToken && lineToken && aiReplyText) {
           await sendLineReply(replyToken, aiReplyText, lineToken)
+        }
+
+        // 8. ─── TOOL CALL: send_payment_qr ───────────────────────────────────
+        if (agentResult.toolCall?.name === 'send_payment_qr') {
+          const { amount, order_summary } = agentResult.toolCall.args
+          const promptpayId = shop.promptpay_id || shop.promptpay_number
+
+          console.log(`[Webhook] AI called send_payment_qr: amount=${amount}, promptpay=${promptpayId}`)
+
+          if (promptpayId && lineToken) {
+            // Generate QR and upload to Supabase Storage → get public URL
+            const qrPublicUrl = await generateAndUploadQR(amount, promptpayId, shop_id)
+
+            if (qrPublicUrl) {
+              // Send QR Image via LINE Push API (replyToken is already used above)
+              await sendLineImagePush(userId, qrPublicUrl, lineToken)
+
+              // Optional: send a follow-up text with the amount
+              const qrCaption = `📋 สรุปยอดชำระ: *${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท*${order_summary ? `\n${order_summary}` : ''}\n\n✅ กรุณาบันทึกรูป QR Code แล้วเปิดแอปธนาคารสแกนได้เลยค่ะ\n📲 เมื่อโอนเสร็จแล้ว กรุณาส่งรูปสลิปกลับมาในแชทนี้นะคะ`
+              await sendLinePush(userId, qrCaption, lineToken)
+
+              // Log QR message to chat_messages
+              await supabase.from('chat_messages').insert({
+                conversation_id: conv.id,
+                shop_id,
+                sender_type: 'bot',
+                sender_name: shop.bot_name || 'น้อง Botify',
+                message: `[QR Code ชำระเงิน] ยอด ${amount} บาท${order_summary ? ` | ${order_summary}` : ''}`,
+              })
+            } else {
+              // Fallback: send text payment info if QR generation fails
+              const fallbackText = `💳 ช่องทางชำระเงิน:\n- พร้อมเพย์: ${promptpayId}\n- ชื่อบัญชี: ${shop.promptpay_name || shop.name}\n- ยอดชำระ: ${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท\n\nกรุณาส่งรูปสลิปกลับมาในแชทนี้หลังโอนเงินนะคะ 🙏`
+              await sendLinePush(userId, fallbackText, lineToken)
+            }
+          }
         }
       }
 
@@ -150,29 +196,25 @@ export async function POST(
       if (event.type === 'message' && event.message?.type === 'image') {
         const messageId = event.message.id
         console.log(`[Webhook] Received image ${messageId} from ${userId}`)
-        
+
         // 1. Acknowledge receipt to user
         if (replyToken && lineToken) {
-          const replyText = "ได้รับรูปสลิปแล้วค่ะ ระบบกำลังตรวจสอบความถูกต้องนะคะ รบกวนรอสักครู่ค่ะ..."
+          const replyText = 'ได้รับรูปสลิปแล้วค่ะ 📄 ระบบกำลังตรวจสอบความถูกต้องนะคะ รบกวนรอสักครู่ค่ะ...'
           await sendLineReply(replyToken, replyText, lineToken)
         }
 
-        // 2. [MOCK] In a real app, we would:
-        // - Download image from LINE Content API: https://api-data.line.me/v2/bot/message/${messageId}/content
-        // - Send to Slip Verification API (e.g. SlipOK)
-        // - Get response: match amount, check receiver
-        
-        // 3. [MOCK] Simulate API delay and automated verification (Option A)
+        // 2. [TODO] In production, connect Slip Verification API here:
+        // - Download image: https://api-data.line.me/v2/bot/message/${messageId}/content
+        // - Send to SlipOK / EasySlip API
+        // - Match amount and receiver name
+        // - UPDATE orders SET payment_status = 'paid' WHERE ...
+
+        // 3. [MOCK] Simulate async verification (replace with real API call)
         setTimeout(async () => {
-          // Push a follow-up message via Push API (mocking async verification result)
           if (lineToken) {
-            const successMsg = "✅ ตรวจสอบสลิปสำเร็จ! ได้รับยอดเงินเรียบร้อยแล้ว ออเดอร์ของคุณได้รับการยืนยันค่ะ"
+            const successMsg = '✅ ตรวจสอบสลิปสำเร็จ! ได้รับยอดเงินเรียบร้อยแล้ว ออเดอร์ของคุณได้รับการยืนยันค่ะ 🎉'
             await sendLinePush(userId, successMsg, lineToken)
           }
-          
-          // Here we would also update Supabase:
-          // UPDATE orders SET payment_status = 'paid' WHERE ...
-          // INSERT INTO chat_messages (sender_type, message) VALUES ('bot', successMsg)
         }, 3000)
       }
     }
@@ -184,7 +226,65 @@ export async function POST(
   }
 }
 
-// Helper: Send Reply via LINE Messaging API
+// ─── QR Code: Generate & Upload to Supabase Storage ──────────────────────────
+
+/**
+ * Generates a PromptPay QR Code image and uploads it to Supabase Storage.
+ * Returns the public URL of the uploaded image, or null on failure.
+ */
+async function generateAndUploadQR(
+  amount: number,
+  promptpayId: string,
+  shopId: string
+): Promise<string | null> {
+  try {
+    // 1. Generate PromptPay payload
+    const payload = generatePayload(promptpayId, { amount })
+
+    // 2. Generate QR code as PNG Buffer
+    const qrBuffer = await qrcode.toBuffer(payload, {
+      type: 'png',
+      width: 512,
+      margin: 2,
+      color: { dark: '#000000', light: '#ffffff' },
+    })
+
+    // 3. Ensure storage bucket exists
+    const { data: buckets } = await supabaseAdmin.storage.listBuckets()
+    const bucketExists = buckets?.some((b) => b.name === QR_BUCKET)
+    if (!bucketExists) {
+      await supabaseAdmin.storage.createBucket(QR_BUCKET, { public: true })
+    }
+
+    // 4. Upload to Supabase Storage (path: /shop_id/timestamp.png)
+    const fileName = `${shopId}/${Date.now()}_${amount}thb.png`
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from(QR_BUCKET)
+      .upload(fileName, qrBuffer, {
+        contentType: 'image/png',
+        upsert: false,
+      })
+
+    if (uploadError) {
+      console.error('[QR Upload Error]:', uploadError.message)
+      return null
+    }
+
+    // 5. Get public URL
+    const { data: urlData } = supabaseAdmin.storage
+      .from(QR_BUCKET)
+      .getPublicUrl(fileName)
+
+    return urlData.publicUrl || null
+  } catch (err) {
+    console.error('[generateAndUploadQR Exception]:', err)
+    return null
+  }
+}
+
+// ─── LINE Messaging Helpers ───────────────────────────────────────────────────
+
+/** Send Reply via LINE Reply API (1 replyToken = 1 use only) */
 async function sendLineReply(replyToken: string, text: string, channelAccessToken: string) {
   try {
     const res = await fetch('https://api.line.me/v2/bot/message/reply', {
@@ -195,25 +295,18 @@ async function sendLineReply(replyToken: string, text: string, channelAccessToke
       },
       body: JSON.stringify({
         replyToken,
-        messages: [
-          {
-            type: 'text',
-            text,
-          },
-        ],
+        messages: [{ type: 'text', text }],
       }),
     })
-
     if (!res.ok) {
-      const errText = await res.text()
-      console.error('[LINE Reply API Error]:', errText)
+      console.error('[LINE Reply API Error]:', await res.text())
     }
   } catch (err) {
     console.error('[LINE Reply Exception]:', err)
   }
 }
 
-// Helper: Send Push Message via LINE Messaging API
+/** Send Push Text Message via LINE Push API */
 async function sendLinePush(to: string, text: string, channelAccessToken: string) {
   try {
     const res = await fetch('https://api.line.me/v2/bot/message/push', {
@@ -232,5 +325,33 @@ async function sendLinePush(to: string, text: string, channelAccessToken: string
     }
   } catch (err) {
     console.error('[LINE Push Exception]:', err)
+  }
+}
+
+/** Send Image Message via LINE Push API (requires public HTTPS image URL) */
+async function sendLineImagePush(to: string, imageUrl: string, channelAccessToken: string) {
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${channelAccessToken}`,
+      },
+      body: JSON.stringify({
+        to,
+        messages: [
+          {
+            type: 'image',
+            originalContentUrl: imageUrl,
+            previewImageUrl: imageUrl,
+          },
+        ],
+      }),
+    })
+    if (!res.ok) {
+      console.error('[LINE Image Push Error]:', await res.text())
+    }
+  } catch (err) {
+    console.error('[LINE Image Push Exception]:', err)
   }
 }
