@@ -1,14 +1,18 @@
 ﻿# Botify SaaS - Project Status
 
-> **อัปเดตล่าสุด:** 28 กรกฎาคม 2026 เวลา 00:09 น.
-> **GitHub:** praphawach29/ai-agent-google-SDK branch main
-> **Last Commit:** c262374 - feat: expand AI tool system to 36 tools
+> อัปเดตล่าสุด: 28 กรกฎาคม 2026 เวลา 00:31 น.
+> GitHub: praphawach29/ai-agent-google-SDK branch main
+> Last Commit: e78ff62 - feat(phase-1): implement Phase 1 Core Reliability
 
 ---
 
-## ภาพรวมโปรเจค
+## Overall Progress
 
-Botify SaaS คือแพลตฟอร์ม AI Sales Agent สำหรับร้านค้าออนไลน์ที่ใช้ LINE OA
+Foundation    ████████████████░░░░  80%
+AI Engine     ██████████████████░░  90%
+Reliability   ████████████████░░░░  80%  [Phase 1 DONE]
+Billing       ░░░░░░░░░░░░░░░░░░░░   0%  [Phase 2 - Next]
+Core UX       █████████████░░░░░░░  65%
 
 ---
 
@@ -25,13 +29,14 @@ Botify SaaS คือแพลตฟอร์ม AI Sales Agent สำหรั�
 | AI Providers | Gemini (primary) -> Claude -> OpenAI (fallback) |
 | LINE Integration | LINE Messaging API (Reply + Push) |
 | QR Generation | promptpay-qr + qrcode |
+| Slip Verification | EasySlip API (developer.easyslip.com) |
 | Deployment | Vercel |
 
 ---
 
 ## Project Structure
 
-src/app/api/webhook/[shop_id]/ - LINE Webhook + 36-Tool Dispatcher
+src/app/api/webhook/[shop_id]/ - LINE Webhook + 36-Tool Dispatcher + EasySlip
 src/app/api/generate-qr/      - PromptPay QR Code API
 src/app/auth/                 - Login / Signup
 src/app/onboarding/           - Shop Setup Wizard
@@ -47,29 +52,31 @@ src/app/dashboard/
   menu/                       - Quick Reply Menu
   settings/                   - Shop Settings + actions.ts
   components/ChatPlaygroundModal.tsx - Test chatbot UI
-src/app/admin/                - Super Admin Panel
-src/lib/ai/salesAgentEngine.ts - AI Brain (36 Tools, 3 Providers)
-supabase_schema_update.sql    - Full DB Schema + RLS
+src/app/admin/                - Super Admin Panel (Overview, Shops, Plans, Logs)
+src/lib/ai/salesAgentEngine.ts - AI Brain (36 Tools, 3 Providers, Complexity Router)
+supabase_schema_update.sql    - Full DB Schema + RLS + Phase 1 updates
 
 ---
 
 ## Database Schema
 
-| Table | Description |
-|---|---|
-| users | ผู้ใช้งาน linked to auth.users |
-| shops | ข้อมูลร้านค้า (bot_name, line_token, promptpay_id, features) |
-| conversations | บทสนทนา LINE ต่อลูกค้า (status: ai/human) |
-| chat_messages | ข้อความในแต่ละบทสนทนา |
-| products | สินค้า (name, price, stock, image_url) |
-| orders | ออเดอร์ (payment_status, slip_url) |
-| bookings | การจองคิว (booking_date, booking_time, status) |
-| services | บริการของร้าน |
-| knowledge_base | FAQ / นโยบายร้าน |
-| plans | SaaS Pricing Plans |
-| leads | ลูกค้าที่สนใจแต่ยังไม่ซื้อ |
+| Table | Description | Status |
+|---|---|---|
+| users | ผู้ใช้งาน linked to auth.users | ACTIVE |
+| shops | ข้อมูลร้านค้า (bot_name, line_token, line_secret, promptpay_id, features) | ACTIVE |
+| conversations | บทสนทนา LINE ต่อลูกค้า (status: ai/human, customer_note, customer_tag) | ACTIVE |
+| chat_messages | ข้อความในแต่ละบทสนทนา | ACTIVE |
+| products | สินค้า (name, price, stock, image_url) | ACTIVE |
+| orders | ออเดอร์ (+conversation_id, +customer_phone, +product_name, +quantity, +variants, +address, +payment_method, +tax_invoice, payment_status, slip_url) | UPDATED Phase 1 |
+| bookings | การจองคิว (booking_no, booking_date, booking_time, status) | ACTIVE |
+| services | บริการของร้าน | ACTIVE |
+| knowledge_base | FAQ / นโยบายร้าน | ACTIVE |
+| promotions | โปรโมชั่นและส่วนลด (discount_type, discount_value, code, end_date) | NEW Phase 1 |
+| leads | ลูกค้าสนใจแต่ยังไม่ซื้อ (unique: shop_id+user_id) | NEW Phase 1 |
+| plans | SaaS Pricing Plans | ACTIVE |
 
-Supabase Storage Bucket: qr-codes (เก็บรูป QR PromptPay)
+Supabase Storage:
+- qr-codes bucket: เก็บรูป QR PromptPay
 
 ---
 
@@ -85,51 +92,105 @@ Router เลือก Tool Set ตาม intent ลูกค้า:
 | ถามออเดอร์/พัสดุ | Support Tools (10) | Gemini |
 | ถามทั่วไป | General Tools (4) | Gemini |
 
-### 36 AI Tools
+### 36 AI Tools + Execution Status
 
-**Payment (6):** send_payment_qr, get_payment_slip_status, send_invoice, calculate_installment, apply_custom_discount, create_quotation
-**Order (4):** take_order, check_order_status, track_parcel, calculate_shipping
-**Product (7):** search_products, check_stock, get_product_image, get_upsell_products, get_crosssell_products, recommend_product_match, upsell_suggestion
-**Booking (5):** check_available_slots, book_appointment, reschedule_booking, check_booking, cancel_booking
-**Customer (5):** save_lead, update_customer_note, add_customer_tag, get_customer_history, check_loyalty_points
-**Knowledge (1):** search_knowledge_base
-**Promotions (1):** get_active_promotions
-**Escalation (2):** request_human_agent, transfer_to_agent
-**Follow-up (1):** schedule_followup
-**NEW (4):** get_shop_info, check_warranty, request_review, get_return_policy
+| Category | Tool | Execution Status |
+|---|---|---|
+| Payment | send_payment_qr | LIVE: Generate QR -> Supabase Storage -> LINE Push |
+| Payment | get_payment_slip_status | Defined |
+| Payment | send_invoice | Defined |
+| Payment | calculate_installment | Defined |
+| Payment | apply_custom_discount | Defined |
+| Payment | create_quotation | Defined |
+| Order | take_order | LIVE: INSERT orders + LINE confirm |
+| Order | check_order_status | LIVE: Query orders + status map |
+| Order | track_parcel | Defined |
+| Order | calculate_shipping | Defined |
+| Product | search_products | LIVE: ilike query on products table |
+| Product | check_stock | LIVE: stock + price lookup |
+| Product | get_product_image | Defined |
+| Product | get_upsell_products | Defined |
+| Product | get_crosssell_products | Defined |
+| Product | recommend_product_match | Defined |
+| Product | upsell_suggestion | Defined |
+| Booking | check_available_slots | LIVE: Query bookings -> free slots |
+| Booking | book_appointment | LIVE: INSERT bookings + confirm |
+| Booking | reschedule_booking | Defined |
+| Booking | check_booking | Defined |
+| Booking | cancel_booking | LIVE: UPDATE status=cancelled |
+| Customer | save_lead | LIVE: UPSERT leads |
+| Customer | update_customer_note | LIVE: UPDATE conversations.customer_note |
+| Customer | add_customer_tag | LIVE: UPDATE conversations.customer_tag |
+| Customer | get_customer_history | LIVE: Query orders by conversation |
+| Customer | check_loyalty_points | LIVE: Sum paid orders / 100 |
+| Knowledge | search_knowledge_base | Defined (needs pgvector) |
+| Promotions | get_active_promotions | LIVE: Query promotions table |
+| Escalation | request_human_agent | LIVE: status=human + LINE Push |
+| Escalation | transfer_to_agent | LIVE: UPDATE + LINE Push |
+| Follow-up | schedule_followup | LIVE: setTimeout -> LINE Push |
+| New | get_shop_info | Defined |
+| New | check_warranty | Defined |
+| New | request_review | Defined |
+| New | get_return_policy | Defined |
 
-### Provider Tool Format
-Gemini  -> functionDeclarations (types UPPERCASE)
-Claude  -> tools[].input_schema
-OpenAI  -> tools[].function (type: "function")
+Live Tool Executions: 15/36 (42%)
+Defined (AI handles text): 21/36 (58%)
 
-### Webhook Tool Dispatcher Actions
-| Tool | Supabase Side Effect |
-|---|---|
-| send_payment_qr | Generate QR -> Upload Storage -> LINE Push Image |
-| take_order | INSERT orders + LINE Push confirm |
-| request_human_agent | UPDATE conversations.status='human' + LINE Push |
-| transfer_to_agent | UPDATE conversations.last_message + LINE Push |
-| save_lead | UPSERT leads |
-| update_customer_note | UPDATE conversations.customer_note |
-| add_customer_tag | UPDATE conversations.customer_tag |
-| schedule_followup | setTimeout -> LINE Push (max 60 min) |
+---
+
+## LINE Webhook Flow
+
+LINE OA <- ลูกค้าส่งข้อความ
+  ↓
+POST /api/webhook/[shop_id]
+  ↓
+1. Read rawBody (for HMAC)
+2. Parse JSON + validate events
+3. Fetch shop from Supabase
+4. Verify X-Line-Signature (HMAC-SHA256) -> 403 if invalid [NEW Phase 1]
+5. Find/Create Conversation
+6. Save user message -> chat_messages
+7. Check status=human -> skip AI
+8. Call processSalesAgentChat() (Botify Brain Router)
+9. Save AI reply -> chat_messages
+10. LINE Reply API (text)
+11. Tool Dispatcher (36 tools, 15 LIVE)
+    |- send_payment_qr -> QR -> Supabase Storage -> LINE Push
+    |- take_order -> INSERT orders -> LINE Push
+    |- search_products -> Query DB -> LINE Push results
+    |- book_appointment -> INSERT bookings -> LINE Push
+    |- [12 more LIVE tools...]
+    |- request_human_agent -> status=human -> LINE Push
+
+Slip Verification Flow (Image Handler):
+  ลูกค้าส่งรูปสลิป -> LINE Webhook (event.message.type=image)
+    ↓
+  Reply: "กำลังตรวจสอบ..."
+    ↓
+  verifySlipAndNotify() runs in background (non-blocking):
+    1. Download image from LINE API
+    2. Convert to base64
+    3. POST to EasySlip API /v1/verify
+    4. Parse: amount, receiver, date, ref
+    5. UPDATE orders.payment_status = 'paid'
+    6. LINE Push success/fail message
+  Fallback: if EASYSLIP_API_KEY not set -> mock approval
 
 ---
 
 ## SaaS Plans
 
-| Plan | ราคา/เดือน | ข้อความ |
-|---|---|---|
-| ทดลองใช้งาน | ฟรี | 500 |
-| เริ่มต้น | 390 บาท | 3,000 |
-| มืออาชีพ (แนะนำ) | 990 บาท | 10,000 |
-| ธุรกิจองค์กร | 2,490 บาท | 30,000 |
-| BYOK (ใช้ API Key ตัวเอง) | 590 บาท | ไม่จำกัด |
+| Plan | ราคา/เดือน | ข้อความ | Token |
+|---|---|---|---|
+| ทดลองใช้งาน | ฟรี | 500 | 1M |
+| เริ่มต้น | 390 บาท | 3,000 | 5M |
+| มืออาชีพ (แนะนำ) | 990 บาท | 10,000 | 15M |
+| ธุรกิจองค์กร | 2,490 บาท | 30,000 | 50M |
+| BYOK (API Key ตัวเอง) | 590 บาท | ไม่จำกัด | ไม่จำกัด |
 
 ---
 
-## Completed Features
+## Completed Features [Phase 1 DONE]
 
 - [x] Next.js 16 App Router + TypeScript
 - [x] Supabase Auth + RLS ทุก Table
@@ -137,31 +198,52 @@ OpenAI  -> tools[].function (type: "function")
 - [x] Dashboard UI ครบ (Inbox, Orders, Products, Bookings, Knowledge, Settings)
 - [x] LINE Webhook รับ-ส่งข้อความ
 - [x] AI Sales Agent Engine (Gemini + Claude + OpenAI Fallback)
-- [x] Botify Brain Router - ส่ง Tool Set ตาม intent
+- [x] Botify Brain Router (ส่ง Tool Set ตาม intent)
 - [x] 36 AI Tools (Function Calling ทั้ง 3 Provider)
-- [x] PromptPay QR Code - Generate + Supabase Storage + LINE Push Image
-- [x] Webhook Tool Dispatcher - Side Effects ครบ
+- [x] PromptPay QR Code (Generate + Supabase Storage + LINE Push)
+- [x] Webhook Tool Dispatcher (Side Effects ครบ)
 - [x] Admin Takeover (human mode)
 - [x] Chat Playground
 - [x] SaaS Plans 5 แผน
+- [x] Admin Panel (Overview, Shops, Plans, Logs)
+- [x] PHASE 1: LINE Signature Verification (HMAC-SHA256)
+- [x] PHASE 1: 9 Live Tool Executions (query Supabase จริง)
+- [x] PHASE 1: EasySlip API Integration (slip verification จริง)
+- [x] PHASE 1: orders table extended (8 columns ใหม่)
+- [x] PHASE 1: promotions table + RLS
+- [x] PHASE 1: leads table + RLS
+- [x] PHASE 1: conversations.customer_note + customer_tag
 
 ---
 
-## TODO - สิ่งที่ยังต้องทำ
+## TODO - Phase 2 (Billing) - สัปดาห์หน้า
+
+| Priority | Feature | Notes |
+|---|---|---|
+| HIGH | Stripe/Omise Subscription | checkout session, webhook, portal |
+| HIGH | usage_logs table | นับ messages/tokens per month |
+| HIGH | Plan Enforcement | block AI เมื่อหมด quota |
+| HIGH | Billing Dashboard /dashboard/billing | usage bar, upgrade button |
+| HIGH | shops.plan_key + subscription fields | track current plan |
+
+## TODO - Phase 3 (Growth) - 2-3 สัปดาห์ถัดไป
 
 | Priority | Feature |
 |---|---|
-| HIGH | Slip Auto-Verification (SlipOK/EasySlip API) |
-| HIGH | Tool: search_products -> Query Supabase จริง |
-| HIGH | Tool: check_stock -> Query Supabase จริง |
-| MEDIUM | Tool: check_order_status -> Query Supabase จริง |
-| MEDIUM | Tool: book_appointment -> INSERT bookings จริง |
-| MEDIUM | Tool: check_available_slots -> Query bookings จริง |
+| HIGH | Landing Page (/) - marketing site |
+| HIGH | Email Notifications (Resend.com) |
+| MEDIUM | Analytics Dashboard /dashboard/analytics |
+| MEDIUM | Onboarding ครบทุก step (เชื่อม LINE, เพิ่มสินค้า, ทดสอบ) |
+
+## TODO - Phase 4-5 (Scale + Expansion)
+
+| Priority | Feature |
+|---|---|
 | MEDIUM | Knowledge Base Vector Search (pgvector) |
-| LOW | LINE LIFF Widget |
-| LOW | Analytics Dashboard |
-| LOW | Omise/Stripe Payment Gateway |
+| MEDIUM | Mobile Responsive Dashboard |
 | LOW | Multi-platform (Facebook, WhatsApp) |
+| LOW | White-label Solution |
+| LOW | Marketplace / Plugin System |
 
 ---
 
@@ -169,19 +251,33 @@ OpenAI  -> tools[].function (type: "function")
 
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-GEMINI_API_KEY=
-CLAUDE_API_KEY=
-OPENAI_API_KEY=
-GEMINI_MODEL=gemini-2.5-flash (optional)
-OPENAI_MODEL=gpt-4o-mini (optional)
+SUPABASE_SERVICE_ROLE_KEY=         # upload Supabase Storage
+GEMINI_API_KEY=                    # Primary AI
+CLAUDE_API_KEY=                    # High-Persuasion (ต่อรองราคา)
+OPENAI_API_KEY=                    # Fallback
+EASYSLIP_API_KEY=                  # Slip Verification [Phase 1]
+GEMINI_MODEL=gemini-2.5-flash      # optional
+OPENAI_MODEL=gpt-4o-mini           # optional
 
 ---
 
 ## Git History
 
-c262374  feat: expand AI tool system to 36 tools (Gemini, Claude, OpenAI)
-10e7b74  feat: implement AI Function Calling (Tool Use) for QR payment
-5fcf10a  fix: install @types/qrcode
-01a6e6a  feat: add PromptPay QR code generation and slip verification flow
-ae0534f  fix: update payment and shipping settings to match schema
+e78ff62  feat(phase-1): implement Phase 1 Core Reliability
+029386e  docs: add ROADMAP.md - 5-phase plan to production SaaS
+566b18d  docs: add PROJECT_STATUS.md
+c262374  feat: expand AI tool system to 36 tools
+10e7b74  feat: implement AI Function Calling (QR payment)
+01a6e6a  feat: add PromptPay QR code generation
+ae0534f  fix: update payment and shipping settings
+
+---
+
+## Roadmap Overview (แผนทั้งหมด)
+
+Phase 1: Core Reliability  [DONE] 28 กรกฎาคม 2026
+Phase 2: Billing System    [NEXT] สัปดาห์ที่ 3-4
+Phase 3: Growth & UX              สัปดาห์ที่ 5-7
+Phase 4: Scale & Polish           สัปดาห์ที่ 8-10
+Phase 5: Expansion                หลัง launch
+Beta Launch Target: ~2 เดือน
