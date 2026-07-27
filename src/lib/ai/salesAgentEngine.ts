@@ -18,6 +18,14 @@ export interface SalesAgentRequest {
   userQuery: string
   userId: string
   conversationId: string
+  /**
+   * Optional explicit conversation history, used in place of the
+   * chat_messages DB lookup. The Chat Playground never persists turns to
+   * chat_messages (unlike the real LINE webhook), so without this override
+   * every Playground message would be treated as the start of a brand new
+   * conversation with no memory of what was just said.
+   */
+  conversationHistory?: { sender: 'user' | 'bot'; text: string }[]
 }
 
 export type ComplexityLevel = 'LOW' | 'HIGH'
@@ -743,6 +751,7 @@ export async function processSalesAgentChat({
   userQuery,
   userId,
   conversationId,
+  conversationHistory,
 }: SalesAgentRequest): Promise<AgentResult> {
   if (await isOverQuota(shop)) {
     return { text: QUOTA_EXCEEDED_MESSAGE_TH, quotaExceeded: true }
@@ -787,20 +796,29 @@ export async function processSalesAgentChat({
   }
 
   // 3. Chat History
-  const { data: recentMessages } = await supabase
-    .from('chat_messages')
-    .select('sender_type, message, created_at')
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: false })
-    .limit(10)
-
   let historyContext = ''
-  if (recentMessages && recentMessages.length > 0) {
+  if (conversationHistory && conversationHistory.length > 0) {
     historyContext =
       `\n\n[ประวัติบทสนทนาล่าสุด]\n` +
-      [...recentMessages].reverse()
-        .map((m) => `${m.sender_type === 'user' ? 'ลูกค้า' : 'AI'}: ${m.message}`)
+      conversationHistory
+        .slice(-10)
+        .map((m) => `${m.sender === 'user' ? 'ลูกค้า' : 'AI'}: ${m.text}`)
         .join('\n')
+  } else {
+    const { data: recentMessages } = await supabase
+      .from('chat_messages')
+      .select('sender_type, message, created_at')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    if (recentMessages && recentMessages.length > 0) {
+      historyContext =
+        `\n\n[ประวัติบทสนทนาล่าสุด]\n` +
+        [...recentMessages].reverse()
+          .map((m) => `${m.sender_type === 'user' ? 'ลูกค้า' : 'AI'}: ${m.message}`)
+          .join('\n')
+    }
   }
 
   // 4. Payment Info

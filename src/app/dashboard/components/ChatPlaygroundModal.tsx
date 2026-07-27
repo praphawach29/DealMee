@@ -67,11 +67,20 @@ export default function ChatPlaygroundModal({
       timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
     }
 
+    // Snapshot before appending the new user message — this becomes the
+    // conversation history sent to the AI so it remembers prior turns
+    // (e.g. "รับ 2 ตัว" referring to a product mentioned earlier). The
+    // Playground never writes to chat_messages like the real LINE webhook
+    // does, so without this the AI would have no memory between messages.
+    const history = messages
+      .filter((m) => m.id !== 'welcome')
+      .map((m) => ({ sender: m.sender, text: m.text }))
+
     setMessages((prev) => [...prev, userMsg])
     if (!queryText && !simulateQuotaExceeded) setInputQuery('')
     setLoading(true)
 
-    const res = await testPlaygroundChat(textToSend.trim(), botName, personality, simulateQuotaExceeded)
+    const res = await testPlaygroundChat(textToSend.trim(), botName, personality, simulateQuotaExceeded, history)
     setLoading(false)
 
     const botReply: ChatMessage = {

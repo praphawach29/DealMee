@@ -97,7 +97,8 @@ export async function testPlaygroundChat(
   userQuery: string,
   customBotName?: string,
   customPersonality?: string,
-  simulateQuotaExceeded?: boolean
+  simulateQuotaExceeded?: boolean,
+  conversationHistory?: { sender: 'user' | 'bot'; text: string }[]
 ) {
   const supabase = await createClient()
 
@@ -131,6 +132,7 @@ export async function testPlaygroundChat(
       userQuery,
       userId: user.id,
       conversationId: `playground-${user.id}`,
+      conversationHistory,
     })
 
     let text = response.text
