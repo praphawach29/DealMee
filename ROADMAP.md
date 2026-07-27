@@ -4,6 +4,8 @@
 > เป้าหมาย: Production-Ready SaaS ที่ร้านค้าสมัครและจ่ายเงินได้จริง
 >
 > เอกสารนี้คือแผนพัฒนาในอนาคตฉบับเดียว (single source of truth) — สำหรับสถานะปัจจุบันของโปรเจกต์ (progress bar, feature ที่เสร็จแล้ว, บั๊กที่พบ) ดูที่ [PROJECT_STATUS.md](./PROJECT_STATUS.md) แทน เพื่อไม่ให้ตัวเลข % ค้างเก่าไม่ตรงกันระหว่างสองไฟล์
+>
+> สำหรับแผนยกเครื่อง AI Agent (Model Router, Planning Layer, Customer Memory Graph, Sales Workflow Engine, Evaluation Framework) ซึ่งเป็นแผนแยกต่างหากที่ตัด cross-cutting ข้าม Phase ต่างๆ ในเอกสารนี้ ดูที่ [ROADMAP_AI_AGENT.md](./ROADMAP_AI_AGENT.md)
 
 ---
 
