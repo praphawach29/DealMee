@@ -526,11 +526,18 @@ const MASTER_TOOLS = [
 function toGeminiTools(tools: typeof MASTER_TOOLS) {
   return [
     {
-      functionDeclarations: tools.map((t) => ({
-        name: t.name,
-        description: t.description,
-        parameters: convertTypesToUppercase(t.parameters),
-      })),
+      // Gemini rejects the entire tools[] payload (400 INVALID_ARGUMENT) if any
+      // declaration has `type: "object"` with an empty `properties` map — so
+      // no-argument tools must omit `parameters` entirely rather than send
+      // `{ type: 'object', properties: {}, required: [] }`.
+      functionDeclarations: tools.map((t) => {
+        const hasProperties = Object.keys(t.parameters?.properties || {}).length > 0
+        return {
+          name: t.name,
+          description: t.description,
+          ...(hasProperties ? { parameters: convertTypesToUppercase(t.parameters) } : {}),
+        }
+      }),
     },
   ]
 }
