@@ -1,13 +1,21 @@
 'use client'
 
-import { useState } from 'react'
-import { testPlaygroundChat } from '../settings/actions'
+import { useState, useEffect } from 'react'
+import { testPlaygroundChat, getPlaygroundQuotaStatus } from '../settings/actions'
 
 interface ChatMessage {
   id: string
   sender: 'user' | 'bot'
   text: string
   timestamp: string
+  quotaExceeded?: boolean
+}
+
+interface QuotaStatus {
+  messagesUsed: number
+  messageLimit: number
+  isUnlimited: boolean
+  isOverQuota: boolean
 }
 
 interface ChatPlaygroundModalProps {
@@ -27,6 +35,7 @@ export default function ChatPlaygroundModal({
   const [personality, setPersonality] = useState(initialPersonality)
   const [inputQuery, setInputQuery] = useState('')
   const [loading, setLoading] = useState(false)
+  const [quotaStatus, setQuotaStatus] = useState<QuotaStatus | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -36,10 +45,19 @@ export default function ChatPlaygroundModal({
     },
   ])
 
+  useEffect(() => {
+    if (!isOpen) return
+    getPlaygroundQuotaStatus().then((status) => {
+      if (status) setQuotaStatus(status)
+    })
+  }, [isOpen])
+
   if (!isOpen) return null
 
-  const handleSend = async (queryText?: string) => {
-    const textToSend = queryText || inputQuery
+  const handleSend = async (queryText?: string, simulateQuotaExceeded?: boolean) => {
+    const textToSend = simulateQuotaExceeded
+      ? '🚫 [ทดสอบ] จำลองข้อความเมื่อโควต้าหมด'
+      : queryText || inputQuery
     if (!textToSend.trim() || loading) return
 
     const userMsg: ChatMessage = {
@@ -50,10 +68,10 @@ export default function ChatPlaygroundModal({
     }
 
     setMessages((prev) => [...prev, userMsg])
-    if (!queryText) setInputQuery('')
+    if (!queryText && !simulateQuotaExceeded) setInputQuery('')
     setLoading(true)
 
-    const res = await testPlaygroundChat(textToSend.trim(), botName, personality)
+    const res = await testPlaygroundChat(textToSend.trim(), botName, personality, simulateQuotaExceeded)
     setLoading(false)
 
     const botReply: ChatMessage = {
@@ -61,6 +79,7 @@ export default function ChatPlaygroundModal({
       sender: 'bot',
       text: res.response || 'ขออภัยค่ะ ระบบทดสอบขัดข้องชั่วคราว',
       timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+      quotaExceeded: res.quotaExceeded === true,
     }
 
     setMessages((prev) => [...prev, botReply])
@@ -72,6 +91,11 @@ export default function ChatPlaygroundModal({
     '💳 ขอช่องทางชำระเงินหน่อย',
     '🚚 คิดค่าจัดส่งเท่าไหร่',
   ]
+
+  const usagePct =
+    quotaStatus && !quotaStatus.isUnlimited && quotaStatus.messageLimit > 0
+      ? Math.min(100, Math.round((quotaStatus.messagesUsed / quotaStatus.messageLimit) * 100))
+      : 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
@@ -103,6 +127,20 @@ export default function ChatPlaygroundModal({
               <p className="text-xs text-slate-400 mt-0.5">
                 ทดสอบคำตอบของพนักงานขายก่อนใช้งานจริงบน LINE OA
               </p>
+              {quotaStatus && (
+                <p className="text-[10px] mt-1 flex items-center gap-1.5">
+                  <span className={quotaStatus.isOverQuota ? 'text-rose-400 font-bold' : 'text-slate-500'}>
+                    {quotaStatus.isUnlimited
+                      ? 'โควต้าข้อความ: ไม่จำกัด'
+                      : `โควต้าข้อความเดือนนี้: ${quotaStatus.messagesUsed.toLocaleString()} / ${quotaStatus.messageLimit.toLocaleString()} (${usagePct}%)`}
+                  </span>
+                  {quotaStatus.isOverQuota && (
+                    <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-1.5 py-0.5 rounded font-bold">
+                      หมดโควต้าแล้ว
+                    </span>
+                  )}
+                </p>
+              )}
             </div>
           </div>
 
@@ -127,6 +165,14 @@ export default function ChatPlaygroundModal({
               {preset}
             </button>
           ))}
+          <button
+            disabled={loading}
+            onClick={() => handleSend(undefined, true)}
+            title="ดูตัวอย่างข้อความที่ลูกค้าจะเห็นเมื่อโควต้าหมด โดยไม่หักโควต้าจริงของร้าน"
+            className="text-xs px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 whitespace-nowrap transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+          >
+            🚫 จำลองโควต้าหมด
+          </button>
         </div>
 
         {/* Chat History Area */}
@@ -146,6 +192,8 @@ export default function ChatPlaygroundModal({
                   className={`p-3 rounded-2xl text-xs sm:text-sm whitespace-pre-wrap leading-relaxed shadow-sm ${
                     msg.sender === 'user'
                       ? 'bg-electric-blue text-white rounded-br-none'
+                      : msg.quotaExceeded
+                      ? 'bg-rose-500/10 text-rose-200 border border-rose-500/40 rounded-bl-none'
                       : 'bg-slate-800 text-slate-100 border border-slate-700/80 rounded-bl-none'
                   }`}
                 >

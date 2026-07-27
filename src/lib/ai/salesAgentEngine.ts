@@ -1,8 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getCurrentPeriod } from '@/lib/billing/usage'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+export const QUOTA_EXCEEDED_MESSAGE_TH =
+  'ขออภัยค่ะ ร้านค้าใช้ข้อความครบตามแพ็กเกจในเดือนนี้แล้ว กรุณาติดต่อทางร้านหรือรออัปเกรดแพ็กเกจเพื่อใช้งานต่อค่ะ'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -62,9 +67,17 @@ export interface AgentToolCall {
   args: Record<string, any>
 }
 
+export interface AgentUsage {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
 export interface AgentResult {
   text: string
   toolCall?: AgentToolCall
+  usage?: AgentUsage
+  quotaExceeded?: boolean
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -638,6 +651,86 @@ export function classifyMessageComplexity(userQuery: string): {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Quota Enforcement (Phase 2 — Billing)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Checks whether a shop has exceeded its plan's monthly message quota.
+ * Limits are resolved from the admin-editable `plans` table (keyed by
+ * shop.plan_key, falling back to shop.plan for shops not yet migrated),
+ * not duplicated onto `shops`, so a plan edit takes effect immediately.
+ * A messages limit of -1 (byok/unlimited sentinel) always skips the check.
+ * An expired-but-not-yet-downgraded subscription (plan_expires_at in the
+ * past) is treated as the free plan's limit.
+ */
+export interface QuotaStatus {
+  planKey: string
+  messagesUsed: number
+  messageLimit: number // -1 = unlimited
+  isUnlimited: boolean
+  isOverQuota: boolean
+}
+
+/**
+ * Resolves a shop's current-period usage against its plan's message limit.
+ * Shared by the webhook's quota gate and the dashboard/Chat Playground so
+ * both always agree on the same numbers.
+ */
+export async function getQuotaStatus(shop: any): Promise<QuotaStatus> {
+  const admin = createAdminClient()
+  const planKey = shop.plan_key || shop.plan || 'free'
+
+  const { data: planRow } = await admin
+    .from('plans')
+    .select('key, messages')
+    .eq('key', planKey)
+    .maybeSingle()
+
+  let messageLimit = planRow ? Number(planRow.messages) : null
+
+  // Fallback for shops whose plan isn't in the `plans` table yet (defaults)
+  if (messageLimit === null) {
+    const defaults: Record<string, number> = { free: 500, starter: 3000, pro: 10000, agency: 30000, byok: -1 }
+    messageLimit = defaults[planKey] ?? 500
+  }
+
+  // Expired subscription (past plan_expires_at) falls back to free-tier limit
+  if (shop.plan_expires_at && new Date(shop.plan_expires_at) < new Date() && planKey !== 'free') {
+    messageLimit = 500
+  }
+
+  const isUnlimited = messageLimit === -1
+
+  const period = getCurrentPeriod()
+  const { data: usageRow } = await admin
+    .from('usage_logs')
+    .select('messages_used')
+    .eq('shop_id', shop.id)
+    .eq('period', period)
+    .maybeSingle()
+
+  const messagesUsed = usageRow ? Number(usageRow.messages_used) : 0
+
+  return {
+    planKey,
+    messagesUsed,
+    messageLimit,
+    isUnlimited,
+    isOverQuota: !isUnlimited && messagesUsed >= messageLimit,
+  }
+}
+
+async function isOverQuota(shop: any): Promise<boolean> {
+  try {
+    const status = await getQuotaStatus(shop)
+    return status.isOverQuota
+  } catch (err) {
+    console.error('[isOverQuota] Exception (fail-open):', err)
+    return false // never block a customer's chat due to a quota-check bug
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main Agent Orchestrator
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -647,6 +740,10 @@ export async function processSalesAgentChat({
   userId,
   conversationId,
 }: SalesAgentRequest): Promise<AgentResult> {
+  if (await isOverQuota(shop)) {
+    return { text: QUOTA_EXCEEDED_MESSAGE_TH, quotaExceeded: true }
+  }
+
   const geminiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
   const claudeKey = process.env.CLAUDE_API_KEY || process.env.CLAUDE_KEY || process.env.NEXT_PUBLIC_CLAUDE_API_KEY || ''
   const openAiKey = process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY || ''
@@ -796,7 +893,17 @@ async function callGeminiApi(
     }
 
     if (!replyText && !toolCall) return null
-    return { text: replyText.trim(), toolCall }
+
+    const usageMeta = data.usageMetadata
+    const usage: AgentUsage | undefined = usageMeta
+      ? {
+          promptTokens: usageMeta.promptTokenCount || 0,
+          completionTokens: usageMeta.candidatesTokenCount || 0,
+          totalTokens: usageMeta.totalTokenCount || 0,
+        }
+      : undefined
+
+    return { text: replyText.trim(), toolCall, usage }
   } catch (err) {
     console.error('[Gemini Exception]:', err)
     return null
@@ -849,7 +956,17 @@ async function callClaudeApi(
     }
 
     if (!replyText && !toolCall) return null
-    return { text: replyText.trim(), toolCall }
+
+    const usageData = data.usage
+    const usage: AgentUsage | undefined = usageData
+      ? {
+          promptTokens: usageData.input_tokens || 0,
+          completionTokens: usageData.output_tokens || 0,
+          totalTokens: (usageData.input_tokens || 0) + (usageData.output_tokens || 0),
+        }
+      : undefined
+
+    return { text: replyText.trim(), toolCall, usage }
   } catch (err) {
     console.error('[Claude Exception]:', err)
     return null
@@ -912,7 +1029,17 @@ async function callOpenAiApi(
     }
 
     if (!replyText && !toolCall) return null
-    return { text: replyText.trim(), toolCall }
+
+    const usageData = data.usage
+    const usage: AgentUsage | undefined = usageData
+      ? {
+          promptTokens: usageData.prompt_tokens || 0,
+          completionTokens: usageData.completion_tokens || 0,
+          totalTokens: usageData.total_tokens || 0,
+        }
+      : undefined
+
+    return { text: replyText.trim(), toolCall, usage }
   } catch (err) {
     console.error('[OpenAI Exception]:', err)
     return null

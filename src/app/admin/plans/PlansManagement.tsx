@@ -263,6 +263,19 @@ export default function PlansManagement({
 
               <div>
                 <label className="block text-xs font-bold text-slate-200 mb-1.5 font-label-md">
+                  Stripe Price ID (สำหรับ subscription checkout)
+                </label>
+                <input
+                  type="text"
+                  value={editingPlan.stripe_price_id || ''}
+                  onChange={(e) => setEditingPlan({ ...editingPlan, stripe_price_id: e.target.value })}
+                  placeholder="price_xxxxxxxxxxxxx"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-400 text-xs sm:text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none font-mono transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-200 mb-1.5 font-label-md">
                   คำอธิบายแพ็กเกจ
                 </label>
                 <textarea

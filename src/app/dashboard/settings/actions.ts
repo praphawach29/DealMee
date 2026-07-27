@@ -2,7 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
+import { processSalesAgentChat, getQuotaStatus, QUOTA_EXCEEDED_MESSAGE_TH } from '@/lib/ai/salesAgentEngine'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 
 export async function updateBotSettings(formData: FormData) {
@@ -96,7 +96,8 @@ export async function updatePaymentShippingSettings(formData: FormData) {
 export async function testPlaygroundChat(
   userQuery: string,
   customBotName?: string,
-  customPersonality?: string
+  customPersonality?: string,
+  simulateQuotaExceeded?: boolean
 ) {
   const supabase = await createClient()
 
@@ -118,6 +119,12 @@ export async function testPlaygroundChat(
     personality: customPersonality || shop.personality || 'สุภาพ เรียบร้อย มืออาชีพ และมุ่งมั่นให้บริการ',
   }
 
+  // Lets a shop owner preview the exact message customers see once quota runs
+  // out, without spending any of the shop's real message quota to trigger it.
+  if (simulateQuotaExceeded) {
+    return { response: QUOTA_EXCEEDED_MESSAGE_TH, quotaExceeded: true }
+  }
+
   try {
     const response = await processSalesAgentChat({
       shop: customShop,
@@ -126,8 +133,29 @@ export async function testPlaygroundChat(
       conversationId: `playground-${user.id}`,
     })
 
-    return { response: response.text }
+    return { response: response.text, quotaExceeded: response.quotaExceeded === true }
   } catch (err: any) {
     return { response: `เกิดข้อผิดพลาด: ${err.message}` }
+  }
+}
+
+/** Current-period usage vs. plan limit, for display in the Chat Playground so a shop owner can see real quota state while testing. */
+export async function getPlaygroundQuotaStatus() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) return null
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop) return null
+
+  try {
+    const status = await getQuotaStatus(shop)
+    return status
+  } catch (err) {
+    console.error('[getPlaygroundQuotaStatus] Exception:', err)
+    return null
   }
 }

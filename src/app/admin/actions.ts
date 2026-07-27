@@ -15,6 +15,7 @@ export interface PlanItem {
   description: string
   badge_color?: string
   features: string[]
+  stripe_price_id?: string
 }
 
 export async function verifySuperAdmin() {
@@ -184,6 +185,7 @@ export async function getPlans(): Promise<PlanItem[]> {
     description: item.description || '',
     badge_color: item.badge_color || 'bg-surface-container-high text-on-surface',
     features: Array.isArray(item.features) ? item.features : [],
+    stripe_price_id: item.stripe_price_id || '',
   }))
 }
 
@@ -204,6 +206,7 @@ export async function updatePlanDetails(plan: PlanItem) {
     description: plan.description,
     badge_color: plan.badge_color || 'bg-surface-container-high text-on-surface',
     features: plan.features,
+    stripe_price_id: plan.stripe_price_id || null,
     updated_at: new Date().toISOString(),
   }
 

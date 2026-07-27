@@ -110,6 +110,16 @@ export default function SidebarNav({ bizType, isSuperAdmin = false, onNavClick }
       )}
 
       <Link
+        href="/dashboard/billing"
+        prefetch={true}
+        onClick={() => handleLinkClick('/dashboard/billing')}
+        className={linkClass('/dashboard/billing')}
+      >
+        <span className="material-symbols-outlined mr-2.5 text-[20px]">credit_card</span>
+        <span>แพ็กเกจและการชำระเงิน</span>
+      </Link>
+
+      <Link
         href="/dashboard/settings"
         prefetch={true}
         onClick={() => handleLinkClick('/dashboard/settings')}

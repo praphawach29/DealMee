@@ -2,14 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createHmac } from 'crypto'
 import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { incrementUsage } from '@/lib/billing/usage'
 import generatePayload from 'promptpay-qr'
 import qrcode from 'qrcode'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
-const supabaseStorageKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
-const supabaseAdmin = createClient(supabaseUrl, supabaseStorageKey)
+const supabaseAdmin = createAdminClient()
 
 const QR_BUCKET = 'qr-codes'
 
@@ -175,6 +176,18 @@ export async function POST(
         }
 
         // 8. ─── TOOL CALL DISPATCHER (36 Tools) ─────────────────────────────────
+        // Skip tool dispatch + usage increment entirely if the AI never actually
+        // ran (quota exceeded) — the customer already got the quota message above.
+        if (agentResult.quotaExceeded) {
+          continue
+        }
+
+        if (agentResult.usage) {
+          incrementUsage(shop_id, agentResult.usage).catch((err) =>
+            console.error('[Webhook] incrementUsage failed:', err)
+          )
+        }
+
         if (agentResult.toolCall) {
           const { name: toolName, args } = agentResult.toolCall
           console.log(`[Webhook] AI called tool: ${toolName}`, args)
