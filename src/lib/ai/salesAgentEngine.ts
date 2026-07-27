@@ -522,37 +522,30 @@ const MASTER_TOOLS = [
 // Convert MASTER_TOOLS → Provider-specific format
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Gemini: functionDeclarations — parameters type must be UPPERCASE */
+/**
+ * Gemini: functionDeclarations. The current generateContent API expects
+ * standard lowercase JSON-Schema type strings ("object", "string", ...) —
+ * same as what Claude/OpenAI already accept in MASTER_TOOLS as authored.
+ * An earlier version of this code uppercased them (matching an older
+ * Gemini SDK convention), which the live API now rejects wholesale with a
+ * 400 INVALID_ARGUMENT on every function declaration in the request.
+ */
 function toGeminiTools(tools: typeof MASTER_TOOLS) {
   return [
     {
-      // Gemini rejects the entire tools[] payload (400 INVALID_ARGUMENT) if any
-      // declaration has `type: "object"` with an empty `properties` map — so
-      // no-argument tools must omit `parameters` entirely rather than send
-      // `{ type: 'object', properties: {}, required: [] }`.
+      // Gemini also rejects any declaration with type:"object" and an empty
+      // properties map, so no-argument tools must omit `parameters` entirely
+      // rather than send `{ type: 'object', properties: {}, required: [] }`.
       functionDeclarations: tools.map((t) => {
         const hasProperties = Object.keys(t.parameters?.properties || {}).length > 0
         return {
           name: t.name,
           description: t.description,
-          ...(hasProperties ? { parameters: convertTypesToUppercase(t.parameters) } : {}),
+          ...(hasProperties ? { parameters: t.parameters } : {}),
         }
       }),
     },
   ]
-}
-
-function convertTypesToUppercase(obj: any): any {
-  if (typeof obj !== 'object' || obj === null) return obj
-  const result: any = {}
-  for (const key of Object.keys(obj)) {
-    if (key === 'type' && typeof obj[key] === 'string') {
-      result[key] = obj[key].toUpperCase()
-    } else {
-      result[key] = convertTypesToUppercase(obj[key])
-    }
-  }
-  return result
 }
 
 /** Claude: tools with input_schema */
