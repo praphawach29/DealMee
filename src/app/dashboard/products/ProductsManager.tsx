@@ -1,0 +1,760 @@
+'use client'
+
+import { useState, useRef } from 'react'
+import { createProduct, deleteProduct, generateAiProductDescription, bulkImportProducts } from './actions'
+
+export interface ProductItem {
+  id: string
+  shop_id: string
+  name: string
+  category: string
+  price: number
+  stock: number
+  description: string | null
+  image_url: string | null
+  status: string
+  created_at: string
+}
+
+export default function ProductsManager({ products }: { products: ProductItem[] }) {
+  const [isOpenModal, setIsOpenModal] = useState(false)
+  const [isOpenImportModal, setIsOpenImportModal] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [isAiGenerating, setIsAiGenerating] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all')
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Form State for Adding Product
+  const [productName, setProductName] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('ทั่วไป')
+  const [customCategory, setCustomCategory] = useState('')
+  const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false)
+  const [productPrice, setProductPrice] = useState('390')
+  const [productStock, setProductStock] = useState('10')
+  const [productDescription, setProductDescription] = useState('')
+  const [imageInputType, setImageInputType] = useState<'upload' | 'url'>('upload')
+  const [imageUrl, setImageUrl] = useState('')
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const csvInputRef = useRef<HTMLInputElement>(null)
+
+  // Dynamically extract categories
+  const defaultCategories = ['เสื้อผ้า', 'ความงาม', 'ไอที', 'อาหาร', 'ทั่วไป']
+  const existingCategories = Array.from(new Set(products.map(p => p.category).filter(Boolean)))
+  const allCategories = Array.from(new Set([...defaultCategories, ...existingCategories]))
+
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (p.description && p.description.toLowerCase().includes(searchTerm.toLowerCase()))
+    const matchesCategory = selectedCategoryFilter === 'all' || p.category === selectedCategoryFilter
+    return matchesSearch && matchesCategory
+  })
+
+  // Reset form when modal opens
+  const handleOpenAddModal = () => {
+    setProductName('')
+    setSelectedCategory('ทั่วไป')
+    setCustomCategory('')
+    setIsCustomCategoryMode(false)
+    setProductPrice('390')
+    setProductStock('10')
+    setProductDescription('')
+    setImageInputType('upload')
+    setImageUrl('')
+    setImagePreview(null)
+    setMessage(null)
+    setIsOpenModal(true)
+  }
+
+  // Handle local image file selection
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('ขนาดไฟล์ภาพต้องไม่เกิน 5MB')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      setImagePreview(result)
+      setImageUrl(result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // Handle AI Description Generation
+  const handleGenerateAiDescription = async () => {
+    if (!productName.trim()) {
+      alert('กรุณากรอกชื่อสินค้าก่อนกดให้ AI ช่วยเขียนรายละเอียดค่ะ')
+      return
+    }
+
+    const targetCategory = isCustomCategoryMode ? customCategory : selectedCategory
+    setIsAiGenerating(true)
+    const res = await generateAiProductDescription(productName, targetCategory)
+    setIsAiGenerating(false)
+
+    if (res.error) {
+      alert(res.error)
+    } else if (res.description) {
+      setProductDescription(res.description)
+    }
+  }
+
+  // Submit Add Product Form
+  async function handleAddSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setMessage(null)
+
+    const finalCategory = isCustomCategoryMode
+      ? (customCategory.trim() || 'ทั่วไป')
+      : selectedCategory
+
+    const formData = new FormData()
+    formData.append('name', productName)
+    formData.append('category', finalCategory)
+    formData.append('price', productPrice)
+    formData.append('stock', productStock)
+    formData.append('description', productDescription)
+    formData.append('image_url', imageUrl)
+
+    const res = await createProduct(formData)
+    setLoading(false)
+
+    if (res?.error) {
+      setMessage({ type: 'error', text: res.error })
+    } else if (res?.success) {
+      setMessage({ type: 'success', text: res.success })
+      setIsOpenModal(false)
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบสินค้านี้?')) return
+
+    setLoading(true)
+    const res = await deleteProduct(id)
+    setLoading(false)
+
+    if (res?.error) {
+      alert(res.error)
+    }
+  }
+
+  // Download Sample CSV Template
+  const handleDownloadCsvTemplate = () => {
+    const csvContent =
+      '\uFEFF' +
+      'ชื่อสินค้า,หมวดหมู่,ราคา,จำนวนสต๊อก,รายละเอียดสินค้า,URLรูปภาพ\n' +
+      'เสื้อยืด Oversize สีดำ,เสื้อผ้า,390,20,เสื้อยืดผ้าคอตตอน 100% สวมใส่สบาย ผ้าระบายอากาศได้ดี,https://images.unsplash.com/photo-1521572267360-ee0c2909d518\n' +
+      'แก้วน้ำเก็บบางความเย็น 500ml,ทั่วไป,490,15,แก้วสแตนเลส 304 เก็บความเย็นได้นาน 24 ชั่วโมง,https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd\n'
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'template_products_import.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  // Handle CSV Bulk File Import
+  const handleCsvFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = async () => {
+      try {
+        const text = reader.result as string
+        const lines = text.split(/\r\n|\n/).filter(line => line.trim())
+
+        if (lines.length <= 1) {
+          alert('ไฟล์ CSV ไม่มีข้อมูลสินค้า')
+          return
+        }
+
+        const parsedProducts = []
+        // Skip header row
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''))
+          if (cols.length >= 3 && cols[0]) {
+            parsedProducts.push({
+              name: cols[0],
+              category: cols[1] || 'ทั่วไป',
+              price: parseFloat(cols[2] || '0'),
+              stock: parseInt(cols[3] || '0', 10),
+              description: cols[4] || '',
+              image_url: cols[5] || '',
+            })
+          }
+        }
+
+        if (parsedProducts.length === 0) {
+          alert('ไม่พบรูปแบบข้อมูลสินค้าที่ถูกต้องในไฟล์ CSV')
+          return
+        }
+
+        setLoading(true)
+        const res = await bulkImportProducts(parsedProducts)
+        setLoading(false)
+
+        if (res.error) {
+          alert(res.error)
+        } else if (res.success) {
+          setMessage({ type: 'success', text: res.success })
+          setIsOpenImportModal(false)
+        }
+      } catch (err) {
+        alert('เกิดข้อผิดพลาดในการอ่านไฟล์ CSV')
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  return (
+    <div className="flex flex-col w-full relative space-y-5 sm:space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-on-surface font-headline-md leading-tight">จัดการสินค้า</h1>
+          <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5 font-body-md">
+            จัดการแคตตาล็อกสินค้า ราคา และสต๊อก เพื่อให้บอท AI ช่วยเชียร์ขายและแนะนำลูกค้า
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <button
+            onClick={() => setIsOpenImportModal(true)}
+            className="flex items-center justify-center gap-1.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md font-bold px-3.5 py-2 rounded-xl transition-all border border-outline-variant/40 cursor-pointer text-xs sm:text-sm shadow-xs"
+          >
+            <span className="material-symbols-outlined text-[18px]">file_upload</span>
+            <span>นำเข้า CSV</span>
+          </button>
+
+          <button
+            onClick={handleOpenAddModal}
+            className="flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-4 py-2 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 cursor-pointer text-xs sm:text-sm"
+          >
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            <span>เพิ่มสินค้าใหม่</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Alert Notification */}
+      {message && (
+        <div
+          className={`p-3.5 rounded-xl text-xs sm:text-sm font-label-md flex items-center justify-between transition-all ${
+            message.type === 'success'
+              ? 'bg-success-green/10 text-success-green border border-success-green/20'
+              : 'bg-error-red/10 text-error-red border border-error-red/20'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-[18px]">
+              {message.type === 'success' ? 'check_circle' : 'error'}
+            </span>
+            <p>{message.text}</p>
+          </div>
+          <button onClick={() => setMessage(null)} className="text-xs opacity-70 hover:opacity-100">✕</button>
+        </div>
+      )}
+
+      {/* Compact 3-Column Stats Grid */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-5">
+        <div className="bg-surface border border-outline-variant/40 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm flex flex-col justify-between h-full">
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <h3 className="text-[11px] sm:text-xs font-bold text-on-surface-variant font-label-md">
+              <span className="sm:hidden">ทั้งหมด</span>
+              <span className="hidden sm:inline">สินค้าทั้งหมด</span>
+            </h3>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-electric-blue/10 flex items-center justify-center text-electric-blue shrink-0">
+              <span className="material-symbols-outlined text-[15px] sm:text-[18px]">inventory_2</span>
+            </div>
+          </div>
+          <div>
+            <span className="text-base sm:text-2xl font-bold text-on-surface font-headline-lg">{products.length}</span>
+            <span className="text-[10px] sm:text-xs text-outline ml-1">รายการ</span>
+          </div>
+        </div>
+
+        <div className="bg-surface border border-outline-variant/40 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm flex flex-col justify-between h-full">
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <h3 className="text-[11px] sm:text-xs font-bold text-on-surface-variant font-label-md">
+              <span className="sm:hidden">พร้อมขาย</span>
+              <span className="hidden sm:inline">พร้อมขาย (In Stock)</span>
+            </h3>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-success-green/10 flex items-center justify-center text-success-green shrink-0">
+              <span className="material-symbols-outlined text-[15px] sm:text-[18px]">check_circle</span>
+            </div>
+          </div>
+          <div>
+            <span className="text-base sm:text-2xl font-bold text-success-green font-headline-lg">
+              {products.filter(p => p.stock > 0).length}
+            </span>
+            <span className="text-[10px] sm:text-xs text-outline ml-1">รายการ</span>
+          </div>
+        </div>
+
+        <div className="bg-surface border border-outline-variant/40 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm flex flex-col justify-between h-full">
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <h3 className="text-[11px] sm:text-xs font-bold text-on-surface-variant font-label-md">
+              <span className="sm:hidden">หมดสต๊อก</span>
+              <span className="hidden sm:inline">สินค้าหมดสต๊อก</span>
+            </h3>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
+              <span className="material-symbols-outlined text-[15px] sm:text-[20px]">warning</span>
+            </div>
+          </div>
+          <div>
+            <span className="text-base sm:text-3xl font-bold text-amber-600 font-headline-lg">
+              {products.filter(p => p.stock <= 0).length}
+            </span>
+            <span className="text-[10px] sm:text-xs text-outline ml-1">รายการ</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="bg-surface border border-outline-variant/40 rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="relative w-full sm:w-80">
+          <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline text-[20px]">
+            search
+          </span>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="ค้นหาชื่อสินค้า หรือรายละเอียด..."
+            className="w-full pl-10 pr-4 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-high text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:bg-surface outline-none transition-all placeholder:text-outline"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+          <button
+            onClick={() => setSelectedCategoryFilter('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              selectedCategoryFilter === 'all'
+                ? 'bg-electric-blue text-white shadow-xs'
+                : 'bg-surface-container-high text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            ทั้งหมด
+          </button>
+
+          {allCategories.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategoryFilter(cat)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                selectedCategoryFilter === cat
+                  ? 'bg-electric-blue text-white shadow-xs'
+                  : 'bg-surface-container-high text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Products Grid Display */}
+      {filteredProducts.length === 0 ? (
+        <div className="bg-surface border border-outline-variant/40 rounded-2xl p-8 sm:p-12 text-center space-y-3">
+          <div className="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center mx-auto text-outline">
+            <span className="material-symbols-outlined text-[28px]">inventory_2</span>
+          </div>
+          <h3 className="font-bold text-base text-on-surface font-headline-md">ยังไม่มีรายการสินค้า</h3>
+          <p className="text-xs text-on-surface-variant max-w-sm mx-auto">
+            กดปุ่ม "เพิ่มสินค้าใหม่" ด้านบน เพื่อป้อนข้อมูลสินค้า ให้บอท AI นำไปใช้เชียร์ขายหน้าร้านได้เลยค่ะ
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
+          {filteredProducts.map(product => {
+            const isOutOfStock = product.stock <= 0
+
+            return (
+              <div
+                key={product.id}
+                className="bg-surface border border-outline-variant/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between space-y-3 hover:shadow-md transition-all relative group"
+              >
+                <div className="space-y-2.5">
+                  <div className="aspect-video w-full rounded-xl bg-merchant-bg border border-outline-variant/30 overflow-hidden relative flex items-center justify-center">
+                    {product.image_url ? (
+                      <img
+                        src={product.image_url}
+                        alt={product.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-outline gap-1">
+                        <span className="material-symbols-outlined text-[32px]">image</span>
+                        <span className="text-[10px]">ไม่มีรูปภาพ</span>
+                      </div>
+                    )}
+
+                    <span className="absolute top-2 right-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-900/80 backdrop-blur-xs text-white">
+                      {product.category || 'ทั่วไป'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-sm text-on-surface line-clamp-1">{product.name}</h3>
+                    <p className="text-xs text-on-surface-variant line-clamp-2 mt-0.5 min-h-[32px]">
+                      {product.description || 'ไม่มีรายละเอียดสินค้า'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-outline-variant/20 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-electric-blue font-mono">
+                      ฿{(product.price ?? 0).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        isOutOfStock
+                          ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                          : 'bg-success-green/10 text-success-green border border-success-green/20'
+                      }`}
+                    >
+                      {isOutOfStock ? 'หมดสต๊อก' : `คงเหลือ ${product.stock}`}
+                    </span>
+
+                    <button
+                      onClick={() => handleDelete(product.id)}
+                      className="p-1 rounded-lg text-outline hover:text-error-red hover:bg-error-red/10 transition-colors cursor-pointer"
+                      title="ลบสินค้า"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* 1. Add Product Modal */}
+      {isOpenModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="bg-slate-900 text-slate-100 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="shrink-0 px-6 py-4 border-b border-slate-700/80 flex items-center justify-between bg-slate-800/90">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-electric-blue/20 flex items-center justify-center text-electric-blue">
+                  <span className="material-symbols-outlined text-[20px]">add_shopping_cart</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-100 font-headline-md leading-tight">
+                    เพิ่มรายการสินค้าใหม่
+                  </h3>
+                  <p className="text-[11px] text-slate-400">กรอกข้อมูลสินค้าเพื่อให้ AI นำไปใช้เชียร์ขายหน้าร้าน</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsOpenModal(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleAddSubmit} className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-900">
+              <div>
+                <label className="block text-xs font-bold text-slate-200 mb-1.5 font-label-md">
+                  ชื่อสินค้า *
+                </label>
+                <input
+                  type="text"
+                  value={productName}
+                  onChange={(e) => setProductName(e.target.value)}
+                  required
+                  placeholder="เช่น เสื้อยืด Oversize สีดำ, เซรั่มหน้าใส"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm focus:border-electric-blue focus:ring-2 focus:ring-electric-blue/20 outline-none transition-colors placeholder:text-slate-500"
+                />
+              </div>
+
+              {/* Custom Category Selection */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-slate-200 font-label-md">
+                      หมวดหมู่
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomCategoryMode(!isCustomCategoryMode)}
+                      className="text-[11px] font-bold text-electric-blue hover:underline cursor-pointer"
+                    >
+                      {isCustomCategoryMode ? 'เลือกจากที่มีอยู่' : '+ เพิ่มหมวดหมู่ใหม่'}
+                    </button>
+                  </div>
+
+                  {isCustomCategoryMode ? (
+                    <input
+                      type="text"
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      placeholder="พิมพ์หมวดหมู่ใหม่ที่ต้องการ..."
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-electric-blue bg-slate-800 text-slate-100 text-xs sm:text-sm outline-none placeholder:text-slate-500"
+                    />
+                  ) : (
+                    <select
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm font-medium focus:border-electric-blue outline-none transition-colors cursor-pointer"
+                    >
+                      {allCategories.map(cat => (
+                        <option key={cat} value={cat} className="bg-slate-800 text-slate-100">{cat}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-200 mb-1.5 font-label-md">
+                    ราคา (บาท) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={productPrice}
+                    onChange={(e) => setProductPrice(e.target.value)}
+                    required
+                    placeholder="390"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm focus:border-electric-blue outline-none font-mono transition-colors placeholder:text-slate-500"
+                  />
+                </div>
+              </div>
+
+              {/* Stock and Image Selection */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-200 mb-1.5 font-label-md">
+                    จำนวนสต๊อก (ชิ้น) *
+                  </label>
+                  <input
+                    type="number"
+                    value={productStock}
+                    onChange={(e) => setProductStock(e.target.value)}
+                    required
+                    min={0}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm focus:border-electric-blue outline-none font-mono transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-slate-200 font-label-md">
+                      รูปภาพสินค้า
+                    </label>
+                    <div className="flex gap-2 text-[10px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setImageInputType('upload')}
+                        className={`cursor-pointer ${imageInputType === 'upload' ? 'text-electric-blue underline' : 'text-slate-400'}`}
+                      >
+                        📁 อัปโหลด
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImageInputType('url')}
+                        className={`cursor-pointer ${imageInputType === 'url' ? 'text-electric-blue underline' : 'text-slate-400'}`}
+                      >
+                        🔗 URL
+                      </button>
+                    </div>
+                  </div>
+
+                  {imageInputType === 'upload' ? (
+                    <div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageFileChange}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full px-3.5 py-2 rounded-xl border border-dashed border-slate-700 hover:border-electric-blue bg-slate-800 text-slate-300 text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">photo_camera</span>
+                        <span>เลือกรูปภาพจากเครื่อง...</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <input
+                      type="url"
+                      value={imageUrl}
+                      onChange={(e) => {
+                        setImageUrl(e.target.value)
+                        setImagePreview(e.target.value)
+                      }}
+                      placeholder="https://..."
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs focus:border-electric-blue outline-none placeholder:text-slate-500"
+                    />
+                  )}
+
+                  {imagePreview && (
+                    <div className="mt-2 relative w-16 h-16 rounded-xl border border-slate-700 overflow-hidden">
+                      <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImagePreview(null)
+                          setImageUrl('')
+                        }}
+                        className="absolute top-0.5 right-0.5 bg-slate-950/90 text-white rounded-full p-0.5 text-[10px]"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Description & AI Copywriter Feature */}
+              <div className="space-y-1.5 pt-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-200 font-label-md">
+                    รายละเอียดสินค้า
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleGenerateAiDescription}
+                    disabled={isAiGenerating}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold text-[11px] rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+                    <span>{isAiGenerating ? 'AI กำลังเขียน...' : '✨ ให้ AI ช่วยเขียนรายละเอียดสินค้า'}</span>
+                  </button>
+                </div>
+                <textarea
+                  rows={3}
+                  value={productDescription}
+                  onChange={(e) => setProductDescription(e.target.value)}
+                  placeholder="กรอกรายละเอียด จุดเด่น หรือขนาดสินค้า (หรือกดปุ่ม AI ช่วยเขียนด้านบน)..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm focus:border-electric-blue outline-none resize-none transition-colors placeholder:text-slate-500"
+                />
+              </div>
+
+              <div className="shrink-0 px-0 pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsOpenModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-5 py-2.5 rounded-xl bg-electric-blue hover:bg-primary text-white font-bold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    {loading ? 'progress_activity' : 'save'}
+                  </span>
+                  <span>{loading ? 'กำลังบันทึก...' : 'บันทึกสินค้า'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2. CSV Bulk Import Modal */}
+      {isOpenImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="bg-slate-900 text-slate-100 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="px-6 py-4 border-b border-slate-700/80 flex items-center justify-between bg-slate-800/90">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <span className="material-symbols-outlined text-[20px]">file_upload</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-100 font-headline-md leading-tight">
+                    นำเข้าสินค้าจาก CSV / Excel
+                  </h3>
+                  <p className="text-[11px] text-slate-400">ดาวน์โหลดตัวอย่างไฟล์และอัปโหลดเพื่อเพิ่มสินค้าจำนวนมาก</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsOpenImportModal(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 bg-slate-900">
+              <div className="p-4 rounded-xl bg-slate-800/90 border border-slate-700/80 space-y-2.5 shadow-sm">
+                <h4 className="font-bold text-xs text-slate-100">ขั้นตอนที่ 1: ดาวน์โหลดตัวอย่างไฟล์</h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  ดาวน์โหลดไฟล์ตัวอย่าง CSV เพื่อดูโครงสร้างคอลัมน์สินค้าที่ถูกต้องตามมาตรฐานของระบบ
+                </p>
+                <button
+                  onClick={handleDownloadCsvTemplate}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-600 text-slate-100 font-bold text-xs rounded-xl transition-all border border-slate-600 cursor-pointer shadow-xs"
+                >
+                  <span className="material-symbols-outlined text-[16px]">download</span>
+                  <span>ดาวน์โหลดไฟล์ตัวอย่าง CSV</span>
+                </button>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-800/90 border border-slate-700/80 space-y-2.5 shadow-sm">
+                <h4 className="font-bold text-xs text-slate-100">ขั้นตอนที่ 2: อัปโหลดไฟล์ CSV</h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  เลือกไฟล์ CSV ที่เตรียมไว้เพื่อเริ่มนำเข้าสินค้าทั้งหมดเข้าสู่ระบบทันที
+                </p>
+
+                <input
+                  ref={csvInputRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleCsvFileImport}
+                  className="hidden"
+                />
+
+                <button
+                  onClick={() => csvInputRef.current?.click()}
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    {loading ? 'progress_activity' : 'cloud_upload'}
+                  </span>
+                  <span>{loading ? 'กำลังนำเข้าสินค้า...' : 'เลือกไฟล์ CSV และนำเข้าทันที'}</span>
+                </button>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={() => setIsOpenImportModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors cursor-pointer"
+                >
+                  ปิดหน้าต่าง
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

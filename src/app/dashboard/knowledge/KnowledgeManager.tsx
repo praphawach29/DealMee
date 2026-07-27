@@ -1,0 +1,359 @@
+'use client'
+
+import { useState } from 'react'
+import { createKnowledgeItem, deleteKnowledgeItem } from './actions'
+
+export interface KnowledgeItem {
+  id: string
+  shop_id: string
+  title: string
+  content: string
+  category: string
+  status: string
+  created_at: string
+}
+
+export default function KnowledgeManager({ items }: { items: KnowledgeItem[] }) {
+  const [isOpenModal, setIsOpenModal] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  const filteredItems = items.filter(item => {
+    const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          item.content.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory
+    return matchesSearch && matchesCategory
+  })
+
+  async function handleAddSubmit(formData: FormData) {
+    setLoading(true)
+    setMessage(null)
+
+    const res = await createKnowledgeItem(formData)
+    setLoading(false)
+
+    if (res?.error) {
+      setMessage({ type: 'error', text: res.error })
+    } else if (res?.success) {
+      setMessage({ type: 'success', text: res.success })
+      setIsOpenModal(false)
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลชุดนี้?')) return
+
+    setLoading(true)
+    const res = await deleteKnowledgeItem(id)
+    setLoading(false)
+
+    if (res?.error) {
+      alert(res.error)
+    }
+  }
+
+  const categoryLabel = (cat: string) => {
+    switch (cat) {
+      case 'faq': return '❓ FAQ (ถาม-ตอบ)'
+      case 'product': return '📦 สินค้า/บริการ'
+      case 'policy': return '📜 เงื่อนไข/นโยบาย'
+      default: return '💡 ข้อมูลทั่วไป'
+    }
+  }
+
+  const categoryBadgeColor = (cat: string) => {
+    switch (cat) {
+      case 'faq': return 'bg-blue-50 text-blue-700 border-blue-200'
+      case 'product': return 'bg-purple-50 text-purple-700 border-purple-200'
+      case 'policy': return 'bg-amber-50 text-amber-700 border-amber-200'
+      default: return 'bg-gray-100 text-gray-700 border-gray-200'
+    }
+  }
+
+  return (
+    <div className="flex flex-col w-full relative space-y-5 sm:space-y-6">
+      {/* Header Section */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-on-surface font-headline-md leading-tight">คลังความรู้</h1>
+          <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5 font-body-md">
+            เพิ่มข้อมูลเอกสาร ถาม-ตอบ หรือเงื่อนไขร้านค้า เพื่อให้ AI นำไปใช้อ้างอิงในการตอบคำถามลูกค้าได้อย่างแม่นยำ
+          </p>
+        </div>
+        <button
+          onClick={() => setIsOpenModal(true)}
+          className="flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-4 py-2 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 cursor-pointer shrink-0 text-xs sm:text-sm"
+        >
+          <span className="material-symbols-outlined text-[18px]">add</span>
+          <span>เพิ่มข้อมูลใหม่</span>
+        </button>
+      </div>
+
+      {/* Alert Notification */}
+      {message && (
+        <div
+          className={`p-3.5 rounded-xl text-xs sm:text-sm font-label-md flex items-center justify-between transition-all ${
+            message.type === 'success'
+              ? 'bg-success-green/10 text-success-green border border-success-green/20'
+              : 'bg-error-red/10 text-error-red border border-error-red/20'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-[18px]">
+              {message.type === 'success' ? 'check_circle' : 'error'}
+            </span>
+            <p>{message.text}</p>
+          </div>
+          <button onClick={() => setMessage(null)} className="text-xs opacity-70 hover:opacity-100">✕</button>
+        </div>
+      )}
+
+      {/* Compact 3-Column Stats Grid on Mobile */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-5">
+        <div className="bg-surface border border-outline-variant/40 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm flex flex-col justify-between h-full min-h-[90px] sm:min-h-[110px]">
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <h3 className="text-[11px] sm:text-xs font-bold text-on-surface-variant font-label-md">
+              <span className="sm:hidden">ทั้งหมด</span>
+              <span className="hidden sm:inline">ข้อมูลทั้งหมด</span>
+            </h3>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-electric-blue/10 flex items-center justify-center text-electric-blue shrink-0">
+              <span className="material-symbols-outlined text-[15px] sm:text-[18px]">description</span>
+            </div>
+          </div>
+          <div>
+            <span className="text-base sm:text-2xl font-bold text-on-surface font-headline-lg">{items.length}</span>
+            <span className="text-[10px] sm:text-xs text-outline ml-1">รายการ</span>
+          </div>
+        </div>
+
+        <div className="bg-surface border border-outline-variant/40 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm flex flex-col justify-between h-full min-h-[90px] sm:min-h-[110px]">
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <h3 className="text-[11px] sm:text-xs font-bold text-on-surface-variant font-label-md">
+              <span className="sm:hidden">สถานะ</span>
+              <span className="hidden sm:inline">สถานะ RAG</span>
+            </h3>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-success-green/10 flex items-center justify-center text-success-green shrink-0">
+              <span className="material-symbols-outlined text-[15px] sm:text-[18px]">check_circle</span>
+            </div>
+          </div>
+          <div>
+            <span className="text-xs sm:text-base font-bold text-success-green">พร้อมใช้งาน</span>
+          </div>
+        </div>
+
+        <div className="bg-surface border border-outline-variant/40 rounded-xl sm:rounded-2xl p-2.5 sm:p-6 shadow-sm flex flex-col justify-between h-full min-h-[90px] sm:min-h-[110px]">
+          <div className="flex items-center justify-between mb-2 sm:mb-4">
+            <h3 className="text-[11px] sm:text-sm font-bold text-on-surface-variant font-label-md">
+              <span className="sm:hidden">ตัวอักษร</span>
+              <span className="hidden sm:inline">รวมตัวอักษร</span>
+            </h3>
+            <div className="w-6 h-6 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-600 shrink-0">
+              <span className="material-symbols-outlined text-[15px] sm:text-[20px]">short_text</span>
+            </div>
+          </div>
+          <div>
+            <span className="text-sm sm:text-3xl font-bold text-on-surface font-headline-lg">
+              {items.reduce((acc, curr) => acc + curr.content.length, 0).toLocaleString()}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Data Section */}
+      <div className="bg-surface border border-outline-variant/40 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+        
+        {/* Search & Filter Toolbar */}
+        <div className="p-3.5 sm:p-5 border-b border-outline-variant/30 flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4 bg-surface-container-lowest">
+          <div className="relative w-full sm:w-80">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px] sm:text-[20px]">search</span>
+            <input 
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="ค้นหาตามหัวข้อ หรือเนื้อหา..." 
+              className="w-full pl-9 sm:pl-10 pr-4 py-2 text-xs sm:text-sm border border-outline-variant rounded-xl bg-merchant-bg text-on-surface focus:outline-none focus:border-electric-blue focus:ring-1 focus:ring-electric-blue transition-all"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+            {['all', 'faq', 'product', 'policy', 'general'].map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all border shrink-0 ${
+                  selectedCategory === cat
+                    ? 'bg-electric-blue text-white border-electric-blue shadow-sm'
+                    : 'bg-surface text-on-surface-variant border-outline-variant/50 hover:bg-surface-container'
+                }`}
+              >
+                {cat === 'all' && 'ทั้งหมด'}
+                {cat === 'faq' && '❓ FAQ'}
+                {cat === 'product' && '📦 สินค้า'}
+                {cat === 'policy' && '📜 เงื่อนไข'}
+                {cat === 'general' && '💡 ทั่วไป'}
+              </button>
+            ))}
+          </div>
+        </div>
+        
+        {/* Items List */}
+        {filteredItems.length > 0 ? (
+          <div className="divide-y divide-outline-variant/30">
+            {filteredItems.map((item) => (
+              <div key={item.id} className="p-4 sm:p-6 hover:bg-surface-container-lowest/50 transition-colors flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4">
+                <div className="space-y-1.5 sm:space-y-2 max-w-3xl w-full">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 text-[10px] sm:text-[11px] font-bold rounded-md border ${categoryBadgeColor(item.category)} shrink-0`}>
+                        {categoryLabel(item.category)}
+                      </span>
+                      <h3 className="text-sm sm:text-base font-bold text-on-surface line-clamp-1">{item.title}</h3>
+                    </div>
+                    {/* Delete button for mobile top-right */}
+                    <button
+                      onClick={() => handleDelete(item.id)}
+                      disabled={loading}
+                      className="md:hidden p-1.5 text-outline hover:text-error-red hover:bg-error-red/10 rounded-lg transition-all shrink-0"
+                      title="ลบข้อมูล"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                  </div>
+
+                  <p className="text-xs sm:text-sm text-on-surface-variant line-clamp-2 leading-relaxed">
+                    {item.content}
+                  </p>
+                  <p className="text-[10px] sm:text-[11px] text-outline" suppressHydrationWarning>
+                    เพิ่มเมื่อ: {new Date(item.created_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })}
+                  </p>
+                </div>
+
+                {/* Delete button for desktop */}
+                <div className="hidden md:flex items-center gap-2 self-center shrink-0">
+                  <button
+                    onClick={() => handleDelete(item.id)}
+                    disabled={loading}
+                    className="p-2 text-outline hover:text-error-red hover:bg-error-red/10 rounded-lg transition-all cursor-pointer"
+                    title="ลบข้อมูล"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">delete</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* Empty State */
+          <div className="flex flex-col items-center justify-center py-16 sm:py-20 text-center px-4">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-electric-blue/10 rounded-2xl flex items-center justify-center mb-4 text-electric-blue">
+              <span className="material-symbols-outlined text-2xl sm:text-3xl">library_books</span>
+            </div>
+            <h3 className="text-base sm:text-lg font-bold text-on-surface mb-1">ยังไม่มีข้อมูลในคลังความรู้</h3>
+            <p className="text-xs sm:text-sm text-on-surface-variant max-w-sm mb-6">
+              เพิ่มข้อมูลคำถามพบบ่อย นโยบาย หรือรายละเอียดสินค้า เพื่อให้ AI นำไปตอบลูกค้าได้แบบถูกต้องและทันที
+            </p>
+            <button
+              onClick={() => setIsOpenModal(true)}
+              className="flex items-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-electric-blue/20 text-xs sm:text-sm"
+            >
+              <span className="material-symbols-outlined text-[18px] sm:text-[20px]">add</span>
+              <span>เพิ่มข้อมูลแรกของคุณ</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Modal: Add New Knowledge (Mobile Sheet Bottom / Desktop Center Modal) */}
+      {isOpenModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full max-h-[85vh] sm:max-h-[90vh] overflow-y-auto p-5 sm:p-7 shadow-2xl border border-slate-100 space-y-5 sm:space-y-6 animate-in slide-in-from-bottom-5 sm:zoom-in duration-200">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-3 sm:pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-blue-50 text-electric-blue flex items-center justify-center font-bold shadow-inner shrink-0">
+                  <span className="material-symbols-outlined text-xl sm:text-2xl">psychology</span>
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-xl font-bold text-slate-900 leading-tight">เพิ่มข้อมูลความรู้ให้ AI</h2>
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">สอนคำตอบ นโยบาย หรือรายละเอียดให้ AI เรียนรู้</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsOpenModal(false)}
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px] sm:text-[20px]">close</span>
+              </button>
+            </div>
+
+            <form action={handleAddSubmit} className="space-y-3.5 sm:space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800">
+                  หมวดหมู่ข้อมูล
+                </label>
+                <select
+                  name="category"
+                  defaultValue="faq"
+                  className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 text-xs sm:text-sm font-medium focus:bg-white focus:border-electric-blue focus:ring-4 focus:ring-electric-blue/10 outline-none transition-all"
+                >
+                  <option value="faq">❓ FAQ (ถาม-ตอบที่พบบ่อย)</option>
+                  <option value="product">📦 ข้อมูลสินค้า/บริการ</option>
+                  <option value="policy">📜 เงื่อนไข/นโยบายการขาย</option>
+                  <option value="general">💡 ข้อมูลทั่วไปของร้าน</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800">
+                  หัวข้อ / คำถาม
+                </label>
+                <input
+                  name="title"
+                  type="text"
+                  required
+                  placeholder="เช่น ค่าจัดส่งเท่าไหร่?, ร้านเปิดกี่โมง?"
+                  className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 text-xs sm:text-sm focus:bg-white focus:border-electric-blue focus:ring-4 focus:ring-electric-blue/10 outline-none transition-all placeholder:text-slate-400"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs sm:text-sm font-bold text-slate-800">
+                  รายละเอียด / คำตอบ
+                </label>
+                <textarea
+                  name="content"
+                  rows={4}
+                  required
+                  placeholder="กรอกรายละเอียดข้อมูลหรือคำตอบที่ต้องการให้ AI ตอบลูกค้าอย่างละเอียด..."
+                  className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 text-xs sm:text-sm focus:bg-white focus:border-electric-blue focus:ring-4 focus:ring-electric-blue/10 outline-none transition-all placeholder:text-slate-400 leading-relaxed"
+                ></textarea>
+              </div>
+
+              <div className="flex justify-end gap-2.5 sm:gap-3 pt-3 sm:pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsOpenModal(false)}
+                  className="px-4 sm:px-6 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold text-xs sm:text-sm transition-all cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-5 sm:px-7 py-2.5 rounded-xl bg-electric-blue hover:bg-primary text-white font-bold text-xs sm:text-sm shadow-md shadow-electric-blue/20 transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    {loading ? 'sync' : 'save'}
+                  </span>
+                  <span>{loading ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
