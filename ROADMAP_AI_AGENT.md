@@ -1,7 +1,7 @@
 # Botify AI — Agent Architecture Upgrade (Master Plan)
 
 > ร่างเมื่อ: 28 กรกฎาคม 2026
-> สถานะเอกสาร: **แผนรวม (master plan) เขียนเสร็จแล้ว — รายละเอียดเจาะลึกแต่ละหัวข้อยังไม่ได้เขียน** จะเติมทีละหัวข้อในเซสชันถัดๆ ไป
+> สถานะเอกสาร: **1/5 เสร็จแล้ว (Customer Memory Graph)** — อีก 4 หัวข้อยังไม่ได้เจาะรายละเอียด จะเติมทีละหัวข้อในเซสชันถัดๆ ไป
 > อ้างอิงจาก: บทสนทนาวันที่ 28 กรกฎาคม 2026 ที่ผู้ใช้ตั้งเป้าหมายด้านสถาปัตยกรรม AI agent 5 อย่าง
 
 ---
@@ -46,8 +46,8 @@
 ## ลำดับการพัฒนาที่แนะนำ (และเหตุผล)
 
 ```
-1. Customer Memory Graph   ← ฐานราก ทุกอย่างข้างล่างต้องใช้ context จากตรงนี้
-2. Planning Layer          ← ใช้ context จาก Memory Graph วางแผนได้แม่นยำขึ้น
+1. Customer Memory Graph   ✅ เสร็จแล้ว (28 กรกฎาคม 2026)
+2. Planning Layer          ← ทำต่อได้เลย (หัวข้อถัดไป)
 3. Sales Workflow Engine   ← ต้องมี Planning Layer ก่อน ถึงจะ execute ตาม stage ได้จริง
 4. Evaluation Framework    ← ต้องมี Workflow Engine ก่อน ถึงจะวัด conversion ต่อ stage ได้แม่นยำ
 
@@ -71,15 +71,19 @@ Model Router: ทำแยกได้ทุกเมื่อ (ของเด�
 
 ### 2. Planning Layer ก่อนเรียก Tools
 - **สถานะ:** 0% — ตอนนี้เป็น single-shot ไม่มี loop ส่งผลลัพธ์ tool กลับให้ AI คิดต่อ (ไม่มี FunctionResponse round-trip เลย)
-- **Dependency:** แนะนำให้ทำหลัง Customer Memory Graph
+- **Dependency:** Customer Memory Graph เสร็จแล้ว ✅ — ทำต่อได้เลย (นี่คือหัวข้อถัดไปตามลำดับที่แนะนำ)
 - **ประเด็นสำคัญที่ต้องคิดตอนเจาะรายละเอียด:** จำกัดจำนวนสเต็ปต่อข้อความ (คุม cost + latency), LINE webhook ต้องตอบใน ~3 วินาที (Reply API timeout), จะนับ quota/usage อย่างไรเมื่อ 1 ข้อความอาจเรียก AI หลายครั้ง
 - [ ] รายละเอียด: ยังไม่เขียน
 
 ### 3. Customer Memory Graph
-- **สถานะ:** 0% — ตอนนี้ "ความจำ" คือแค่ดึง `chat_messages` ย้อนหลัง 10 ข้อความ **ภายในบทสนทนาเดียว** ไม่ข้าม session; `update_customer_note`/`add_customer_tag` เขียนแค่ text field เดียวลง `conversations`
-- **Dependency:** ไม่มี — เป็นฐานให้ข้ออื่น ควรทำก่อน
-- **คำถามที่ต้องตัดสินใจตอนเจาะรายละเอียด:** ต้องการ graph database จริง (เช่น เก็บความสัมพันธ์ entity-to-entity) หรือ structured customer-profile table ธรรมดาก็พอ (ง่ายกว่ามาก ไม่ต้องเพิ่ม infra ใหม่)
-- [ ] รายละเอียด: ยังไม่เขียน
+- **สถานะ: ✅ เสร็จแล้ว (28 กรกฎาคม 2026)**
+- **สิ่งที่สร้าง:** ตาราง `customer_profiles` (shop_id+user_id, unique) เก็บ tags/notes แบบ append-only (jsonb array แทนที่ text field เดิมที่ overwrite ทุกครั้ง), preferences (jsonb key/value), total_orders/total_spend/last_order_at ที่อัปเดตอัตโนมัติเมื่อ take_order สำเร็จ, first_seen_at/last_seen_at ที่อัปเดตทุกข้อความ
+- **ไฟล์:** `supabase_phase3_customer_memory.sql` (schema+RPC), `src/lib/customerMemory.ts` (helpers), context auto-injected ใน `salesAgentEngine.ts` (section "5. Customer Profile" ต่อจาก Payment Info) — ไม่ต้องเรียก tool ใดๆ AI จะเห็นข้อมูลลูกค้ารายนี้อัตโนมัติทุกข้อความ
+- **Webhook:** `upsertCustomerProfile()` เรียกทุกข้อความที่เข้ามา, `update_customer_note`/`add_customer_tag` เขียนคู่ขนานทั้ง `conversations` (field เดิม เก็บไว้เผื่ออนาคต) และ `customer_profiles` (ที่ใช้จริง), `take_order` เรียก `recordCustomerOrder()` อัตโนมัติ
+- **Chat Playground:** `update_customer_note`/`add_customer_tag` รันจริง (ไม่ใช่แค่ preview) เพื่อพิสูจน์ว่าความจำข้าม session ได้จริงระหว่างทดสอบ
+- **การตัดสินใจที่ทำไปแล้ว:** ใช้ entity table (Postgres ธรรมดา) ไม่ใช่ graph database จริง — use case ไม่ต้องการ graph traversal (ไม่มี query แบบ "ลูกค้าที่ซื้อ X มักซื้อ Y ด้วย") structured table ตอบโจทย์ครบและไม่ต้องเพิ่ม infra ใหม่
+- **ยังไม่ทำ (นอกขอบเขตของรอบนี้):** ยังไม่มี AI tool สำหรับเขียน `preferences` โดยตรง (มีแค่ฟังก์ชัน `updateCustomerPreference` รอเชื่อมต่อ), ยังไม่มี UI ใน `/dashboard` แสดงโปรไฟล์ลูกค้า
+- [x] รายละเอียด: เขียนแล้ว (28 กรกฎาคม 2026)
 
 ### 4. Sales Workflow Engine (แบ่ง Agent ตามขั้นตอนการขาย)
 - **สถานะ:** ~25% — system prompt อธิบาย "4-step Sales Pipeline" (Greeting→Showcase→Closing→Post-Sales) ให้ AI ตัวเดียวอ่านเป็น guideline แต่ไม่มีการ track จริงว่าบทสนทนานี้อยู่ stage ไหน (การ route ที่มีอยู่ตอนนี้แยกตาม**ประเภทคำถาม** ไม่ใช่ตาม**stage ของ funnel**)

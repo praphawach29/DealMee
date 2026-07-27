@@ -3,7 +3,7 @@
 
 > อัปเดตล่าสุด: 28 กรกฎาคม 2026
 > GitHub: praphawach29/ai-agent-google-SDK branch main
-> Last Commit: 64f1020 - fix(playground): give Chat Playground real conversation memory
+> Last Commit: e698121 - feat(ai-agent): implement Customer Memory Graph (1/5 of AI agent upgrade)
 >
 > เอกสารนี้คือแหล่งข้อมูลสถานะปัจจุบันของโปรเจกต์ฉบับเดียว (single source of truth)
 > สำหรับแผนพัฒนาในอนาคตดูที่ [ROADMAP.md](./ROADMAP.md)
@@ -90,6 +90,7 @@ supabase_phase2_billing.sql   - Phase 2 Billing schema (usage_logs, billing_paym
 | shops | +plan_key, subscription_provider, subscription_id, subscription_status, plan_expires_at, stripe_customer_id, omise_customer_id | UPDATED Phase 2 |
 | usage_logs | นับ messages_used/tokens_used ต่อร้านต่อเดือน (unique: shop_id+period) + increment_usage() RPC | NEW Phase 2 |
 | billing_payments | ประวัติการชำระเงิน (provider, plan_key, amount, status, provider_ref) | NEW Phase 2 |
+| customer_profiles | Customer Memory Graph: tags/notes แบบ append-only (jsonb), preferences, total_orders/total_spend/last_order_at (unique: shop_id+user_id) | NEW [AI Agent Upgrade 1/5] |
 
 Supabase Storage:
 - qr-codes bucket: เก็บรูป QR PromptPay
@@ -97,6 +98,9 @@ Supabase Storage:
 ---
 
 ## AI Brain - salesAgentEngine.ts
+
+### Customer Memory Graph [NEW - AI Agent Upgrade 1/5, 28 กรกฎาคม 2026]
+ทุกข้อความจะ auto-inject โปรไฟล์ลูกค้า (`customer_profiles`) เข้า system prompt โดยไม่ต้องเรียก tool — เห็น tags/notes ที่สะสมมา (append-only ไม่ overwrite เหมือน `conversations.customer_note`/`customer_tag` แบบเดิม), preferences, และสรุปยอดซื้อสะสม (`total_orders`/`total_spend`) ที่อัปเดตอัตโนมัติทุกครั้งที่ `take_order` สำเร็จ ดูรายละเอียดที่ [ROADMAP_AI_AGENT.md](./ROADMAP_AI_AGENT.md)
 
 ### Botify Brain Router
 Router เลือก Tool Set ตาม intent ลูกค้า:
@@ -239,6 +243,16 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 
 ---
 
+## Completed Features [AI Agent Upgrade — 1/5: Customer Memory Graph]
+
+แผนรวม 5 หัวข้อดูที่ [ROADMAP_AI_AGENT.md](./ROADMAP_AI_AGENT.md) — หัวข้อที่ 1 เสร็จแล้ว:
+
+- [x] ตาราง `customer_profiles` (unique: shop_id+user_id) — tags/notes แบบ append-only แทน text field ที่ overwrite ทุกครั้งใน `conversations`
+- [x] RPC functions: `upsert_customer_profile`, `append_customer_note`, `add_customer_tag_unique`, `update_customer_preference`, `record_customer_order` (atomic, SECURITY DEFINER เหมือน `increment_usage` จาก Phase 2)
+- [x] Auto-inject context เข้า system prompt ทุกข้อความ ไม่ต้องเรียก tool (`getCustomerProfileContext` ใน `src/lib/customerMemory.ts`)
+- [x] Webhook: upsert profile ทุกข้อความที่เข้ามา, `update_customer_note`/`add_customer_tag` เขียนคู่ขนานทั้งของเดิมและโปรไฟล์ใหม่, `take_order` อัปเดตยอดซื้อสะสมอัตโนมัติ
+- [x] Chat Playground: `update_customer_note`/`add_customer_tag` รันจริง (ไม่ใช่แค่ preview) เพื่อพิสูจน์ความจำข้าม session ระหว่างทดสอบ
+
 ## Completed Features [Bug Fixes - 28 กรกฎาคม 2026 หลัง Phase 2]
 
 พบและแก้ระหว่างทดสอบ Chat Playground หลัง Phase 2 (ไม่เกี่ยวกับ billing โดยตรง แต่กระทบการทำงานจริงของบอท):
@@ -366,6 +380,7 @@ NEXT_PUBLIC_APP_URL=               # [Phase 2] Stripe Checkout success/cancel + 
 
 ## Git History
 
+e698121  feat(ai-agent): implement Customer Memory Graph (1/5 of AI agent upgrade)
 64f1020  fix(playground): give Chat Playground real conversation memory
 35591c1  fix(products): remove filters on a status column that doesn't exist in production
 cb4ed28  fix(ai): grant product tools to general queries + fix search_products arg mismatch
