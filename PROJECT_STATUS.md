@@ -1,8 +1,9 @@
-﻿# Botify SaaS - Project Status
+﻿
+# Botify SaaS - Project Status
 
-> อัปเดตล่าสุด: 28 กรกฎาคม 2026 เวลา 00:31 น.
+> อัปเดตล่าสุด: 28 กรกฎาคม 2026
 > GitHub: praphawach29/ai-agent-google-SDK branch main
-> Last Commit: e78ff62 - feat(phase-1): implement Phase 1 Core Reliability
+> Last Commit: 0f88be0 - feat(phase-2): implement Phase 2 Billing & Monetization
 
 ---
 
@@ -11,7 +12,7 @@
 Foundation    ████████████████░░░░  80%
 AI Engine     ██████████████████░░  90%
 Reliability   ████████████████░░░░  80%  [Phase 1 DONE]
-Billing       ░░░░░░░░░░░░░░░░░░░░   0%  [Phase 2 - Next]
+Billing       ████████████████░░░░  80%  [Phase 2 DONE - รอ live API keys]
 Core UX       █████████████░░░░░░░  65%
 
 ---
@@ -30,6 +31,8 @@ Core UX       █████████████░░░░░░░  65%
 | LINE Integration | LINE Messaging API (Reply + Push) |
 | QR Generation | promptpay-qr + qrcode |
 | Slip Verification | EasySlip API (developer.easyslip.com) |
+| Billing (Stripe) | stripe npm SDK - recurring subscription, Checkout, Billing Portal |
+| Billing (Omise) | Omise/Opn Payments REST API - PromptPay one-time charge |
 | Deployment | Vercel |
 
 ---
@@ -50,11 +53,17 @@ src/app/dashboard/
   services/                   - Services Management
   modules/                    - Feature Toggles
   menu/                       - Quick Reply Menu
-  settings/                   - Shop Settings + actions.ts
-  components/ChatPlaygroundModal.tsx - Test chatbot UI
-src/app/admin/                - Super Admin Panel (Overview, Shops, Plans, Logs)
-src/lib/ai/salesAgentEngine.ts - AI Brain (36 Tools, 3 Providers, Complexity Router)
+  settings/                   - Shop Settings + actions.ts (+ Chat Playground quota preview)
+  billing/                    - [NEW Phase 2] Billing Dashboard (plan, usage bars, upgrade, payment history)
+  components/ChatPlaygroundModal.tsx - Test chatbot UI (shows live quota status + "simulate quota exceeded" preview)
+src/app/admin/                - Super Admin Panel (Overview, Shops, Plans, Logs incl. Stripe Price ID)
+src/app/api/billing/          - [NEW Phase 2] checkout, portal, webhook/stripe, webhook/omise
+src/lib/ai/salesAgentEngine.ts - AI Brain (36 Tools, 3 Providers, Complexity Router, Quota Gate)
+src/lib/billing/               - [NEW Phase 2] stripe.ts, omise.ts, usage.ts
+src/lib/supabase/admin.ts      - [NEW Phase 2] shared service-role Supabase client
+src/proxy.ts                    - [RENAMED Phase 2] was middleware.ts (Next.js 16 Proxy convention)
 supabase_schema_update.sql    - Full DB Schema + RLS + Phase 1 updates
+supabase_phase2_billing.sql   - Phase 2 Billing schema (usage_logs, billing_payments, plan/shop columns)
 
 ---
 
@@ -73,7 +82,10 @@ supabase_schema_update.sql    - Full DB Schema + RLS + Phase 1 updates
 | knowledge_base | FAQ / นโยบายร้าน | ACTIVE |
 | promotions | โปรโมชั่นและส่วนลด (discount_type, discount_value, code, end_date) | NEW Phase 1 |
 | leads | ลูกค้าสนใจแต่ยังไม่ซื้อ (unique: shop_id+user_id) | NEW Phase 1 |
-| plans | SaaS Pricing Plans | ACTIVE |
+| plans | SaaS Pricing Plans (+stripe_price_id) | UPDATED Phase 2 |
+| shops | +plan_key, subscription_provider, subscription_id, subscription_status, plan_expires_at, stripe_customer_id, omise_customer_id | UPDATED Phase 2 |
+| usage_logs | นับ messages_used/tokens_used ต่อร้านต่อเดือน (unique: shop_id+period) + increment_usage() RPC | NEW Phase 2 |
+| billing_payments | ประวัติการชำระเงิน (provider, plan_key, amount, status, provider_ref) | NEW Phase 2 |
 
 Supabase Storage:
 - qr-codes bucket: เก็บรูป QR PromptPay
@@ -162,6 +174,13 @@ POST /api/webhook/[shop_id]
     |- [12 more LIVE tools...]
     |- request_human_agent -> status=human -> LINE Push
 
+Quota Gate [NEW Phase 2]:
+  ก่อนเรียก AI Provider ทุกครั้ง -> getQuotaStatus(shop) เช็ค usage_logs เดือนปัจจุบัน เทียบกับ plans.messages
+    - plan_key = 'byok' หรือ messages = -1 -> ไม่จำกัด ข้ามการเช็ค
+    - subscription หมดอายุ (plan_expires_at ผ่านไปแล้ว) -> fallback เป็น limit ของแผน free
+    - เกินโควต้า -> ส่งข้อความแจ้งลูกค้า ไม่เรียก AI Provider (ประหยัดค่าใช้จ่าย) ไม่รัน Tool Dispatcher
+  ตอบสำเร็จ -> incrementUsage() เพิ่ม messages_used +1 และ tokens_used ตาม usage จริงจาก Provider (atomic RPC)
+
 Slip Verification Flow (Image Handler):
   ลูกค้าส่งรูปสลิป -> LINE Webhook (event.message.type=image)
     ↓
@@ -178,6 +197,32 @@ Slip Verification Flow (Image Handler):
 
 ---
 
+## Billing Flow [NEW Phase 2]
+
+Subscription (Stripe, global cards):
+  /dashboard/billing -> UpgradeButton (provider=stripe) -> POST /api/billing/checkout
+    -> Stripe Checkout Session (mode=subscription, metadata: shop_id+plan_key) -> redirect ลูกค้าไปหน้าชำระเงิน Stripe
+  Stripe ยิง Webhook -> POST /api/billing/webhook/stripe (verify signature ด้วย STRIPE_WEBHOOK_SECRET)
+    |- checkout.session.completed -> shops.plan_key/subscription_provider='stripe'/subscription_id/stripe_customer_id + insert billing_payments (succeeded)
+    |- customer.subscription.updated -> sync subscription_status + plan_expires_at
+    |- customer.subscription.deleted -> subscription_status='canceled' (plan_key คงเดิมจนกว่า plan_expires_at จะหมดอายุ)
+    |- invoice.payment_failed -> subscription_status='past_due' + insert billing_payments (failed)
+  จัดการบัญชี: ปุ่ม "จัดการการชำระเงิน" -> POST /api/billing/portal -> Stripe Billing Portal
+
+One-time PromptPay (Omise/Opn Payments, ไม่มี recurring/portal ในตัว):
+  /dashboard/billing -> UpgradeButton (provider=omise) -> POST /api/billing/checkout
+    -> สร้าง Omise Charge (source=promptpay) -> คืน QR Code ให้สแกนในหน้าเว็บ (ไม่ redirect)
+  Omise ยิง Webhook -> POST /api/billing/webhook/omise
+    -> ตรวจสอบสถานะจริงด้วยการเรียก Omise API ซ้ำ (ไม่เชื่อ payload ของ webhook เพราะ Omise ไม่เซ็น signature)
+    -> ถ้า charge.status === 'successful' -> shops.plan_key/subscription_provider='omise'/plan_expires_at=+1 เดือน + update billing_payments เป็น succeeded
+  ข้อจำกัด: ไม่ auto-renew ร้านต้องกลับมาสแกนจ่ายใหม่ก่อนหมดอายุ (Phase 3 TODO: อีเมลแจ้งเตือนก่อนหมดอายุ)
+
+Chat Playground (ทดสอบก่อนใช้งานจริง):
+  /dashboard (Chat Playground Modal) แสดงโควต้าที่ใช้ไปเดือนนี้แบบ real-time (getPlaygroundQuotaStatus)
+  ปุ่ม "🚫 จำลองโควต้าหมด" แสดงข้อความเดียวกับที่ลูกค้าจริงจะเห็นเมื่อโควต้าหมด โดยไม่หักโควต้าจริงของร้าน
+
+---
+
 ## SaaS Plans
 
 | Plan | ราคา/เดือน | ข้อความ | Token |
@@ -189,6 +234,19 @@ Slip Verification Flow (Image Handler):
 | BYOK (API Key ตัวเอง) | 590 บาท | ไม่จำกัด | ไม่จำกัด |
 
 ---
+
+## Completed Features [Phase 2 DONE]
+
+- [x] PHASE 2: Stripe Subscription (Checkout Session, Billing Portal, webhook lifecycle)
+- [x] PHASE 2: Omise/Opn Payments PromptPay one-time charge + webhook (re-verified via API, ไม่เชื่อ signature)
+- [x] PHASE 2: usage_logs + billing_payments tables + increment_usage() atomic RPC
+- [x] PHASE 2: Quota Gate ใน salesAgentEngine.ts (block AI ก่อนเรียก Provider เมื่อหมดโควต้า ประหยัดค่าใช้จ่าย)
+- [x] PHASE 2: Token usage capture จริงจาก Gemini/Claude/OpenAI responses
+- [x] PHASE 2: Billing Dashboard /dashboard/billing (แผนปัจจุบัน, usage bar, ปุ่ม upgrade 2 ช่องทาง, ประวัติชำระเงิน)
+- [x] PHASE 2: Admin Plans เพิ่ม stripe_price_id
+- [x] PHASE 2: Chat Playground แสดงโควต้าจริง + ปุ่มจำลองข้อความเมื่อโควต้าหมด (ทดสอบก่อนใช้งานจริง)
+- [x] PHASE 2 (bug fix): Proxy/Middleware auth ไม่บล็อก webhook อีกต่อไป (LINE + Stripe + Omise เข้าถึง handler ได้จริง)
+- [x] PHASE 2: ย้าย middleware.ts -> proxy.ts ตาม Next.js 16 convention ใหม่
 
 ## Completed Features [Phase 1 DONE]
 
@@ -216,15 +274,14 @@ Slip Verification Flow (Image Handler):
 
 ---
 
-## TODO - Phase 2 (Billing) - สัปดาห์หน้า
+## TODO - Phase 2 (Billing) - เหลือก่อนใช้งานจริง
 
-| Priority | Feature | Notes |
+| Priority | Task | Notes |
 |---|---|---|
-| HIGH | Stripe/Omise Subscription | checkout session, webhook, portal |
-| HIGH | usage_logs table | นับ messages/tokens per month |
-| HIGH | Plan Enforcement | block AI เมื่อหมด quota |
-| HIGH | Billing Dashboard /dashboard/billing | usage bar, upgrade button |
-| HIGH | shops.plan_key + subscription fields | track current plan |
+| HIGH | รัน supabase_phase2_billing.sql บน Supabase จริง | ยังไม่ได้ apply บน production DB |
+| HIGH | ใส่ STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET / OMISE_SECRET_KEY | ดู .env.example |
+| HIGH | ตั้งค่า Stripe Price ID ในหน้า /admin/plans ทุกแผนที่มีค่าใช้จ่าย | จำเป็นก่อนลูกค้าจ่ายผ่าน Stripe ได้ |
+| MEDIUM | ทดสอบ end-to-end ด้วย Stripe CLI (`stripe listen` + `stripe trigger`) และ Omise sandbox | ดูแผนทดสอบใน plan ที่บันทึกไว้ |
 
 ## TODO - Phase 3 (Growth) - 2-3 สัปดาห์ถัดไป
 
@@ -232,6 +289,7 @@ Slip Verification Flow (Image Handler):
 |---|---|
 | HIGH | Landing Page (/) - marketing site |
 | HIGH | Email Notifications (Resend.com) |
+| HIGH | อีเมลแจ้งเตือนก่อน Omise plan_expires_at หมดอายุ (ไม่มี auto-renew) |
 | MEDIUM | Analytics Dashboard /dashboard/analytics |
 | MEDIUM | Onboarding ครบทุก step (เชื่อม LINE, เพิ่มสินค้า, ทดสอบ) |
 
@@ -251,18 +309,26 @@ Slip Verification Flow (Image Handler):
 
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=         # upload Supabase Storage
+SUPABASE_SERVICE_ROLE_KEY=         # upload Supabase Storage + billing webhooks (bypass RLS)
 GEMINI_API_KEY=                    # Primary AI
 CLAUDE_API_KEY=                    # High-Persuasion (ต่อรองราคา)
 OPENAI_API_KEY=                    # Fallback
 EASYSLIP_API_KEY=                  # Slip Verification [Phase 1]
 GEMINI_MODEL=gemini-2.5-flash      # optional
 OPENAI_MODEL=gpt-4o-mini           # optional
+STRIPE_SECRET_KEY=                 # [Phase 2] Stripe subscription billing
+STRIPE_WEBHOOK_SECRET=             # [Phase 2] Stripe webhook signature verification
+OMISE_SECRET_KEY=                  # [Phase 2] Omise/Opn Payments PromptPay charges
+NEXT_PUBLIC_APP_URL=               # [Phase 2] Stripe Checkout success/cancel + Portal return URL
+
+(ดูตัวอย่างเต็มใน .env.example)
 
 ---
 
 ## Git History
 
+0f88be0  feat(phase-2): implement Phase 2 Billing & Monetization
+632a7b7  docs: update PROJECT_STATUS.md - Phase 1 complete
 e78ff62  feat(phase-1): implement Phase 1 Core Reliability
 029386e  docs: add ROADMAP.md - 5-phase plan to production SaaS
 566b18d  docs: add PROJECT_STATUS.md
@@ -276,8 +342,8 @@ ae0534f  fix: update payment and shipping settings
 ## Roadmap Overview (แผนทั้งหมด)
 
 Phase 1: Core Reliability  [DONE] 28 กรกฎาคม 2026
-Phase 2: Billing System    [NEXT] สัปดาห์ที่ 3-4
-Phase 3: Growth & UX              สัปดาห์ที่ 5-7
+Phase 2: Billing System    [DONE - รอ live API keys + apply SQL] 28 กรกฎาคม 2026
+Phase 3: Growth & UX       [NEXT] สัปดาห์ที่ 5-7
 Phase 4: Scale & Polish           สัปดาห์ที่ 8-10
 Phase 5: Expansion                หลัง launch
 Beta Launch Target: ~2 เดือน
