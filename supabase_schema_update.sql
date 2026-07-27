@@ -49,6 +49,8 @@ ALTER TABLE public.shops ADD COLUMN IF NOT EXISTS greeting_message TEXT DEFAULT 
 ALTER TABLE public.shops ADD COLUMN IF NOT EXISTS line_secret TEXT;
 ALTER TABLE public.shops ADD COLUMN IF NOT EXISTS personality TEXT DEFAULT 'หญิง-สุภาพ';
 ALTER TABLE public.shops ADD COLUMN IF NOT EXISTS system_prompt TEXT;
+ALTER TABLE public.shops ADD COLUMN IF NOT EXISTS promptpay_id TEXT;
+ALTER TABLE public.shops ADD COLUMN IF NOT EXISTS promptpay_name TEXT;
 
 -- 5. Create Knowledge Base Table & Policies
 CREATE TABLE IF NOT EXISTS public.knowledge_base (
@@ -207,6 +209,8 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS order_no TEXT DEFAULT 'ORD-00
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_name TEXT DEFAULT 'ลูกค้า';
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS total_amount NUMERIC(10,2) DEFAULT 0.00;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS items_summary TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'pending';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS slip_url TEXT;
 
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 

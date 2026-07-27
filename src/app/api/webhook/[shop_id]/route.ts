@@ -55,7 +55,7 @@ export async function POST(
         continue
       }
 
-      // Handle Message Event
+      // Handle Message Event (Text)
       if (event.type === 'message' && event.message?.type === 'text') {
         const userText = event.message.text
 
@@ -145,6 +145,36 @@ export async function POST(
           await sendLineReply(replyToken, aiReplyText, lineToken)
         }
       }
+
+      // Handle Message Event (Image) - For Slip Verification
+      if (event.type === 'message' && event.message?.type === 'image') {
+        const messageId = event.message.id
+        console.log(`[Webhook] Received image ${messageId} from ${userId}`)
+        
+        // 1. Acknowledge receipt to user
+        if (replyToken && lineToken) {
+          const replyText = "ได้รับรูปสลิปแล้วค่ะ ระบบกำลังตรวจสอบความถูกต้องนะคะ รบกวนรอสักครู่ค่ะ..."
+          await sendLineReply(replyToken, replyText, lineToken)
+        }
+
+        // 2. [MOCK] In a real app, we would:
+        // - Download image from LINE Content API: https://api-data.line.me/v2/bot/message/${messageId}/content
+        // - Send to Slip Verification API (e.g. SlipOK)
+        // - Get response: match amount, check receiver
+        
+        // 3. [MOCK] Simulate API delay and automated verification (Option A)
+        setTimeout(async () => {
+          // Push a follow-up message via Push API (mocking async verification result)
+          if (lineToken) {
+            const successMsg = "✅ ตรวจสอบสลิปสำเร็จ! ได้รับยอดเงินเรียบร้อยแล้ว ออเดอร์ของคุณได้รับการยืนยันค่ะ"
+            await sendLinePush(userId, successMsg, lineToken)
+          }
+          
+          // Here we would also update Supabase:
+          // UPDATE orders SET payment_status = 'paid' WHERE ...
+          // INSERT INTO chat_messages (sender_type, message) VALUES ('bot', successMsg)
+        }, 3000)
+      }
     }
 
     return NextResponse.json({ status: 'success' })
@@ -180,5 +210,27 @@ async function sendLineReply(replyToken: string, text: string, channelAccessToke
     }
   } catch (err) {
     console.error('[LINE Reply Exception]:', err)
+  }
+}
+
+// Helper: Send Push Message via LINE Messaging API
+async function sendLinePush(to: string, text: string, channelAccessToken: string) {
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${channelAccessToken}`,
+      },
+      body: JSON.stringify({
+        to,
+        messages: [{ type: 'text', text }],
+      }),
+    })
+    if (!res.ok) {
+      console.error('[LINE Push API Error]:', await res.text())
+    }
+  } catch (err) {
+    console.error('[LINE Push Exception]:', err)
   }
 }
