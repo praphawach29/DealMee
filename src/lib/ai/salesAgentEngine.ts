@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPeriod } from '@/lib/billing/usage'
+import { getCustomerProfileContext } from '@/lib/customerMemory'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
@@ -830,6 +831,9 @@ export async function processSalesAgentChat({
 - ธนาคาร: ${shop.bank_name || '-'} เลขบัญชี: ${shop.bank_account_number || '-'} ชื่อ: ${shop.bank_account_name || shop.name}`
   }
 
+  // 5. Customer Profile (Customer Memory Graph) — auto-injected, no tool call needed
+  const customerProfileContext = await getCustomerProfileContext(shop.id, userId)
+
   // 5. System Instruction
   const systemInstruction = `คุณคือ "${shop.bot_name || 'น้อง Botify'}" พนักงานขาย AI อัจฉริยะประจำร้าน "${shop.name}"
 บุคลิกภาพ: ${shop.personality || 'สุภาพ เรียบร้อย มืออาชีพ'}
@@ -848,6 +852,7 @@ export async function processSalesAgentChat({
 ${knowledgeContext}
 ${productsContext}
 ${paymentInfo}
+${customerProfileContext}
 ${historyContext}`
 
   // 6. Route

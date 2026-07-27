@@ -4,6 +4,7 @@ import { createHmac } from 'crypto'
 import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { incrementUsage } from '@/lib/billing/usage'
+import { upsertCustomerProfile, appendCustomerNote, addCustomerTagUnique, recordCustomerOrder } from '@/lib/customerMemory'
 import generatePayload from 'promptpay-qr'
 import qrcode from 'qrcode'
 
@@ -120,6 +121,11 @@ export async function POST(
 
         if (!conv) continue
 
+        // Customer Memory Graph: create/touch the durable cross-conversation
+        // profile for this customer before anything else runs, so it's
+        // guaranteed to exist by the time any tool call below needs it.
+        await upsertCustomerProfile(shop_id, userId, conv.customer_name)
+
         // 3. Save incoming customer message to chat_messages
         await supabase.from('chat_messages').insert({
           conversation_id: conv.id,
@@ -234,6 +240,9 @@ export async function POST(
               tax_invoice: args.tax_invoice,
               status: 'pending',
             })
+            // Customer Memory Graph: roll up order stats automatically —
+            // no dedicated AI tool call needed for this.
+            await recordCustomerOrder(shop_id, userId, Number(args.total_price) || 0)
             if (lineToken) {
               const confirmMsg = `✅ รับออเดอร์แล้วค่ะ!\n📦 สินค้า: ${args.product} x${args.qty}\n💰 ยอดรวม: ${Number(args.total_price).toLocaleString()} บาท\n📍 จัดส่งไปที่: ${args.address}\n\nขอบคุณที่ใช้บริการนะคะ 🙏`
               await sendLinePush(userId, confirmMsg, lineToken)
@@ -261,16 +270,21 @@ export async function POST(
           }
 
           else if (toolName === 'update_customer_note') {
-            // Save note to conversations
+            // Save note to conversations (kept for backward compatibility —
+            // nothing currently reads this field, but zero cost to keep it
+            // in sync). The Customer Memory Graph's append-only history is
+            // what the AI actually uses for cross-session memory.
             await supabase.from('conversations').update({
               customer_note: args.note,
             }).eq('id', conv.id)
+            await appendCustomerNote(shop_id, userId, args.note)
           }
 
           else if (toolName === 'add_customer_tag') {
             await supabase.from('conversations').update({
               customer_tag: args.tag,
             }).eq('id', conv.id)
+            await addCustomerTagUnique(shop_id, userId, args.tag)
           }
 
           else if (toolName === 'save_lead') {

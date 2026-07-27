@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { processSalesAgentChat, getQuotaStatus, QUOTA_EXCEEDED_MESSAGE_TH } from '@/lib/ai/salesAgentEngine'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
+import { upsertCustomerProfile, appendCustomerNote, addCustomerTagUnique } from '@/lib/customerMemory'
 
 export async function updateBotSettings(formData: FormData) {
   const supabase = await createClient()
@@ -126,6 +127,11 @@ export async function testPlaygroundChat(
     return { response: QUOTA_EXCEEDED_MESSAGE_TH, quotaExceeded: true }
   }
 
+  // Customer Memory Graph: mirror the webhook's upsert so the tester's
+  // pseudo-customer profile exists before any note/tag tool call needs it,
+  // and so the auto-injected profile context works in the Playground too.
+  await upsertCustomerProfile(shop.id, user.id, 'ผู้ทดสอบ (Chat Playground)')
+
   try {
     const response = await processSalesAgentChat({
       shop: customShop,
@@ -143,7 +149,7 @@ export async function testPlaygroundChat(
     // confirm search actually returns real data; for anything else we show a
     // clear preview line instead of silently returning blank/generic text.
     if (response.toolCall) {
-      const preview = await previewToolCall(supabase, shop.id, response.toolCall)
+      const preview = await previewToolCall(supabase, shop.id, user.id, response.toolCall)
       text = text ? `${text}\n\n${preview}` : preview
     }
 
@@ -153,13 +159,32 @@ export async function testPlaygroundChat(
   }
 }
 
-/** Read-only preview of a tool the AI chose to call, for the Chat Playground only — never executes side effects (no orders/bookings/DB writes). */
+/**
+ * Preview of a tool the AI chose to call, for the Chat Playground only.
+ * Read-only lookups run live so a tester can confirm they return real data.
+ * update_customer_note/add_customer_tag also run for real — they're
+ * low-risk appends to the tester's own Customer Memory Graph profile, not
+ * fake business records, and actually exercising them is the only way to
+ * prove memory persists across a fresh Playground session. Anything that
+ * would create a real order/booking/etc. stays preview-only.
+ */
 async function previewToolCall(
   supabase: Awaited<ReturnType<typeof createClient>>,
   shopId: string,
+  userId: string,
   toolCall: { name: string; args: Record<string, any> }
 ): Promise<string> {
   const { name, args } = toolCall
+
+  if (name === 'update_customer_note') {
+    await appendCustomerNote(shopId, userId, args.note)
+    return `[ทดสอบ] เรียกใช้เครื่องมือ update_customer_note: บันทึกแล้ว — "${args.note}" (จะจำได้ในบทสนทนาถัดไป)`
+  }
+
+  if (name === 'add_customer_tag') {
+    await addCustomerTagUnique(shopId, userId, args.tag)
+    return `[ทดสอบ] เรียกใช้เครื่องมือ add_customer_tag: เพิ่ม Tag "${args.tag}" แล้ว (จะจำได้ในบทสนทนาถัดไป)`
+  }
 
   if (name === 'search_products') {
     const limit = Math.min(Number(args.limit) || 5, 10)
