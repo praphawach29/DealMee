@@ -760,7 +760,7 @@ export async function processSalesAgentChat({
   const geminiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
   const claudeKey = process.env.CLAUDE_API_KEY || process.env.CLAUDE_KEY || process.env.NEXT_PUBLIC_CLAUDE_API_KEY || ''
   const openAiKey = process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY || ''
-  const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+  const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
 
   // 1. Knowledge Base
   const { data: knowledgeItems } = await supabase
@@ -951,7 +951,7 @@ async function callClaudeApi(
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-5',
         max_tokens: 1024,
         system: systemInstruction,
         tools: toClaudeTools(toolSet),
@@ -1013,7 +1013,7 @@ async function callOpenAiApi(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        model: process.env.OPENAI_MODEL || 'gpt-5.6-luna',
         messages: [
           { role: 'system', content: systemInstruction },
           { role: 'user', content: userQuery },

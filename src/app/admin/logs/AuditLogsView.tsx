@@ -22,7 +22,7 @@ export default function AuditLogsView() {
     {
       id: 'log-002',
       action: 'เชื่อมต่อ Gemini AI API Gateway',
-      details: 'ตรวจสอบสถานะการทำงานของโมเดล Gemini 2.5 Flash สำเร็จ',
+      details: 'ตรวจสอบสถานะการทำงานของโมเดล Gemini 3.6 Flash สำเร็จ',
       user: 'SYSTEM',
       time: '10 นาทีที่แล้ว',
       type: 'success',

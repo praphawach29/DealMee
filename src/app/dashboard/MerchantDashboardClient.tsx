@@ -223,7 +223,7 @@ export default function MerchantDashboardClient({
                   <div>
                     <p className="font-label-md text-xs font-bold text-on-surface">Botify Brain Engine™</p>
                     <p className="font-label-sm text-[11px] font-medium text-outline mt-0.5">
-                      สลับโมเดลอัตโนมัติ (Gemini 3.6 Flash / Claude 3.5 Sonnet)
+                      สลับโมเดลอัตโนมัติ (Gemini 3.6 Flash / Claude Sonnet 5)
                     </p>
                   </div>
                 </div>
