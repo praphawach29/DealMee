@@ -126,7 +126,7 @@ export async function testPlaygroundChat(
       conversationId: `playground-${user.id}`,
     })
 
-    return { response }
+    return { response: response.text }
   } catch (err: any) {
     return { response: `เกิดข้อผิดพลาด: ${err.message}` }
   }

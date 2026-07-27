@@ -156,39 +156,117 @@ export async function POST(
           await sendLineReply(replyToken, aiReplyText, lineToken)
         }
 
-        // 8. ─── TOOL CALL: send_payment_qr ───────────────────────────────────
-        if (agentResult.toolCall?.name === 'send_payment_qr') {
-          const { amount, order_summary } = agentResult.toolCall.args
-          const promptpayId = shop.promptpay_id || shop.promptpay_number
+        // 8. ─── TOOL CALL DISPATCHER (36 Tools) ─────────────────────────────────
+        if (agentResult.toolCall) {
+          const { name: toolName, args } = agentResult.toolCall
+          console.log(`[Webhook] AI called tool: ${toolName}`, args)
 
-          console.log(`[Webhook] AI called send_payment_qr: amount=${amount}, promptpay=${promptpayId}`)
+          // Log tool call to chat_messages
+          await supabase.from('chat_messages').insert({
+            conversation_id: conv.id,
+            shop_id,
+            sender_type: 'bot',
+            sender_name: shop.bot_name || 'น้อง Botify',
+            message: `[Tool: ${toolName}] ${JSON.stringify(args)}`,
+          })
 
-          if (promptpayId && lineToken) {
-            // Generate QR and upload to Supabase Storage → get public URL
-            const qrPublicUrl = await generateAndUploadQR(amount, promptpayId, shop_id)
-
-            if (qrPublicUrl) {
-              // Send QR Image via LINE Push API (replyToken is already used above)
-              await sendLineImagePush(userId, qrPublicUrl, lineToken)
-
-              // Optional: send a follow-up text with the amount
-              const qrCaption = `📋 สรุปยอดชำระ: *${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท*${order_summary ? `\n${order_summary}` : ''}\n\n✅ กรุณาบันทึกรูป QR Code แล้วเปิดแอปธนาคารสแกนได้เลยค่ะ\n📲 เมื่อโอนเสร็จแล้ว กรุณาส่งรูปสลิปกลับมาในแชทนี้นะคะ`
-              await sendLinePush(userId, qrCaption, lineToken)
-
-              // Log QR message to chat_messages
-              await supabase.from('chat_messages').insert({
-                conversation_id: conv.id,
-                shop_id,
-                sender_type: 'bot',
-                sender_name: shop.bot_name || 'น้อง Botify',
-                message: `[QR Code ชำระเงิน] ยอด ${amount} บาท${order_summary ? ` | ${order_summary}` : ''}`,
-              })
-            } else {
-              // Fallback: send text payment info if QR generation fails
-              const fallbackText = `💳 ช่องทางชำระเงิน:\n- พร้อมเพย์: ${promptpayId}\n- ชื่อบัญชี: ${shop.promptpay_name || shop.name}\n- ยอดชำระ: ${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท\n\nกรุณาส่งรูปสลิปกลับมาในแชทนี้หลังโอนเงินนะคะ 🙏`
-              await sendLinePush(userId, fallbackText, lineToken)
+          // ── 💳 PAYMENT TOOLS ─────────────────────────────────────────────────
+          if (toolName === 'send_payment_qr') {
+            const { amount, order_summary } = args
+            const promptpayId = shop.promptpay_id || shop.promptpay_number
+            if (promptpayId && lineToken) {
+              const qrPublicUrl = await generateAndUploadQR(amount, promptpayId, shop_id)
+              if (qrPublicUrl) {
+                await sendLineImagePush(userId, qrPublicUrl, lineToken)
+                const caption = `📋 ยอดชำระ: *${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท*${order_summary ? `\n${order_summary}` : ''}\n\n✅ บันทึกรูป QR แล้วเปิดแอปธนาคารสแกนได้เลยค่ะ\n📲 โอนเสร็จกรุณาส่งสลิปกลับมาในแชทนะคะ`
+                await sendLinePush(userId, caption, lineToken)
+              } else {
+                const fallback = `💳 ช่องทางชำระเงิน:\n- พร้อมเพย์: ${promptpayId}\n- ชื่อ: ${shop.promptpay_name || shop.name}\n- ยอด: ${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท`
+                await sendLinePush(userId, fallback, lineToken)
+              }
             }
           }
+
+          else if (toolName === 'take_order') {
+            // Create order in Supabase
+            await supabase.from('orders').insert({
+              shop_id,
+              conversation_id: conv.id,
+              customer_name: args.name,
+              customer_phone: args.phone,
+              product_name: args.product,
+              quantity: args.qty,
+              variants: args.variants,
+              address: args.address,
+              payment_method: args.payment_method,
+              total_amount: args.total_price,
+              tax_invoice: args.tax_invoice,
+              status: 'pending',
+            })
+            if (lineToken) {
+              const confirmMsg = `✅ รับออเดอร์แล้วค่ะ!\n📦 สินค้า: ${args.product} x${args.qty}\n💰 ยอดรวม: ${Number(args.total_price).toLocaleString()} บาท\n📍 จัดส่งไปที่: ${args.address}\n\nขอบคุณที่ใช้บริการนะคะ 🙏`
+              await sendLinePush(userId, confirmMsg, lineToken)
+            }
+          }
+
+          else if (toolName === 'request_human_agent') {
+            // Switch conversation to human mode
+            await supabase.from('conversations').update({ status: 'human' }).eq('id', conv.id)
+            if (lineToken) {
+              const handoffMsg = `🙋 กำลังเรียกแอดมินเข้ามาดูแลค่ะ กรุณารอสักครู่นะคะ...\n(เหตุผล: ${args.reason})`
+              await sendLinePush(userId, handoffMsg, lineToken)
+            }
+          }
+
+          else if (toolName === 'transfer_to_agent') {
+            // Log agent transfer
+            await supabase.from('conversations').update({
+              status: 'ai',
+              last_message: `[โอนสายไป ${args.target_agent}] ${args.reason}`,
+            }).eq('id', conv.id)
+            if (lineToken) {
+              await sendLinePush(userId, `🔄 กำลังส่งต่อให้แผนก ${args.target_agent} ค่ะ...`, lineToken)
+            }
+          }
+
+          else if (toolName === 'update_customer_note') {
+            // Save note to conversations
+            await supabase.from('conversations').update({
+              customer_note: args.note,
+            }).eq('id', conv.id)
+          }
+
+          else if (toolName === 'add_customer_tag') {
+            await supabase.from('conversations').update({
+              customer_tag: args.tag,
+            }).eq('id', conv.id)
+          }
+
+          else if (toolName === 'save_lead') {
+            await supabase.from('leads').upsert({
+              shop_id,
+              user_id: userId,
+              product_name: args.product_name,
+              customer_name: args.customer_name || `LINE-${userId.substring(0, 6)}`,
+              source: 'LINE',
+              status: 'new',
+            }, { onConflict: 'shop_id,user_id' })
+          }
+
+          else if (toolName === 'schedule_followup') {
+            // Schedule a follow-up push message
+            const delayMs = (args.delay_minutes || 60) * 60 * 1000
+            setTimeout(async () => {
+              if (lineToken) {
+                const followupMsg = `👋 สวัสดีค่ะ ไม่ทราบว่าตัดสินใจได้แล้วหรือยังคะ? มีอะไรให้ช่วยแนะนำเพิ่มเติมได้เลยนะคะ 😊`
+                await sendLinePush(userId, followupMsg, lineToken)
+              }
+            }, Math.min(delayMs, 3600000)) // cap at 1 hour for safety
+          }
+
+          // All other tools (search_products, check_stock, calculate_shipping, etc.)
+          // are handled internally by AI — the AI reads the response and generates the text reply.
+          // For server-side execution of these tools, add their Supabase queries here as needed.
         }
       }
 
