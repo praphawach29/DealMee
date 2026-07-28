@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createHmac } from 'crypto'
-import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
+import { startSalesAgentPlanning, continueSalesAgentPlanning, type AgentResult } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 
@@ -140,89 +140,53 @@ export async function POST(
           continue
         }
 
-        // 5. Call AI Sales Agent Engine → returns AgentResult { text, toolCall? }
-        const agentResult = await processSalesAgentChat({
+        // 5. Call AI Sales Agent Engine — run only the first planning step
+        // here. Most messages resolve in one step (nothing changes for
+        // those); if the AI needs to chain more tool calls, we get back a
+        // continuation state instead of waiting for the whole plan to
+        // finish, so we can ack the customer right away.
+        const started = await startSalesAgentPlanning({
           shop,
           userQuery: userText,
           userId,
           conversationId: conv.id,
         })
 
-        const aiReplyText = agentResult.text || ''
-
-        // 6. Save AI Reply to chat_messages
-        if (aiReplyText) {
-          await supabase.from('chat_messages').insert({
-            conversation_id: conv.id,
-            shop_id,
-            sender_type: 'bot',
-            sender_name: shop.bot_name || 'น้อง Botify',
-            message: aiReplyText,
+        if (started.done) {
+          // Single-step case (the common one) — unchanged behavior: reply
+          // via the LINE Reply API once the final answer is ready.
+          await deliverAgentResult({
+            agentResult: started.result,
+            conv,
+            shop,
+            shopId: shop_id,
+            userId,
+            lineToken,
+            replyToken,
+            useReplyForText: true,
           })
-        }
-
-        // Update conversation last_message
-        await supabase
-          .from('conversations')
-          .update({
-            last_message: aiReplyText || '[ส่ง QR Code]',
-            last_message_at: new Date().toISOString(),
-          })
-          .eq('id', conv.id)
-
-        // 7. Reply text back via LINE Reply API
-        if (replyToken && lineToken && aiReplyText) {
-          await sendLineReply(replyToken, aiReplyText, lineToken)
-        }
-
-        // 8. ─── TOOL CALL DISPATCHER (36 Tools) ─────────────────────────────────
-        // Skip tool dispatch + usage increment entirely if the AI never actually
-        // ran (quota exceeded) — the customer already got the quota message above.
-        if (agentResult.quotaExceeded) {
-          continue
-        }
-
-        if (agentResult.usage) {
-          incrementUsage(shop_id, agentResult.usage).catch((err) =>
-            console.error('[Webhook] incrementUsage failed:', err)
-          )
-          incrementProviderUsage(shop_id, agentResult.usage).catch((err) =>
-            console.error('[Webhook] incrementProviderUsage failed:', err)
-          )
-        }
-
-        // Tool execution now happens INSIDE processSalesAgentChat's Planning
-        // Layer loop (src/lib/ai/toolDispatcher.ts's executeTool(), called
-        // possibly multiple times per customer message) — the webhook route's
-        // job is just to log what ran and deliver the resulting messages.
-        for (const toolCall of agentResult.toolCallsExecuted) {
-          console.log(`[Webhook] AI called tool: ${toolCall.name}`, toolCall.args)
-          await supabase.from('chat_messages').insert({
-            conversation_id: conv.id,
-            shop_id,
-            sender_type: 'bot',
-            sender_name: shop.bot_name || 'น้อง Botify',
-            message: `[Tool: ${toolCall.name}] ${JSON.stringify(toolCall.args)}`,
-          })
-        }
-
-        for (const msg of agentResult.immediateMessages) {
-          if (!lineToken) continue
-          if (msg.type === 'image') {
-            await sendLineImagePush(userId, msg.content, lineToken)
-          } else {
-            await sendLinePush(userId, msg.content, lineToken)
+        } else {
+          // Multi-step plan — send a short ack now (consumes the one-time
+          // replyToken while it's still fresh), then finish the remaining
+          // steps in the background and push the real answer once ready.
+          // Same reply-then-push-later shape as verifySlipAndNotify below.
+          if (replyToken && lineToken) {
+            await sendLineReply(replyToken, 'กำลังตรวจสอบให้สักครู่นะคะ รอแป๊บนึงนะคะ 🙏', lineToken)
           }
-        }
-
-        for (const scheduled of agentResult.scheduledMessages) {
-          if (!lineToken) continue
-          const { delayMs, message } = scheduled
-          setTimeout(() => {
-            sendLinePush(userId, message.content, lineToken).catch((err) =>
-              console.error('[Webhook] scheduledMessage push failed:', err)
+          continueSalesAgentPlanning(started.state)
+            .then((agentResult) =>
+              deliverAgentResult({
+                agentResult,
+                conv,
+                shop,
+                shopId: shop_id,
+                userId,
+                lineToken,
+                replyToken: undefined,
+                useReplyForText: false,
+              })
             )
-          }, delayMs)
+            .catch((err) => console.error('[Webhook] Planning Layer background continuation failed:', err))
         }
       }
 
@@ -246,6 +210,101 @@ export async function POST(
   } catch (error: any) {
     console.error('[LINE Webhook Error]:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
+// ─── Deliver a finished AgentResult (sync or from a background continuation) ──
+
+/**
+ * Saves the AI's reply + tool log to chat_messages, updates the
+ * conversation, and delivers everything to LINE — shared by both the
+ * single-step sync path (reply via replyToken) and the multi-step async
+ * path (push via userId, since the replyToken was already spent on the ack).
+ */
+async function deliverAgentResult({
+  agentResult, conv, shop, shopId, userId, lineToken, replyToken, useReplyForText,
+}: {
+  agentResult: AgentResult
+  conv: { id: string }
+  shop: Record<string, any>
+  shopId: string
+  userId: string
+  lineToken: string | undefined
+  replyToken: string | undefined
+  useReplyForText: boolean
+}) {
+  const aiReplyText = agentResult.text || ''
+
+  if (aiReplyText) {
+    await supabase.from('chat_messages').insert({
+      conversation_id: conv.id,
+      shop_id: shopId,
+      sender_type: 'bot',
+      sender_name: shop.bot_name || 'น้อง Botify',
+      message: aiReplyText,
+    })
+  }
+
+  await supabase
+    .from('conversations')
+    .update({
+      last_message: aiReplyText || '[ส่ง QR Code]',
+      last_message_at: new Date().toISOString(),
+    })
+    .eq('id', conv.id)
+
+  if (aiReplyText && lineToken) {
+    if (useReplyForText && replyToken) {
+      await sendLineReply(replyToken, aiReplyText, lineToken)
+    } else {
+      await sendLinePush(userId, aiReplyText, lineToken)
+    }
+  }
+
+  // Skip tool logging + usage increment entirely if the AI never actually
+  // ran (quota exceeded) — the customer already got the quota message above.
+  if (agentResult.quotaExceeded) return
+
+  if (agentResult.usage) {
+    incrementUsage(shopId, agentResult.usage).catch((err) =>
+      console.error('[Webhook] incrementUsage failed:', err)
+    )
+    incrementProviderUsage(shopId, agentResult.usage).catch((err) =>
+      console.error('[Webhook] incrementProviderUsage failed:', err)
+    )
+  }
+
+  // Tool execution happens INSIDE the Planning Layer (src/lib/ai/toolDispatcher.ts's
+  // executeTool(), called possibly multiple times per customer message) —
+  // this function's job is just to log what ran and deliver the results.
+  for (const toolCall of agentResult.toolCallsExecuted) {
+    console.log(`[Webhook] AI called tool: ${toolCall.name}`, toolCall.args)
+    await supabase.from('chat_messages').insert({
+      conversation_id: conv.id,
+      shop_id: shopId,
+      sender_type: 'bot',
+      sender_name: shop.bot_name || 'น้อง Botify',
+      message: `[Tool: ${toolCall.name}] ${JSON.stringify(toolCall.args)}`,
+    })
+  }
+
+  for (const msg of agentResult.immediateMessages) {
+    if (!lineToken) continue
+    if (msg.type === 'image') {
+      await sendLineImagePush(userId, msg.content, lineToken)
+    } else {
+      await sendLinePush(userId, msg.content, lineToken)
+    }
+  }
+
+  for (const scheduled of agentResult.scheduledMessages) {
+    if (!lineToken) continue
+    const { delayMs, message } = scheduled
+    setTimeout(() => {
+      sendLinePush(userId, message.content, lineToken).catch((err) =>
+        console.error('[Webhook] scheduledMessage push failed:', err)
+      )
+    }, delayMs)
   }
 }
 

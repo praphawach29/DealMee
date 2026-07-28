@@ -116,6 +116,47 @@ export interface AgentResult {
   scheduledMessages: { delayMs: number; message: CustomerMessage }[]
 }
 
+/**
+ * Bounded multi-step tool loop. Most messages resolve in a single step
+ * (identical behavior to before this existed); a message like
+ * "มีเสื้อยืดไซส์ L ไหม ถ้ามีเอา 2 ตัว" can chain
+ * search_products/check_stock -> take_order in one customer turn.
+ */
+export const MAX_PLANNING_STEPS = 3
+
+/**
+ * Everything a planning step needs, carried across steps so the webhook
+ * route can pause after step 0 (to send a LINE ack once it knows the plan
+ * needs more than one AI call) and resume the rest in the background — the
+ * same reply-then-push-later shape `verifySlipAndNotify` already uses for
+ * slip verification, just applied to multi-step planning instead.
+ */
+export interface PlanningState {
+  shop: any
+  conversationId: string
+  turns: PlanningTurn[]
+  /** Index of the step about to run (0-based) — callers own incrementing this between steps. */
+  step: number
+  routing: ReturnType<typeof classifyMessageComplexity>
+  executor: ToolExecutor
+  toolCtx: ToolExecutionContext
+  staticSystemPrompt: string
+  dynamicSystemPrompt: string
+  systemInstruction: string
+  modelName: string
+  geminiKey: string
+  claudeKey: string
+  openAiKey: string
+  allUsage: AgentUsage[]
+  immediateMessages: CustomerMessage[]
+  toolCallsExecuted: AgentToolCall[]
+  scheduledMessages: { delayMs: number; message: CustomerMessage }[]
+}
+
+export type PlanningStart =
+  | { done: true; result: AgentResult }
+  | { done: false; state: PlanningState }
+
 /** Internal — one provider call's raw result within the planning loop (not the final AgentResult returned to callers). */
 interface ProviderStepResult {
   text: string
@@ -849,16 +890,32 @@ async function isOverQuota(shop: any): Promise<boolean> {
 // Main Agent Orchestrator
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function processSalesAgentChat({
+const QUOTA_EXCEEDED_RESULT: AgentResult = {
+  text: QUOTA_EXCEEDED_MESSAGE_TH,
+  quotaExceeded: true,
+  immediateMessages: [],
+  toolCallsExecuted: [],
+  scheduledMessages: [],
+}
+
+/**
+ * Setup phase shared by both the single-call `processSalesAgentChat` and the
+ * two-phase `startSalesAgentPlanning`/`continueSalesAgentPlanning` pair:
+ * quota check, context gathering (KB/products/history/customer profile),
+ * prompt construction, routing, and the initial turn — everything needed
+ * before the first AI call, produced once so it's never duplicated between
+ * the two call styles.
+ */
+async function preparePlanningState({
   shop,
   userQuery,
   userId,
   conversationId,
   conversationHistory,
   toolExecutor,
-}: SalesAgentRequest): Promise<AgentResult> {
+}: SalesAgentRequest): Promise<{ quotaExceeded: true } | { quotaExceeded: false; state: PlanningState }> {
   if (await isOverQuota(shop)) {
-    return { text: QUOTA_EXCEEDED_MESSAGE_TH, quotaExceeded: true, immediateMessages: [], toolCallsExecuted: [], scheduledMessages: [] }
+    return { quotaExceeded: true }
   }
 
   const geminiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
@@ -986,11 +1043,6 @@ ${historyContext}`
     `[Botify Brain™] "${userQuery}" | ${routing.complexity} (score ${routing.complexityScore}) | ${routing.targetProvider.toUpperCase()} | Tools: ${routing.toolSet.length}${isVipCustomer ? ' | VIP customer' : ''}`
   )
 
-  // 7. Planning Layer — bounded multi-step tool loop. Most messages resolve
-  // in a single step (identical behavior to before this existed); a message
-  // like "มีเสื้อยืดไซส์ L ไหม ถ้ามีเอา 2 ตัว" can chain
-  // search_products/check_stock -> take_order in one customer turn.
-  const MAX_PLANNING_STEPS = 3
   const executor: ToolExecutor = toolExecutor || realExecuteTool
   const toolCtx: ToolExecutionContext = {
     shopId: shop.id,
@@ -1001,74 +1053,102 @@ ${historyContext}`
     supabaseAdmin: createAdminClient(),
   }
 
-  const turns: PlanningTurn[] = [{ role: 'user', text: userQuery }]
-  let finalText = ''
-  const allUsage: AgentUsage[] = []
-  const immediateMessages: CustomerMessage[] = []
-  const toolCallsExecuted: AgentToolCall[] = []
-  const scheduledMessages: { delayMs: number; message: CustomerMessage }[] = []
+  return {
+    quotaExceeded: false,
+    state: {
+      shop,
+      conversationId,
+      turns: [{ role: 'user', text: userQuery }],
+      step: 0,
+      routing,
+      executor,
+      toolCtx,
+      staticSystemPrompt,
+      dynamicSystemPrompt,
+      systemInstruction,
+      modelName,
+      geminiKey,
+      claudeKey,
+      openAiKey,
+      allUsage: [],
+      immediateMessages: [],
+      toolCallsExecuted: [],
+      scheduledMessages: [],
+    },
+  }
+}
 
-  const callCurrentStep = async (): Promise<ProviderStepResult | null> => {
-    if (routing.targetProvider === 'claude' && claudeKey) {
-      const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, turns, claudeKey, routing.toolSet)
-      if (result) return result
-    } else if (routing.targetProvider === 'openai' && openAiKey) {
-      const result = await callOpenAiApi(systemInstruction, turns, openAiKey, routing.toolSet)
-      if (result) return result
-    }
-    if (!geminiKey) return null
-    return callGeminiApi(systemInstruction, turns, modelName, geminiKey, routing.toolSet)
+async function callCurrentStep(state: PlanningState): Promise<ProviderStepResult | null> {
+  const { routing, staticSystemPrompt, dynamicSystemPrompt, systemInstruction, turns, claudeKey, openAiKey, geminiKey, modelName } = state
+  if (routing.targetProvider === 'claude' && claudeKey) {
+    const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, turns, claudeKey, routing.toolSet)
+    if (result) return result
+  } else if (routing.targetProvider === 'openai' && openAiKey) {
+    const result = await callOpenAiApi(systemInstruction, turns, openAiKey, routing.toolSet)
+    if (result) return result
+  }
+  if (!geminiKey) return null
+  return callGeminiApi(systemInstruction, turns, modelName, geminiKey, routing.toolSet)
+}
+
+/**
+ * Runs exactly one planning-loop step (one AI call, plus the tool it asks
+ * for if any), mutating `state` in place. Split out from the loop itself so
+ * the webhook route can run just step 0, decide sync-vs-async based on
+ * whether it's done, and hand the same state to `continueSalesAgentPlanning`
+ * for the remaining steps if not.
+ */
+async function runPlanningStep(state: PlanningState): Promise<{ done: true; finalText: string } | { done: false }> {
+  const response = await callCurrentStep(state)
+
+  if (!response) {
+    // All configured providers failed this step — same fallback text as
+    // the old single-shot path used when every provider call returned null.
+    const finalText = state.step === 0
+      ? (state.geminiKey ? `สวัสดีค่ะ ยินดีต้อนรับสู่ร้าน "${state.shop.name}" มีอะไรให้ช่วยแนะนำไหมคะ?` : (state.shop.greeting_message || 'สวัสดีค่ะ มีอะไรให้ช่วยไหมคะ?'))
+      : 'ขออภัยค่ะ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งนะคะ'
+    return { done: true, finalText }
   }
 
-  for (let step = 0; step < MAX_PLANNING_STEPS; step++) {
-    const response = await callCurrentStep()
+  if (response.usage) state.allUsage.push(response.usage)
 
-    if (!response) {
-      // All configured providers failed this step — same fallback text as
-      // the old single-shot path used when every provider call returned null.
-      finalText = step === 0
-        ? (geminiKey ? `สวัสดีค่ะ ยินดีต้อนรับสู่ร้าน "${shop.name}" มีอะไรให้ช่วยแนะนำไหมคะ?` : (shop.greeting_message || 'สวัสดีค่ะ มีอะไรให้ช่วยไหมคะ?'))
-        : (finalText || 'ขออภัยค่ะ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งนะคะ')
-      break
-    }
-
-    if (response.usage) allUsage.push(response.usage)
-
-    if (!response.toolCall) {
-      finalText = response.text
-      break
-    }
-
-    turns.push({ role: 'assistant', text: response.text, toolCall: response.toolCall })
-
-    const toolResult = await executor(response.toolCall.name, response.toolCall.args, toolCtx)
-    toolCallsExecuted.push({ name: response.toolCall.name, args: response.toolCall.args })
-    immediateMessages.push(...toolResult.immediateMessages)
-    if (toolResult.scheduledMessage) scheduledMessages.push(toolResult.scheduledMessage)
-    turns.push({
-      role: 'tool_result',
-      toolCallId: response.toolCall.id,
-      toolName: response.toolCall.name,
-      result: toolResult.resultForAi,
-    })
-
-    if (step === MAX_PLANNING_STEPS - 1) {
-      // Ran out of steps without a final text answer — hand off to a human
-      // rather than leaving the customer with nothing.
-      finalText = 'ขออภัยค่ะ เรื่องนี้ซับซ้อนเกินกว่าจะตอบได้ในตอนนี้ รอสักครู่แอดมินจะติดต่อกลับนะคะ'
-      try {
-        await supabase.from('conversations').update({ status: 'human' }).eq('id', conversationId)
-      } catch (err) {
-        console.error('[Planning Layer] Failed to flip conversation to human handoff:', err)
-      }
-    }
+  if (!response.toolCall) {
+    return { done: true, finalText: response.text }
   }
 
+  state.turns.push({ role: 'assistant', text: response.text, toolCall: response.toolCall })
+
+  const toolResult = await state.executor(response.toolCall.name, response.toolCall.args, state.toolCtx)
+  state.toolCallsExecuted.push({ name: response.toolCall.name, args: response.toolCall.args })
+  state.immediateMessages.push(...toolResult.immediateMessages)
+  if (toolResult.scheduledMessage) state.scheduledMessages.push(toolResult.scheduledMessage)
+  state.turns.push({
+    role: 'tool_result',
+    toolCallId: response.toolCall.id,
+    toolName: response.toolCall.name,
+    result: toolResult.resultForAi,
+  })
+
+  if (state.step === MAX_PLANNING_STEPS - 1) {
+    // Ran out of steps without a final text answer — hand off to a human
+    // rather than leaving the customer with nothing.
+    try {
+      await supabase.from('conversations').update({ status: 'human' }).eq('id', state.conversationId)
+    } catch (err) {
+      console.error('[Planning Layer] Failed to flip conversation to human handoff:', err)
+    }
+    return { done: true, finalText: 'ขออภัยค่ะ เรื่องนี้ซับซ้อนเกินกว่าจะตอบได้ในตอนนี้ รอสักครู่แอดมินจะติดต่อกลับนะคะ' }
+  }
+
+  return { done: false }
+}
+
+function finalizeAgentResult(state: PlanningState, finalText: string): AgentResult {
   // Sum usage across every step into one AgentUsage — quota/cost accounting
   // counts this as ONE customer message regardless of how many AI calls the
   // plan took internally.
-  const usage: AgentUsage | undefined = allUsage.length > 0
-    ? allUsage.reduce((acc, u) => ({
+  const usage: AgentUsage | undefined = state.allUsage.length > 0
+    ? state.allUsage.reduce((acc, u) => ({
         promptTokens: acc.promptTokens + u.promptTokens,
         completionTokens: acc.completionTokens + u.completionTokens,
         totalTokens: acc.totalTokens + u.totalTokens,
@@ -1078,7 +1158,77 @@ ${historyContext}`
       }))
     : undefined
 
-  return { text: finalText.trim(), usage, immediateMessages, toolCallsExecuted, scheduledMessages }
+  return {
+    text: finalText.trim(),
+    usage,
+    immediateMessages: state.immediateMessages,
+    toolCallsExecuted: state.toolCallsExecuted,
+    scheduledMessages: state.scheduledMessages,
+  }
+}
+
+/**
+ * Single-call entry point — runs the whole planning loop to completion and
+ * returns the final AgentResult. Used by the Chat Playground (which has no
+ * need for the ack/push split, since it's already a synchronous UI) and by
+ * anything else that just wants "give me the final answer".
+ */
+export async function processSalesAgentChat(request: SalesAgentRequest): Promise<AgentResult> {
+  const prep = await preparePlanningState(request)
+  if (prep.quotaExceeded) return QUOTA_EXCEEDED_RESULT
+
+  const state = prep.state
+  let finalText = ''
+  for (; state.step < MAX_PLANNING_STEPS; state.step++) {
+    const outcome = await runPlanningStep(state)
+    if (outcome.done) {
+      finalText = outcome.finalText
+      break
+    }
+  }
+  return finalizeAgentResult(state, finalText)
+}
+
+/**
+ * Two-phase entry point #1 — runs only the first planning step. If the AI
+ * answered directly (no tool call), behaves exactly like
+ * `processSalesAgentChat` and returns the final result. If the AI asked for
+ * a tool (meaning at least one more AI call is needed), returns the
+ * continuation state instead of running it — this is the signal the webhook
+ * route uses to send a LINE ack ("กำลังตรวจสอบให้สักครู่นะคะ...") right
+ * away, before handing the state to `continueSalesAgentPlanning` to finish
+ * in the background (matching the reply-then-push-later shape
+ * `verifySlipAndNotify` already uses for slip verification).
+ */
+export async function startSalesAgentPlanning(request: SalesAgentRequest): Promise<PlanningStart> {
+  const prep = await preparePlanningState(request)
+  if (prep.quotaExceeded) return { done: true, result: QUOTA_EXCEEDED_RESULT }
+
+  const state = prep.state
+  const outcome = await runPlanningStep(state)
+  state.step += 1
+
+  if (outcome.done) {
+    return { done: true, result: finalizeAgentResult(state, outcome.finalText) }
+  }
+  return { done: false, state }
+}
+
+/**
+ * Two-phase entry point #2 — resumes a `PlanningState` returned by
+ * `startSalesAgentPlanning` (with `done: false`) and runs the remaining
+ * steps to completion.
+ */
+export async function continueSalesAgentPlanning(state: PlanningState): Promise<AgentResult> {
+  let finalText = ''
+  for (; state.step < MAX_PLANNING_STEPS; state.step++) {
+    const outcome = await runPlanningStep(state)
+    if (outcome.done) {
+      finalText = outcome.finalText
+      break
+    }
+  }
+  return finalizeAgentResult(state, finalText)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
