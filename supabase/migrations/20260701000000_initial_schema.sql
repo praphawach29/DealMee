@@ -1,6 +1,18 @@
 -- ================================================================
 -- Botify SaaS - Supabase Auth, Tables & RLS Integration (Safe & Complete)
 -- ================================================================
+--
+-- ⚠ KNOWN DRIFT: this file no longer matches the real production schema.
+-- Confirmed via information_schema introspection (28 กรกฎาคม 2026) that the
+-- live database has diverged from what's written here in at least these
+-- ways: `shops` has no `user_id` column (shop↔user linking actually goes
+-- through `public.users.workspace_id`), `products` has no `status` column
+-- at all, and `products.stock` is TEXT (not integer). Do not trust this
+-- file as ground truth — run `supabase/tools/check_schema.sql` first and
+-- verify against the real schema before writing any new migration that
+-- touches a table defined here. See PROJECT_STATUS.md "Known Issues —
+-- Database Schema Drift" for the full list found so far.
+-- ================================================================
 
 -- 1. Modify users table to link with auth.users
 ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_id_fkey;

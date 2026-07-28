@@ -66,8 +66,7 @@ src/lib/ai/salesAgentEngine.ts - AI Brain (36 Tools, 3 Providers, Complexity Rou
 src/lib/billing/               - [NEW Phase 2] stripe.ts, omise.ts, usage.ts
 src/lib/supabase/admin.ts      - [NEW Phase 2] shared service-role Supabase client
 src/proxy.ts                    - [RENAMED Phase 2] was middleware.ts (Next.js 16 Proxy convention)
-supabase_schema_update.sql    - Full DB Schema + RLS + Phase 1 updates
-supabase_phase2_billing.sql   - Phase 2 Billing schema (usage_logs, billing_payments, plan/shop columns)
+supabase/                    - [REORGANIZED 28 ก.ค.] all SQL moved out of repo root into migrations/ + tools/ — see supabase/README.md
 
 ---
 
@@ -288,7 +287,7 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 - [x] คำถามสินค้าทั่วไป (ไม่มีคำต่อรองราคา) ไม่เคยได้รับเครื่องมือ search_products/check_stock/get_active_promotions เลย เพราะ intent routing ให้เฉพาะคำถามที่มีคีย์เวิร์ดต่อรองราคาเท่านั้น
 - [x] search_products บน webhook จริงอ่าน `args.query` แต่ schema ของ tool ประกาศพารามิเตอร์ชื่อ `keyword` — คำค้นหาของลูกค้าถูกเพิกเฉยเงียบๆ มาโดยตลอด
 - [x] Chat Playground ไม่เคยมี "ความจำ" ระหว่างข้อความ เพราะไม่ได้บันทึกลง chat_messages เหมือน LINE webhook จริง — แก้โดยส่งประวัติแชทจาก client ตรงเข้า AI engine แทน
-- [x] **พบ schema drift สำคัญ:** ฐานข้อมูล Supabase จริงไม่ตรงกับ `supabase_schema_update.sql` ในเรโป — ดูหัวข้อ "Known Issues" ด้านล่าง
+- [x] **พบ schema drift สำคัญ:** ฐานข้อมูล Supabase จริงไม่ตรงกับ `supabase/migrations/20260701000000_initial_schema.sql` ในเรโป — ดูหัวข้อ "Known Issues" ด้านล่าง
 
 ## Completed Features [Phase 2 DONE]
 
@@ -340,7 +339,7 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 
 ## Known Issues — Database Schema Drift
 
-**สำคัญ:** ฐานข้อมูล Supabase จริง (production) มีโครงสร้างต่างจากไฟล์ `supabase_schema_update.sql` ในเรโปนี้อย่างมีนัยสำคัญ — พบระหว่างดีบัก Chat Playground เมื่อ 28 กรกฎาคม 2026 ด้วยการ query `information_schema.columns` ตรงจริง (ดู `supabase_check_schema.sql`):
+**สำคัญ:** ฐานข้อมูล Supabase จริง (production) มีโครงสร้างต่างจากไฟล์ `supabase/migrations/20260701000000_initial_schema.sql` ในเรโปนี้อย่างมีนัยสำคัญ — พบระหว่างดีบัก Chat Playground เมื่อ 28 กรกฎาคม 2026 ด้วยการ query `information_schema.columns` ตรงจริง (ดู `supabase/tools/check_schema.sql`):
 
 | จุดที่ต่างจากไฟล์ในเรโป | ผลกระทบ |
 |---|---|
@@ -348,7 +347,7 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 | `products` ไม่มีคอลัมน์ `status` เลย | ทุก query ที่ทำ `.eq('status','active')` บน products error เงียบๆ — แก้ไปแล้วในโค้ด (ลบ filter ออก) แต่ไฟล์ schema เดิมยังเข้าใจผิดว่ามีคอลัมน์นี้ |
 | `products.stock` เป็น `TEXT` ไม่ใช่ตัวเลข (ดีฟอลต์ `'มี'`) | Dashboard เขียนเป็นเลขที่แปลงเป็น string (`"30"`, `"0"`) ผ่าน `parseInt`, โค้ด AI/webhook เทียบเป็นตัวเลขได้พอดีเพราะ JS coerce string อัตโนมัติ แต่ฝั่ง Postgres/PostgREST (`.gt('stock', 0)`) เป็นการเทียบ string แบบ lexicographic ซึ่งบังเอิญถูกต้องกับข้อมูลปัจจุบัน แต่เปราะบางในกรณี edge case |
 
-**ข้อควรระวัง:** ห้ามเขียน SQL migration ใหม่โดยอ้างอิงจาก `supabase_schema_update.sql` เพียงอย่างเดียวโดยไม่ตรวจสอบ schema จริงก่อน — ให้รัน `supabase_check_schema.sql` ใน Supabase SQL Editor เพื่อดูโครงสร้างจริงทุกครั้งก่อนเขียนไฟล์ migration ใหม่
+**ข้อควรระวัง:** ห้ามเขียน SQL migration ใหม่โดยอ้างอิงจาก `supabase/migrations/20260701000000_initial_schema.sql` เพียงอย่างเดียวโดยไม่ตรวจสอบ schema จริงก่อน — ให้รัน `supabase/tools/check_schema.sql` ใน Supabase SQL Editor เพื่อดูโครงสร้างจริงทุกครั้งก่อนเขียนไฟล์ migration ใหม่
 
 ---
 
@@ -356,7 +355,7 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 
 | Priority | Task | Notes |
 |---|---|---|
-| HIGH | รัน supabase_phase2_billing.sql บน Supabase จริง | ยังไม่ได้ apply บน production DB |
+| HIGH | รัน supabase/migrations/20260728020000_phase2_billing.sql บน Supabase จริง | ยังไม่ได้ apply บน production DB |
 | HIGH | ใส่ STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET / OMISE_SECRET_KEY | ดู .env.example |
 | HIGH | ตั้งค่า Stripe Price ID ในหน้า /admin/plans ทุกแผนที่มีค่าใช้จ่าย | จำเป็นก่อนลูกค้าจ่ายผ่าน Stripe ได้ |
 | MEDIUM | ทดสอบ end-to-end ด้วย Stripe CLI (`stripe listen` + `stripe trigger`) และ Omise sandbox | ดูแผนทดสอบใน plan ที่บันทึกไว้ |

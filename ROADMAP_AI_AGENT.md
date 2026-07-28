@@ -18,7 +18,7 @@
 2. **ฟีเจอร์ที่สร้างต้องใช้ได้กับทุกช่องทางจากจุดเดียว** — ห้ามสร้าง logic ซ้ำต่อช่องทาง (LINE/FB/Web Widget) เหมือนที่เกิดใน `aisalesassistant-main` (tool-calling loop ถูกสร้างแค่ใน web widget ไม่เคยไปถึง LINE ซึ่งเป็นช่องทางหลัก) — ให้ logic หลักอยู่ใน `salesAgentEngine.ts` แห่งเดียว ช่องทางต่างๆ แค่เรียกใช้
 3. **ออกแบบ multi-tenant (RLS ตาม shop_id) ตั้งแต่ migration แรกของทุกตารางใหม่ ห้ามลืมแล้วมา retrofit ทีหลัง** — `aisalesassistant-main` ล่มเพราะลืมออกแบบ multi-tenancy ตั้งแต่ต้น แล้วพอจะ retrofit ทีหลังกลับใหญ่เกินจะ merge (ดูหัวข้อ 1.1)
 4. **ห้ามเขียน script แก้ไฟล์แบบ regex-patch (เช่น `patch_agent.cjs` ใน aisalesassistant-main)** — ถ้าจะแก้โค้ด ให้แก้ไฟล์ตรงๆ ด้วย Edit tool เท่านั้น
-5. **ตรวจสอบ schema ฐานข้อมูลจริงก่อนเขียน SQL migration ใหม่เสมอ** — รัน `supabase_check_schema.sql` ก่อนเขียน SQL ใหม่ทุกครั้ง (พบมาแล้วหลายรอบในเซสชันนี้ว่า schema จริงไม่ตรงกับไฟล์ `supabase_schema_update.sql` เดิม)
+5. **ตรวจสอบ schema ฐานข้อมูลจริงก่อนเขียน SQL migration ใหม่เสมอ** — รัน `supabase/tools/check_schema.sql` ก่อนเขียน SQL ใหม่ทุกครั้ง (พบมาแล้วหลายรอบในเซสชันนี้ว่า schema จริงไม่ตรงกับไฟล์ `supabase/migrations/20260701000000_initial_schema.sql` เดิม)
 
 ---
 
@@ -53,8 +53,10 @@
 - Staging deployment: **NO-GO ทุก gate ทั้ง 12 อัน** ไม่เคย deploy จริงแม้แต่ครั้งเดียว ไม่มีใครเซ็นอนุมัติปล่อยของ
 - บทเรียน: **การวางแผน/เอกสารมากเกินไปโดยไม่ ship ของจริง ก็เป็นความล้มเหลวเหมือนกัน** เอกสารนี้จึงเน้นให้มีรายละเอียดพอที่จะ "ลงมือทำได้ทันที" ไม่ใช่แค่ framework/governance ลอยๆ
 
-### สัญญาณเตือน: `botify-saas-web` (โปรเจคปัจจุบัน) เริ่มมีอาการคล้าย v5-hybrid แล้ว
-ระหว่างพัฒนา Phase 2 (Billing) พบปัญหา schema drift ระหว่างไฟล์ SQL กับฐานข้อมูลจริงถึง 3 รอบ และแก้ด้วยการสร้างไฟล์ SQL แยกไว้ที่ root (`supabase_check_schema.sql`, `supabase_seed_test_products.sql` ฯลฯ) — **นี่คือรูปแบบเดียวกับ 45 ไฟล์ debug script ของ v5-hybrid** ถ้าปล่อยไว้โดยไม่จัดระบบจะสะสมเป็นปัญหาเดียวกัน **คำแนะนำ:** ก่อนเริ่ม Planning Layer (งานใหญ่ที่สุดในแผนนี้) ควรใช้เวลาสั้นๆ รวมไฟล์ SQL migration ที่กระจัดกระจายให้อยู่ในโฟลเดอร์เดียว/มีลำดับชัดเจน และพิจารณาเพิ่ม automated test อย่างน้อยสำหรับ tool dispatcher
+### สัญญาณเตือน: `botify-saas-web` (โปรเจคปัจจุบัน) เริ่มมีอาการคล้าย v5-hybrid แล้ว — ✅ แก้แล้ว (28 กรกฎาคม 2026)
+ระหว่างพัฒนา Phase 2 (Billing) พบปัญหา schema drift ระหว่างไฟล์ SQL กับฐานข้อมูลจริงถึง 3 รอบ และแก้ด้วยการสร้างไฟล์ SQL แยกไว้ที่ root (`supabase_check_schema.sql`, `supabase_seed_test_products.sql` ฯลฯ) — **นี่คือรูปแบบเดียวกับ 45 ไฟล์ debug script ของ v5-hybrid** ถ้าปล่อยไว้โดยไม่จัดระบบจะสะสมเป็นปัญหาเดียวกัน
+
+**แก้แล้ว:** ย้าย SQL ทั้งหมดออกจาก root เข้า `supabase/migrations/` (ไฟล์ schema/phase ตามลำดับเวลา) และ `supabase/tools/` (script ตรวจสอบ/seed ที่ไม่ใช่ migration) พร้อมเขียน `supabase/README.md` อธิบายธรรมเนียมการใช้งาน — ดูรายละเอียดที่ `supabase/README.md` โดยตรง ยังไม่ได้เพิ่ม automated test สำหรับ tool dispatcher (ยังเป็นข้อเสนอแนะที่ค้างอยู่ ไม่ใช่ blocker)
 
 ---
 
@@ -139,7 +141,7 @@
 
 ### สถานะ: ✅ เสร็จแล้ว (28 กรกฎาคม 2026) — ทำงานได้จริง ตรวจสอบแล้ว
 
-โครงสร้าง: ตาราง `customer_profiles` (shop_id+user_id unique) เก็บ tags/notes แบบ append-only (jsonb), preferences (jsonb), total_orders/total_spend/last_order_at อัปเดตอัตโนมัติ, auto-inject เข้า system prompt ทุกข้อความผ่าน `getCustomerProfileContext()` ไฟล์หลัก: `supabase_phase3_customer_memory.sql`, `src/lib/customerMemory.ts`
+โครงสร้าง: ตาราง `customer_profiles` (shop_id+user_id unique) เก็บ tags/notes แบบ append-only (jsonb), preferences (jsonb), total_orders/total_spend/last_order_at อัปเดตอัตโนมัติ, auto-inject เข้า system prompt ทุกข้อความผ่าน `getCustomerProfileContext()` ไฟล์หลัก: `supabase/migrations/20260728030000_phase3_customer_memory.sql`, `src/lib/customerMemory.ts`
 
 ### จุดที่ควรปรับปรุงให้สมบูรณ์ขึ้น
 
@@ -315,6 +317,6 @@ if (steps >= MAX_PLANNING_STEPS && !finalText) {
 1. อ่านหัวข้อ 0 (เป้าหมาย+กฎเหล็ก) และหัวข้อ 1 (บทเรียน) ให้จบก่อนเริ่มโค้ดใดๆ
 2. เช็คว่าตอนนี้ทำถึงหัวข้อไหนแล้ว — ดู checklist สถานะในแต่ละหัวข้อ (4-8) และดู `PROJECT_STATUS.md` ประกอบ (มีบันทึกทุกครั้งที่ ship ฟีเจอร์จริง)
 3. ทำตามลำดับในหัวข้อ 3 เว้นแต่ผู้ใช้ระบุเจาะจงว่าอยากทำหัวข้อไหนก่อน
-4. **ก่อนเขียน SQL migration ใหม่ใดๆ ต้องรัน `supabase_check_schema.sql` ก่อนเสมอ** (กฎเหล็กข้อ 5)
+4. **ก่อนเขียน SQL migration ใหม่ใดๆ ต้องรัน `supabase/tools/check_schema.sql` ก่อนเสมอ** (กฎเหล็กข้อ 5)
 5. ทุกครั้งที่ทำหัวข้อไหนเสร็จ: (a) typecheck+build ให้ผ่าน, (b) อัปเดตสถานะในเอกสารนี้ (เปลี่ยนเครื่องหมาย/เพิ่มวันที่), (c) อัปเดต `PROJECT_STATUS.md` ตามธรรมเนียมเดิม, (d) commit+push
 6. ห้ามฝ่าฝืนกฎเหล็ก 5 ข้อในหัวข้อ 0 ไม่ว่ากรณีใด — ถ้าคิดว่าจำเป็นต้องฝ่าฝืนข้อไหน ให้หยุดแล้วถามผู้ใช้ก่อน อย่าตัดสินใจเอง
