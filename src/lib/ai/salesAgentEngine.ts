@@ -1314,11 +1314,13 @@ async function callGeminiApi(
         generationConfig: {
           temperature: 0.7,
           maxOutputTokens: 1024,
-          // thinkingBudget: 0 disables thinking entirely (fastest, no signatures needed)
-          // thinkingBudget: -1 lets the model decide (requires echoing thought_signature back)
-          // We disable thinking here to avoid the thought_signature requirement.
-          thinkingConfig: { thinkingBudget: 0 },
         },
+        // thinkingConfig is a TOP-LEVEL field (not inside generationConfig).
+        // thinkingBudget: 0 disables thinking entirely — avoids the
+        // thought_signature requirement and makes responses faster.
+        // Set to -1 to let the model decide when to think (requires
+        // echoing thought_signature back on functionCall parts).
+        thinkingConfig: { thinkingBudget: 0 },
       }),
     })
 
