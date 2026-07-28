@@ -58,6 +58,17 @@
 
 **แก้แล้ว:** ย้าย SQL ทั้งหมดออกจาก root เข้า `supabase/migrations/` (ไฟล์ schema/phase ตามลำดับเวลา) และ `supabase/tools/` (script ตรวจสอบ/seed ที่ไม่ใช่ migration) พร้อมเขียน `supabase/README.md` อธิบายธรรมเนียมการใช้งาน — ดูรายละเอียดที่ `supabase/README.md` โดยตรง ยังไม่ได้เพิ่ม automated test สำหรับ tool dispatcher (ยังเป็นข้อเสนอแนะที่ค้างอยู่ ไม่ใช่ blocker)
 
+### สัญญาณเตือนอีกครั้ง: เกือบแยก deploy ไป Railway ("สมอง AI" แยกจากเว็บ) — ✅ ตัดสินใจแล้วว่าไม่ทำ (28 กรกฎาคม 2026)
+ผู้ใช้ deploy โปรเจคนี้ (repo/โค้ดชุดเดียวกัน ไม่ได้แยก root) ขึ้นทั้ง Vercel และ Railway พร้อมกัน โดยตั้งใจจะให้ Railway รับหน้าที่ "สมอง AI" (ประมวลผลแชท) ส่วน Vercel รับหน้าที่เว็บร้านค้า/แอดมิน — ตามคำแนะนำที่เคยได้รับตอนทำ `botify-v5-hybrid` (เหตุผลตอนนั้นคือกลัว Vercel "หลับ" ตอบข้อความลูกค้าไม่ได้) ตรวจสอบโค้ดทั้งโปรเจคแล้วไม่พบการอ้างถึง Railway หรือ `NEXT_PUBLIC_AI_AGENT_SERVICE_URL` (ตัวแปรที่ตั้งไว้ใน Vercel) เลยสักที่ — ระบบทั้งหมดรันอยู่บน Vercel เดียว 100% อยู่แล้วในทางปฏิบัติ Railway เป็นแค่ deployment ที่ไม่มีอะไรเรียกใช้
+
+**เหตุผลที่ตัดสินใจไม่แยก (ยืนยันกฎเหล็กข้อ 1):**
+1. Vercel serverless ไม่ได้ "หลับ" แล้วตอบไม่ได้ — scale ลง 0 ตอนไม่มีคนใช้แล้ว spin ขึ้นมาใหม่ตอนมี request (cold start เพิ่ม latency ~0.1-2 วิ ไม่ใช่ตอบไม่ได้เลย) ข้อจำกัดจริงคือ **เวลาทำงานสูงสุดต่อ request** (`maxDuration`) ซึ่งแก้ได้ด้วยการตั้งค่าใน route handler โดยไม่ต้องเพิ่ม service
+2. LINE webhook เป็น request/response ธรรมดา ไม่ใช่งานที่ต้องมี process ค้างตลอดเวลาแบบ WebSocket/queue worker — ไม่มีเหตุผลทางเทคนิคที่ต้องมี server "ไม่เคยหลับ" แยกต่างหาก
+3. ถ้าแยกจริง Vercel ต้องยิง request ต่อไป Railway อีกที **เพิ่ม** latency (network hop เพิ่ม) ตรงข้ามกับที่ต้องการ
+4. **สำคัญที่สุด:** งาน Async Ack/Push ของ Planning Layer (หัวข้อ 6) ออกแบบให้ `PlanningState` (มี Supabase client, `ToolExecutor` function reference ฯลฯ) อยู่ใน process เดียวกันตลอดการทำงาน — ถ้าแยก AI ไป Railway จริง ต้องรื้อ design ทั้งหมดใหม่เพราะ object พวกนี้ส่งข้าม HTTP ไม่ได้ (serialize เป็น JSON ได้แต่ function/client ไม่ได้)
+
+**คำแนะนำที่ให้ไปและผู้ใช้เห็นด้วย:** ลบ `NEXT_PUBLIC_AI_AGENT_SERVICE_URL` ออกจาก Vercel env vars (dead config ไม่มีโค้ดใช้), ปิด Railway deployment, ถ้าจะกังวลเรื่อง timeout ให้ตั้ง `maxDuration` ในไฟล์ webhook route แทน — ทั้งหมดนี้เป็นงานฝั่ง infrastructure ที่ผู้ใช้ต้องทำเองผ่าน Vercel/Railway dashboard
+
 ---
 
 ## 2. ภาพรวมสถาปัตยกรรม: ตอนนี้ vs เป้าหมาย
