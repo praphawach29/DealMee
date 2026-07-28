@@ -9,6 +9,12 @@ interface ChatMessage {
   text: string
   timestamp: string
   quotaExceeded?: boolean
+  /** Mirrors how LINE delivers this message, so a shop owner can see that e.g. a QR arrives as its own separate message rather than part of the reply. */
+  origin?: 'ack' | 'reply' | 'tool'
+  imageUrl?: string
+  /** Tools that really ran for this turn, shown under the bubble. */
+  toolCalls?: { name: string; args: Record<string, any> }[]
+  scheduled?: { delayMinutes: number; content: string }[]
 }
 
 interface QuotaStatus {
@@ -86,15 +92,36 @@ export default function ChatPlaygroundModal({
     const res = await testPlaygroundChat(textToSend.trim(), botName, personality, simulateQuotaExceeded, history)
     setLoading(false)
 
-    const botReply: ChatMessage = {
-      id: (Date.now() + 1).toString(),
-      sender: 'bot',
-      text: res.response || 'ขออภัยค่ะ ระบบทดสอบขัดข้องชั่วคราว',
-      timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
-      quotaExceeded: res.quotaExceeded === true,
+    const timestamp = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+
+    if (res.error) {
+      setMessages((prev) => [...prev, { id: `${Date.now()}-err`, sender: 'bot', text: res.error!, timestamp }])
+      return
     }
 
-    setMessages((prev) => [...prev, botReply])
+    // One bubble per message, in the order LINE would deliver them — the old
+    // Playground concatenated everything into a single bubble, which hid
+    // problems like the bot and a tool both answering the same question.
+    const replies: ChatMessage[] = res.bubbles.map((bubble, i) => ({
+      id: `${Date.now()}-${i}`,
+      sender: 'bot' as const,
+      text: bubble.type === 'image' ? 'ส่งรูปภาพให้ลูกค้า' : bubble.content,
+      imageUrl: bubble.type === 'image' ? bubble.content : undefined,
+      origin: bubble.origin,
+      timestamp,
+      quotaExceeded: res.quotaExceeded === true,
+    }))
+
+    if (replies.length === 0) {
+      replies.push({ id: `${Date.now()}-empty`, sender: 'bot', text: 'ขออภัยค่ะ ระบบทดสอบขัดข้องชั่วคราว', timestamp })
+    }
+
+    // Hang the debug detail off the last bubble so it reads as a footnote to
+    // the whole turn rather than to one message.
+    replies[replies.length - 1].toolCalls = res.toolCalls
+    replies[replies.length - 1].scheduled = res.scheduled
+
+    setMessages((prev) => [...prev, ...replies])
   }
 
   const quickPresets = [
@@ -208,9 +235,42 @@ export default function ChatPlaygroundModal({
                       : 'bg-slate-800 text-slate-100 border border-slate-700/80 rounded-bl-none'
                   }`}
                 >
+                  {msg.origin === 'ack' && (
+                    <div className="text-[10px] uppercase tracking-wide text-amber-400/80 mb-1">
+                      ข้อความตอบรับทันที (LINE Reply)
+                    </div>
+                  )}
+                  {msg.origin === 'tool' && (
+                    <div className="text-[10px] uppercase tracking-wide text-emerald-400/80 mb-1">
+                      ส่งแยกอีกข้อความ (LINE Push)
+                    </div>
+                  )}
                   {msg.text}
+                  {msg.imageUrl && (
+                    <img
+                      src={msg.imageUrl}
+                      alt="รูปที่บอทส่งให้ลูกค้า"
+                      className="mt-2 rounded-lg max-w-[200px] border border-slate-600"
+                    />
+                  )}
                 </div>
               </div>
+
+              {msg.toolCalls && msg.toolCalls.length > 0 && (
+                <div className="mt-1.5 ml-9 text-[10px] text-slate-400 bg-slate-900/60 border border-slate-700/60 rounded-lg px-2.5 py-1.5 max-w-[85%] sm:max-w-[75%]">
+                  <span className="text-slate-500">เครื่องมือที่ทำงานจริง: </span>
+                  {msg.toolCalls.map((t) => t.name).join(', ')}
+                </div>
+              )}
+
+              {msg.scheduled && msg.scheduled.length > 0 && (
+                <div className="mt-1.5 ml-9 text-[10px] text-slate-400 bg-slate-900/60 border border-slate-700/60 rounded-lg px-2.5 py-1.5 max-w-[85%] sm:max-w-[75%]">
+                  {msg.scheduled.map((s, i) => (
+                    <div key={i}>ตั้งเวลาส่งอีก {s.delayMinutes} นาที: {s.content}</div>
+                  ))}
+                </div>
+              )}
+
               <span className="text-[10px] text-slate-500 mt-1 px-1">{msg.timestamp}</span>
             </div>
           ))}

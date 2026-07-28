@@ -253,18 +253,25 @@ async function findBookingForAction(supabase: SupabaseClient, shopId: string, ar
     .select(baseSelect)
     .eq('shop_id', shopId)
     .neq('status', 'cancelled')
+    // Always scoped to the person asking. Without this, the identifiers below
+    // are the only thing standing between a customer and someone else's
+    // booking: a guessed booking number or a phone number would let anyone
+    // cancel or move a stranger's table. Bookings the shop entered by hand
+    // are deliberately out of reach here — staff change those from the
+    // dashboard, not by asking the bot.
+    .contains('metadata', { line_user_id: userId })
     .order('created_at', { ascending: false })
     .limit(5)
 
+  // These only narrow within the customer's own bookings — with no
+  // identifier at all, the scope above already limits it to theirs.
   if (lookup) {
     query = UUID_RE.test(lookup) ? query.eq('id', lookup) : query.ilike('booking_no', `%${lookup}%`)
-  } else if (phone || customerName || date || time) {
+  } else {
     if (phone) query = query.ilike('phone', `%${phone}%`)
     if (customerName) query = query.ilike('customer_name', `%${customerName}%`)
     if (date) query = query.eq('booking_date', date)
     if (time) query = query.eq('booking_time', time)
-  } else {
-    query = query.contains('metadata', { line_user_id: userId })
   }
 
   const { data, error } = await query

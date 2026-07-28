@@ -2,12 +2,16 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { processSalesAgentChat, getQuotaStatus, QUOTA_EXCEEDED_MESSAGE_TH } from '@/lib/ai/salesAgentEngine'
-import { applyProductSearchFilters, buildAvailabilitySlots, formatOrderCloseSummary, formatPaymentInstructions, getSlotIntervalMinutes, normalizeBookingDate, parseBookingDateDayKey, resolveBookingService } from '@/lib/ai/toolDispatcher'
-import type { ToolExecutor, ToolExecutionContext, ToolExecutionResult } from '@/lib/ai/toolDispatcher'
+import {
+  startSalesAgentPlanning,
+  continueSalesAgentPlanning,
+  getQuotaStatus,
+  QUOTA_EXCEEDED_MESSAGE_TH,
+  PLANNING_ACK_MESSAGE_TH,
+} from '@/lib/ai/salesAgentEngine'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { buildAutoGreeting } from '@/lib/businessGreeting'
-import { upsertCustomerProfile, appendCustomerNote, addCustomerTagUnique } from '@/lib/customerMemory'
+import { upsertCustomerProfile } from '@/lib/customerMemory'
 
 export async function updateBotSettings(formData: FormData) {
   const supabase = await createClient()
@@ -119,26 +123,80 @@ export async function getPlaygroundGreeting() {
     hasTableBooking: (templates || []).some((item: any) => item.booking_type === 'table'),
   }
 }
+/** One message exactly as LINE would deliver it, in delivery order. */
+export interface PlaygroundBubble {
+  type: 'text' | 'image'
+  content: string
+  /** Where it came from, so the UI can label it: the quick acknowledgement LINE sends while a multi-step plan runs, the bot's own reply, or a message a tool pushed itself. */
+  origin: 'ack' | 'reply' | 'tool'
+}
+
+export interface PlaygroundResult {
+  bubbles: PlaygroundBubble[]
+  /** Tools that really ran, for the debug strip under the conversation. */
+  toolCalls: { name: string; args: Record<string, any> }[]
+  /** Follow-ups the bot scheduled — LINE would push these after a delay. */
+  scheduled: { delayMinutes: number; content: string }[]
+  quotaExceeded: boolean
+  error?: string
+}
+
+/**
+ * The Playground's conversation, as a real `conversations` row. Two reasons
+ * it can't stay a synthetic `playground-<uuid>` string: `orders.conversation_id`
+ * and `chat_messages.conversation_id` are UUID columns that such a string
+ * can't be written to, and tools that read conversation history need a row
+ * to read. `platform: 'PLAYGROUND'` marks it so the Inbox can tell it apart
+ * from a real customer.
+ */
+async function getOrCreatePlaygroundConversation(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  shopId: string,
+  userId: string
+) {
+  const { data: existing } = await supabase
+    .from('conversations')
+    .select('id')
+    .eq('shop_id', shopId)
+    .eq('user_id', userId)
+    .eq('platform', 'PLAYGROUND')
+    .maybeSingle()
+
+  if (existing?.id) return existing.id as string
+
+  const { data: created } = await supabase
+    .from('conversations')
+    .insert({
+      shop_id: shopId,
+      user_id: userId,
+      customer_name: 'ผู้ทดสอบ (Chat Playground)',
+      platform: 'PLAYGROUND',
+      status: 'ai',
+    })
+    .select('id')
+    .single()
+
+  return (created?.id as string) || null
+}
+
 export async function testPlaygroundChat(
   userQuery: string,
   customBotName?: string,
   customPersonality?: string,
   simulateQuotaExceeded?: boolean,
   conversationHistory?: { sender: 'user' | 'bot'; text: string }[]
-) {
+): Promise<PlaygroundResult> {
+  const empty = { bubbles: [], toolCalls: [], scheduled: [], quotaExceeded: false }
   const supabase = await createClient()
 
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user) return { response: 'กรุณาล็อกอินก่อนใช้งานระบบทดสอบแชท' }
+  if (!user) return { ...empty, error: 'กรุณาล็อกอินก่อนใช้งานระบบทดสอบแชท' }
 
-  let shop = await getOrCreateShopForUser(supabase, user)
-
-  if (!shop) {
-    shop = { id: 'test-shop', name: 'ร้านค้าทดสอบ', bot_name: 'น้อง Botify' }
-  }
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop?.id) return { ...empty, error: 'ไม่พบข้อมูลร้านค้า' }
 
   const customShop = {
     ...shop,
@@ -149,7 +207,7 @@ export async function testPlaygroundChat(
   // Lets a shop owner preview the exact message customers see once quota runs
   // out, without spending any of the shop's real message quota to trigger it.
   if (simulateQuotaExceeded) {
-    return { response: QUOTA_EXCEEDED_MESSAGE_TH, quotaExceeded: true }
+    return { ...empty, bubbles: [{ type: 'text', content: QUOTA_EXCEEDED_MESSAGE_TH, origin: 'reply' }], quotaExceeded: true }
   }
 
   // Customer Memory Graph: mirror the webhook's upsert so the tester's
@@ -157,203 +215,51 @@ export async function testPlaygroundChat(
   // and so the auto-injected profile context works in the Playground too.
   await upsertCustomerProfile(shop.id, user.id, 'ผู้ทดสอบ (Chat Playground)')
 
+  const conversationId = await getOrCreatePlaygroundConversation(supabase, shop.id, user.id)
+  if (!conversationId) return { ...empty, error: 'สร้างบทสนทนาทดสอบไม่สำเร็จ' }
+
   try {
-    const response = await processSalesAgentChat({
+    // Same two-phase call the LINE webhook makes, so a plan that needs more
+    // than one AI call takes the same path here — including the short
+    // acknowledgement LINE sends before the real answer, which the old
+    // single-call Playground could never show.
+    const bubbles: PlaygroundBubble[] = []
+    const started = await startSalesAgentPlanning({
       shop: customShop,
       userQuery,
       userId: user.id,
-      conversationId: `playground-${user.id}`,
+      conversationId,
       conversationHistory,
-      toolExecutor: previewToolExecutor,
       supabaseClient: supabase,
     })
 
-    // The Planning Layer already ran (possibly several) tool calls internally
-    // via previewToolExecutor above, so response.text is the AI's final reply
-    // after seeing every tool's (preview) result. immediateMessages carries
-    // the preview lines those tool calls produced, appended for visibility.
-    const previewLines = response.immediateMessages
-      .map((msg) => (msg.type === 'image' ? `[รูปภาพ: ${msg.content}]` : msg.content))
-      .join('\n\n')
-    const text = previewLines ? `${response.text}\n\n${previewLines}` : response.text
+    let result
+    if (started.done) {
+      result = started.result
+    } else {
+      bubbles.push({ type: 'text', content: PLANNING_ACK_MESSAGE_TH, origin: 'ack' })
+      result = await continueSalesAgentPlanning(started.state)
+    }
 
-    return { response: text, quotaExceeded: response.quotaExceeded === true }
+    // Delivery order mirrors deliverAgentResult(): the bot's reply first,
+    // then anything a tool pushed on its own.
+    if (result.text) bubbles.push({ type: 'text', content: result.text, origin: 'reply' })
+    for (const msg of result.immediateMessages) {
+      bubbles.push({ type: msg.type, content: msg.content, origin: 'tool' })
+    }
+
+    return {
+      bubbles,
+      toolCalls: result.toolCallsExecuted,
+      scheduled: result.scheduledMessages.map((s) => ({
+        delayMinutes: Math.round(s.delayMs / 60000),
+        content: s.message.content,
+      })),
+      quotaExceeded: result.quotaExceeded === true,
+    }
   } catch (err: any) {
-    return { response: `เกิดข้อผิดพลาด: ${err.message}` }
+    return { ...empty, error: `เกิดข้อผิดพลาด: ${err.message}` }
   }
-}
-
-/**
- * Chat Playground's ToolExecutor — never runs the real executeTool() dispatcher
- * since it must never create real orders/bookings/etc. Read-only lookups run
- * the same query live so a tester can confirm search actually returns real
- * data. update_customer_note/add_customer_tag also run for real — they're
- * low-risk appends to the tester's own Customer Memory Graph profile, not
- * fake business records, and actually exercising them is the only way to
- * prove memory persists across a fresh Playground session. Anything else
- * (take_order, book_appointment, send_payment_qr, save_lead, ...) is preview-only:
- * the AI is told it "succeeded" via resultForAi so multi-step planning can
- * continue, but no real side effect happens and no message is delivered.
- */
-const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionContext): Promise<ToolExecutionResult> => {
-  const { supabase, shopId, userId } = ctx
-
-  if (name === 'update_customer_note') {
-    await appendCustomerNote(shopId, userId, args.note)
-    const line = `[ทดสอบ] เรียกใช้เครื่องมือ update_customer_note: บันทึกแล้ว — "${args.note}" (จะจำได้ในบทสนทนาถัดไป)`
-    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-  }
-
-  if (name === 'add_customer_tag') {
-    await addCustomerTagUnique(shopId, userId, args.tag)
-    const line = `[ทดสอบ] เรียกใช้เครื่องมือ add_customer_tag: เพิ่ม Tag "${args.tag}" แล้ว (จะจำได้ในบทสนทนาถัดไป)`
-    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-  }
-
-  if (name === 'search_products') {
-    const limit = Math.min(Number(args.limit) || 5, 10)
-    const baseQuery = supabase.from('products').select('name,price,stock,description,category').eq('shop_id', shopId).limit(limit)
-    const { query, keyword } = applyProductSearchFilters(baseQuery, args)
-    const { data: prods } = await query
-    if (!prods || prods.length === 0) {
-      const line = `[ทดสอบ] เรียกใช้เครื่องมือ search_products แต่ไม่พบสินค้าที่ตรงกับ "${keyword || args.keyword || ''}"`
-      return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-    }
-    const list = prods.map((p: any, i: number) => `${i + 1}. ${p.name} - ${Number(p.price).toLocaleString()} บาท ${p.stock > 0 ? `(${p.stock} ชิ้น)` : '(หมดสต๊อก)'}`).join('\n')
-    const line = `[ทดสอบ] เรียกใช้เครื่องมือ search_products:\n${list}`
-    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-  }
-
-  if (name === 'check_stock') {
-    const { data: prods } = await supabase.from('products').select('name,stock,price').eq('shop_id', shopId).ilike('name', `%${args.product_name || ''}%`).limit(3)
-    if (!prods || prods.length === 0) {
-      const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_stock แต่ไม่พบสินค้า "${args.product_name || ''}"`
-      return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-    }
-    const info = prods.map((p: any) => `• ${p.name}: ${p.stock > 0 ? `${p.stock} ชิ้น | ${Number(p.price).toLocaleString()} บาท` : 'หมดสต๊อก'}`).join('\n')
-    const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_stock:\n${info}`
-    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-  }
-
-  if (name === 'take_order') {
-    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ take_order:\n${formatOrderCloseSummary(ctx.shop, args)}`
-    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-  }
-
-  if (name === 'send_payment_qr') {
-    const amount = Number(args.amount) || undefined
-    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ send_payment_qr:\n${formatPaymentInstructions(ctx.shop, amount)}`
-    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-  }
-  if (name === 'check_available_slots') {
-    const bookingDate = normalizeBookingDate(args.date)
-    const service = await resolveBookingService(supabase, shopId, args)
-    const requestedTime = String(args.time || args.requested_time || '').trim().replace('.', ':')
-
-    const dayKey = parseBookingDateDayKey(bookingDate)
-    const serviceDays = (service as any)?.available_days as string[] | null | undefined
-    const serviceName = (service as any)?.name || String(args.service || args.service_name || '').trim()
-    const serviceId = (service as any)?.id
-    const capacityPerSlot = Math.max(Number((service as any)?.capacity_per_slot) || 1, 1)
-
-    if (service && dayKey && serviceDays?.length && !serviceDays.includes(dayKey)) {
-      const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_available_slots: ${serviceName} ไม่เปิดให้จองวันที่ ${bookingDate}`
-      return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-    }
-
-    let bookingQuery = supabase
-      .from('bookings')
-      .select('booking_time,guest_count')
-      .eq('shop_id', shopId)
-      .eq('booking_date', bookingDate)
-      .neq('status', 'cancelled')
-
-    if (serviceId) bookingQuery = bookingQuery.eq('service_id', serviceId)
-    else if (serviceName) bookingQuery = bookingQuery.ilike('service_name', `%${serviceName}%`)
-
-    const { data: booked } = await bookingQuery
-    const bookedCounts = new Map<string, number>()
-    for (const booking of booked || []) {
-      const slot = String((booking as any).booking_time || '').slice(0, 5)
-      const seats = Number((booking as any).guest_count) || 1
-      bookedCounts.set(slot, (bookedCounts.get(slot) || 0) + seats)
-    }
-
-    const allSlots = service
-      ? buildAvailabilitySlots((service as any).start_time, (service as any).end_time, (service as any).duration_minutes, (service as any).buffer_minutes)
-      : ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
-    const slotInterval = service
-      ? getSlotIntervalMinutes((service as any).duration_minutes, (service as any).buffer_minutes)
-      : 60
-    const free = allSlots.filter((slot) => (bookedCounts.get(slot) || 0) < capacityPerSlot)
-    const resource = (service as any)?.resource_label || (service as any)?.staff_name
-    const scope = serviceName ? `สำหรับ ${serviceName}${resource ? ` (${resource})` : ''}` : ''
-    const requestedSlotNote = requestedTime && !allSlots.includes(requestedTime)
-      ? ` | เวลาที่ลูกค้าถาม ${requestedTime} ไม่ใช่รอบเปิดจริง ให้เสนอรอบใกล้ที่สุดจากรายการว่างเท่านั้น`
-      : ''
-    const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_available_slots ${scope} วันที่ ${bookingDate}: ระบบเปิดรอบทุก ${slotInterval} นาที | รอบที่เปิดจริง ${allSlots.join(', ')} | ว่าง ${free.length ? free.join(', ') : 'ไม่มีเวลาว่าง'}${requestedSlotNote} | ให้เสนอเฉพาะเวลาที่อยู่ในรายการว่างเท่านั้น`
-    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-  }
-  if (name === 'check_booking') {
-    const bid = args.booking_id || args.query
-    if (!bid) {
-      const line = '[ทดสอบ] ยังตรวจสอบการจองไม่ได้ เพราะยังไม่มีเลขที่การจองหรือคำค้นหา'
-      return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-    }
-    const { data: bk } = await supabase.from('bookings').select('booking_no,customer_name,phone,service_name,booking_date,booking_time,status').eq('shop_id', shopId).or(`id.eq.${bid},booking_no.ilike.%${bid}%`).maybeSingle()
-    const line = bk
-      ? `[ทดสอบ] เรียกใช้เครื่องมือ check_booking:\n${bk.booking_no} - ${bk.customer_name} ${bk.service_name || '-'} ${bk.booking_date} ${String(bk.booking_time || '').slice(0, 5)} (${bk.status})`
-      : `[ทดสอบ] เรียกใช้เครื่องมือ check_booking แต่ไม่พบเลขที่การจอง ${bid}`
-    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-  }
-
-  if (name === 'book_appointment') {
-    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ book_appointment:
-เลขจองตัวอย่าง: BK-TEST
-บริการ: ${args.service || args.service_name}
-วันที่: ${normalizeBookingDate(args.date)}
-เวลา: ${args.time}
-ลูกค้า: ${args.customer_name || args.name || '-'}
-เบอร์: ${args.phone || '-'}${args.guest_count || args.people || args.party_size ? `
-จำนวน: ${args.guest_count || args.people || args.party_size}` : ''}${args.resource || args.resource_label ? `
-พื้นที่/ผู้ให้บริการ: ${args.resource || args.resource_label}` : ''}`
-    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-  }
-  if (name === 'reschedule_booking') {
-    if (!args.booking_id && !args.query) {
-      const line = '[ทดสอบ] ยังเลื่อนการจองไม่ได้ เพราะยังไม่มีเลขที่การจองหรือข้อมูลเดิมสำหรับค้นหา'
-      return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-    }
-    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ reschedule_booking: ${args.booking_id || args.query} -> ${args.new_date} ${args.new_time}`
-    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-  }
-  if (name === 'cancel_booking') {
-    if (!args.booking_id && !args.query) {
-      const line = '[ทดสอบ] ยังยกเลิกการจองไม่ได้ เพราะยังไม่มีเลขที่การจองหรือข้อมูลเดิมสำหรับค้นหา'
-      return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-    }
-    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ cancel_booking: ${args.booking_id || args.query}`
-    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-  }
-  if (name === 'get_active_promotions') {
-    const today = new Date().toISOString().split('T')[0]
-    const { data: promos } = await supabase.from('promotions').select('name,discount_type,discount_value,end_date,code').eq('shop_id', shopId).eq('status', 'active').or(`end_date.is.null,end_date.gte.${today}`).order('created_at', { ascending: false }).limit(5)
-    if (!promos || promos.length === 0) {
-      const line = `[ทดสอบ] เรียกใช้เครื่องมือ get_active_promotions แต่ไม่พบโปรโมชั่นที่ใช้งานอยู่`
-      return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-    }
-    const list = promos.map((p: any) => {
-      const d = p.discount_type === 'percent' ? `ลด ${p.discount_value}%` : `ลด ${Number(p.discount_value).toLocaleString()} บาท`
-      return `• ${p.name} - ${d}${p.code ? ` (โค้ด: ${p.code})` : ''}`
-    }).join('\n')
-    const line = `[ทดสอบ] เรียกใช้เครื่องมือ get_active_promotions:\n${list}`
-    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
-  }
-
-  // Any other tool (take_order, book_appointment, send_payment_qr, save_lead, ...)
-  // is a real side effect on the live LINE webhook — never execute it here.
-  const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ "${name}" (${JSON.stringify(args)}) — ในโหมดทดสอบจะไม่มีการบันทึกข้อมูลจริง`
-  return { resultForAi: 'ดำเนินการเรียบร้อยแล้ว (โหมดทดสอบ)', immediateMessages: [{ type: 'text', content: line }] }
 }
 
 /** Current-period usage vs. plan limit, for display in the Chat Playground so a shop owner can see real quota state while testing. */

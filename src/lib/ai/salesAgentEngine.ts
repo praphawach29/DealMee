@@ -9,6 +9,9 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+/** Sent the moment a plan turns out to need more than one AI call, so the customer isn't left waiting in silence. Shared so the Chat Playground shows the same wording LINE sends. */
+export const PLANNING_ACK_MESSAGE_TH = 'กำลังตรวจสอบให้สักครู่นะคะ รอแป๊บนึงนะคะ 🙏'
+
 export const QUOTA_EXCEEDED_MESSAGE_TH =
   'ขออภัยค่ะ ร้านค้าใช้ข้อความครบตามแพ็กเกจในเดือนนี้แล้ว กรุณาติดต่อทางร้านหรือรออัปเกรดแพ็กเกจเพื่อใช้งานต่อค่ะ'
 
