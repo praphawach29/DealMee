@@ -1266,11 +1266,10 @@ function buildGeminiContents(turns: PlanningTurn[]): any[] {
             args: turn.toolCall.args,
           },
         }
-        // Gemini 2.5+ requires thought_signature to be echoed back on the
-        // functionCall part on the follow-up turn, or it 400s. If we stored
-        // it during the previous response parse, attach it here.
+        // Gemini 3 requires the thought signature on the same Part as the
+        // functionCall when we echo model history back after tool execution.
         if (turn.toolCall.thoughtSignature) {
-          fcPart.functionCall.thought_signature = turn.toolCall.thoughtSignature
+          fcPart.thoughtSignature = turn.toolCall.thoughtSignature
         }
         parts.push(fcPart)
       }
@@ -1330,16 +1329,20 @@ async function callGeminiApi(
     let replyText = ''
     let toolCall: IdentifiedToolCall | undefined
 
-    // Gemini 3.6+ thinking mode: thought parts appear BEFORE the
-    // functionCall part.  The signature lives at `part.thought_signature`
-    // (part-level, not nested inside `part.thought`).  We capture it into
-    // a local var and attach it to whichever functionCall part follows.
+    // Gemini thinking signatures are part-level metadata. Depending on the
+    // REST/SDK surface they can be exposed as thoughtSignature or
+    // thought_signature, and in some responses they appear on the part before
+    // the functionCall. Capture either spelling and echo it back unchanged.
     let pendingThoughtSig: string | undefined
 
     for (const part of parts) {
+      const partThoughtSignature = part.thoughtSignature || part.thought_signature
+      if (partThoughtSignature) {
+        pendingThoughtSig = partThoughtSignature
+      }
+
       // Skip thought content but capture its signature
       if (part.thought) {
-        pendingThoughtSig = part.thought_signature || pendingThoughtSig
         continue
       }
       if (part.text) replyText += part.text
@@ -1350,7 +1353,11 @@ async function callGeminiApi(
           id: part.functionCall.id,
           // thought_signature can be on the functionCall part itself or
           // from a preceding thought part — accept either.
-          thoughtSignature: part.functionCall.thought_signature || pendingThoughtSig,
+          thoughtSignature:
+            partThoughtSignature ||
+            part.functionCall.thoughtSignature ||
+            part.functionCall.thought_signature ||
+            pendingThoughtSig,
         }
       }
     }
