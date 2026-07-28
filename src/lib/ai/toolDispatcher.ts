@@ -39,6 +39,56 @@ export type ToolExecutor = (
 
 const NO_OP: ToolExecutionResult = { resultForAi: 'ดำเนินการเรียบร้อยแล้ว', immediateMessages: [] }
 
+const GENERIC_PRODUCT_SEARCH_WORDS = [
+  'สินค้า',
+  'รายการสินค้า',
+  'สินค้าทั้งหมด',
+  'ทั้งหมด',
+  'ทุกอย่าง',
+  'อะไรบ้าง',
+  'มีอะไร',
+  'ของขาย',
+  'ของ',
+  'products',
+  'product',
+  'all',
+]
+
+export function normalizeProductSearchKeyword(rawKeyword: unknown): string {
+  if (typeof rawKeyword !== 'string') return ''
+
+  let keyword = rawKeyword
+    .toLowerCase()
+    .replace(/["'`“”‘’!?？,，.。:;()[\]{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  for (const word of [...GENERIC_PRODUCT_SEARCH_WORDS].sort((a, b) => b.length - a.length)) {
+    keyword = keyword.replaceAll(word, ' ')
+  }
+
+  keyword = keyword
+    .replace(/\b(please|show|list|what|do|you|have)\b/g, ' ')
+    .replace(/(ครับ|ค่ะ|คะ|จ้า|หน่อย|ขอ|ช่วย|แนะนำ|ดู|ให้|มี)/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return keyword.length >= 2 ? keyword : ''
+}
+
+export function applyProductSearchFilters(query: any, args: Record<string, any>) {
+  const keyword = normalizeProductSearchKeyword(args.keyword || args.query)
+  const category = normalizeProductSearchKeyword(args.category)
+
+  if (keyword) {
+    query = query.or(`name.ilike.%${keyword}%,description.ilike.%${keyword}%,category.ilike.%${keyword}%`)
+  }
+  if (category) query = query.ilike('category', `%${category}%`)
+  if (args.max_price) query = query.lte('price', Number(args.max_price))
+
+  return { query, keyword }
+}
+
 /**
  * Executes a single AI tool call against the database and returns what
  * happened — channel-agnostic (knows nothing about LINE/webhooks). The
@@ -160,13 +210,11 @@ export async function executeTool(
   // ── 📦 PRODUCT TOOLS ─────────────────────────────────────────────
   if (toolName === 'search_products') {
     const limit = Math.min(Number(args.limit) || 5, 10)
-    let q = supabase.from('products').select('name,price,stock,description').eq('shop_id', shopId).limit(limit)
-    if (args.keyword) q = q.ilike('name', `%${args.keyword}%`)
-    if (args.category) q = q.eq('category', args.category)
-    if (args.max_price) q = q.lte('price', Number(args.max_price))
-    const { data: prods } = await q
+    const baseQuery = supabase.from('products').select('name,price,stock,description,category').eq('shop_id', shopId).limit(limit)
+    const { query, keyword } = applyProductSearchFilters(baseQuery, args)
+    const { data: prods } = await query
     if (!prods || prods.length === 0) {
-      return { resultForAi: `ไม่พบสินค้าที่ตรงกับ "${args.keyword || ''}"`, immediateMessages: [{ type: 'text', content: '❌ ไม่พบสินค้าที่ค้นหาค่ะ ลองคำอื่นดูนะคะ' }] }
+      return { resultForAi: `ไม่พบสินค้าที่ตรงกับ "${keyword || args.keyword || ''}"`, immediateMessages: [{ type: 'text', content: '❌ ไม่พบสินค้าที่ค้นหาค่ะ ลองคำอื่นดูนะคะ' }] }
     }
     const list = prods.map((p: any, i: number) => `${i + 1}. ${p.name}\n   💰 ${Number(p.price).toLocaleString()} บาท ${p.stock > 0 ? `| ${p.stock} ชิ้น` : '| หมดสต๊อก'}`).join('\n\n')
     return {

@@ -324,12 +324,11 @@ const MASTER_TOOLS = [
     parameters: {
       type: 'object',
       properties: {
-        keyword: { type: 'string', description: 'คำค้นหา เช่น "ชุดนอน" "สีชมพู" หรือชื่อสินค้า' },
+        keyword: { type: 'string', description: 'คำค้นหาเฉพาะ เช่น "ชุดนอน" "สีชมพู" หรือชื่อสินค้า ถ้าลูกค้าถามกว้างๆ ว่ามีสินค้าอะไรบ้างให้เว้นว่างเพื่อแสดงรายการทั้งหมด' },
         category: { type: 'string', description: 'หมวดหมู่สินค้า (optional)' },
         max_price: { type: 'number', description: 'ราคาสูงสุดที่ลูกค้ารับได้ (บาท, optional)' },
         limit: { type: 'number', description: 'จำนวนสินค้าที่ต้องการ (default 5, max 10)' },
       },
-      required: ['keyword'],
     },
   },
   {

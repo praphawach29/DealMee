@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { processSalesAgentChat, getQuotaStatus, QUOTA_EXCEEDED_MESSAGE_TH } from '@/lib/ai/salesAgentEngine'
+import { applyProductSearchFilters } from '@/lib/ai/toolDispatcher'
 import type { ToolExecutor, ToolExecutionContext, ToolExecutionResult } from '@/lib/ai/toolDispatcher'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { upsertCustomerProfile, appendCustomerNote, addCustomerTagUnique } from '@/lib/customerMemory'
@@ -187,13 +188,11 @@ const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionC
 
   if (name === 'search_products') {
     const limit = Math.min(Number(args.limit) || 5, 10)
-    let q = supabase.from('products').select('name,price,stock,description').eq('shop_id', shopId).limit(limit)
-    if (args.keyword) q = q.ilike('name', `%${args.keyword}%`)
-    if (args.category) q = q.eq('category', args.category)
-    if (args.max_price) q = q.lte('price', Number(args.max_price))
-    const { data: prods } = await q
+    const baseQuery = supabase.from('products').select('name,price,stock,description,category').eq('shop_id', shopId).limit(limit)
+    const { query, keyword } = applyProductSearchFilters(baseQuery, args)
+    const { data: prods } = await query
     if (!prods || prods.length === 0) {
-      const line = `[ทดสอบ] เรียกใช้เครื่องมือ search_products แต่ไม่พบสินค้าที่ตรงกับ "${args.keyword || ''}"`
+      const line = `[ทดสอบ] เรียกใช้เครื่องมือ search_products แต่ไม่พบสินค้าที่ตรงกับ "${keyword || args.keyword || ''}"`
       return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
     }
     const list = prods.map((p: any, i: number) => `${i + 1}. ${p.name} - ${Number(p.price).toLocaleString()} บาท ${p.stock > 0 ? `(${p.stock} ชิ้น)` : '(หมดสต๊อก)'}`).join('\n')
