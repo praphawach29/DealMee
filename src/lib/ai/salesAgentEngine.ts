@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
+import { executeTool as realExecuteTool, type ToolExecutor, type ToolExecutionContext, type CustomerMessage } from '@/lib/ai/toolDispatcher'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
@@ -27,7 +28,21 @@ export interface SalesAgentRequest {
    * conversation with no memory of what was just said.
    */
   conversationHistory?: { sender: 'user' | 'bot'; text: string }[]
+  /**
+   * Overrides tool execution — defaults to the real executeTool() (writes to
+   * the database, sends real LINE messages via the returned
+   * immediateMessages). The Chat Playground supplies a safe-preview
+   * executor instead, so testing a multi-step plan never creates real
+   * orders/bookings/etc.
+   */
+  toolExecutor?: ToolExecutor
 }
+
+/** One turn of the Planning Layer's provider-agnostic conversation state. Each callXApi function serializes this into its own wire format. */
+export type PlanningTurn =
+  | { role: 'user'; text: string }
+  | { role: 'assistant'; text?: string; toolCall?: IdentifiedToolCall }
+  | { role: 'tool_result'; toolCallId?: string; toolName: string; result: string }
 
 export type ComplexityLevel = 'LOW' | 'HIGH'
 export type AiProvider = 'gemini' | 'claude' | 'openai'
@@ -76,6 +91,9 @@ export interface AgentToolCall {
   args: Record<string, any>
 }
 
+/** A tool call plus the provider's own id for it (required to send the matching tool result back on the next planning-loop turn). */
+export type IdentifiedToolCall = AgentToolCall & { id?: string }
+
 export interface AgentUsage {
   promptTokens: number
   completionTokens: number
@@ -88,9 +106,21 @@ export interface AgentUsage {
 
 export interface AgentResult {
   text: string
-  toolCall?: AgentToolCall
   usage?: AgentUsage
   quotaExceeded?: boolean
+  /** Messages (QR images, order confirmations, etc.) to push to the customer — tool execution now happens inside processSalesAgentChat's planning loop, so the caller (webhook route) just delivers these instead of dispatching tools itself. Always an array (empty if no tool ran). */
+  immediateMessages: CustomerMessage[]
+  /** Every tool actually executed this turn, in order — for future use by the Sales Workflow Engine (stage transitions) and debugging. Always an array. */
+  toolCallsExecuted: AgentToolCall[]
+  /** Delayed pushes (schedule_followup) — the engine has no channel access to set its own setTimeout, so the caller (webhook route) does it. Always an array. */
+  scheduledMessages: { delayMs: number; message: CustomerMessage }[]
+}
+
+/** Internal — one provider call's raw result within the planning loop (not the final AgentResult returned to callers). */
+interface ProviderStepResult {
+  text: string
+  toolCall?: IdentifiedToolCall
+  usage?: AgentUsage
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -825,9 +855,10 @@ export async function processSalesAgentChat({
   userId,
   conversationId,
   conversationHistory,
+  toolExecutor,
 }: SalesAgentRequest): Promise<AgentResult> {
   if (await isOverQuota(shop)) {
-    return { text: QUOTA_EXCEEDED_MESSAGE_TH, quotaExceeded: true }
+    return { text: QUOTA_EXCEEDED_MESSAGE_TH, quotaExceeded: true, immediateMessages: [], toolCallsExecuted: [], scheduledMessages: [] }
   }
 
   const geminiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
@@ -955,35 +986,157 @@ ${historyContext}`
     `[Botify Brain™] "${userQuery}" | ${routing.complexity} (score ${routing.complexityScore}) | ${routing.targetProvider.toUpperCase()} | Tools: ${routing.toolSet.length}${isVipCustomer ? ' | VIP customer' : ''}`
   )
 
-  if (routing.targetProvider === 'claude' && claudeKey) {
-    const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, userQuery, claudeKey, routing.toolSet)
-    if (result) return result
-  } else if (routing.targetProvider === 'openai' && openAiKey) {
-    const result = await callOpenAiApi(systemInstruction, userQuery, openAiKey, routing.toolSet)
-    if (result) return result
+  // 7. Planning Layer — bounded multi-step tool loop. Most messages resolve
+  // in a single step (identical behavior to before this existed); a message
+  // like "มีเสื้อยืดไซส์ L ไหม ถ้ามีเอา 2 ตัว" can chain
+  // search_products/check_stock -> take_order in one customer turn.
+  const MAX_PLANNING_STEPS = 3
+  const executor: ToolExecutor = toolExecutor || realExecuteTool
+  const toolCtx: ToolExecutionContext = {
+    shopId: shop.id,
+    userId,
+    conversationId,
+    shop,
+    supabase,
+    supabaseAdmin: createAdminClient(),
   }
 
-  if (!geminiKey) {
-    return { text: shop.greeting_message || 'สวัสดีค่ะ มีอะไรให้ช่วยไหมคะ?' }
+  const turns: PlanningTurn[] = [{ role: 'user', text: userQuery }]
+  let finalText = ''
+  const allUsage: AgentUsage[] = []
+  const immediateMessages: CustomerMessage[] = []
+  const toolCallsExecuted: AgentToolCall[] = []
+  const scheduledMessages: { delayMs: number; message: CustomerMessage }[] = []
+
+  const callCurrentStep = async (): Promise<ProviderStepResult | null> => {
+    if (routing.targetProvider === 'claude' && claudeKey) {
+      const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, turns, claudeKey, routing.toolSet)
+      if (result) return result
+    } else if (routing.targetProvider === 'openai' && openAiKey) {
+      const result = await callOpenAiApi(systemInstruction, turns, openAiKey, routing.toolSet)
+      if (result) return result
+    }
+    if (!geminiKey) return null
+    return callGeminiApi(systemInstruction, turns, modelName, geminiKey, routing.toolSet)
   }
 
-  const geminiResult = await callGeminiApi(systemInstruction, userQuery, modelName, geminiKey, routing.toolSet)
-  if (geminiResult) return geminiResult
+  for (let step = 0; step < MAX_PLANNING_STEPS; step++) {
+    const response = await callCurrentStep()
 
-  return { text: `สวัสดีค่ะ ยินดีต้อนรับสู่ร้าน "${shop.name}" มีอะไรให้ช่วยแนะนำไหมคะ?` }
+    if (!response) {
+      // All configured providers failed this step — same fallback text as
+      // the old single-shot path used when every provider call returned null.
+      finalText = step === 0
+        ? (geminiKey ? `สวัสดีค่ะ ยินดีต้อนรับสู่ร้าน "${shop.name}" มีอะไรให้ช่วยแนะนำไหมคะ?` : (shop.greeting_message || 'สวัสดีค่ะ มีอะไรให้ช่วยไหมคะ?'))
+        : (finalText || 'ขออภัยค่ะ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งนะคะ')
+      break
+    }
+
+    if (response.usage) allUsage.push(response.usage)
+
+    if (!response.toolCall) {
+      finalText = response.text
+      break
+    }
+
+    turns.push({ role: 'assistant', text: response.text, toolCall: response.toolCall })
+
+    const toolResult = await executor(response.toolCall.name, response.toolCall.args, toolCtx)
+    toolCallsExecuted.push({ name: response.toolCall.name, args: response.toolCall.args })
+    immediateMessages.push(...toolResult.immediateMessages)
+    if (toolResult.scheduledMessage) scheduledMessages.push(toolResult.scheduledMessage)
+    turns.push({
+      role: 'tool_result',
+      toolCallId: response.toolCall.id,
+      toolName: response.toolCall.name,
+      result: toolResult.resultForAi,
+    })
+
+    if (step === MAX_PLANNING_STEPS - 1) {
+      // Ran out of steps without a final text answer — hand off to a human
+      // rather than leaving the customer with nothing.
+      finalText = 'ขออภัยค่ะ เรื่องนี้ซับซ้อนเกินกว่าจะตอบได้ในตอนนี้ รอสักครู่แอดมินจะติดต่อกลับนะคะ'
+      try {
+        await supabase.from('conversations').update({ status: 'human' }).eq('id', conversationId)
+      } catch (err) {
+        console.error('[Planning Layer] Failed to flip conversation to human handoff:', err)
+      }
+    }
+  }
+
+  // Sum usage across every step into one AgentUsage — quota/cost accounting
+  // counts this as ONE customer message regardless of how many AI calls the
+  // plan took internally.
+  const usage: AgentUsage | undefined = allUsage.length > 0
+    ? allUsage.reduce((acc, u) => ({
+        promptTokens: acc.promptTokens + u.promptTokens,
+        completionTokens: acc.completionTokens + u.completionTokens,
+        totalTokens: acc.totalTokens + u.totalTokens,
+        provider: u.provider,
+        cacheReadTokens: (acc.cacheReadTokens || 0) + (u.cacheReadTokens || 0),
+        cacheWriteTokens: (acc.cacheWriteTokens || 0) + (u.cacheWriteTokens || 0),
+      }))
+    : undefined
+
+  return { text: finalText.trim(), usage, immediateMessages, toolCallsExecuted, scheduledMessages }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Provider: Google Gemini
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Converts the provider-agnostic PlanningTurn[] into Gemini's `contents`
+ * array. Gemini's current generateContent API requires every
+ * functionResponse to carry a `call_id` matching the `id` the model
+ * attached to its functionCall — a newer requirement than older Gemini
+ * versions had, so this is the one part of the loop most worth a live
+ * Chat Playground test before trusting in production (if it errors, the
+ * fix is almost certainly adjusting where `id` goes based on the logged
+ * error body below).
+ */
+function buildGeminiContents(turns: PlanningTurn[]): any[] {
+  return turns.map((turn) => {
+    if (turn.role === 'user') {
+      return { role: 'user', parts: [{ text: turn.text }] }
+    }
+    if (turn.role === 'assistant') {
+      const parts: any[] = []
+      if (turn.text) parts.push({ text: turn.text })
+      if (turn.toolCall) {
+        parts.push({
+          functionCall: {
+            id: turn.toolCall.id,
+            name: turn.toolCall.name,
+            args: turn.toolCall.args,
+          },
+        })
+      }
+      return { role: 'model', parts }
+    }
+    // tool_result
+    return {
+      role: 'function',
+      parts: [
+        {
+          functionResponse: {
+            id: turn.toolCallId,
+            name: turn.toolName,
+            response: { result: turn.result },
+          },
+        },
+      ],
+    }
+  })
+}
+
 async function callGeminiApi(
   systemInstruction: string,
-  userQuery: string,
+  turns: PlanningTurn[],
   modelName: string,
   apiKey: string,
   toolSet: typeof MASTER_TOOLS
-): Promise<AgentResult | null> {
+): Promise<ProviderStepResult | null> {
   try {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`
     const response = await fetch(endpoint, {
@@ -991,7 +1144,7 @@ async function callGeminiApi(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemInstruction }] },
-        contents: [{ role: 'user', parts: [{ text: userQuery }] }],
+        contents: buildGeminiContents(turns),
         tools: toGeminiTools(toolSet),
         generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
       }),
@@ -1006,12 +1159,16 @@ async function callGeminiApi(
     const parts: any[] = data.candidates?.[0]?.content?.parts || []
 
     let replyText = ''
-    let toolCall: AgentToolCall | undefined
+    let toolCall: IdentifiedToolCall | undefined
 
     for (const part of parts) {
       if (part.text) replyText += part.text
       if (part.functionCall) {
-        toolCall = { name: part.functionCall.name as AgentToolName, args: part.functionCall.args || {} }
+        toolCall = {
+          name: part.functionCall.name as AgentToolName,
+          args: part.functionCall.args || {},
+          id: part.functionCall.id,
+        }
       }
     }
 
@@ -1038,13 +1195,42 @@ async function callGeminiApi(
 // Provider: Anthropic Claude
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Converts PlanningTurn[] into Claude's `messages` array. Per Claude's
+ * documented multi-turn format: the assistant's content (including the
+ * tool_use block) is echoed back exactly as received, then a new user
+ * message carries ONLY a tool_result block referencing that tool_use's id.
+ */
+function buildClaudeMessages(turns: PlanningTurn[]): any[] {
+  const messages: any[] = []
+  for (const turn of turns) {
+    if (turn.role === 'user') {
+      messages.push({ role: 'user', content: turn.text })
+    } else if (turn.role === 'assistant') {
+      const content: any[] = []
+      if (turn.text) content.push({ type: 'text', text: turn.text })
+      if (turn.toolCall) {
+        content.push({ type: 'tool_use', id: turn.toolCall.id, name: turn.toolCall.name, input: turn.toolCall.args })
+      }
+      messages.push({ role: 'assistant', content })
+    } else {
+      // tool_result — must be its own user message containing only tool_result blocks
+      messages.push({
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: turn.toolCallId, content: turn.result }],
+      })
+    }
+  }
+  return messages
+}
+
 async function callClaudeApi(
   staticSystemPrompt: string,
   dynamicSystemPrompt: string,
-  userQuery: string,
+  turns: PlanningTurn[],
   apiKey: string,
   toolSet: typeof MASTER_TOOLS
-): Promise<AgentResult | null> {
+): Promise<ProviderStepResult | null> {
   try {
     // Prompt caching: the static block (bot identity, knowledge base,
     // products, payment info — stable per shop) is tagged cache_control so
@@ -1067,7 +1253,7 @@ async function callClaudeApi(
           { type: 'text', text: dynamicSystemPrompt },
         ],
         tools: toClaudeTools(toolSet),
-        messages: [{ role: 'user', content: userQuery }],
+        messages: buildClaudeMessages(turns),
       }),
     })
 
@@ -1080,12 +1266,12 @@ async function callClaudeApi(
     const blocks: any[] = data.content || []
 
     let replyText = ''
-    let toolCall: AgentToolCall | undefined
+    let toolCall: IdentifiedToolCall | undefined
 
     for (const block of blocks) {
       if (block.type === 'text') replyText += block.text
       if (block.type === 'tool_use') {
-        toolCall = { name: block.name as AgentToolName, args: block.input || {} }
+        toolCall = { name: block.name as AgentToolName, args: block.input || {}, id: block.id }
       }
     }
 
@@ -1118,12 +1304,35 @@ async function callClaudeApi(
 // Provider: OpenAI
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Converts PlanningTurn[] into OpenAI's `messages` array (stable, long-standing format — assistant message with tool_calls, then a role:'tool' message per result). */
+function buildOpenAiMessages(systemInstruction: string, turns: PlanningTurn[]): any[] {
+  const messages: any[] = [{ role: 'system', content: systemInstruction }]
+  for (const turn of turns) {
+    if (turn.role === 'user') {
+      messages.push({ role: 'user', content: turn.text })
+    } else if (turn.role === 'assistant') {
+      const msg: any = { role: 'assistant', content: turn.text || null }
+      if (turn.toolCall) {
+        msg.tool_calls = [{
+          id: turn.toolCall.id,
+          type: 'function',
+          function: { name: turn.toolCall.name, arguments: JSON.stringify(turn.toolCall.args) },
+        }]
+      }
+      messages.push(msg)
+    } else {
+      messages.push({ role: 'tool', tool_call_id: turn.toolCallId, content: turn.result })
+    }
+  }
+  return messages
+}
+
 async function callOpenAiApi(
   systemInstruction: string,
-  userQuery: string,
+  turns: PlanningTurn[],
   apiKey: string,
   toolSet: typeof MASTER_TOOLS
-): Promise<AgentResult | null> {
+): Promise<ProviderStepResult | null> {
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -1133,10 +1342,7 @@ async function callOpenAiApi(
       },
       body: JSON.stringify({
         model: process.env.OPENAI_MODEL || 'gpt-5.6-luna',
-        messages: [
-          { role: 'system', content: systemInstruction },
-          { role: 'user', content: userQuery },
-        ],
+        messages: buildOpenAiMessages(systemInstruction, turns),
         tools: toOpenAITools(toolSet),
         tool_choice: 'auto',
         max_tokens: 1024,
@@ -1153,7 +1359,7 @@ async function callOpenAiApi(
     if (!message) return null
 
     const replyText = message.content || ''
-    let toolCall: AgentToolCall | undefined
+    let toolCall: IdentifiedToolCall | undefined
 
     if (message.tool_calls?.length > 0) {
       const tc = message.tool_calls[0]
@@ -1162,6 +1368,7 @@ async function callOpenAiApi(
           toolCall = {
             name: tc.function.name as AgentToolName,
             args: JSON.parse(tc.function.arguments || '{}'),
+            id: tc.id,
           }
         } catch {
           console.error('[OpenAI] tool_call parse error')

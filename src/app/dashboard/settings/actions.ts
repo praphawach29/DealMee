@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { processSalesAgentChat, getQuotaStatus, QUOTA_EXCEEDED_MESSAGE_TH } from '@/lib/ai/salesAgentEngine'
+import type { ToolExecutor, ToolExecutionContext, ToolExecutionResult } from '@/lib/ai/toolDispatcher'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { upsertCustomerProfile, appendCustomerNote, addCustomerTagUnique } from '@/lib/customerMemory'
 
@@ -139,19 +140,17 @@ export async function testPlaygroundChat(
       userId: user.id,
       conversationId: `playground-${user.id}`,
       conversationHistory,
+      toolExecutor: previewToolExecutor,
     })
 
-    let text = response.text
-
-    // The Playground never runs the real Tool Call Dispatcher (unlike the
-    // LINE webhook) since it must never create real orders/bookings/etc. For
-    // the read-only lookup tools we run the same query live so a tester can
-    // confirm search actually returns real data; for anything else we show a
-    // clear preview line instead of silently returning blank/generic text.
-    if (response.toolCall) {
-      const preview = await previewToolCall(supabase, shop.id, user.id, response.toolCall)
-      text = text ? `${text}\n\n${preview}` : preview
-    }
+    // The Planning Layer already ran (possibly several) tool calls internally
+    // via previewToolExecutor above, so response.text is the AI's final reply
+    // after seeing every tool's (preview) result. immediateMessages carries
+    // the preview lines those tool calls produced, appended for visibility.
+    const previewLines = response.immediateMessages
+      .map((msg) => (msg.type === 'image' ? `[รูปภาพ: ${msg.content}]` : msg.content))
+      .join('\n\n')
+    const text = previewLines ? `${response.text}\n\n${previewLines}` : response.text
 
     return { response: text, quotaExceeded: response.quotaExceeded === true }
   } catch (err: any) {
@@ -160,30 +159,30 @@ export async function testPlaygroundChat(
 }
 
 /**
- * Preview of a tool the AI chose to call, for the Chat Playground only.
- * Read-only lookups run live so a tester can confirm they return real data.
- * update_customer_note/add_customer_tag also run for real — they're
+ * Chat Playground's ToolExecutor — never runs the real executeTool() dispatcher
+ * since it must never create real orders/bookings/etc. Read-only lookups run
+ * the same query live so a tester can confirm search actually returns real
+ * data. update_customer_note/add_customer_tag also run for real — they're
  * low-risk appends to the tester's own Customer Memory Graph profile, not
  * fake business records, and actually exercising them is the only way to
- * prove memory persists across a fresh Playground session. Anything that
- * would create a real order/booking/etc. stays preview-only.
+ * prove memory persists across a fresh Playground session. Anything else
+ * (take_order, book_appointment, send_payment_qr, save_lead, ...) is preview-only:
+ * the AI is told it "succeeded" via resultForAi so multi-step planning can
+ * continue, but no real side effect happens and no message is delivered.
  */
-async function previewToolCall(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  shopId: string,
-  userId: string,
-  toolCall: { name: string; args: Record<string, any> }
-): Promise<string> {
-  const { name, args } = toolCall
+const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionContext): Promise<ToolExecutionResult> => {
+  const { supabase, shopId, userId } = ctx
 
   if (name === 'update_customer_note') {
     await appendCustomerNote(shopId, userId, args.note)
-    return `[ทดสอบ] เรียกใช้เครื่องมือ update_customer_note: บันทึกแล้ว — "${args.note}" (จะจำได้ในบทสนทนาถัดไป)`
+    const line = `[ทดสอบ] เรียกใช้เครื่องมือ update_customer_note: บันทึกแล้ว — "${args.note}" (จะจำได้ในบทสนทนาถัดไป)`
+    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
 
   if (name === 'add_customer_tag') {
     await addCustomerTagUnique(shopId, userId, args.tag)
-    return `[ทดสอบ] เรียกใช้เครื่องมือ add_customer_tag: เพิ่ม Tag "${args.tag}" แล้ว (จะจำได้ในบทสนทนาถัดไป)`
+    const line = `[ทดสอบ] เรียกใช้เครื่องมือ add_customer_tag: เพิ่ม Tag "${args.tag}" แล้ว (จะจำได้ในบทสนทนาถัดไป)`
+    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
 
   if (name === 'search_products') {
@@ -193,32 +192,45 @@ async function previewToolCall(
     if (args.category) q = q.eq('category', args.category)
     if (args.max_price) q = q.lte('price', Number(args.max_price))
     const { data: prods } = await q
-    if (!prods || prods.length === 0) return `[ทดสอบ] เรียกใช้เครื่องมือ search_products แต่ไม่พบสินค้าที่ตรงกับ "${args.keyword || ''}"`
+    if (!prods || prods.length === 0) {
+      const line = `[ทดสอบ] เรียกใช้เครื่องมือ search_products แต่ไม่พบสินค้าที่ตรงกับ "${args.keyword || ''}"`
+      return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
+    }
     const list = prods.map((p: any, i: number) => `${i + 1}. ${p.name} - ${Number(p.price).toLocaleString()} บาท ${p.stock > 0 ? `(${p.stock} ชิ้น)` : '(หมดสต๊อก)'}`).join('\n')
-    return `[ทดสอบ] เรียกใช้เครื่องมือ search_products:\n${list}`
+    const line = `[ทดสอบ] เรียกใช้เครื่องมือ search_products:\n${list}`
+    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
 
   if (name === 'check_stock') {
     const { data: prods } = await supabase.from('products').select('name,stock,price').eq('shop_id', shopId).ilike('name', `%${args.product_name || ''}%`).limit(3)
-    if (!prods || prods.length === 0) return `[ทดสอบ] เรียกใช้เครื่องมือ check_stock แต่ไม่พบสินค้า "${args.product_name || ''}"`
+    if (!prods || prods.length === 0) {
+      const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_stock แต่ไม่พบสินค้า "${args.product_name || ''}"`
+      return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
+    }
     const info = prods.map((p: any) => `• ${p.name}: ${p.stock > 0 ? `${p.stock} ชิ้น | ${Number(p.price).toLocaleString()} บาท` : 'หมดสต๊อก'}`).join('\n')
-    return `[ทดสอบ] เรียกใช้เครื่องมือ check_stock:\n${info}`
+    const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_stock:\n${info}`
+    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
 
   if (name === 'get_active_promotions') {
     const today = new Date().toISOString().split('T')[0]
     const { data: promos } = await supabase.from('promotions').select('name,discount_type,discount_value,end_date,code').eq('shop_id', shopId).eq('status', 'active').or(`end_date.is.null,end_date.gte.${today}`).order('created_at', { ascending: false }).limit(5)
-    if (!promos || promos.length === 0) return `[ทดสอบ] เรียกใช้เครื่องมือ get_active_promotions แต่ไม่พบโปรโมชั่นที่ใช้งานอยู่`
+    if (!promos || promos.length === 0) {
+      const line = `[ทดสอบ] เรียกใช้เครื่องมือ get_active_promotions แต่ไม่พบโปรโมชั่นที่ใช้งานอยู่`
+      return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
+    }
     const list = promos.map((p: any) => {
       const d = p.discount_type === 'percent' ? `ลด ${p.discount_value}%` : `ลด ${Number(p.discount_value).toLocaleString()} บาท`
       return `• ${p.name} - ${d}${p.code ? ` (โค้ด: ${p.code})` : ''}`
     }).join('\n')
-    return `[ทดสอบ] เรียกใช้เครื่องมือ get_active_promotions:\n${list}`
+    const line = `[ทดสอบ] เรียกใช้เครื่องมือ get_active_promotions:\n${list}`
+    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
 
   // Any other tool (take_order, book_appointment, send_payment_qr, save_lead, ...)
   // is a real side effect on the live LINE webhook — never execute it here.
-  return `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ "${name}" (${JSON.stringify(args)}) — ในโหมดทดสอบจะไม่มีการบันทึกข้อมูลจริง`
+  const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ "${name}" (${JSON.stringify(args)}) — ในโหมดทดสอบจะไม่มีการบันทึกข้อมูลจริง`
+  return { resultForAi: 'ดำเนินการเรียบร้อยแล้ว (โหมดทดสอบ)', immediateMessages: [{ type: 'text', content: line }] }
 }
 
 /** Current-period usage vs. plan limit, for display in the Chat Playground so a shop owner can see real quota state while testing. */

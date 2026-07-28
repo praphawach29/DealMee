@@ -2,18 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createHmac } from 'crypto'
 import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
-import { upsertCustomerProfile, appendCustomerNote, addCustomerTagUnique, recordCustomerOrder } from '@/lib/customerMemory'
-import generatePayload from 'promptpay-qr'
-import qrcode from 'qrcode'
+import { upsertCustomerProfile } from '@/lib/customerMemory'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
-const supabaseAdmin = createAdminClient()
-
-const QR_BUCKET = 'qr-codes'
 
 // ─── LINE Signature Verification ─────────────────────────────────────────────
 function verifyLineSignature(rawBody: string, signature: string, secret: string): boolean {
@@ -197,234 +191,38 @@ export async function POST(
           )
         }
 
-        if (agentResult.toolCall) {
-          const { name: toolName, args } = agentResult.toolCall
-          console.log(`[Webhook] AI called tool: ${toolName}`, args)
-
-          // Log tool call to chat_messages
+        // Tool execution now happens INSIDE processSalesAgentChat's Planning
+        // Layer loop (src/lib/ai/toolDispatcher.ts's executeTool(), called
+        // possibly multiple times per customer message) — the webhook route's
+        // job is just to log what ran and deliver the resulting messages.
+        for (const toolCall of agentResult.toolCallsExecuted) {
+          console.log(`[Webhook] AI called tool: ${toolCall.name}`, toolCall.args)
           await supabase.from('chat_messages').insert({
             conversation_id: conv.id,
             shop_id,
             sender_type: 'bot',
             sender_name: shop.bot_name || 'น้อง Botify',
-            message: `[Tool: ${toolName}] ${JSON.stringify(args)}`,
+            message: `[Tool: ${toolCall.name}] ${JSON.stringify(toolCall.args)}`,
           })
+        }
 
-          // ── 💳 PAYMENT TOOLS ─────────────────────────────────────────────────
-          if (toolName === 'send_payment_qr') {
-            const { amount, order_summary } = args
-            const promptpayId = shop.promptpay_id || shop.promptpay_number
-            if (promptpayId && lineToken) {
-              const qrPublicUrl = await generateAndUploadQR(amount, promptpayId, shop_id)
-              if (qrPublicUrl) {
-                await sendLineImagePush(userId, qrPublicUrl, lineToken)
-                const caption = `📋 ยอดชำระ: *${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท*${order_summary ? `\n${order_summary}` : ''}\n\n✅ บันทึกรูป QR แล้วเปิดแอปธนาคารสแกนได้เลยค่ะ\n📲 โอนเสร็จกรุณาส่งสลิปกลับมาในแชทนะคะ`
-                await sendLinePush(userId, caption, lineToken)
-              } else {
-                const fallback = `💳 ช่องทางชำระเงิน:\n- พร้อมเพย์: ${promptpayId}\n- ชื่อ: ${shop.promptpay_name || shop.name}\n- ยอด: ${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท`
-                await sendLinePush(userId, fallback, lineToken)
-              }
-            }
+        for (const msg of agentResult.immediateMessages) {
+          if (!lineToken) continue
+          if (msg.type === 'image') {
+            await sendLineImagePush(userId, msg.content, lineToken)
+          } else {
+            await sendLinePush(userId, msg.content, lineToken)
           }
+        }
 
-          else if (toolName === 'take_order') {
-            // Create order in Supabase
-            await supabase.from('orders').insert({
-              shop_id,
-              conversation_id: conv.id,
-              customer_name: args.name,
-              customer_phone: args.phone,
-              product_name: args.product,
-              quantity: args.qty,
-              variants: args.variants,
-              address: args.address,
-              payment_method: args.payment_method,
-              total_amount: args.total_price,
-              tax_invoice: args.tax_invoice,
-              status: 'pending',
-            })
-            // Customer Memory Graph: roll up order stats automatically —
-            // no dedicated AI tool call needed for this.
-            await recordCustomerOrder(shop_id, userId, Number(args.total_price) || 0)
-            if (lineToken) {
-              const confirmMsg = `✅ รับออเดอร์แล้วค่ะ!\n📦 สินค้า: ${args.product} x${args.qty}\n💰 ยอดรวม: ${Number(args.total_price).toLocaleString()} บาท\n📍 จัดส่งไปที่: ${args.address}\n\nขอบคุณที่ใช้บริการนะคะ 🙏`
-              await sendLinePush(userId, confirmMsg, lineToken)
-            }
-          }
-
-          else if (toolName === 'request_human_agent') {
-            // Switch conversation to human mode
-            await supabase.from('conversations').update({ status: 'human' }).eq('id', conv.id)
-            if (lineToken) {
-              const handoffMsg = `🙋 กำลังเรียกแอดมินเข้ามาดูแลค่ะ กรุณารอสักครู่นะคะ...\n(เหตุผล: ${args.reason})`
-              await sendLinePush(userId, handoffMsg, lineToken)
-            }
-          }
-
-          else if (toolName === 'transfer_to_agent') {
-            // Log agent transfer
-            await supabase.from('conversations').update({
-              status: 'ai',
-              last_message: `[โอนสายไป ${args.target_agent}] ${args.reason}`,
-            }).eq('id', conv.id)
-            if (lineToken) {
-              await sendLinePush(userId, `🔄 กำลังส่งต่อให้แผนก ${args.target_agent} ค่ะ...`, lineToken)
-            }
-          }
-
-          else if (toolName === 'update_customer_note') {
-            // Save note to conversations (kept for backward compatibility —
-            // nothing currently reads this field, but zero cost to keep it
-            // in sync). The Customer Memory Graph's append-only history is
-            // what the AI actually uses for cross-session memory.
-            await supabase.from('conversations').update({
-              customer_note: args.note,
-            }).eq('id', conv.id)
-            await appendCustomerNote(shop_id, userId, args.note)
-          }
-
-          else if (toolName === 'add_customer_tag') {
-            await supabase.from('conversations').update({
-              customer_tag: args.tag,
-            }).eq('id', conv.id)
-            await addCustomerTagUnique(shop_id, userId, args.tag)
-          }
-
-          else if (toolName === 'save_lead') {
-            await supabase.from('leads').upsert({
-              shop_id,
-              user_id: userId,
-              product_name: args.product_name,
-              customer_name: args.customer_name || `LINE-${userId.substring(0, 6)}`,
-              source: 'LINE',
-              status: 'new',
-            }, { onConflict: 'shop_id,user_id' })
-          }
-
-          else if (toolName === 'schedule_followup') {
-            // Schedule a follow-up push message
-            const delayMs = (args.delay_minutes || 60) * 60 * 1000
-            setTimeout(async () => {
-              if (lineToken) {
-                const followupMsg = `👋 สวัสดีค่ะ ไม่ทราบว่าตัดสินใจได้แล้วหรือยังคะ? มีอะไรให้ช่วยแนะนำเพิ่มเติมได้เลยนะคะ 😊`
-                await sendLinePush(userId, followupMsg, lineToken)
-              }
-            }, Math.min(delayMs, 3600000)) // cap at 1 hour for safety
-          }
-
-
-          // ── 📦 PRODUCT TOOLS ─────────────────────────────────────────────
-          else if (toolName === 'search_products') {
-            const limit = Math.min(Number(args.limit) || 5, 10)
-            let q = supabase.from('products').select('name,price,stock,description').eq('shop_id', shop_id).limit(limit)
-            if (args.keyword) q = q.ilike('name', `%${args.keyword}%`)
-            if (args.category) q = q.eq('category', args.category)
-            if (args.max_price) q = q.lte('price', Number(args.max_price))
-            const { data: prods } = await q
-            if (prods && prods.length > 0 && lineToken) {
-              const list = prods.map((p: any, i: number) => `${i + 1}. ${p.name}\n   💰 ${Number(p.price).toLocaleString()} บาท ${p.stock > 0 ? `| ${p.stock} ชิ้น` : '| หมดสต๊อก'}`).join('\n\n')
-              await sendLinePush(userId, `🛍️ สินค้าที่ค้นพบ:\n\n${list}\n\nสนใจสินค้าไหนบอกได้เลยนะคะ 😊`, lineToken)
-            } else if (lineToken) {
-              await sendLinePush(userId, '❌ ไม่พบสินค้าที่ค้นหาค่ะ ลองคำอื่นดูนะคะ', lineToken)
-            }
-          }
-
-          else if (toolName === 'check_stock') {
-            const { data: prods } = await supabase.from('products').select('name,stock,price').eq('shop_id', shop_id).ilike('name', `%${args.product_name}%`).limit(3)
-            if (prods && prods.length > 0 && lineToken) {
-              const info = prods.map((p: any) => `• ${p.name}: ${p.stock > 0 ? `${p.stock} ชิ้น | ${Number(p.price).toLocaleString()} บาท` : '❌ หมดสต๊อก'}`).join('\n')
-              await sendLinePush(userId, `📦 สต๊อกสินค้า:\n\n${info}`, lineToken)
-            } else if (lineToken) {
-              await sendLinePush(userId, `❌ ไม่พบสินค้า "${args.product_name}" ค่ะ`, lineToken)
-            }
-          }
-
-          else if (toolName === 'check_order_status') {
-            const oid = args.order_id
-            const { data: ord } = await supabase.from('orders').select('order_no,status,payment_status,tracking_no,product_name,total_amount').eq('shop_id', shop_id).or(`id.eq.${oid},order_no.ilike.%${oid}%`).single()
-            if (ord && lineToken) {
-              const sMap: Record<string, string> = { pending: '⏳ รอดำเนินการ', confirmed: '✅ ยืนยันแล้ว', processing: '🔄 กำลังดำเนินการ', shipped: '🚚 จัดส่งแล้ว', delivered: '✅ ส่งถึงแล้ว', cancelled: '❌ ยกเลิก' }
-              const pMap: Record<string, string> = { pending: '⏳ รอชำระ', paid: '✅ ชำระแล้ว', failed: '❌ ล้มเหลว' }
-              await sendLinePush(userId, `📦 ออเดอร์ ${ord.order_no}\nสินค้า: ${ord.product_name}\nยอด: ${Number(ord.total_amount).toLocaleString()} บาท\nสถานะ: ${sMap[ord.status] ?? ord.status}\nชำระเงิน: ${pMap[ord.payment_status] ?? ord.payment_status}${ord.tracking_no ? `\nพัสดุ: ${ord.tracking_no}` : ''}`, lineToken)
-            } else if (lineToken) {
-              await sendLinePush(userId, '❌ ไม่พบข้อมูลออเดอร์ค่ะ', lineToken)
-            }
-          }
-
-          // ── 📅 BOOKING TOOLS ──────────────────────────────────────────────
-          else if (toolName === 'check_available_slots') {
-            const { data: booked } = await supabase.from('bookings').select('booking_time').eq('shop_id', shop_id).eq('booking_date', args.date).neq('status', 'cancelled')
-            const bookedTimes = booked?.map((b: any) => b.booking_time) ?? []
-            const allSlots = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
-            const free = allSlots.filter(s => !bookedTimes.some((t: string) => t?.startsWith(s)))
-            if (lineToken) {
-              if (free.length > 0) {
-                await sendLinePush(userId, `📅 ช่วงเวลาว่างวันที่ ${args.date}:\n\n${free.map((s: string) => `• ${s} น.`).join('\n')}\n\nต้องการจองเวลาไหนคะ?`, lineToken)
-              } else {
-                await sendLinePush(userId, `❌ ไม่มีเวลาว่างวันที่ ${args.date} ค่ะ กรุณาเลือกวันอื่นนะคะ`, lineToken)
-              }
-            }
-          }
-
-          else if (toolName === 'book_appointment') {
-            const bookingNo = `BK-${Date.now().toString().slice(-6)}`
-            await supabase.from('bookings').insert({
-              shop_id, booking_no: bookingNo,
-              customer_name: args.customer_name || `LINE-${userId.substring(0, 6)}`,
-              phone: args.phone, service_name: args.service_name,
-              booking_date: args.date, booking_time: args.time,
-              status: 'confirmed', note: args.note,
-            })
-            if (lineToken) {
-              await sendLinePush(userId, `✅ จองคิวเรียบร้อยค่ะ!\n📋 หมายเลข: ${bookingNo}\n💆 บริการ: ${args.service_name}\n📅 ${args.date} เวลา ${args.time} น.\n\nขอบคุณค่ะ 🙏`, lineToken)
-            }
-          }
-
-          else if (toolName === 'cancel_booking') {
-            const bid = args.booking_id
-            const { data: bk } = await supabase.from('bookings').select('booking_no,service_name,booking_date').eq('shop_id', shop_id).or(`id.eq.${bid},booking_no.ilike.%${bid}%`).single()
-            if (bk) {
-              await supabase.from('bookings').update({ status: 'cancelled' }).or(`id.eq.${bid},booking_no.ilike.%${bid}%`)
-              if (lineToken) await sendLinePush(userId, `✅ ยกเลิกการจอง ${bk.booking_no} (${bk.service_name} วันที่ ${bk.booking_date}) เรียบร้อยค่ะ`, lineToken)
-            } else if (lineToken) {
-              await sendLinePush(userId, '❌ ไม่พบข้อมูลการจองค่ะ', lineToken)
-            }
-          }
-
-          // ── 👤 CUSTOMER TOOLS ─────────────────────────────────────────────
-          else if (toolName === 'get_customer_history') {
-            const { data: ords } = await supabase.from('orders').select('order_no,product_name,total_amount,status,created_at').eq('shop_id', shop_id).eq('conversation_id', conv.id).order('created_at', { ascending: false }).limit(5)
-            if (ords && ords.length > 0 && lineToken) {
-              const hist = ords.map((o: any) => `• ${o.order_no} - ${o.product_name}\n  ${Number(o.total_amount).toLocaleString()} บาท | ${o.status}`).join('\n\n')
-              await sendLinePush(userId, `📋 ประวัติการสั่งซื้อ:\n\n${hist}`, lineToken)
-            } else if (lineToken) {
-              await sendLinePush(userId, '📋 ยังไม่มีประวัติการสั่งซื้อค่ะ', lineToken)
-            }
-          }
-
-          else if (toolName === 'check_loyalty_points') {
-            const { data: paidOrds } = await supabase.from('orders').select('total_amount').eq('shop_id', shop_id).eq('conversation_id', conv.id).eq('payment_status', 'paid')
-            if (lineToken) {
-              const total = paidOrds?.reduce((s: number, o: any) => s + Number(o.total_amount), 0) ?? 0
-              const pts = Math.floor(total / 100)
-              await sendLinePush(userId, `⭐ แต้มสะสมของคุณ\n💰 ยอดซื้อทั้งหมด: ${total.toLocaleString()} บาท\n🎁 แต้มสะสม: ${pts.toLocaleString()} แต้ม\n(ทุก 100 บาท = 1 แต้ม)`, lineToken)
-            }
-          }
-
-          // ── 🎁 PROMOTIONS ─────────────────────────────────────────────────
-          else if (toolName === 'get_active_promotions') {
-            const today = new Date().toISOString().split('T')[0]
-            const { data: promos } = await supabase.from('promotions').select('name,description,discount_type,discount_value,end_date,code').eq('shop_id', shop_id).eq('status', 'active').or(`end_date.is.null,end_date.gte.${today}`).order('created_at', { ascending: false }).limit(5)
-            if (promos && promos.length > 0 && lineToken) {
-              const list = promos.map((p: any) => {
-                const d = p.discount_type === 'percent' ? `ลด ${p.discount_value}%` : `ลด ${Number(p.discount_value).toLocaleString()} บาท`
-                return `🎁 ${p.name}\n   ${d}${p.end_date ? ` | ถึง ${p.end_date}` : ''}${p.code ? `\n   โค้ด: ${p.code}` : ''}`
-              }).join('\n\n')
-              await sendLinePush(userId, `🔥 โปรโมชั่นพิเศษ:\n\n${list}`, lineToken)
-            } else if (lineToken) {
-              await sendLinePush(userId, '❌ ยังไม่มีโปรโมชั่นในขณะนี้ค่ะ', lineToken)
-            }
-          }
+        for (const scheduled of agentResult.scheduledMessages) {
+          if (!lineToken) continue
+          const { delayMs, message } = scheduled
+          setTimeout(() => {
+            sendLinePush(userId, message.content, lineToken).catch((err) =>
+              console.error('[Webhook] scheduledMessage push failed:', err)
+            )
+          }, delayMs)
         }
       }
 
@@ -538,62 +336,6 @@ async function verifySlipAndNotify({
   } catch (err) {
     console.error('[SlipVerify Exception]:', err)
     await sendLinePush(userId, '❌ ระบบตรวจสลิปขัดข้องชั่วคราวค่ะ กรุณาแจ้งแอดมินนะคะ 🙏', lineToken)
-  }
-}
-
-// ─── QR Code: Generate & Upload to Supabase Storage ──────────────────────────
-
-/**
- * Generates a PromptPay QR Code image and uploads it to Supabase Storage.
- * Returns the public URL of the uploaded image, or null on failure.
- */
-async function generateAndUploadQR(
-  amount: number,
-  promptpayId: string,
-  shopId: string
-): Promise<string | null> {
-  try {
-    // 1. Generate PromptPay payload
-    const payload = generatePayload(promptpayId, { amount })
-
-    // 2. Generate QR code as PNG Buffer
-    const qrBuffer = await qrcode.toBuffer(payload, {
-      type: 'png',
-      width: 512,
-      margin: 2,
-      color: { dark: '#000000', light: '#ffffff' },
-    })
-
-    // 3. Ensure storage bucket exists
-    const { data: buckets } = await supabaseAdmin.storage.listBuckets()
-    const bucketExists = buckets?.some((b) => b.name === QR_BUCKET)
-    if (!bucketExists) {
-      await supabaseAdmin.storage.createBucket(QR_BUCKET, { public: true })
-    }
-
-    // 4. Upload to Supabase Storage (path: /shop_id/timestamp.png)
-    const fileName = `${shopId}/${Date.now()}_${amount}thb.png`
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from(QR_BUCKET)
-      .upload(fileName, qrBuffer, {
-        contentType: 'image/png',
-        upsert: false,
-      })
-
-    if (uploadError) {
-      console.error('[QR Upload Error]:', uploadError.message)
-      return null
-    }
-
-    // 5. Get public URL
-    const { data: urlData } = supabaseAdmin.storage
-      .from(QR_BUCKET)
-      .getPublicUrl(fileName)
-
-    return urlData.publicUrl || null
-  } catch (err) {
-    console.error('[generateAndUploadQR Exception]:', err)
-    return null
   }
 }
 
