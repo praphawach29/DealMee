@@ -142,6 +142,7 @@ export async function testPlaygroundChat(
       conversationId: `playground-${user.id}`,
       conversationHistory,
       toolExecutor: previewToolExecutor,
+      supabaseClient: supabase,
     })
 
     // The Planning Layer already ran (possibly several) tool calls internally

@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
@@ -36,6 +36,13 @@ export interface SalesAgentRequest {
    * orders/bookings/etc.
    */
   toolExecutor?: ToolExecutor
+  /**
+   * Optional caller-scoped Supabase client. Dashboard server actions pass the
+   * authenticated user client so RLS-protected shop data (products, KB, etc.)
+   * is visible inside the agent loop; webhook callers can omit this and use
+   * the existing anon-key client behavior.
+   */
+  supabaseClient?: SupabaseClient
 }
 
 /** One turn of the Planning Layer's provider-agnostic conversation state. Each callXApi function serializes this into its own wire format. */
@@ -919,10 +926,13 @@ async function preparePlanningState({
   conversationId,
   conversationHistory,
   toolExecutor,
+  supabaseClient,
 }: SalesAgentRequest): Promise<{ quotaExceeded: true } | { quotaExceeded: false; state: PlanningState }> {
   if (await isOverQuota(shop)) {
     return { quotaExceeded: true }
   }
+
+  const db = supabaseClient || supabase
 
   const geminiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
   const claudeKey = process.env.CLAUDE_API_KEY || process.env.CLAUDE_KEY || process.env.NEXT_PUBLIC_CLAUDE_API_KEY || ''
@@ -930,7 +940,7 @@ async function preparePlanningState({
   const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
 
   // 1. Knowledge Base
-  const { data: knowledgeItems } = await supabase
+  const { data: knowledgeItems } = await db
     .from('knowledge_base')
     .select('title, content, category')
     .eq('shop_id', shop.id)
@@ -947,7 +957,7 @@ async function preparePlanningState({
   const features = (shop.features as Record<string, boolean>) || {}
   let productsContext = ''
   if (features.product_recommend !== false) {
-    const { data: products } = await supabase
+    const { data: products } = await db
       .from('products')
       .select('id, name, price, stock, category, description')
       .eq('shop_id', shop.id)
@@ -977,7 +987,7 @@ async function preparePlanningState({
       recent.map((m) => `${m.sender === 'user' ? 'ลูกค้า' : 'AI'}: ${m.text}`).join('\n')
     recentCustomerMessages = recent.filter((m) => m.sender === 'user').map((m) => m.text)
   } else {
-    const { data: recentMessages } = await supabase
+    const { data: recentMessages } = await db
       .from('chat_messages')
       .select('sender_type, message, created_at')
       .eq('conversation_id', conversationId)
@@ -1055,7 +1065,7 @@ ${historyContext}`
     userId,
     conversationId,
     shop,
-    supabase,
+    supabase: db,
     supabaseAdmin: createAdminClient(),
   }
 
@@ -1139,7 +1149,7 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
     // Ran out of steps without a final text answer — hand off to a human
     // rather than leaving the customer with nothing.
     try {
-      await supabase.from('conversations').update({ status: 'human' }).eq('id', state.conversationId)
+      await state.toolCtx.supabase.from('conversations').update({ status: 'human' }).eq('id', state.conversationId)
     } catch (err) {
       console.error('[Planning Layer] Failed to flip conversation to human handoff:', err)
     }
