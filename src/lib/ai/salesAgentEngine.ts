@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { buildBusinessPromptContext } from '@/lib/businessGreeting'
 import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
 import { executeTool as realExecuteTool, type ToolExecutor, type ToolExecutionContext, type CustomerMessage } from '@/lib/ai/toolDispatcher'
@@ -997,6 +998,7 @@ async function preparePlanningState({
 
   // 3. Booking Templates
   let bookingContext = ''
+  let bookingPromptTemplates: any[] = []
   if (features.booking_system !== false) {
     const { data: bookingTemplates } = await db
       .from('services')
@@ -1006,6 +1008,7 @@ async function preparePlanningState({
       .order('created_at', { ascending: false })
       .limit(12)
 
+    bookingPromptTemplates = bookingTemplates || []
     if (bookingTemplates && bookingTemplates.length > 0) {
       const typeLabel: Record<string, string> = {
         table: 'ร้านอาหาร/จองโต๊ะ',
@@ -1110,7 +1113,8 @@ async function preparePlanningState({
 - ถ้ายังขาดวิธีชำระเงิน ให้เสนอทางเลือกจากข้อมูลร้าน เช่น พร้อมเพย์/โอนธนาคาร/เก็บปลายทาง แล้วถามให้ลูกค้าเลือก ก่อนเรียก take_order
 - ห้ามสรุปว่ารับออเดอร์แล้วถ้ายังไม่ได้เรียก take_order หรือข้อมูลลูกค้ายังไม่ครบ ให้ถามเฉพาะข้อมูลที่ขาดแทน
 - ถ้าไม่มีข้อมูล ให้แจ้งลูกค้าให้รอแอดมินหรือเรียก request_human_agent
-${knowledgeContext}${productsContext}${bookingContext}
+${knowledgeContext}${productsContext}
+${buildBusinessPromptContext(shop, bookingPromptTemplates)}${bookingContext}
 ${paymentInfo}`
 
   const dynamicSystemPrompt = `${customerProfileContext}

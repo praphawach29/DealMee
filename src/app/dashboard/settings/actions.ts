@@ -6,6 +6,7 @@ import { processSalesAgentChat, getQuotaStatus, QUOTA_EXCEEDED_MESSAGE_TH } from
 import { applyProductSearchFilters, formatOrderCloseSummary, formatPaymentInstructions } from '@/lib/ai/toolDispatcher'
 import type { ToolExecutor, ToolExecutionContext, ToolExecutionResult } from '@/lib/ai/toolDispatcher'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
+import { buildAutoGreeting } from '@/lib/businessGreeting'
 import { upsertCustomerProfile, appendCustomerNote, addCustomerTagUnique } from '@/lib/customerMemory'
 
 export async function updateBotSettings(formData: FormData) {
@@ -97,32 +98,6 @@ export async function updatePaymentShippingSettings(formData: FormData) {
 }
 
 
-type BookingTemplateSummary = {
-  name: string
-  booking_type: string | null
-  resource_label?: string | null
-  staff_name?: string | null
-}
-
-function buildBookingGreeting(shop: any, templates: BookingTemplateSummary[]) {
-  const botName = shop?.bot_name || 'น้อง Botify'
-  const shopName = shop?.name || 'ร้านของเรา'
-  const hasTableBooking = templates.some((item) => item.booking_type === 'table')
-  const hasBooking = templates.length > 0
-
-  if (hasTableBooking) {
-    const tableName = templates.find((item) => item.booking_type === 'table')?.name || 'จองโต๊ะ'
-    return `สวัสดีค่ะ ${botName} จากร้าน ${shopName} ยินดีให้บริการค่ะ ตอนนี้ลูกค้าสามารถสอบถามเมนูหรือจองโต๊ะได้เลยนะคะ หากต้องการ${tableName} แจ้งจำนวนท่าน วันที่ และเวลาที่สะดวกได้เลยค่ะ`
-  }
-
-  if (hasBooking) {
-    const names = templates.slice(0, 3).map((item) => item.name).join(', ')
-    return `สวัสดีค่ะ ${botName} จากร้าน ${shopName} ยินดีให้บริการค่ะ สามารถสอบถามรายละเอียดหรือจองคิวบริการ ${names} ได้เลยนะคะ`
-  }
-
-  return `สวัสดีค่ะ ${botName} จากร้าน ${shopName} ยินดีให้บริการค่ะ มีอะไรให้ช่วยไหมคะ?`
-}
-
 export async function getPlaygroundGreeting() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -140,7 +115,7 @@ export async function getPlaygroundGreeting() {
     .limit(8)
 
   return {
-    greeting: buildBookingGreeting(shop, (templates || []) as BookingTemplateSummary[]),
+    greeting: buildAutoGreeting(shop, templates || []),
     hasTableBooking: (templates || []).some((item: any) => item.booking_type === 'table'),
   }
 }
