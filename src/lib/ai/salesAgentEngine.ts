@@ -80,6 +80,10 @@ export interface AgentUsage {
   promptTokens: number
   completionTokens: number
   totalTokens: number
+  provider: AiProvider
+  /** Claude prompt-caching only — stays undefined for Gemini/OpenAI. */
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
 }
 
 export interface AgentResult {
@@ -834,8 +838,15 @@ export async function processSalesAgentChat({
   // 5. Customer Profile (Customer Memory Graph) — auto-injected, no tool call needed
   const customerProfileContext = await getCustomerProfileContext(shop.id, userId)
 
-  // 5. System Instruction
-  const systemInstruction = `คุณคือ "${shop.bot_name || 'น้อง Botify'}" พนักงานขาย AI อัจฉริยะประจำร้าน "${shop.name}"
+  // 5. System Instruction — split into a static block (stable per shop:
+  // identity, knowledge base, products, payment info) and a dynamic block
+  // (customer profile, chat history — changes per customer/message). This
+  // split only matters for Claude's explicit prompt caching (callClaudeApi
+  // tags the static block cache_control so it's billed once per window
+  // instead of every message); Gemini/OpenAI keep receiving them combined
+  // since Gemini's caching is automatic regardless of structure and OpenAI
+  // isn't currently reachable by the routing below.
+  const staticSystemPrompt = `คุณคือ "${shop.bot_name || 'น้อง Botify'}" พนักงานขาย AI อัจฉริยะประจำร้าน "${shop.name}"
 บุคลิกภาพ: ${shop.personality || 'สุภาพ เรียบร้อย มืออาชีพ'}
 คำอธิบายร้าน: ${shop.description || 'ร้านค้าออนไลน์'}
 
@@ -851,16 +862,19 @@ export async function processSalesAgentChat({
 - ถ้าไม่มีข้อมูล → แจ้งลูกค้าให้รอแอดมินหรือเรียก request_human_agent
 ${knowledgeContext}
 ${productsContext}
-${paymentInfo}
-${customerProfileContext}
+${paymentInfo}`
+
+  const dynamicSystemPrompt = `${customerProfileContext}
 ${historyContext}`
+
+  const systemInstruction = `${staticSystemPrompt}\n${dynamicSystemPrompt}`
 
   // 6. Route
   const routing = classifyMessageComplexity(userQuery)
   console.log(`[Botify Brain™] "${userQuery}" | ${routing.complexity} | ${routing.targetProvider.toUpperCase()} | Tools: ${routing.toolSet.length}`)
 
   if (routing.targetProvider === 'claude' && claudeKey) {
-    const result = await callClaudeApi(systemInstruction, userQuery, claudeKey, routing.toolSet)
+    const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, userQuery, claudeKey, routing.toolSet)
     if (result) return result
   } else if (routing.targetProvider === 'openai' && openAiKey) {
     const result = await callOpenAiApi(systemInstruction, userQuery, openAiKey, routing.toolSet)
@@ -927,6 +941,7 @@ async function callGeminiApi(
           promptTokens: usageMeta.promptTokenCount || 0,
           completionTokens: usageMeta.candidatesTokenCount || 0,
           totalTokens: usageMeta.totalTokenCount || 0,
+          provider: 'gemini',
         }
       : undefined
 
@@ -942,12 +957,19 @@ async function callGeminiApi(
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function callClaudeApi(
-  systemInstruction: string,
+  staticSystemPrompt: string,
+  dynamicSystemPrompt: string,
   userQuery: string,
   apiKey: string,
   toolSet: typeof MASTER_TOOLS
 ): Promise<AgentResult | null> {
   try {
+    // Prompt caching: the static block (bot identity, knowledge base,
+    // products, payment info — stable per shop) is tagged cache_control so
+    // Claude only bills full price for it once per 5-minute/1-hour window;
+    // the dynamic block (customer profile, chat history) is never cached
+    // since it changes per customer/message. Below Claude's 1024-token
+    // cacheable minimum this just silently doesn't activate — no error.
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -958,7 +980,10 @@ async function callClaudeApi(
       body: JSON.stringify({
         model: 'claude-sonnet-5',
         max_tokens: 1024,
-        system: systemInstruction,
+        system: [
+          { type: 'text', text: staticSystemPrompt, cache_control: { type: 'ephemeral' } },
+          { type: 'text', text: dynamicSystemPrompt },
+        ],
         tools: toClaudeTools(toolSet),
         messages: [{ role: 'user', content: userQuery }],
       }),
@@ -989,7 +1014,14 @@ async function callClaudeApi(
       ? {
           promptTokens: usageData.input_tokens || 0,
           completionTokens: usageData.output_tokens || 0,
-          totalTokens: (usageData.input_tokens || 0) + (usageData.output_tokens || 0),
+          totalTokens:
+            (usageData.input_tokens || 0) +
+            (usageData.output_tokens || 0) +
+            (usageData.cache_creation_input_tokens || 0) +
+            (usageData.cache_read_input_tokens || 0),
+          provider: 'claude',
+          cacheReadTokens: usageData.cache_read_input_tokens || 0,
+          cacheWriteTokens: usageData.cache_creation_input_tokens || 0,
         }
       : undefined
 
@@ -1063,6 +1095,7 @@ async function callOpenAiApi(
           promptTokens: usageData.prompt_tokens || 0,
           completionTokens: usageData.completion_tokens || 0,
           totalTokens: usageData.total_tokens || 0,
+          provider: 'openai',
         }
       : undefined
 

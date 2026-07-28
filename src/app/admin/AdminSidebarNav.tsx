@@ -28,6 +28,11 @@ export default function AdminSidebarNav({ onNavClick }: AdminSidebarNavProps) {
       icon: 'loyalty',
     },
     {
+      label: 'Margin Dashboard',
+      href: '/admin/margin',
+      icon: 'monitoring',
+    },
+    {
       label: 'ประวัติระบบ',
       href: '/admin/logs',
       icon: 'history',

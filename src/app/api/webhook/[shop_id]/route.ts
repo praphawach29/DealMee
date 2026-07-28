@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createHmac } from 'crypto'
 import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { incrementUsage } from '@/lib/billing/usage'
+import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile, appendCustomerNote, addCustomerTagUnique, recordCustomerOrder } from '@/lib/customerMemory'
 import generatePayload from 'promptpay-qr'
 import qrcode from 'qrcode'
@@ -191,6 +191,9 @@ export async function POST(
         if (agentResult.usage) {
           incrementUsage(shop_id, agentResult.usage).catch((err) =>
             console.error('[Webhook] incrementUsage failed:', err)
+          )
+          incrementProviderUsage(shop_id, agentResult.usage).catch((err) =>
+            console.error('[Webhook] incrementProviderUsage failed:', err)
           )
         }
 
