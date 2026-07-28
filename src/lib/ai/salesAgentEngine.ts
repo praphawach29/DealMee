@@ -1315,17 +1315,12 @@ async function callGeminiApi(
           temperature: 0.7,
           maxOutputTokens: 1024,
         },
-        // thinkingConfig is a TOP-LEVEL field (not inside generationConfig).
-        // thinkingBudget: 0 disables thinking entirely — avoids the
-        // thought_signature requirement and makes responses faster.
-        // Set to -1 to let the model decide when to think (requires
-        // echoing thought_signature back on functionCall parts).
-        thinkingConfig: { thinkingBudget: 0 },
       }),
     })
 
     if (!response.ok) {
-      console.error('[Gemini Error]:', await response.text())
+      const errBody = await response.text()
+      console.error(`[Gemini Error] ${response.status} model=${modelName}:`, errBody.slice(0, 500))
       return null
     }
 
@@ -1335,17 +1330,16 @@ async function callGeminiApi(
     let replyText = ''
     let toolCall: IdentifiedToolCall | undefined
 
+    // Gemini 3.6+ thinking mode: thought parts appear BEFORE the
+    // functionCall part.  The signature lives at `part.thought_signature`
+    // (part-level, not nested inside `part.thought`).  We capture it into
+    // a local var and attach it to whichever functionCall part follows.
+    let pendingThoughtSig: string | undefined
+
     for (const part of parts) {
+      // Skip thought content but capture its signature
       if (part.thought) {
-        // Gemini 2.5+ thinking mode: capture thought_signature so we can
-        // echo it back on the functionCall part in the next turn. Without
-        // this, a follow-up call with function results gets:
-        // "400 missing a thought_signature in functionCall parts"
-        // Note: thinkingBudget:0 disables thinking so this block is
-        // currently skipped, but kept as a safety net in case the model
-        // thinks anyway on certain prompts.
-        const sig = part.thought?.thought_signature || part.thoughtSignature
-        if (sig && toolCall) toolCall.thoughtSignature = sig
+        pendingThoughtSig = part.thought_signature || pendingThoughtSig
         continue
       }
       if (part.text) replyText += part.text
@@ -1354,8 +1348,9 @@ async function callGeminiApi(
           name: part.functionCall.name as AgentToolName,
           args: part.functionCall.args || {},
           id: part.functionCall.id,
-          // Capture thought_signature if present (Gemini 2.5 thinking mode)
-          thoughtSignature: part.functionCall.thought_signature,
+          // thought_signature can be on the functionCall part itself or
+          // from a preceding thought part — accept either.
+          thoughtSignature: part.functionCall.thought_signature || pendingThoughtSig,
         }
       }
     }
