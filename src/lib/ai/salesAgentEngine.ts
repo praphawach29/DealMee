@@ -718,6 +718,16 @@ const NEGOTIATION_KEYWORDS = [
   'พอลดได้ไหม', 'ราคาพิเศษ', 'ซื้อเยอะลดไหม', 'งบไม่พอ', 'แพงไป', 'ลดหน่อย', 'ขอราคาพิเศษ',
 ]
 
+const ORDER_INTENT_KEYWORDS = [
+  'เอาเลย', 'เอาค่ะ', 'เอาครับ', 'เอาตัวนี้', 'เอาชิ้นนี้', 'รับตัวนี้', 'รับค่ะ', 'รับครับ',
+  'ซื้อเลย', 'สั่งเลย', 'สั่งซื้อ', 'สั่งค่ะ', 'สั่งครับ', 'จัดมา', 'จองไว้', 'โอนเลย',
+  'พร้อมโอน', 'พร้อมจ่าย', 'ชำระเงิน', 'เก็บปลายทาง', 'cod', 'checkout', 'buy now', 'order now',
+]
+
+function hasOrderIntent(text: string): boolean {
+  return ORDER_INTENT_KEYWORDS.some((k) => text.includes(k)) || /(?:เอา|รับ|ซื้อ|สั่ง)\s*\d+\s*(?:ตัว|ชิ้น|อัน|คู่|ใบ|ชุด)?/.test(text)
+}
+
 /** Complexity score threshold at/above which a message is routed HIGH (high-persuasion model). */
 export const HIGH_COMPLEXITY_THRESHOLD = 3
 
@@ -777,6 +787,7 @@ export function classifyMessageComplexity(
 
   const isBooking = bookingKeywords.some((k) => text.includes(k))
   const isSupport = supportKeywords.some((k) => text.includes(k))
+  const isOrderIntent = hasOrderIntent(text)
 
   const complexityScore = computeComplexityScore({
     userQuery,
@@ -789,7 +800,7 @@ export function classifyMessageComplexity(
     ? filterTools(BOOKING_TOOL_NAMES)
     : isSupport
     ? filterTools(SUPPORT_TOOL_NAMES)
-    : isHighComplexity
+    : isOrderIntent || isHighComplexity
     ? filterTools(SALES_TOOL_NAMES)
     : filterTools(GENERAL_TOOL_NAMES)
 
@@ -1034,15 +1045,16 @@ async function preparePlanningState({
 [Sales Pipeline]
 1. [Greeting] ทักทายและถามความต้องการ
 2. [Showcase] แนะนำสินค้า ราคา จุดเด่น ตามรายการสินค้าด้านล่าง
-3. [Closing] เมื่อลูกค้าพร้อมชำระ → เรียก Tool "send_payment_qr" ทันที หรือ "take_order" เมื่อครบข้อมูล
-4. [Post-Sales] ขอบคุณ + แนะนำส่งสลิปกลับมาในแชท
+3. [Closing] เมื่อลูกค้าพูดเชิงซื้อ เช่น "เอาเลย", "รับ 1 ตัว", "ซื้อเลย", "สั่ง" ให้ตรวจสต๊อก/ราคาก่อนถ้ายังไม่แน่ใจ แล้วถามข้อมูลที่ยังขาดให้ครบ: ชื่อ, เบอร์โทร, ที่อยู่จัดส่ง, วิธีชำระเงิน
+4. [Order Creation] เมื่อข้อมูลครบและลูกค้าตกลงซื้อแล้ว ให้เรียก Tool "take_order" ก่อน จากนั้นจึงส่งช่องทางชำระเงินหรือเรียก "send_payment_qr" ตามความเหมาะสม
+5. [Post-Sales] ขอบคุณ + แนะนำส่งสลิปกลับมาในแชท
 
 [กฎสำคัญ]
 - ตอบภาษาไทยสุภาพ กระชับ
 - ใช้ Tools ที่จำเป็นให้ถูกต้อง อย่าตอบเดา
-- ถ้าไม่มีข้อมูล → แจ้งลูกค้าให้รอแอดมินหรือเรียก request_human_agent
-${knowledgeContext}
-${productsContext}
+- ห้ามสรุปว่ารับออเดอร์แล้วถ้ายังไม่ได้เรียก take_order หรือข้อมูลลูกค้ายังไม่ครบ ให้ถามข้อมูลที่ขาดแทน
+- ถ้าไม่มีข้อมูล ให้แจ้งลูกค้าให้รอแอดมินหรือเรียก request_human_agent
+${knowledgeContext}${productsContext}
 ${paymentInfo}`
 
   const dynamicSystemPrompt = `${customerProfileContext}
