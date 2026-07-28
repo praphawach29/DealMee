@@ -414,6 +414,8 @@ const MASTER_TOOLS = [
       properties: {
         date: { type: 'string', description: 'วันที่ต้องการเช็ค เช่น "พรุ่งนี้" "วันศุกร์" "15/07/2025"' },
         service: { type: 'string', description: 'ชื่อบริการที่ต้องการจอง เช่น "ตัดผม" "นวด"' },
+        guest_count: { type: 'number', description: 'จำนวนคน/จำนวนที่นั่งที่ต้องการจอง ถ้าเป็นร้านอาหารหรือคลาส' },
+        resource: { type: 'string', description: 'ช่าง โต๊ะ ห้อง โซน หรือทรัพยากรที่ลูกค้าต้องการ ถ้ามี' },
       },
       required: [],
     },
@@ -430,6 +432,9 @@ const MASTER_TOOLS = [
         name: { type: 'string', description: 'ชื่อลูกค้า' },
         phone: { type: 'string', description: 'เบอร์โทรติดต่อ' },
         deposit_amount: { type: 'number', description: 'ค่ามัดจำ (ถ้ามี)' },
+        guest_count: { type: 'number', description: 'จำนวนคน/จำนวนที่นั่ง เช่น จองโต๊ะ 4 คน' },
+        resource: { type: 'string', description: 'ช่าง โต๊ะ ห้อง โซน หรือทรัพยากรที่ลูกค้าเลือก' },
+        booking_type: { type: 'string', description: 'ประเภทการจอง เช่น service, table, queue, class, consultation' },
         note: { type: 'string', description: 'หมายเหตุเพิ่มเติม' },
       },
       required: ['service', 'date', 'time', 'name', 'phone'],

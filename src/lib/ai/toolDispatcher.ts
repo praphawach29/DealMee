@@ -362,7 +362,7 @@ export async function executeTool(
     const { data: service } = serviceQuery
       ? await supabase
           .from('services')
-          .select('name,staff_name,duration_minutes,available_days,start_time,end_time,buffer_minutes,status')
+          .select('id,name,booking_type,staff_name,resource_label,duration_minutes,available_days,start_time,end_time,buffer_minutes,capacity_per_slot,deposit_amount,required_fields,status')
           .eq('shop_id', shopId)
           .neq('status', 'inactive')
           .ilike('name', `%${serviceQuery}%`)
@@ -373,6 +373,8 @@ export async function executeTool(
     const dayKey = parseBookingDateDayKey(args.date)
     const serviceDays = (service as any)?.available_days as string[] | null | undefined
     const serviceName = (service as any)?.name || serviceQuery
+    const serviceId = (service as any)?.id
+    const capacityPerSlot = Math.max(Number((service as any)?.capacity_per_slot) || 1, 1)
 
     if (service && dayKey && serviceDays?.length && !serviceDays.includes(dayKey)) {
       return {
@@ -383,22 +385,28 @@ export async function executeTool(
 
     let bookingQuery = supabase
       .from('bookings')
-      .select('booking_time')
+      .select('booking_time,guest_count')
       .eq('shop_id', shopId)
       .eq('booking_date', args.date)
       .neq('status', 'cancelled')
 
-    if (serviceName) bookingQuery = bookingQuery.ilike('service_name', `%${serviceName}%`)
+    if (serviceId) bookingQuery = bookingQuery.eq('service_id', serviceId)
+    else if (serviceName) bookingQuery = bookingQuery.ilike('service_name', `%${serviceName}%`)
 
     const { data: booked } = await bookingQuery
-    const bookedTimes = booked?.map((b: any) => String(b.booking_time || '').slice(0, 5)) ?? []
+    const bookedCounts = new Map<string, number>()
+    for (const booking of booked || []) {
+      const slot = String((booking as any).booking_time || '').slice(0, 5)
+      const seats = Number((booking as any).guest_count) || 1
+      bookedCounts.set(slot, (bookedCounts.get(slot) || 0) + seats)
+    }
     const allSlots = service
       ? buildAvailabilitySlots((service as any).start_time, (service as any).end_time, (service as any).duration_minutes, (service as any).buffer_minutes)
       : ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
-    const free = allSlots.filter((slot) => !bookedTimes.includes(slot))
+    const free = allSlots.filter((slot) => (bookedCounts.get(slot) || 0) < capacityPerSlot)
 
     if (free.length > 0) {
-      const serviceLine = serviceName ? `สำหรับ ${serviceName}${(service as any)?.staff_name ? ` โดย ${(service as any).staff_name}` : ''}` : ''
+      const serviceLine = serviceName ? `สำหรับ ${serviceName}${((service as any)?.resource_label || (service as any)?.staff_name) ? ` (${(service as any).resource_label || (service as any).staff_name})` : ''}` : ''
       return {
         resultForAi: `เวลาว่างวันที่ ${args.date}${serviceLine ? ` ${serviceLine}` : ''}: ${free.join(', ')}`,
         immediateMessages: [{ type: 'text', content: `ช่วงเวลาว่างวันที่ ${args.date}${serviceLine ? ` ${serviceLine}` : ''}:\n\n${free.map((slot) => `- ${slot} น.`).join('\n')}\n\nต้องการจองเวลาไหนคะ?` }],
@@ -412,13 +420,29 @@ export async function executeTool(
   }
   if (toolName === 'book_appointment') {
     const serviceName = args.service || args.service_name
+    const { data: service } = serviceName
+      ? await supabase
+          .from('services')
+          .select('id,booking_type,resource_label,staff_name,deposit_amount,capacity_per_slot')
+          .eq('shop_id', shopId)
+          .neq('status', 'inactive')
+          .ilike('name', `%${serviceName}%`)
+          .limit(1)
+          .maybeSingle()
+      : { data: null }
     const bookingNo = `BK-${Date.now().toString().slice(-6)}`
     await supabase.from('bookings').insert({
       shop_id: shopId, booking_no: bookingNo,
       customer_name: args.customer_name || args.name || `LINE-${userId.substring(0, 6)}`,
       phone: args.phone, service_name: serviceName,
+      service_id: (service as any)?.id || null,
+      booking_type: (service as any)?.booking_type || args.booking_type || 'service',
+      resource_label: args.resource_label || args.resource || (service as any)?.resource_label || (service as any)?.staff_name || null,
+      guest_count: args.guest_count || args.party_size || args.people || null,
+      deposit_amount: (service as any)?.deposit_amount || args.deposit_amount || 0,
       booking_date: args.date, booking_time: args.time,
       status: 'confirmed', note: args.note,
+      metadata: { raw_args: args },
     })
     return {
       resultForAi: `จองคิว ${bookingNo}: ${serviceName} วันที่ ${args.date} เวลา ${args.time}`,
