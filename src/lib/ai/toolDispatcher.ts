@@ -57,7 +57,7 @@ const GENERIC_PRODUCT_SEARCH_WORDS = [
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 
-function parseBookingDateDayKey(dateValue: unknown) {
+export function parseBookingDateDayKey(dateValue: unknown) {
   const text = String(dateValue || '').trim()
   const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/)
   const slash = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
@@ -92,7 +92,7 @@ function minutesToTime(value: number) {
   return `${hours}:${minutes}`
 }
 
-function buildAvailabilitySlots(startTime: unknown, endTime: unknown, durationMinutes: unknown, bufferMinutes: unknown) {
+export function buildAvailabilitySlots(startTime: unknown, endTime: unknown, durationMinutes: unknown, bufferMinutes: unknown) {
   const start = timeToMinutes(startTime || '09:00')
   const end = timeToMinutes(endTime || '18:00')
   const duration = Math.max(Number(durationMinutes) || 60, 5)
@@ -451,7 +451,13 @@ export async function executeTool(
   }
 
   if (toolName === 'check_booking') {
-    const bid = args.booking_id
+    const bid = args.booking_id || args.query
+    if (!bid) {
+      return {
+        resultForAi: 'ยังไม่มีเลขที่การจองหรือคำค้นหา จึงตรวจสอบการจองไม่ได้',
+        immediateMessages: [{ type: 'text', content: 'รบกวนแจ้งเลขที่การจอง หรือชื่อและเบอร์โทรที่ใช้จองก่อนนะคะ' }],
+      }
+    }
     const { data: bk } = await supabase
       .from('bookings')
       .select('booking_no,customer_name,phone,service_name,booking_date,booking_time,status,note')
@@ -476,7 +482,19 @@ export async function executeTool(
   }
 
   if (toolName === 'reschedule_booking') {
-    const bid = args.booking_id
+    const bid = args.booking_id || args.query
+    if (!bid) {
+      return {
+        resultForAi: 'ยังไม่มีเลขที่การจอง จึงดำเนินการไม่ได้ ต้องขอเลขที่การจองหรือข้อมูลเดิมเพื่อค้นหาก่อน',
+        immediateMessages: [{ type: 'text', content: 'รบกวนแจ้งเลขที่การจองก่อนนะคะ หรือแจ้งชื่อ เบอร์โทร วันและเวลาเดิม เพื่อให้น้องช่วยค้นหาการจองให้ก่อนค่ะ' }],
+      }
+    }
+    if (!args.new_date || !args.new_time) {
+      return {
+        resultForAi: 'ยังไม่มีวันหรือเวลาใหม่ครบถ้วน จึงเลื่อนการจองไม่ได้',
+        immediateMessages: [{ type: 'text', content: 'รบกวนแจ้งวันและเวลาใหม่ที่ต้องการเลื่อนด้วยนะคะ' }],
+      }
+    }
     const { data: bk } = await supabase
       .from('bookings')
       .select('booking_no,service_name')
@@ -500,12 +518,18 @@ export async function executeTool(
     }
   }
   if (toolName === 'cancel_booking') {
-    const bid = args.booking_id
-    const { data: bk } = await supabase.from('bookings').select('booking_no,service_name,booking_date').eq('shop_id', shopId).or(`id.eq.${bid},booking_no.ilike.%${bid}%`).single()
+    const bid = args.booking_id || args.query
+    if (!bid) {
+      return {
+        resultForAi: 'ยังไม่มีเลขที่การจอง จึงดำเนินการไม่ได้ ต้องขอเลขที่การจองหรือข้อมูลเดิมเพื่อค้นหาก่อน',
+        immediateMessages: [{ type: 'text', content: 'รบกวนแจ้งเลขที่การจองก่อนนะคะ หรือแจ้งชื่อ เบอร์โทร วันและเวลาเดิม เพื่อให้น้องช่วยค้นหาการจองให้ก่อนค่ะ' }],
+      }
+    }
+    const { data: bk } = await supabase.from('bookings').select('booking_no,service_name,booking_date').eq('shop_id', shopId).or(`id.eq.${bid},booking_no.ilike.%${bid}%`).maybeSingle()
     if (!bk) {
       return { resultForAi: 'ไม่พบข้อมูลการจอง', immediateMessages: [{ type: 'text', content: '❌ ไม่พบข้อมูลการจองค่ะ' }] }
     }
-    await supabase.from('bookings').update({ status: 'cancelled' }).or(`id.eq.${bid},booking_no.ilike.%${bid}%`)
+    await supabase.from('bookings').update({ status: 'cancelled' }).eq('shop_id', shopId).or(`id.eq.${bid},booking_no.ilike.%${bid}%`)
     return {
       resultForAi: `ยกเลิกการจอง ${bk.booking_no} แล้ว`,
       immediateMessages: [{ type: 'text', content: `✅ ยกเลิกการจอง ${bk.booking_no} (${bk.service_name} วันที่ ${bk.booking_date}) เรียบร้อยค่ะ` }],

@@ -3,7 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { processSalesAgentChat, getQuotaStatus, QUOTA_EXCEEDED_MESSAGE_TH } from '@/lib/ai/salesAgentEngine'
-import { applyProductSearchFilters, formatOrderCloseSummary, formatPaymentInstructions } from '@/lib/ai/toolDispatcher'
+import { applyProductSearchFilters, buildAvailabilitySlots, formatOrderCloseSummary, formatPaymentInstructions, parseBookingDateDayKey } from '@/lib/ai/toolDispatcher'
 import type { ToolExecutor, ToolExecutionContext, ToolExecutionResult } from '@/lib/ai/toolDispatcher'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { buildAutoGreeting } from '@/lib/businessGreeting'
@@ -246,16 +246,62 @@ const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionC
     return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
   if (name === 'check_available_slots') {
-    const { data: booked } = await supabase.from('bookings').select('booking_time').eq('shop_id', shopId).eq('booking_date', args.date).neq('status', 'cancelled')
-    const bookedTimes = booked?.map((b: any) => b.booking_time) ?? []
-    const allSlots = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
-    const free = allSlots.filter((s) => !bookedTimes.some((t: string) => t?.startsWith(s)))
-    const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_available_slots วันที่ ${args.date}: ${free.length ? free.join(', ') : 'ไม่มีเวลาว่าง'}`
+    const serviceQuery = String(args.service || args.service_name || '').trim()
+    const { data: service } = serviceQuery
+      ? await supabase
+          .from('services')
+          .select('id,name,booking_type,staff_name,resource_label,duration_minutes,available_days,start_time,end_time,buffer_minutes,capacity_per_slot,status')
+          .eq('shop_id', shopId)
+          .neq('status', 'inactive')
+          .ilike('name', `%${serviceQuery}%`)
+          .limit(1)
+          .maybeSingle()
+      : { data: null }
+
+    const dayKey = parseBookingDateDayKey(args.date)
+    const serviceDays = (service as any)?.available_days as string[] | null | undefined
+    const serviceName = (service as any)?.name || serviceQuery
+    const serviceId = (service as any)?.id
+    const capacityPerSlot = Math.max(Number((service as any)?.capacity_per_slot) || 1, 1)
+
+    if (service && dayKey && serviceDays?.length && !serviceDays.includes(dayKey)) {
+      const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_available_slots: ${serviceName} ไม่เปิดให้จองวันที่ ${args.date}`
+      return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
+    }
+
+    let bookingQuery = supabase
+      .from('bookings')
+      .select('booking_time,guest_count')
+      .eq('shop_id', shopId)
+      .eq('booking_date', args.date)
+      .neq('status', 'cancelled')
+
+    if (serviceId) bookingQuery = bookingQuery.eq('service_id', serviceId)
+    else if (serviceName) bookingQuery = bookingQuery.ilike('service_name', `%${serviceName}%`)
+
+    const { data: booked } = await bookingQuery
+    const bookedCounts = new Map<string, number>()
+    for (const booking of booked || []) {
+      const slot = String((booking as any).booking_time || '').slice(0, 5)
+      const seats = Number((booking as any).guest_count) || 1
+      bookedCounts.set(slot, (bookedCounts.get(slot) || 0) + seats)
+    }
+
+    const allSlots = service
+      ? buildAvailabilitySlots((service as any).start_time, (service as any).end_time, (service as any).duration_minutes, (service as any).buffer_minutes)
+      : ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
+    const free = allSlots.filter((slot) => (bookedCounts.get(slot) || 0) < capacityPerSlot)
+    const resource = (service as any)?.resource_label || (service as any)?.staff_name
+    const scope = serviceName ? `สำหรับ ${serviceName}${resource ? ` (${resource})` : ''}` : ''
+    const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_available_slots ${scope} วันที่ ${args.date}: ${free.length ? free.join(', ') : 'ไม่มีเวลาว่าง'}`
     return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
-
   if (name === 'check_booking') {
-    const bid = args.booking_id
+    const bid = args.booking_id || args.query
+    if (!bid) {
+      const line = '[ทดสอบ] ยังตรวจสอบการจองไม่ได้ เพราะยังไม่มีเลขที่การจองหรือคำค้นหา'
+      return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
+    }
     const { data: bk } = await supabase.from('bookings').select('booking_no,customer_name,phone,service_name,booking_date,booking_time,status').eq('shop_id', shopId).or(`id.eq.${bid},booking_no.ilike.%${bid}%`).maybeSingle()
     const line = bk
       ? `[ทดสอบ] เรียกใช้เครื่องมือ check_booking:\n${bk.booking_no} - ${bk.customer_name} ${bk.service_name || '-'} ${bk.booking_date} ${String(bk.booking_time || '').slice(0, 5)} (${bk.status})`
@@ -264,17 +310,31 @@ const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionC
   }
 
   if (name === 'book_appointment') {
-    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ book_appointment:\nบริการ: ${args.service || args.service_name}\nวันที่: ${args.date}\nเวลา: ${args.time}\nลูกค้า: ${args.customer_name || '-'}\nเบอร์: ${args.phone || '-'}`
+    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ book_appointment:
+เลขจองตัวอย่าง: BK-TEST
+บริการ: ${args.service || args.service_name}
+วันที่: ${args.date}
+เวลา: ${args.time}
+ลูกค้า: ${args.customer_name || args.name || '-'}
+เบอร์: ${args.phone || '-'}${args.guest_count || args.people || args.party_size ? `
+จำนวน: ${args.guest_count || args.people || args.party_size}` : ''}${args.resource || args.resource_label ? `
+พื้นที่/ผู้ให้บริการ: ${args.resource || args.resource_label}` : ''}`
     return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
-
   if (name === 'reschedule_booking') {
-    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ reschedule_booking: ${args.booking_id} -> ${args.new_date} ${args.new_time}`
+    if (!args.booking_id && !args.query) {
+      const line = '[ทดสอบ] ยังเลื่อนการจองไม่ได้ เพราะยังไม่มีเลขที่การจองหรือข้อมูลเดิมสำหรับค้นหา'
+      return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
+    }
+    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ reschedule_booking: ${args.booking_id || args.query} -> ${args.new_date} ${args.new_time}`
     return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
-
   if (name === 'cancel_booking') {
-    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ cancel_booking: ${args.booking_id}`
+    if (!args.booking_id && !args.query) {
+      const line = '[ทดสอบ] ยังยกเลิกการจองไม่ได้ เพราะยังไม่มีเลขที่การจองหรือข้อมูลเดิมสำหรับค้นหา'
+      return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
+    }
+    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ cancel_booking: ${args.booking_id || args.query}`
     return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
   if (name === 'get_active_promotions') {
