@@ -88,6 +88,45 @@ export function applyProductSearchFilters(query: any, args: Record<string, any>)
 
   return { query, keyword }
 }
+export function formatPaymentInstructions(shop: any, amount?: number): string {
+  const lines: string[] = []
+  const promptpayId = shop.promptpay_id || shop.promptpay_number
+  const amountLine = typeof amount === 'number' && Number.isFinite(amount)
+    ? `ยอดชำระ: ${amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท`
+    : ''
+
+  if (promptpayId) {
+    lines.push(`พร้อมเพย์: ${promptpayId} (${shop.promptpay_name || shop.name})`)
+  }
+  if (shop.bank_account_number) {
+    lines.push(`โอนธนาคาร: ${shop.bank_name || '-'} เลขบัญชี ${shop.bank_account_number} ชื่อบัญชี ${shop.bank_account_name || shop.name}`)
+  }
+  if ((shop.shipping_fee_type || '').toLowerCase().includes('cod')) {
+    lines.push('เก็บเงินปลายทาง: แจ้งแอดมินเพื่อยืนยันพื้นที่จัดส่ง')
+  }
+
+  if (amountLine) lines.unshift(amountLine)
+  if (lines.length === 0) return 'ร้านยังไม่ได้ตั้งค่าช่องทางชำระเงิน กรุณารอแอดมินยืนยันช่องทางชำระเงิน'
+
+  return `${lines.join('\n')}\nโอนแล้วกรุณาส่งสลิปกลับมาในแชทนี้นะคะ`
+}
+
+export function formatOrderCloseSummary(shop: any, args: Record<string, any>): string {
+  const total = Number(args.total_price) || 0
+  const paymentInstructions = formatPaymentInstructions(shop, total)
+  return [
+    'สรุปออเดอร์เรียบร้อยค่ะ',
+    `สินค้า: ${args.product} x${args.qty}`,
+    `ยอดสุทธิ: ${total.toLocaleString('th-TH')} บาท`,
+    `ชื่อผู้รับ: ${args.name}`,
+    `เบอร์โทร: ${args.phone}`,
+    `ที่อยู่จัดส่ง: ${args.address}`,
+    `วิธีชำระเงิน: ${args.payment_method || 'โอนเงิน'}`,
+    '',
+    'ช่องทางชำระเงิน:',
+    paymentInstructions,
+  ].join('\n')
+}
 
 /**
  * Executes a single AI tool call against the database and returns what
@@ -147,8 +186,8 @@ export async function executeTool(
     // circular import at module-load time (customerMemory <-> engine).
     const { recordCustomerOrder } = await import('@/lib/customerMemory')
     await recordCustomerOrder(shopId, userId, Number(args.total_price) || 0)
-    const confirmMsg = `✅ รับออเดอร์แล้วค่ะ!\n📦 สินค้า: ${args.product} x${args.qty}\n💰 ยอดรวม: ${Number(args.total_price).toLocaleString()} บาท\n📍 จัดส่งไปที่: ${args.address}\n\nขอบคุณที่ใช้บริการนะคะ 🙏`
-    return { resultForAi: `สร้างออเดอร์แล้ว: ${args.product} x${args.qty}, ยอดรวม ${args.total_price} บาท`, immediateMessages: [{ type: 'text', content: confirmMsg }] }
+    const confirmMsg = formatOrderCloseSummary(shop, args)
+    return { resultForAi: `สร้างออเดอร์แล้วและส่งข้อมูลชำระเงินให้ลูกค้าแล้ว:\n${confirmMsg}`, immediateMessages: [{ type: 'text', content: confirmMsg }] }
   }
 
   if (toolName === 'request_human_agent') {

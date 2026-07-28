@@ -3,7 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { processSalesAgentChat, getQuotaStatus, QUOTA_EXCEEDED_MESSAGE_TH } from '@/lib/ai/salesAgentEngine'
-import { applyProductSearchFilters } from '@/lib/ai/toolDispatcher'
+import { applyProductSearchFilters, formatOrderCloseSummary, formatPaymentInstructions } from '@/lib/ai/toolDispatcher'
 import type { ToolExecutor, ToolExecutionContext, ToolExecutionResult } from '@/lib/ai/toolDispatcher'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { upsertCustomerProfile, appendCustomerNote, addCustomerTagUnique } from '@/lib/customerMemory'
@@ -212,6 +212,16 @@ const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionC
     return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
 
+  if (name === 'take_order') {
+    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ take_order:\n${formatOrderCloseSummary(ctx.shop, args)}`
+    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
+  }
+
+  if (name === 'send_payment_qr') {
+    const amount = Number(args.amount) || undefined
+    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ send_payment_qr:\n${formatPaymentInstructions(ctx.shop, amount)}`
+    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
+  }
   if (name === 'get_active_promotions') {
     const today = new Date().toISOString().split('T')[0]
     const { data: promos } = await supabase.from('promotions').select('name,discount_type,discount_value,end_date,code').eq('shop_id', shopId).eq('status', 'active').or(`end_date.is.null,end_date.gte.${today}`).order('created_at', { ascending: false }).limit(5)
