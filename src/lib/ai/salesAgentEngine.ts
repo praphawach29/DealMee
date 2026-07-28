@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPeriod } from '@/lib/billing/usage'
-import { getCustomerProfileContext } from '@/lib/customerMemory'
+import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
@@ -625,22 +625,81 @@ function filterTools(names: AgentToolName[]) {
 // Botify Brain Engine™: Complexity Classifier & Router
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function classifyMessageComplexity(userQuery: string): {
+// Negotiation/discount keywords — expanded per ROADMAP_AI_AGENT.md §4 step 1
+// beyond the original narrow list, to catch more real phrasings without
+// needing an extra AI call.
+const NEGOTIATION_KEYWORDS = [
+  'ลด', 'ส่วนลด', 'ลดได้ไหม', 'ลดอีกไหม', 'แถม', 'ของแถม',
+  'แพง', 'แพงกว่า', 'เทียบ', 'ต่อรอง', 'โปรโมชั่นพิเศษ', 'ราคาส่ง', 'เหมา',
+  'พอลดได้ไหม', 'ราคาพิเศษ', 'ซื้อเยอะลดไหม', 'งบไม่พอ', 'แพงไป', 'ลดหน่อย', 'ขอราคาพิเศษ',
+]
+
+/** Complexity score threshold at/above which a message is routed HIGH (high-persuasion model). */
+export const HIGH_COMPLEXITY_THRESHOLD = 3
+
+export interface ComplexityScoreInput {
+  userQuery: string
+  /** Prior customer messages in this conversation, most recent last. Optional — omit if unavailable (e.g. very first message). */
+  recentCustomerMessages?: string[]
+  /** From Customer Memory Graph: true if tagged VIP or total_spend exceeds the VIP threshold. */
+  isVip?: boolean
+}
+
+/**
+ * Pure, DB-free complexity scoring (ROADMAP_AI_AGENT.md §4 step 2) — unit
+ * testable without touching the database or any AI provider. Replaces the
+ * old binary "does this message contain a negotiation keyword" check with a
+ * cumulative score, so nuance (message length, price figures, negotiation
+ * signals earlier in the conversation, VIP status) can push a message over
+ * the HIGH threshold even without an exact keyword match.
+ */
+export function computeComplexityScore({
+  userQuery,
+  recentCustomerMessages = [],
+  isVip = false,
+}: ComplexityScoreInput): number {
+  const text = userQuery.toLowerCase().trim()
+  let score = 0
+
+  const matchedKeywords = NEGOTIATION_KEYWORDS.filter((k) => text.includes(k))
+  score += matchedKeywords.length * 2
+
+  if (userQuery.trim().length > 100) score += 1
+  if (/\d/.test(userQuery)) score += 1 // mentions a number (likely a price/quantity being negotiated)
+
+  for (const msg of recentCustomerMessages.slice(-3)) {
+    if (NEGOTIATION_KEYWORDS.some((k) => msg.toLowerCase().includes(k))) score += 1
+  }
+
+  if (isVip) score += 2 // VIP customers get the high-persuasion model even for plain-looking messages
+
+  return score
+}
+
+export function classifyMessageComplexity(
+  userQuery: string,
+  options: { recentCustomerMessages?: string[]; isVip?: boolean } = {}
+): {
   complexity: ComplexityLevel
+  complexityScore: number
   targetProvider: AiProvider
   toolSet: typeof MASTER_TOOLS
   reason: string
 } {
   const text = userQuery.toLowerCase().trim()
 
-  const negotiationKeywords = ['ลด', 'ส่วนลด', 'ลดได้ไหม', 'ลดอีกไหม', 'แถม', 'ของแถม',
-    'แพง', 'แพงกว่า', 'เทียบ', 'ต่อรอง', 'โปรโมชั่นพิเศษ', 'ราคาส่ง', 'เหมา']
   const bookingKeywords = ['จอง', 'นัด', 'จองคิว', 'นัดหมาย', 'ว่างไหม', 'เลื่อนนัด', 'ยกเลิกนัด']
   const supportKeywords = ['ออเดอร์', 'พัสดุ', 'tracking', 'ส่งแล้ว', 'ยังไม่ได้รับ', 'คืนสินค้า', 'ประกัน', 'ชำรุด']
 
   const isBooking = bookingKeywords.some((k) => text.includes(k))
   const isSupport = supportKeywords.some((k) => text.includes(k))
-  const isHighComplexity = negotiationKeywords.some((k) => text.includes(k))
+
+  const complexityScore = computeComplexityScore({
+    userQuery,
+    recentCustomerMessages: options.recentCustomerMessages,
+    isVip: options.isVip,
+  })
+  const isHighComplexity = complexityScore >= HIGH_COMPLEXITY_THRESHOLD
 
   const toolSet = isBooking
     ? filterTools(BOOKING_TOOL_NAMES)
@@ -651,19 +710,28 @@ export function classifyMessageComplexity(userQuery: string): {
     : filterTools(GENERAL_TOOL_NAMES)
 
   if (isHighComplexity) {
+    // Fixed dead-code bug (ROADMAP_AI_AGENT.md §4 step 1): targetProvider
+    // could previously be 'openai' from nowhere else in the codebase, since
+    // this function never actually returned it — GPT-5.6 was configured but
+    // unreachable. Now: Claude first, GPT-5.6 as a real fallback if Claude
+    // has no key configured, Gemini only as the last resort.
+    const claudeAvailable = !!(process.env.CLAUDE_API_KEY || process.env.CLAUDE_KEY)
+    const openAiAvailable = !!(process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY)
     return {
       complexity: 'HIGH',
-      targetProvider: process.env.CLAUDE_API_KEY || process.env.CLAUDE_KEY ? 'claude' : 'gemini',
+      complexityScore,
+      targetProvider: claudeAvailable ? 'claude' : openAiAvailable ? 'openai' : 'gemini',
       toolSet,
-      reason: 'Detected negotiation/discount intent → High-persuasion model',
+      reason: `Complexity score ${complexityScore} (>= ${HIGH_COMPLEXITY_THRESHOLD}) → High-persuasion routing`,
     }
   }
 
   return {
     complexity: 'LOW',
+    complexityScore,
     targetProvider: 'gemini',
     toolSet,
-    reason: 'Standard FAQ / product / booking / support query',
+    reason: `Complexity score ${complexityScore} (< ${HIGH_COMPLEXITY_THRESHOLD}) → Standard FAQ/product/booking/support query`,
   }
 }
 
@@ -802,13 +870,18 @@ export async function processSalesAgentChat({
 
   // 3. Chat History
   let historyContext = ''
+  // Prior customer messages only (not bot replies), most recent last — fed
+  // into the Model Router's complexity scoring below so negotiation signals
+  // earlier in the conversation still count even if the current message is
+  // just "ok" or "yes". Populated from whichever history source is in use.
+  let recentCustomerMessages: string[] = []
+
   if (conversationHistory && conversationHistory.length > 0) {
+    const recent = conversationHistory.slice(-10)
     historyContext =
       `\n\n[ประวัติบทสนทนาล่าสุด]\n` +
-      conversationHistory
-        .slice(-10)
-        .map((m) => `${m.sender === 'user' ? 'ลูกค้า' : 'AI'}: ${m.text}`)
-        .join('\n')
+      recent.map((m) => `${m.sender === 'user' ? 'ลูกค้า' : 'AI'}: ${m.text}`).join('\n')
+    recentCustomerMessages = recent.filter((m) => m.sender === 'user').map((m) => m.text)
   } else {
     const { data: recentMessages } = await supabase
       .from('chat_messages')
@@ -818,11 +891,11 @@ export async function processSalesAgentChat({
       .limit(10)
 
     if (recentMessages && recentMessages.length > 0) {
+      const ordered = [...recentMessages].reverse()
       historyContext =
         `\n\n[ประวัติบทสนทนาล่าสุด]\n` +
-        [...recentMessages].reverse()
-          .map((m) => `${m.sender_type === 'user' ? 'ลูกค้า' : 'AI'}: ${m.message}`)
-          .join('\n')
+        ordered.map((m) => `${m.sender_type === 'user' ? 'ลูกค้า' : 'AI'}: ${m.message}`).join('\n')
+      recentCustomerMessages = ordered.filter((m) => m.sender_type === 'user').map((m) => m.message)
     }
   }
 
@@ -835,8 +908,12 @@ export async function processSalesAgentChat({
 - ธนาคาร: ${shop.bank_name || '-'} เลขบัญชี: ${shop.bank_account_number || '-'} ชื่อ: ${shop.bank_account_name || shop.name}`
   }
 
-  // 5. Customer Profile (Customer Memory Graph) — auto-injected, no tool call needed
-  const customerProfileContext = await getCustomerProfileContext(shop.id, userId)
+  // 5. Customer Profile (Customer Memory Graph) — auto-injected, no tool call
+  // needed. Fetched once and reused both for the prompt context text below
+  // and for the Model Router's VIP check, to avoid querying customer_profiles twice.
+  const customerProfileSummary = await getCustomerProfileSummary(shop.id, userId)
+  const customerProfileContext = formatCustomerProfileContext(customerProfileSummary)
+  const isVipCustomer = isVipProfile(customerProfileSummary)
 
   // 5. System Instruction — split into a static block (stable per shop:
   // identity, knowledge base, products, payment info) and a dynamic block
@@ -870,8 +947,13 @@ ${historyContext}`
   const systemInstruction = `${staticSystemPrompt}\n${dynamicSystemPrompt}`
 
   // 6. Route
-  const routing = classifyMessageComplexity(userQuery)
-  console.log(`[Botify Brain™] "${userQuery}" | ${routing.complexity} | ${routing.targetProvider.toUpperCase()} | Tools: ${routing.toolSet.length}`)
+  const routing = classifyMessageComplexity(userQuery, {
+    recentCustomerMessages,
+    isVip: isVipCustomer,
+  })
+  console.log(
+    `[Botify Brain™] "${userQuery}" | ${routing.complexity} (score ${routing.complexityScore}) | ${routing.targetProvider.toUpperCase()} | Tools: ${routing.toolSet.length}${isVipCustomer ? ' | VIP customer' : ''}`
+  )
 
   if (routing.targetProvider === 'claude' && claudeKey) {
     const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, userQuery, claudeKey, routing.toolSet)
