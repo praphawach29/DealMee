@@ -3,7 +3,7 @@
 
 > อัปเดตล่าสุด: 28 กรกฎาคม 2026
 > GitHub: praphawach29/ai-agent-google-SDK branch main
-> Last Commit: 75c8d91 - feat(ai-agent): upgrade Model Router (2/5 of AI agent upgrade)
+> Last Commit: 9ec54ea - chore: organize scattered SQL files into supabase/migrations + tools
 >
 > เอกสารนี้คือแหล่งข้อมูลสถานะปัจจุบันของโปรเจกต์ฉบับเดียว (single source of truth)
 > สำหรับแผนพัฒนาในอนาคตดูที่ [ROADMAP.md](./ROADMAP.md)
@@ -404,6 +404,7 @@ NEXT_PUBLIC_APP_URL=               # [Phase 2] Stripe Checkout success/cancel + 
 
 ## Git History
 
+9ec54ea  chore: organize scattered SQL files into supabase/migrations + tools
 75c8d91  feat(ai-agent): upgrade Model Router (2/5 of AI agent upgrade)
 c99e20b  feat(billing): implement Claude prompt caching + admin Margin Dashboard
 e698121  feat(ai-agent): implement Customer Memory Graph (1/5 of AI agent upgrade)
