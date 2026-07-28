@@ -3,7 +3,7 @@
 
 > อัปเดตล่าสุด: 28 กรกฎาคม 2026
 > GitHub: praphawach29/ai-agent-google-SDK branch main
-> Last Commit: c99e20b - feat(billing): implement Claude prompt caching + admin Margin Dashboard
+> Last Commit: 75c8d91 - feat(ai-agent): upgrade Model Router (2/5 of AI agent upgrade)
 >
 > เอกสารนี้คือแหล่งข้อมูลสถานะปัจจุบันของโปรเจกต์ฉบับเดียว (single source of truth)
 > สำหรับแผนพัฒนาในอนาคตดูที่ [ROADMAP.md](./ROADMAP.md)
@@ -259,6 +259,15 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 
 `ROADMAP_AI_AGENT.md` ได้รับการปรับปรุงใหญ่ (28 กรกฎาคม 2026): เพิ่มบทเรียนจากการตรวจสอบ 3 โปรเจคเดิมของผู้ใช้ (`aisalesassistant-main`, `botify-v5-hybrid`, `chatbot-agent-V6` — ความพยายามสร้างสินค้าเดียวกันครั้งก่อนหน้าที่ถูกทิ้งไป) และวางแผนละเอียดครบทั้ง 5 หัวข้อ (Model Router, Planning Layer, Customer Memory Graph, Sales Workflow Engine, Evaluation Framework) พร้อม "กฎเหล็ก 5 ข้อ" ป้องกันไม่ให้เดินซ้ำรอยปัญหาเดิม (แยก service เกินจำเป็น, ลืม multi-tenancy, logic ซ้ำต่อช่องทาง, script patch แบบ regex, schema drift) — เอกสารนี้เขียนให้ AI เซสชันไหน/ค่ายไหนก็หยิบไปทำต่อได้โดยไม่ต้องมีบริบทเดิม
 
+## Completed Features [AI Agent Upgrade — 2/5: Model Router]
+
+- [x] แก้ dead code: GPT-5.6 Luna เป็น fallback จริงเมื่อ Claude ไม่มี key (เดิมไม่เคยถูกเรียกใช้เลย)
+- [x] ขยาย negotiation keyword list (+7 คำ/วลี)
+- [x] เปลี่ยนจาก binary complexity เป็น score-based (`computeComplexityScore()` — pure function, testable แยกจาก DB)
+- [x] ผูก VIP status จาก Customer Memory Graph เข้ากับ routing (`isVipProfile()`, `VIP_SPEND_THRESHOLD_THB = 5000`)
+- [x] Log routing decision ละเอียดขึ้น (score + VIP status ใน console log)
+- รายละเอียดเต็มดูที่ [ROADMAP_AI_AGENT.md](./ROADMAP_AI_AGENT.md) หัวข้อ 4
+
 ## Completed Features [AI Agent Upgrade — 1/5: Customer Memory Graph]
 
 แผนรวม 5 หัวข้อดูที่ [ROADMAP_AI_AGENT.md](./ROADMAP_AI_AGENT.md) — หัวข้อที่ 1 เสร็จแล้ว:
@@ -396,6 +405,7 @@ NEXT_PUBLIC_APP_URL=               # [Phase 2] Stripe Checkout success/cancel + 
 
 ## Git History
 
+75c8d91  feat(ai-agent): upgrade Model Router (2/5 of AI agent upgrade)
 c99e20b  feat(billing): implement Claude prompt caching + admin Margin Dashboard
 e698121  feat(ai-agent): implement Customer Memory Graph (1/5 of AI agent upgrade)
 64f1020  fix(playground): give Chat Playground real conversation memory

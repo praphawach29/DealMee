@@ -2,6 +2,7 @@
 
 > ร่างเมื่อ: 28 กรกฎาคม 2026 | ปรับปรุงใหญ่: 28 กรกฎาคม 2026 (เพิ่มบทเรียนจาก 3 โปรเจคเดิม + วางแผนละเอียดครบ 5 หัวข้อ)
 > สถานะเอกสาร: **แผนละเอียดครบทั้ง 5 หัวข้อแล้ว — พร้อมให้ AI เซสชันไหนก็ได้หยิบไปทำต่อได้ทันที โดยไม่ต้องมีบริบทจากการสนทนาเดิม**
+> ความคืบหน้า: **2/5 เสร็จแล้ว** (Customer Memory Graph, Model Router) — เหลือ Planning Layer, Sales Workflow Engine, Evaluation Framework
 >
 > **เอกสารนี้คือ single source of truth สำหรับสถาปัตยกรรม AI Agent ของ Botify SaaS**
 > ถ้าเป็น AI ที่เพิ่งเข้ามาทำงานนี้ครั้งแรก อ่านเอกสารนี้ทั้งหมดก่อนเริ่มโค้ดใดๆ แล้วอ่าน `PROJECT_STATUS.md` (สถานะปัจจุบันของทั้งโปรเจค) กับ `ROADMAP.md` (แผนธุรกิจ/ฟีเจอร์ที่ไม่ใช่ AI-core) ประกอบ
@@ -87,8 +88,8 @@
 
 ```
 1. Customer Memory Graph   ✅ เสร็จแล้ว (28 กรกฎาคม 2026)
-2. Model Router ปรับปรุง   ← ทำได้เลยตอนนี้ (ความเสี่ยงต่ำสุด ไม่ต้องรอ dependency ไหน)
-3. Planning Layer          ← งานใหญ่สุด ต้องทำก่อน Workflow Engine
+2. Model Router ปรับปรุง   ✅ เสร็จแล้ว (28 กรกฎาคม 2026)
+3. Planning Layer          ← ทำต่อได้เลย (หัวข้อถัดไป, งานใหญ่สุด ต้องทำก่อน Workflow Engine)
 4. Sales Workflow Engine   ← ต้องมี Planning Layer ก่อน
 5. Evaluation Framework    ← ทำบางส่วนได้ทันที (conversion rate พื้นฐาน) ส่วนที่เหลือรอ Workflow Engine
 ```
@@ -97,7 +98,20 @@
 
 ## 4. Model Router — ตรวจสอบของเดิม + แผนปรับปรุง
 
-### สถานะปัจจุบัน (ตรวจสอบโค้ดจริงแล้ว)
+### สถานะ: ✅ เสร็จแล้ว (28 กรกฎาคม 2026) — ทำครบทั้งขั้นที่ 1 และ 2 ตามแผนเดิม
+
+**สิ่งที่แก้จริง:**
+- แก้ dead code GPT-5.6: `classifyMessageComplexity()` ตอนนี้ route HIGH complexity ไป Claude ก่อน (ถ้ามี key) → GPT-5.6 Luna เป็น fallback จริง (ถ้า Claude ไม่มี key) → Gemini เป็นตัวสุดท้าย — ทดสอบผ่าน `npx tsc --noEmit` + `npm run build` แล้วผ่าน 100%
+- ขยาย `NEGOTIATION_KEYWORDS` เพิ่ม 7 คำ/วลี ("พอลดได้ไหม", "ราคาพิเศษ", "ซื้อเยอะลดไหม", "งบไม่พอ", "แพงไป", "ลดหน่อย", "ขอราคาพิเศษ")
+- เปลี่ยนจาก binary เป็น score-based: ฟังก์ชันใหม่ `computeComplexityScore()` (pure, DB-free, ทดสอบแยกได้) คำนวณคะแนนจาก negotiation keyword (+2/คำ), ความยาวข้อความ >100 ตัวอักษร (+1), มีตัวเลขในข้อความ (+1), negotiation keyword ใน 3 ข้อความล่าสุดของลูกค้า (+1/ข้อความ), VIP (+2) — threshold `HIGH_COMPLEXITY_THRESHOLD = 3` (export ไว้ปรับได้ง่ายทีหลัง)
+- ผูกกับ Customer Memory Graph จริง: เพิ่ม `getCustomerProfileSummary()`/`isVipProfile()`/`formatCustomerProfileContext()` ใน `src/lib/customerMemory.ts` (แยกจาก DB fetch เดิมที่เคยทำทั้ง fetch+format ในฟังก์ชันเดียว) เพื่อให้ `processSalesAgentChat` fetch โปรไฟล์ลูกค้าครั้งเดียวแล้วใช้ได้ทั้งสร้าง context text (เหมือนเดิม) และเช็ค VIP สำหรับ routing (`VIP_SPEND_THRESHOLD_THB = 5000`) — ไม่มีการ query ซ้ำซ้อน
+- Log routing decision ปรับปรุง: `console.log` ตอนนี้แสดง complexity score และสถานะ VIP ด้วย (`[Botify Brain™] "..." | HIGH (score 5) | CLAUDE | Tools: 27 | VIP customer`) — **ตัดสินใจแล้วว่ายังไม่สร้างตาราง log ถาวรตอนนี้** (ตามแผนเดิมที่เขียนไว้คลุมเครือ) เพราะ Evaluation Framework (หัวข้อ 8) จะออกแบบ schema การเก็บข้อมูลแบบละเอียด (`chat_messages.tokens_used` ฯลฯ) อยู่แล้ว การสร้างตาราง log แยกตอนนี้จะทำให้มี migration ซ้ำซ้อนสองรอบสำหรับจุดประสงค์ใกล้เคียงกัน — เมื่อถึงหัวข้อ Evaluation Framework ให้พิจารณาเพิ่มคอลัมน์ `complexity_score`/`routed_provider` ใน `chat_messages` ไปพร้อมกับ `tokens_used` ในครั้งเดียว
+
+**ไฟล์ที่แก้:** `src/lib/ai/salesAgentEngine.ts` (classifier + call site), `src/lib/customerMemory.ts` (เพิ่ม summary/VIP/formatter functions)
+
+**สิ่งที่ตัดสินใจไม่ทำในรอบนี้ (นอกขอบเขต):** ยังไม่ทำ persistent routing-decision table (เหตุผลด้านบน)
+
+### บันทึกอ้างอิง — สถานะเดิมก่อนแก้ (เก็บไว้เป็นประวัติ)
 `classifyMessageComplexity()` ใน `src/lib/ai/salesAgentEngine.ts:628` — ใช้ keyword matching ภาษาไทย 3 ลิสต์ (ต่อรองราคา/จอง/ซัพพอร์ต) แบ่งความซับซ้อนแค่ 2 ระดับ (LOW/HIGH) ไม่มี confidence score, route HIGH ไป Claude เท่านั้น (ถ้ามี key) ที่เหลือไป Gemini เสมอ
 
 ### จุดอ่อนที่พบ
