@@ -54,6 +54,57 @@ const GENERIC_PRODUCT_SEARCH_WORDS = [
   'all',
 ]
 
+
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+
+function parseBookingDateDayKey(dateValue: unknown) {
+  const text = String(dateValue || '').trim()
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const slash = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  let year = 0
+  let month = 0
+  let day = 0
+
+  if (iso) {
+    year = Number(iso[1])
+    month = Number(iso[2])
+    day = Number(iso[3])
+  } else if (slash) {
+    year = Number(slash[3])
+    month = Number(slash[2])
+    day = Number(slash[1])
+  } else {
+    return null
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return DAY_KEYS[date.getUTCDay()]
+}
+
+function timeToMinutes(value: unknown) {
+  const [hours, minutes] = String(value || '00:00').slice(0, 5).split(':').map(Number)
+  return (Number.isFinite(hours) ? hours : 0) * 60 + (Number.isFinite(minutes) ? minutes : 0)
+}
+
+function minutesToTime(value: number) {
+  const hours = Math.floor(value / 60).toString().padStart(2, '0')
+  const minutes = (value % 60).toString().padStart(2, '0')
+  return `${hours}:${minutes}`
+}
+
+function buildAvailabilitySlots(startTime: unknown, endTime: unknown, durationMinutes: unknown, bufferMinutes: unknown) {
+  const start = timeToMinutes(startTime || '09:00')
+  const end = timeToMinutes(endTime || '18:00')
+  const duration = Math.max(Number(durationMinutes) || 60, 5)
+  const step = Math.max(duration + (Number(bufferMinutes) || 0), 15)
+  const slots: string[] = []
+
+  for (let current = start; current + duration <= end; current += step) {
+    slots.push(minutesToTime(current))
+  }
+
+  return slots
+}
 export function normalizeProductSearchKeyword(rawKeyword: unknown): string {
   if (typeof rawKeyword !== 'string') return ''
 
@@ -248,7 +299,7 @@ export async function executeTool(
       shop_id: shopId,
       user_id: userId,
       product_name: args.product_name,
-      customer_name: args.customer_name || `LINE-${userId.substring(0, 6)}`,
+      customer_name: args.customer_name || args.name || `LINE-${userId.substring(0, 6)}`,
       source: 'LINE',
       status: 'new',
     }, { onConflict: 'shop_id,user_id' })
@@ -307,25 +358,64 @@ export async function executeTool(
 
   // ── 📅 BOOKING TOOLS ──────────────────────────────────────────────
   if (toolName === 'check_available_slots') {
-    const { data: booked } = await supabase.from('bookings').select('booking_time').eq('shop_id', shopId).eq('booking_date', args.date).neq('status', 'cancelled')
-    const bookedTimes = booked?.map((b: any) => b.booking_time) ?? []
-    const allSlots = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
-    const free = allSlots.filter((s) => !bookedTimes.some((t: string) => t?.startsWith(s)))
-    if (free.length > 0) {
+    const serviceQuery = String(args.service || args.service_name || '').trim()
+    const { data: service } = serviceQuery
+      ? await supabase
+          .from('services')
+          .select('name,staff_name,duration_minutes,available_days,start_time,end_time,buffer_minutes,status')
+          .eq('shop_id', shopId)
+          .neq('status', 'inactive')
+          .ilike('name', `%${serviceQuery}%`)
+          .limit(1)
+          .maybeSingle()
+      : { data: null }
+
+    const dayKey = parseBookingDateDayKey(args.date)
+    const serviceDays = (service as any)?.available_days as string[] | null | undefined
+    const serviceName = (service as any)?.name || serviceQuery
+
+    if (service && dayKey && serviceDays?.length && !serviceDays.includes(dayKey)) {
       return {
-        resultForAi: `เวลาว่างวันที่ ${args.date}: ${free.join(', ')}`,
-        immediateMessages: [{ type: 'text', content: `📅 ช่วงเวลาว่างวันที่ ${args.date}:\n\n${free.map((s) => `• ${s} น.`).join('\n')}\n\nต้องการจองเวลาไหนคะ?` }],
+        resultForAi: `${serviceName} ไม่ได้เปิดให้บริการวันที่ ${args.date}`,
+        immediateMessages: [{ type: 'text', content: `${serviceName} ไม่ได้เปิดให้บริการวันที่ ${args.date} ค่ะ รบกวนเลือกวันอื่นนะคะ` }],
       }
     }
-    return { resultForAi: `ไม่มีเวลาว่างวันที่ ${args.date}`, immediateMessages: [{ type: 'text', content: `❌ ไม่มีเวลาว่างวันที่ ${args.date} ค่ะ กรุณาเลือกวันอื่นนะคะ` }] }
-  }
 
+    let bookingQuery = supabase
+      .from('bookings')
+      .select('booking_time')
+      .eq('shop_id', shopId)
+      .eq('booking_date', args.date)
+      .neq('status', 'cancelled')
+
+    if (serviceName) bookingQuery = bookingQuery.ilike('service_name', `%${serviceName}%`)
+
+    const { data: booked } = await bookingQuery
+    const bookedTimes = booked?.map((b: any) => String(b.booking_time || '').slice(0, 5)) ?? []
+    const allSlots = service
+      ? buildAvailabilitySlots((service as any).start_time, (service as any).end_time, (service as any).duration_minutes, (service as any).buffer_minutes)
+      : ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
+    const free = allSlots.filter((slot) => !bookedTimes.includes(slot))
+
+    if (free.length > 0) {
+      const serviceLine = serviceName ? `สำหรับ ${serviceName}${(service as any)?.staff_name ? ` โดย ${(service as any).staff_name}` : ''}` : ''
+      return {
+        resultForAi: `เวลาว่างวันที่ ${args.date}${serviceLine ? ` ${serviceLine}` : ''}: ${free.join(', ')}`,
+        immediateMessages: [{ type: 'text', content: `ช่วงเวลาว่างวันที่ ${args.date}${serviceLine ? ` ${serviceLine}` : ''}:\n\n${free.map((slot) => `- ${slot} น.`).join('\n')}\n\nต้องการจองเวลาไหนคะ?` }],
+      }
+    }
+
+    return {
+      resultForAi: `ไม่มีเวลาว่างวันที่ ${args.date}`,
+      immediateMessages: [{ type: 'text', content: `ไม่มีเวลาว่างวันที่ ${args.date} ค่ะ กรุณาเลือกวันอื่นนะคะ` }],
+    }
+  }
   if (toolName === 'book_appointment') {
     const serviceName = args.service || args.service_name
     const bookingNo = `BK-${Date.now().toString().slice(-6)}`
     await supabase.from('bookings').insert({
       shop_id: shopId, booking_no: bookingNo,
-      customer_name: args.customer_name || `LINE-${userId.substring(0, 6)}`,
+      customer_name: args.customer_name || args.name || `LINE-${userId.substring(0, 6)}`,
       phone: args.phone, service_name: serviceName,
       booking_date: args.date, booking_time: args.time,
       status: 'confirmed', note: args.note,
