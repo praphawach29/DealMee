@@ -3,7 +3,7 @@
 
 > อัปเดตล่าสุด: 28 กรกฎาคม 2026
 > GitHub: praphawach29/ai-agent-google-SDK branch main
-> Last Commit: 9ec54ea - chore: organize scattered SQL files into supabase/migrations + tools
+> Last Commit: 95fdf51 - feat(ai-agent): add Planning Layer multi-step tool loop (3/5 of AI agent upgrade)
 >
 > เอกสารนี้คือแหล่งข้อมูลสถานะปัจจุบันของโปรเจกต์ฉบับเดียว (single source of truth)
 > สำหรับแผนพัฒนาในอนาคตดูที่ [ROADMAP.md](./ROADMAP.md)
@@ -258,6 +258,19 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 
 `ROADMAP_AI_AGENT.md` ได้รับการปรับปรุงใหญ่ (28 กรกฎาคม 2026): เพิ่มบทเรียนจากการตรวจสอบ 3 โปรเจคเดิมของผู้ใช้ (`aisalesassistant-main`, `botify-v5-hybrid`, `chatbot-agent-V6` — ความพยายามสร้างสินค้าเดียวกันครั้งก่อนหน้าที่ถูกทิ้งไป) และวางแผนละเอียดครบทั้ง 5 หัวข้อ (Model Router, Planning Layer, Customer Memory Graph, Sales Workflow Engine, Evaluation Framework) พร้อม "กฎเหล็ก 5 ข้อ" ป้องกันไม่ให้เดินซ้ำรอยปัญหาเดิม (แยก service เกินจำเป็น, ลืม multi-tenancy, logic ซ้ำต่อช่องทาง, script patch แบบ regex, schema drift) — เอกสารนี้เขียนให้ AI เซสชันไหน/ค่ายไหนก็หยิบไปทำต่อได้โดยไม่ต้องมีบริบทเดิม
 
+## Completed Features [AI Agent Upgrade — 3/5: Planning Layer (แกนหลัก)]
+
+🟡 **แกนหลักเสร็จแล้ว, เหลือ async ack/push + verification จริง** — รายละเอียดเต็มดูที่ [ROADMAP_AI_AGENT.md](./ROADMAP_AI_AGENT.md) หัวข้อ 6
+
+- [x] `src/lib/ai/toolDispatcher.ts` (ใหม่): แยก 17 กิ่ง tool-dispatch ออกจาก webhook route มาเป็นโมดูล channel-agnostic (`executeTool()`, `ToolExecutor` type ที่ swap ได้)
+- [x] `PlanningTurn` discriminated union + `processSalesAgentChat` ตอนนี้เป็น bounded loop สูงสุด 3 step ต่อข้อความลูกค้า 1 ครั้ง (เรียก AI ต่อเนื่องได้หลาย tool ก่อนตอบจริง แทนที่จะ dispatch ได้แค่ 1 tool ต่อข้อความ)
+- [x] ทั้ง 3 provider (Gemini/Claude/OpenAI) รองรับ multi-turn tool result ตาม wire format ของตัวเอง (Gemini ต้องใช้ `functionResponse.id` ตรงกับ `functionCall.id` — requirement ใหม่ของ Gemini 3.6 ยังไม่เคย verify กับ live API)
+- [x] Chat Playground แก้เป็น `previewToolExecutor` (pluggable) — read-only lookup รันจริง, tool ที่มี side effect จริงยังคง preview-only ไม่ execute จริงเหมือนเดิม
+- [x] Usage accounting รวม token จากทุก step ก่อน increment ครั้งเดียว; hit step limit แล้ว flip `conversations.status='human'` จริง
+- [x] `npx tsc --noEmit` + `npm run build` ผ่านสะอาด
+- [ ] **ยังไม่ได้ทำ**: async ack+push (reply ทันทีด้วยข้อความสั้นๆ แล้ว push คำตอบจริงทีหลังสำหรับ HIGH complexity/VIP) — ตอนนี้ยังตอบแบบ sync รอ loop จบทั้งหมดทุกกรณี
+- [ ] **ยังไม่ได้ verify**: ทดสอบ Chat Playground จริง (คำถามที่ต้องเรียก 2 tool ต่อกัน) และทดสอบผ่าน LINE จริง — โดยเฉพาะ Gemini `functionResponse.id`
+
 ## Completed Features [AI Agent Upgrade — 2/5: Model Router]
 
 - [x] แก้ dead code: GPT-5.6 Luna เป็น fallback จริงเมื่อ Claude ไม่มี key (เดิมไม่เคยถูกเรียกใช้เลย)
@@ -404,6 +417,7 @@ NEXT_PUBLIC_APP_URL=               # [Phase 2] Stripe Checkout success/cancel + 
 
 ## Git History
 
+95fdf51  feat(ai-agent): add Planning Layer multi-step tool loop (3/5 of AI agent upgrade)
 9ec54ea  chore: organize scattered SQL files into supabase/migrations + tools
 75c8d91  feat(ai-agent): upgrade Model Router (2/5 of AI agent upgrade)
 c99e20b  feat(billing): implement Claude prompt caching + admin Margin Dashboard

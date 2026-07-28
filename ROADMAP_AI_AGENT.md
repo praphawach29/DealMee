@@ -2,7 +2,7 @@
 
 > ร่างเมื่อ: 28 กรกฎาคม 2026 | ปรับปรุงใหญ่: 28 กรกฎาคม 2026 (เพิ่มบทเรียนจาก 3 โปรเจคเดิม + วางแผนละเอียดครบ 5 หัวข้อ)
 > สถานะเอกสาร: **แผนละเอียดครบทั้ง 5 หัวข้อแล้ว — พร้อมให้ AI เซสชันไหนก็ได้หยิบไปทำต่อได้ทันที โดยไม่ต้องมีบริบทจากการสนทนาเดิม**
-> ความคืบหน้า: **2/5 เสร็จแล้ว** (Customer Memory Graph, Model Router) — เหลือ Planning Layer, Sales Workflow Engine, Evaluation Framework
+> ความคืบหน้า: **2.5/5** (Customer Memory Graph, Model Router เสร็จแล้ว; Planning Layer เสร็จส่วนแกนหลัก 28 กรกฎาคม 2026 — เหลือ async ack/push + verification จริง) — เหลือ Sales Workflow Engine, Evaluation Framework
 >
 > **เอกสารนี้คือ single source of truth สำหรับสถาปัตยกรรม AI Agent ของ Botify SaaS**
 > ถ้าเป็น AI ที่เพิ่งเข้ามาทำงานนี้ครั้งแรก อ่านเอกสารนี้ทั้งหมดก่อนเริ่มโค้ดใดๆ แล้วอ่าน `PROJECT_STATUS.md` (สถานะปัจจุบันของทั้งโปรเจค) กับ `ROADMAP.md` (แผนธุรกิจ/ฟีเจอร์ที่ไม่ใช่ AI-core) ประกอบ
@@ -91,8 +91,8 @@
 ```
 1. Customer Memory Graph   ✅ เสร็จแล้ว (28 กรกฎาคม 2026)
 2. Model Router ปรับปรุง   ✅ เสร็จแล้ว (28 กรกฎาคม 2026)
-3. Planning Layer          ← ทำต่อได้เลย (หัวข้อถัดไป, งานใหญ่สุด ต้องทำก่อน Workflow Engine)
-4. Sales Workflow Engine   ← ต้องมี Planning Layer ก่อน
+3. Planning Layer          🟡 แกนหลักเสร็จแล้ว (28 กรกฎาคม 2026) — เหลือ async ack/push + verification จริง
+4. Sales Workflow Engine   ← เริ่มได้ (แกนหลักของ Planning Layer พร้อมแล้ว)
 5. Evaluation Framework    ← ทำบางส่วนได้ทันที (conversion rate พื้นฐาน) ส่วนที่เหลือรอ Workflow Engine
 ```
 
@@ -154,7 +154,23 @@
 
 ---
 
-## 6. Planning Layer — แผนละเอียด (งานใหญ่ที่สุด ยังไม่เริ่ม 0%)
+## 6. Planning Layer — แผนละเอียด
+
+### สถานะ: 🟡 แกนหลักเสร็จแล้ว (28 กรกฎาคม 2026) — เหลือ async ack/push + verification จริง
+
+**สิ่งที่ทำเสร็จจริง (Phase A + B ตามแผนเดิม):**
+- **Phase A** — สร้าง `src/lib/ai/toolDispatcher.ts` (channel-agnostic, ไม่รู้จัก LINE เลย): `ToolExecutionContext`, `CustomerMessage`, `ToolExecutionResult` (`{resultForAi, immediateMessages[], scheduledMessage?}` — เป็น array ไม่ใช่ optional เดี่ยวเหมือนร่างเดิม เพราะบาง tool เช่น `send_payment_qr` ต้องส่งทั้งรูปและ caption 2 ข้อความ), `ToolExecutor` type, `executeTool()` ย้าย logic ทั้ง 17 กิ่งจาก webhook route มาไว้ที่นี่ (รวม `generateAndUploadQR` ด้วย) — webhook route แก้ให้เรียก `executeTool()` แทน ยืนยันด้วย `npx tsc --noEmit` + `npm run build` ผ่านก่อนเริ่ม Phase B (ตามที่แผนกำหนดให้ checkpoint ตรงนี้)
+- **Phase B** — เพิ่ม `PlanningTurn` type (discriminated union `user`/`assistant`/`tool_result`) ใน `salesAgentEngine.ts`, เขียน `buildGeminiContents`/`buildClaudeMessages`/`buildOpenAiMessages` แปลง `PlanningTurn[]` เป็น wire format ของแต่ละ provider (Gemini ต้องการ `functionResponse.id` ตรงกับ `functionCall.id` ของ model เป๊ะ — เป็น requirement ใหม่ของ Gemini 3.6 ที่ verify ผ่าน WebSearch, **ยังไม่ได้ทดสอบจริงกับ live API** ดูหัวข้อ "ยังไม่ได้ทำ" ด้านล่าง), เพิ่ม loop ใน `processSalesAgentChat` (`MAX_PLANNING_STEPS = 3`, เหมือนแผนเดิมทุกอย่าง) พร้อม pluggable `toolExecutor?: ToolExecutor` (ไม่มีในร่างเดิม — เพิ่มเพราะ Chat Playground ต้องพรีวิว tool call ไม่ใช่ execute จริง ดูด้านล่าง)
+- **Chat Playground** (`src/app/dashboard/settings/actions.ts`) แก้ให้ inject `previewToolExecutor` (adapt จาก `previewToolCall` เดิม) แทนการ execute จริง — read-only lookups (search_products/check_stock/get_active_promotions) รันจริงกับ DB, update_customer_note/add_customer_tag รันจริง (safe append), ที่เหลือ preview-only (บอก AI ว่า "สำเร็จ" เพื่อให้วางแผนต่อได้ แต่ไม่มี side effect จริง)
+- Usage accounting: sum `promptTokens`/`completionTokens`/`totalTokens`/`cacheReadTokens`/`cacheWriteTokens` จากทุก step ก่อน return ครั้งเดียว (ตามแผน)
+- Step-limit exhaustion: flip `conversations.status = 'human'` จริง ไม่ใช่แค่บอกลูกค้าเฉยๆ
+- ยืนยันด้วย `npx tsc --noEmit` + `npm run build` ผ่านสะอาดทั้งคู่
+
+**ไฟล์ที่แก้/เพิ่ม:** `src/lib/ai/toolDispatcher.ts` (ใหม่), `src/lib/ai/salesAgentEngine.ts` (types + 3 provider functions + loop), `src/app/api/webhook/[shop_id]/route.ts` (บริโภค `immediateMessages`/`toolCallsExecuted`/`scheduledMessages` แทนการ dispatch tool เอง), `src/app/dashboard/settings/actions.ts` (`previewToolExecutor`)
+
+**ยังไม่ได้ทำ (ต่างจากแผนเดิม ต้องทำต่อ):**
+1. **Async ack/push ในขั้นตอนที่ 3 ของแผนเดิมยังไม่ได้เขียน** — ตอนนี้ webhook route ยังตอบแบบ sync เหมือนเดิมทุกกรณี (รอ loop จบทั้งหมดก่อนถึงจะ reply) ยังไม่มีการส่ง ack message ทันทีแล้ว push คำตอบจริงทีหลังสำหรับเคส HIGH complexity/VIP ตามที่แผนกำหนด — ความเสี่ยง: ถ้า loop ใช้ 2-3 step จริง (เรียก AI provider 2-3 ครั้ง) ผู้ใช้ LINE อาจรอนานกว่าปกติก่อนได้ reply เพราะยังไม่มี ack กันไว้
+2. **ยังไม่ได้ verify กับ Chat Playground จริง** (คำถามที่ต้องเรียก 2 tool ต่อกัน) และ**ยังไม่ได้ทดสอบผ่าน LINE จริง** — โดยเฉพาะ Gemini `functionResponse.id` ที่เป็น requirement ใหม่ ยังไม่เคย verify กับ live API เลย มีแค่ typecheck/build ผ่านเท่านั้น
 
 ### เป้าหมาย
 เปลี่ยนจาก "เรียก AI 1 ครั้ง ได้ tool call เดียวจบ" เป็น "AI วางแผนและเรียก tool ต่อเนื่องกันได้หลายขั้นตอนในข้อความเดียว" (เช่น ลูกค้าถาม "มีเสื้อยืดไซส์ L ไหม ถ้ามีเอา 2 ตัวเลย" → step 1: `search_products`/`check_stock` → step 2 (เห็นว่ามีของ): `take_order`)
