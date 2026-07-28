@@ -255,6 +255,10 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 - [x] `/admin/margin` (Margin Dashboard ใหม่): สรุปรายได้เทียบต้นทุน AI ประมาณการ ทั้งแบบรวมต่อแพ็กเกจและรายร้านค้า (เรียงจากขาดทุนมากสุด) — **หมายเหตุ: ไม่มีข้อมูลย้อนหลังก่อนวันที่ฟีเจอร์นี้ขึ้น และเป็นตัวเลขประมาณการ ไม่ใช่ invoice จริง**
 - [ ] **ยังไม่ได้แก้**: `classifyMessageComplexity()` ไม่เคยส่ง `targetProvider: 'openai'` เลย — GPT-5.6 ตั้งค่าไว้แต่ไม่ถูกเรียกใช้จริงในโค้ดปัจจุบัน (พบระหว่างการวิเคราะห์นี้ ยังไม่ได้แก้ตามที่แจ้งผู้ใช้ไว้)
 
+## AI Agent Architecture Upgrade — Master Plan
+
+`ROADMAP_AI_AGENT.md` ได้รับการปรับปรุงใหญ่ (28 กรกฎาคม 2026): เพิ่มบทเรียนจากการตรวจสอบ 3 โปรเจคเดิมของผู้ใช้ (`aisalesassistant-main`, `botify-v5-hybrid`, `chatbot-agent-V6` — ความพยายามสร้างสินค้าเดียวกันครั้งก่อนหน้าที่ถูกทิ้งไป) และวางแผนละเอียดครบทั้ง 5 หัวข้อ (Model Router, Planning Layer, Customer Memory Graph, Sales Workflow Engine, Evaluation Framework) พร้อม "กฎเหล็ก 5 ข้อ" ป้องกันไม่ให้เดินซ้ำรอยปัญหาเดิม (แยก service เกินจำเป็น, ลืม multi-tenancy, logic ซ้ำต่อช่องทาง, script patch แบบ regex, schema drift) — เอกสารนี้เขียนให้ AI เซสชันไหน/ค่ายไหนก็หยิบไปทำต่อได้โดยไม่ต้องมีบริบทเดิม
+
 ## Completed Features [AI Agent Upgrade — 1/5: Customer Memory Graph]
 
 แผนรวม 5 หัวข้อดูที่ [ROADMAP_AI_AGENT.md](./ROADMAP_AI_AGENT.md) — หัวข้อที่ 1 เสร็จแล้ว:
