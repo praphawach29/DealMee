@@ -572,10 +572,25 @@ export async function executeTool(
   }
 
   if (toolName === 'check_order_status') {
-    const oid = args.order_id
-    const { data: ord } = await supabase.from('orders').select('order_no,status,payment_status,tracking_no,product_name,total_amount').eq('shop_id', shopId).or(`id.eq.${oid},order_no.ilike.%${oid}%`).single()
+    const oid = String(args.order_id || '').trim()
+    if (!oid) {
+      return { resultForAi: 'ยังไม่มีเลขที่ออเดอร์ ให้ขอจากลูกค้าก่อน', immediateMessages: [] }
+    }
+    // Scoped to this conversation as well as the shop. Filtering on shop_id
+    // alone let anyone who guessed an order number read another customer's
+    // name, phone, total and tracking number — the same ownership gap that
+    // was open on bookings. get_customer_history below already did this.
+    const { data: ord } = await supabase
+      .from('orders')
+      .select('order_no,status,payment_status,tracking_no,product_name,total_amount')
+      .eq('shop_id', shopId)
+      .eq('conversation_id', conversationId)
+      .or(`order_no.ilike.%${oid}%${UUID_RE.test(oid) ? `,id.eq.${oid}` : ''}`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
     if (!ord) {
-      return { resultForAi: 'ไม่พบข้อมูลออเดอร์ ให้ขอเลขที่ออเดอร์จากลูกค้าอีกครั้ง', immediateMessages: [] }
+      return { resultForAi: `ไม่พบออเดอร์ ${oid} ในบทสนทนานี้ ให้ขอเลขที่ออเดอร์อีกครั้ง หรือถ้าลูกค้ายืนยันว่าสั่งไว้จริง ให้เรียก request_human_agent ให้แอดมินตรวจสอบ`, immediateMessages: [] }
     }
     const sMap: Record<string, string> = { pending: 'รอดำเนินการ', confirmed: 'ยืนยันแล้ว', processing: 'กำลังดำเนินการ', shipped: 'จัดส่งแล้ว', delivered: 'ส่งถึงแล้ว', cancelled: 'ยกเลิก' }
     const pMap: Record<string, string> = { pending: 'รอชำระ', paid: 'ชำระแล้ว', failed: 'ล้มเหลว' }
