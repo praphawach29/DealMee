@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { testPlaygroundChat, getPlaygroundQuotaStatus } from '../settings/actions'
+import { testPlaygroundChat, getPlaygroundQuotaStatus, getPlaygroundGreeting } from '../settings/actions'
 
 interface ChatMessage {
   id: string
@@ -50,6 +50,9 @@ export default function ChatPlaygroundModal({
     getPlaygroundQuotaStatus().then((status) => {
       if (status) setQuotaStatus(status)
     })
+    getPlaygroundGreeting().then((result) => {
+      setMessages((prev) => prev.map((msg) => msg.id === 'welcome' ? { ...msg, text: result.greeting } : msg))
+    })
   }, [isOpen])
 
   if (!isOpen) return null
@@ -95,12 +98,11 @@ export default function ChatPlaygroundModal({
   }
 
   const quickPresets = [
-    '🛍️ มีสินค้าอะไรพร้อมส่งบ้าง',
-    '💰 มีโปรโมชั่นหรือส่วนลดไหม',
-    '💳 ขอช่องทางชำระเงินหน่อย',
-    '🚚 คิดค่าจัดส่งเท่าไหร่',
+    'จองโต๊ะ 4 คนพรุ่งนี้ 18:00 ได้ไหม',
+    'วันนี้มีโต๊ะว่างช่วงเย็นไหม',
+    'ขอดูเวลาที่จองได้หน่อย',
+    'ยกเลิกการจองต้องทำยังไง',
   ]
-
   const usagePct =
     quotaStatus && !quotaStatus.isUnlimited && quotaStatus.messageLimit > 0
       ? Math.min(100, Math.round((quotaStatus.messagesUsed / quotaStatus.messageLimit) * 100))

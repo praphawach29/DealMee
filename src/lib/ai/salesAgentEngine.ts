@@ -995,6 +995,46 @@ async function preparePlanningState({
     }
   }
 
+  // 3. Booking Templates
+  let bookingContext = ''
+  if (features.booking_system !== false) {
+    const { data: bookingTemplates } = await db
+      .from('services')
+      .select('name, booking_type, resource_label, staff_name, duration_minutes, available_days, start_time, end_time, capacity_per_slot, required_fields, deposit_amount, description')
+      .eq('shop_id', shop.id)
+      .neq('status', 'inactive')
+      .order('created_at', { ascending: false })
+      .limit(12)
+
+    if (bookingTemplates && bookingTemplates.length > 0) {
+      const typeLabel: Record<string, string> = {
+        table: 'ร้านอาหาร/จองโต๊ะ',
+        service: 'บริการ/นัดหมาย',
+        queue: 'จองคิว',
+        class: 'คลาส/กิจกรรม',
+        consultation: 'นัดปรึกษา',
+      }
+      const primaryType = bookingTemplates.find((item: any) => item.booking_type === 'table')?.booking_type || bookingTemplates[0].booking_type || 'service'
+      bookingContext =
+        `
+
+[แม่แบบการจองของร้าน]
+บริบทหลักของร้านจากระบบจอง: ${typeLabel[primaryType] || primaryType}
+` +
+        bookingTemplates.map((item: any) => {
+          const resource = item.resource_label || item.staff_name || '-'
+          const fields = Array.isArray(item.required_fields) ? item.required_fields.join(', ') : '-'
+          return `- ${item.name} (${typeLabel[item.booking_type] || item.booking_type || 'บริการ'}): ทรัพยากร ${resource}, ระยะเวลา ${item.duration_minutes || 60} นาที, ความจุต่อรอบ ${item.capacity_per_slot || 1}, เวลา ${String(item.start_time || '').slice(0, 5)}-${String(item.end_time || '').slice(0, 5)}, ข้อมูลที่ต้องถาม: ${fields}${Number(item.deposit_amount || 0) > 0 ? `, มัดจำ ${Number(item.deposit_amount).toLocaleString()} บาท` : ''}`
+        }).join('\n') +
+        `
+
+[แนวทางการตอบตามระบบจอง]
+- ถ้าบริบทหลักเป็นร้านอาหาร/จองโต๊ะ ให้ทักทายแบบร้านอาหาร เช่น สอบถามการจองโต๊ะ จำนวนท่าน วันที่ และเวลา ไม่ควรเริ่มด้วยการขายสินค้า
+- ถ้าลูกค้าทักทายเฉยๆ ให้ตอบโดยอิงบริการจองหลักของร้าน และเสนอช่วยจอง/เช็กเวลาว่าง
+- ถ้าลูกค้าต้องการจอง ให้ถามเฉพาะข้อมูลที่ยังขาดตาม required_fields ของแม่แบบนั้น แล้วใช้ check_available_slots ก่อน book_appointment
+- สำหรับจองโต๊ะ ให้เก็บจำนวนคนใน guest_count และบอกจำนวนท่านในการสรุปการจอง`
+    }
+  }
   // 3. Chat History
   let historyContext = ''
   // Prior customer messages only (not bot replies), most recent last — fed
@@ -1070,7 +1110,7 @@ async function preparePlanningState({
 - ถ้ายังขาดวิธีชำระเงิน ให้เสนอทางเลือกจากข้อมูลร้าน เช่น พร้อมเพย์/โอนธนาคาร/เก็บปลายทาง แล้วถามให้ลูกค้าเลือก ก่อนเรียก take_order
 - ห้ามสรุปว่ารับออเดอร์แล้วถ้ายังไม่ได้เรียก take_order หรือข้อมูลลูกค้ายังไม่ครบ ให้ถามเฉพาะข้อมูลที่ขาดแทน
 - ถ้าไม่มีข้อมูล ให้แจ้งลูกค้าให้รอแอดมินหรือเรียก request_human_agent
-${knowledgeContext}${productsContext}
+${knowledgeContext}${productsContext}${bookingContext}
 ${paymentInfo}`
 
   const dynamicSystemPrompt = `${customerProfileContext}

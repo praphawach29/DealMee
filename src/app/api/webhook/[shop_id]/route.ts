@@ -16,6 +16,38 @@ function verifyLineSignature(rawBody: string, signature: string, secret: string)
   return hash === signature
 }
 
+
+function isDefaultGreeting(value?: string | null) {
+  const text = (value || '').trim()
+  return !text || text === 'สวัสดีค่ะ มีอะไรให้ช่วยไหมคะ?' || text.includes('มีอะไรให้ช่วยไหม')
+}
+
+async function buildFollowGreeting(shop: any) {
+  if (!isDefaultGreeting(shop.greeting_message)) return shop.greeting_message
+
+  const { data: templates } = await supabase
+    .from('services')
+    .select('name, booking_type')
+    .eq('shop_id', shop.id)
+    .neq('status', 'inactive')
+    .order('created_at', { ascending: false })
+    .limit(8)
+
+  const botName = shop.bot_name || 'น้อง Botify'
+  const shopName = shop.name || 'ร้านของเรา'
+  const tableTemplate = templates?.find((item: any) => item.booking_type === 'table')
+
+  if (tableTemplate) {
+    return `สวัสดีค่ะ ${botName} จากร้าน ${shopName} ยินดีให้บริการค่ะ ต้องการจองโต๊ะ สอบถามเวลา หรือแจ้งจำนวนท่านได้เลยนะคะ`
+  }
+
+  if (templates && templates.length > 0) {
+    const serviceNames = templates.slice(0, 3).map((item: any) => item.name).join(', ')
+    return `สวัสดีค่ะ ${botName} จากร้าน ${shopName} ยินดีให้บริการค่ะ สามารถสอบถามรายละเอียดหรือจองคิว ${serviceNames} ได้เลยนะคะ`
+  }
+
+  return `สวัสดีค่ะ ${botName} จากร้าน ${shopName} ยินดีให้บริการค่ะ มีอะไรให้ช่วยไหมคะ?`
+}
 export async function GET() {
   return new NextResponse('LINE Webhook Endpoint Active', { status: 200 })
 }
@@ -69,7 +101,7 @@ export async function POST(
 
       // Handle Follow Event (Add Friend)
       if (event.type === 'follow') {
-        const greeting = shop.greeting_message || 'สวัสดีค่ะ มีอะไรให้ช่วยไหมคะ?'
+        const greeting = await buildFollowGreeting(shop)
         if (replyToken && lineToken) {
           await sendLineReply(replyToken, greeting, lineToken)
         }
