@@ -87,6 +87,27 @@ function formatIsoDate(date: Date) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`
 }
 
+/** Current wall-clock time in the shop's timezone as "HH:MM". Vercel runs in UTC, so this must never be derived from the server's local clock. */
+function bangkokNowTime() {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Bangkok',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date())
+}
+
+/**
+ * Slots earlier than right now can't be booked, but only matters when the
+ * requested date is today — "11:00 tomorrow" is fine at 18:00 today. Compares
+ * "HH:MM" strings, which sort correctly because they're zero-padded.
+ */
+function dropPastSlots(slots: string[], bookingDate: string) {
+  if (bookingDate !== formatIsoDate(bangkokToday())) return slots
+  const now = bangkokNowTime()
+  return slots.filter((slot) => slot > now)
+}
+
 export function normalizeBookingDate(dateValue: unknown) {
   const text = String(dateValue || '').trim().toLowerCase()
   if (!text) return ''
@@ -578,7 +599,18 @@ export async function executeTool(
     const slotInterval = service
       ? getSlotIntervalMinutes((service as any).duration_minutes, (service as any).buffer_minutes)
       : 60
-    const free = allSlots.filter((slot) => (bookedCounts.get(slot) || 0) < capacityPerSlot)
+    const notFull = allSlots.filter((slot) => (bookedCounts.get(slot) || 0) < capacityPerSlot)
+    const free = dropPastSlots(notFull, bookingDate)
+
+    if (free.length === 0 && notFull.length > 0) {
+      // Every remaining slot today has already started — say so plainly
+      // instead of falling through to the generic "fully booked" message,
+      // which would wrongly imply the shop is out of capacity.
+      return {
+        resultForAi: `รอบของวันที่ ${bookingDate} ผ่านเวลาไปหมดแล้ว (ตอนนี้ ${bangkokNowTime()} น.) ต้องให้ลูกค้าเลือกวันถัดไป ห้ามเสนอรอบที่ผ่านมาแล้ว`,
+        immediateMessages: [{ type: 'text', content: `รอบของวันนี้ผ่านเวลาไปหมดแล้วค่ะ 🙏 รบกวนเลือกวันถัดไปนะคะ` }],
+      }
+    }
 
     if (free.length > 0) {
       const serviceLine = serviceName ? `สำหรับ ${serviceName}${((service as any)?.resource_label || (service as any)?.staff_name) ? ` (${(service as any).resource_label || (service as any).staff_name})` : ''}` : ''
@@ -616,6 +648,17 @@ ${free.map((slot) => `- ${slot} น.`).join('\n')}
       return {
         resultForAi: `${serviceRecord.name || serviceName} ไม่ได้เปิดให้จองวันที่ ${bookingDate}`,
         immediateMessages: [{ type: 'text', content: `${serviceRecord.name || serviceName} ไม่ได้เปิดให้จองวันที่ ${bookingDate} ค่ะ รบกวนเลือกวันอื่นนะคะ` }],
+      }
+    }
+
+    // Last line of defence against writing a booking into a time that has
+    // already passed — the slot list the AI saw may be minutes stale by the
+    // time it gets around to booking, and a past booking silently rots in the
+    // shop's calendar with nobody showing up.
+    if (bookingDate < formatIsoDate(bangkokToday()) || dropPastSlots([bookingTime], bookingDate).length === 0) {
+      return {
+        resultForAi: `เวลา ${bookingDate} ${bookingTime} ผ่านไปแล้ว (ตอนนี้ ${bangkokNowTime()} น.) จองไม่ได้ ต้องให้ลูกค้าเลือกวัน/เวลาข้างหน้า`,
+        immediateMessages: [{ type: 'text', content: `รอบ ${bookingTime} น. ของวันที่ ${bookingDate} ผ่านเวลาไปแล้วค่ะ 🙏 รบกวนเลือกวันหรือเวลาถัดไปนะคะ` }],
       }
     }
 

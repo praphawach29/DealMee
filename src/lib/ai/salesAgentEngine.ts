@@ -1121,6 +1121,32 @@ async function preparePlanningState({
   const customerProfileContext = formatCustomerProfileContext(customerProfileSummary)
   const isVipCustomer = isVipProfile(customerProfileSummary)
 
+  // 5b. This customer's real bookings. Without this the model has no way to
+  // tell a booking it actually saved from one it merely described, and it
+  // has been observed announcing "จองเรียบร้อยแล้ว" for a booking that was
+  // never written. Stating the truth up front makes that claim contradict
+  // its own context instead of being unconstrained.
+  let bookingStateContext = ''
+  if (features.booking_system !== false) {
+    const { data: myBookings } = await db
+      .from('bookings')
+      .select('booking_no, service_name, booking_date, booking_time, guest_count, customer_name, phone, status')
+      .eq('shop_id', shop.id)
+      .neq('status', 'cancelled')
+      .contains('metadata', { line_user_id: userId })
+      .order('created_at', { ascending: false })
+      .limit(5)
+
+    bookingStateContext = myBookings?.length
+      ? `\n\n[การจองที่บันทึกจริงแล้วของลูกค้ารายนี้]\n` +
+        myBookings.map((b: any) =>
+          `- ${b.booking_no}: ${b.service_name || '-'} ${b.booking_date} ${String(b.booking_time || '').slice(0, 5)} น.` +
+          `${b.guest_count ? ` ${b.guest_count} ท่าน` : ''} (${b.customer_name || '-'} ${b.phone || '-'}) สถานะ ${b.status}`
+        ).join('\n') +
+        `\n(ใช้เลขที่จองจากรายการนี้เท่านั้น ห้ามแต่งเลขใหม่)`
+      : `\n\n[การจองที่บันทึกจริงแล้วของลูกค้ารายนี้]\nยังไม่มีการจองที่บันทึกจริงเลย — ถ้ายังไม่ได้เรียก book_appointment สำเร็จในเทิร์นนี้ ห้ามบอกลูกค้าว่าจองเรียบร้อยแล้วเด็ดขาด และไม่มีรายการให้ยกเลิก/เลื่อน`
+  }
+
   // 5. System Instruction — split into a static block (stable per shop:
   // identity, knowledge base, products, payment info) and a dynamic block
   // (customer profile, chat history — changes per customer/message). This
@@ -1156,7 +1182,14 @@ async function preparePlanningState({
    - ห้ามพิมพ์สรุปการจองก่อนเรียก book_appointment เด็ดขาด เพราะการจองจะยังไม่ถูกบันทึกจริง
    - ถ้าลูกค้าตอบข้อมูลที่ขาดมาครบในข้อความเดียว (เช่น "แจ็ค 0955851136 โซนริมน้ำ") ให้ถือว่าครบแล้ว เรียก book_appointment เลย ไม่ต้องถามยืนยันซ้ำ
 4. [Confirm] หลัง book_appointment สำเร็จ จึงสรุปจากผลเครื่องมือจริง: เลขที่จอง, บริการ/โซน, วัน, เวลา, จำนวนคน, ชื่อ, เบอร์โทร
+   - ทุกครั้งที่บอกว่าจองสำเร็จ ต้องมี "เลขที่จอง" ที่ได้จากผลเครื่องมือเสมอ ถ้าไม่มีเลขที่จองแปลว่ายังไม่ได้จองจริง ห้ามบอกว่าเรียบร้อยแล้ว
 5. [Change] เลื่อน/ยกเลิก ต้องเรียก reschedule_booking / cancel_booking ให้สำเร็จก่อนจึงบอกลูกค้าว่าเรียบร้อย
+
+[แยกคำถามออกจากคำสั่ง — สำคัญมาก]
+คำถามที่ถามถึง "วิธีการ" ไม่ใช่คำสั่งให้ลงมือ ห้ามเรียกเครื่องมือที่เปลี่ยนแปลงข้อมูลจากคำถามพวกนี้
+- "ยกเลิกการจองต้องทำยังไง", "ยกเลิกได้ไหม", "มีค่าปรับไหม" = ลูกค้าถามขั้นตอน ให้อธิบายวิธีและถามว่าต้องการให้ยกเลิกเลยหรือไม่ ห้ามเรียก cancel_booking
+- "ยกเลิกการจองให้หน่อย", "ไม่ไปแล้วครับ ยกเลิกเลย" = คำสั่งจริง ให้ยืนยันรายการที่จะยกเลิกก่อน แล้วจึงเรียก cancel_booking
+- หลักเดียวกันนี้ใช้กับ reschedule_booking และ take_order ด้วย
 
 [กฎสำคัญ]
 - ตอบภาษาไทยสุภาพ กระชับ ไม่เกิน 10 บรรทัด
@@ -1171,7 +1204,7 @@ ${knowledgeContext}${productsContext}
 ${buildBusinessPromptContext(shop, bookingPromptTemplates)}${bookingContext}
 ${paymentInfo}`
 
-  const dynamicSystemPrompt = `${customerProfileContext}
+  const dynamicSystemPrompt = `${customerProfileContext}${bookingStateContext}
 ${historyContext}`
 
   const systemInstruction = `${staticSystemPrompt}\n${dynamicSystemPrompt}`
