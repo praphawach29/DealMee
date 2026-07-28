@@ -91,8 +91,15 @@ export interface AgentToolCall {
   args: Record<string, any>
 }
 
-/** A tool call plus the provider's own id for it (required to send the matching tool result back on the next planning-loop turn). */
-export type IdentifiedToolCall = AgentToolCall & { id?: string }
+/**
+ * A tool call plus the provider's own id for it (required to send the
+ * matching tool result back on the next planning-loop turn). `thoughtSignature`
+ * is Gemini-only (opaque per-functionCall reasoning-continuity token Gemini
+ * 3.6 attaches — must be echoed back on the same functionCall part on the
+ * next turn or Gemini 400s with "missing a thought_signature"); other
+ * providers just never set it.
+ */
+export type IdentifiedToolCall = AgentToolCall & { id?: string; thoughtSignature?: string }
 
 export interface AgentUsage {
   promptTokens: number
@@ -1252,13 +1259,20 @@ function buildGeminiContents(turns: PlanningTurn[]): any[] {
       const parts: any[] = []
       if (turn.text) parts.push({ text: turn.text })
       if (turn.toolCall) {
-        parts.push({
+        const fcPart: any = {
           functionCall: {
             id: turn.toolCall.id,
             name: turn.toolCall.name,
             args: turn.toolCall.args,
           },
-        })
+        }
+        // Gemini 2.5+ requires thought_signature to be echoed back on the
+        // functionCall part on the follow-up turn, or it 400s. If we stored
+        // it during the previous response parse, attach it here.
+        if (turn.toolCall.thoughtSignature) {
+          fcPart.functionCall.thought_signature = turn.toolCall.thoughtSignature
+        }
+        parts.push(fcPart)
       }
       return { role: 'model', parts }
     }
@@ -1297,7 +1311,14 @@ async function callGeminiApi(
         system_instruction: { parts: [{ text: systemInstruction }] },
         contents: buildGeminiContents(turns),
         tools: toGeminiTools(toolSet),
-        generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1024,
+          // thinkingBudget: 0 disables thinking entirely (fastest, no signatures needed)
+          // thinkingBudget: -1 lets the model decide (requires echoing thought_signature back)
+          // We disable thinking here to avoid the thought_signature requirement.
+          thinkingConfig: { thinkingBudget: 0 },
+        },
       }),
     })
 
@@ -1313,12 +1334,26 @@ async function callGeminiApi(
     let toolCall: IdentifiedToolCall | undefined
 
     for (const part of parts) {
+      if (part.thought) {
+        // Gemini 2.5+ thinking mode: capture thought_signature so we can
+        // echo it back on the functionCall part in the next turn. Without
+        // this, a follow-up call with function results gets:
+        // "400 missing a thought_signature in functionCall parts"
+        // Note: thinkingBudget:0 disables thinking so this block is
+        // currently skipped, but kept as a safety net in case the model
+        // thinks anyway on certain prompts.
+        const sig = part.thought?.thought_signature || part.thoughtSignature
+        if (sig && toolCall) toolCall.thoughtSignature = sig
+        continue
+      }
       if (part.text) replyText += part.text
       if (part.functionCall) {
         toolCall = {
           name: part.functionCall.name as AgentToolName,
           args: part.functionCall.args || {},
           id: part.functionCall.id,
+          // Capture thought_signature if present (Gemini 2.5 thinking mode)
+          thoughtSignature: part.functionCall.thought_signature,
         }
       }
     }
