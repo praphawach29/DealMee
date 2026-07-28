@@ -140,6 +140,16 @@ export interface AgentResult {
 export const MAX_PLANNING_STEPS = 3
 
 /**
+ * Output-token ceiling per provider call. Deliberately generous because
+ * Gemini 3.x bills its internal reasoning against this same budget: at the
+ * previous 1024 a single booking turn could burn most of the budget thinking
+ * and return a reply truncated mid-sentence (observed live). Thai also
+ * tokenizes poorly — a normal confirmation message costs far more tokens
+ * here than the equivalent English one.
+ */
+export const MAX_OUTPUT_TOKENS = 4096
+
+/**
  * Everything a planning step needs, carried across steps so the webhook
  * route can pause after step 0 (to send a LINE ack once it knows the plan
  * needs more than one AI call) and resume the rest in the background — the
@@ -177,6 +187,8 @@ interface ProviderStepResult {
   text: string
   toolCall?: IdentifiedToolCall
   usage?: AgentUsage
+  /** The provider stopped because it hit the output-token ceiling, so `text` is cut off mid-sentence and must not be sent to a customer as-is. */
+  truncated?: boolean
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -956,6 +968,7 @@ const QUOTA_EXCEEDED_RESULT: AgentResult = {
  * before the first AI call, produced once so it's never duplicated between
  * the two call styles.
  */
+
 async function preparePlanningState({
   shop,
   userQuery,
@@ -1056,9 +1069,7 @@ async function preparePlanningState({
 - สำหรับจองโต๊ะ ให้เก็บจำนวนคนใน guest_count และบอกจำนวนท่านในการสรุปการจอง
 - งานจองทั่วไปให้ AI จัดการเองเหมือนถือสมุดจองอยู่: เปิดดูด้วย check_booking, เช็กเวลาว่างด้วย check_available_slots, บันทึกด้วย book_appointment, เลื่อนด้วย reschedule_booking, ยกเลิกด้วย cancel_booking
 - ห้ามใช้ transfer_to_agent หรือบอกว่าจะส่งให้ BookingAgent สำหรับการจอง/เลื่อน/ยกเลิก/เช็กคิวปกติ เว้นแต่ลูกค้าขอคุยกับคนจริง หรือเครื่องมือคืน error ที่แก้เองไม่ได้
-- ถ้าลูกค้าขอจองและข้อมูลครบตาม required_fields แล้ว ให้เรียก check_available_slots ก่อน จากนั้นถ้าว่างและเวลาที่ลูกค้าเลือกอยู่ในรายการว่าง ให้เรียก book_appointment เพื่อบันทึกจริง ห้ามบอกว่าเจ้าหน้าที่จะติดต่อกลับแทน
-- หลัง book_appointment สำเร็จ ให้สรุปการจองให้ครบเสมอ: เลขที่จอง, บริการ/พื้นที่/โต๊ะ, วัน, เวลา, จำนวนคนหรือจำนวนที่นั่ง, ชื่อผู้จอง, เบอร์โทร และหมายเหตุถ้ามี
-- ถ้าลูกค้าขอเลื่อน/ยกเลิก/แก้ไขการจอง ห้ามตอบว่าสำเร็จจนกว่าจะเรียก reschedule_booking หรือ cancel_booking สำเร็จจริง
+- ห้ามบอกว่าเจ้าหน้าที่จะติดต่อกลับแทนการจอง ให้บันทึกเองด้วย book_appointment ตาม [Booking Pipeline]
 - ถ้ายังไม่มีเลขที่การจอง ให้ใช้ชื่อ เบอร์โทร วัน/เวลาเดิม หรือรายการล่าสุดในบทสนทนาเพื่อ check_booking/ดำเนินการต่อ ถ้าพบหลายรายการค่อยถามให้ลูกค้าเลือกเลขที่การจอง
 - ถ้าลูกค้าขอเปลี่ยนเวลา ให้เช็กเวลาว่างใหม่ แล้วเรียก reschedule_booking พร้อมข้อมูลระบุรายการเดิมและ new_date, new_time`
     }
@@ -1138,9 +1149,19 @@ async function preparePlanningState({
 5. [Payment Close] หลังสร้าง/ยืนยันออเดอร์ ให้สรุปข้อมูลปิดการขายครบทุกครั้ง: รายการสินค้า, ยอดสุทธิ, ชื่อผู้รับ, เบอร์โทร, ที่อยู่จัดส่ง, วิธีชำระเงิน และขั้นตอนส่งสลิป
 6. [Post-Sales] ขอบคุณ + แนะนำส่งสลิปกลับมาในแชท
 
+[Booking Pipeline]
+1. [Availability] ลูกค้าถามถึงวัน/เวลา/จำนวนคน ให้เรียก check_available_slots ทันที พร้อมส่ง time ที่ลูกค้าถามไปด้วยถ้ามี
+2. [Collect] เก็บข้อมูลที่ยังขาดตาม required_fields ของแม่แบบนั้น ถามเฉพาะช่องที่ขาด ห้ามถามซ้ำสิ่งที่ลูกค้าตอบไปแล้วในบทสนทนา
+3. [Booking Creation] ทันทีที่มี วันที่ + เวลา (ที่อยู่ในรอบว่างจริง) + จำนวนคน + ชื่อ + เบอร์โทร ครบแล้ว ให้เรียก Tool "book_appointment" ทันทีในเทิร์นนั้นเลย
+   - ห้ามพิมพ์สรุปการจองก่อนเรียก book_appointment เด็ดขาด เพราะการจองจะยังไม่ถูกบันทึกจริง
+   - ถ้าลูกค้าตอบข้อมูลที่ขาดมาครบในข้อความเดียว (เช่น "แจ็ค 0955851136 โซนริมน้ำ") ให้ถือว่าครบแล้ว เรียก book_appointment เลย ไม่ต้องถามยืนยันซ้ำ
+4. [Confirm] หลัง book_appointment สำเร็จ จึงสรุปจากผลเครื่องมือจริง: เลขที่จอง, บริการ/โซน, วัน, เวลา, จำนวนคน, ชื่อ, เบอร์โทร
+5. [Change] เลื่อน/ยกเลิก ต้องเรียก reschedule_booking / cancel_booking ให้สำเร็จก่อนจึงบอกลูกค้าว่าเรียบร้อย
+
 [กฎสำคัญ]
-- ตอบภาษาไทยสุภาพ กระชับ
+- ตอบภาษาไทยสุภาพ กระชับ ไม่เกิน 10 บรรทัด
 - ใช้ Tools ที่จำเป็นให้ถูกต้อง อย่าตอบเดา
+- ห้ามพิมพ์หัวข้อสรุปแล้วปล่อยค่าว่าง เช่น "- **" ถ้ายังไม่มีข้อมูลจริง ให้ถามหรือเรียกเครื่องมือแทน
 - ถ้าลูกค้าให้ชื่อ/เบอร์/ที่อยู่แล้ว ให้สรุปข้อมูลเหล่านั้นกลับให้ครบ อย่าละไว้หรือแทนด้วยหัวข้อว่าง
 - เวลาส่งเลขพร้อมเพย์หรือเลขบัญชี ให้ใช้ plain text เท่านั้น ห้ามใส่ backtick, code format, markdown หรือตัวหนารอบเลขบัญชี
 - ถ้ายังขาดวิธีชำระเงิน ให้เสนอทางเลือกจากข้อมูลร้าน เช่น พร้อมเพย์/โอนธนาคาร/เก็บปลายทาง แล้วถามให้ลูกค้าเลือก ก่อนเรียก take_order
@@ -1234,6 +1255,17 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
   if (response.usage) state.allUsage.push(response.usage)
 
   if (!response.toolCall) {
+    // A truncated reply is a half-written sentence, not an answer — sending
+    // it would show the customer something like "ขอสรุปรายละเอียดดังนี้: - **".
+    // Salvage only whole lines and require enough of them to stand alone;
+    // otherwise apologise rather than deliver a fragment.
+    if (response.truncated) {
+      const salvaged = salvageTruncatedText(response.text)
+      return {
+        done: true,
+        finalText: salvaged || 'ขออภัยค่ะ ระบบตอบข้อความไม่ครบ รบกวนพิมพ์คำถามอีกครั้งนะคะ 🙏',
+      }
+    }
     return { done: true, finalText: response.text }
   }
 
@@ -1262,6 +1294,19 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
   }
 
   return { done: false }
+}
+
+/**
+ * Trims a reply that the provider cut off at its token ceiling back to the
+ * last line that actually finished, so a customer never sees a dangling
+ * fragment. Returns '' when too little survives to be worth sending, letting
+ * the caller apologise instead.
+ */
+function salvageTruncatedText(text: string): string {
+  const lines = text.split('\n')
+  lines.pop() // the line the provider was still writing when it ran out
+  const salvaged = lines.join('\n').trimEnd()
+  return salvaged.length >= 60 ? salvaged : ''
 }
 
 function finalizeAgentResult(state: PlanningState, finalText: string): AgentResult {
@@ -1426,7 +1471,12 @@ async function callGeminiApi(
         tools: toGeminiTools(toolSet),
         generationConfig: {
           temperature: 0.7,
-          maxOutputTokens: 1024,
+          // Gemini 3.x reasons before answering and those thinking tokens are
+          // billed against maxOutputTokens too. At the old 1024 the model
+          // could spend nearly the whole budget thinking and get cut off
+          // mid-sentence (seen live: a booking summary that stopped at "- **"
+          // and never reached its book_appointment call).
+          maxOutputTokens: MAX_OUTPUT_TOKENS,
         },
       }),
     })
@@ -1438,7 +1488,9 @@ async function callGeminiApi(
     }
 
     const data = await response.json()
-    const parts: any[] = data.candidates?.[0]?.content?.parts || []
+    const candidate = data.candidates?.[0]
+    const parts: any[] = candidate?.content?.parts || []
+    const truncated = candidate?.finishReason === 'MAX_TOKENS'
 
     let replyText = ''
     let toolCall: IdentifiedToolCall | undefined
@@ -1488,7 +1540,13 @@ async function callGeminiApi(
         }
       : undefined
 
-    return { text: replyText.trim(), toolCall, usage }
+    if (truncated) {
+      console.warn(
+        `[Gemini] Response hit MAX_TOKENS (thinking ${usageMeta?.thoughtsTokenCount ?? '?'} + output ${usageMeta?.candidatesTokenCount ?? '?'} of ${MAX_OUTPUT_TOKENS}) — reply was cut off mid-sentence.`
+      )
+    }
+
+    return { text: replyText.trim(), toolCall, usage, truncated }
   } catch (err) {
     console.error('[Gemini Exception]:', err)
     return null
@@ -1551,7 +1609,7 @@ async function callClaudeApi(
       },
       body: JSON.stringify({
         model: 'claude-sonnet-5',
-        max_tokens: 1024,
+        max_tokens: MAX_OUTPUT_TOKENS,
         system: [
           { type: 'text', text: staticSystemPrompt, cache_control: { type: 'ephemeral' } },
           { type: 'text', text: dynamicSystemPrompt },
@@ -1597,7 +1655,12 @@ async function callClaudeApi(
         }
       : undefined
 
-    return { text: replyText.trim(), toolCall, usage }
+    const truncated = data.stop_reason === 'max_tokens'
+    if (truncated) {
+      console.warn(`[Claude] Response hit max_tokens (${MAX_OUTPUT_TOKENS}) — reply was cut off mid-sentence.`)
+    }
+
+    return { text: replyText.trim(), toolCall, usage, truncated }
   } catch (err) {
     console.error('[Claude Exception]:', err)
     return null
@@ -1649,7 +1712,7 @@ async function callOpenAiApi(
         messages: buildOpenAiMessages(systemInstruction, turns),
         tools: toOpenAITools(toolSet),
         tool_choice: 'auto',
-        max_tokens: 1024,
+        max_tokens: MAX_OUTPUT_TOKENS,
       }),
     })
 
@@ -1692,7 +1755,12 @@ async function callOpenAiApi(
         }
       : undefined
 
-    return { text: replyText.trim(), toolCall, usage }
+    const truncated = data.choices?.[0]?.finish_reason === 'length'
+    if (truncated) {
+      console.warn(`[OpenAI] Response hit max_tokens (${MAX_OUTPUT_TOKENS}) — reply was cut off mid-sentence.`)
+    }
+
+    return { text: replyText.trim(), toolCall, usage, truncated }
   } catch (err) {
     console.error('[OpenAI Exception]:', err)
     return null
