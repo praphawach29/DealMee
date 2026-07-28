@@ -728,6 +728,10 @@ function hasOrderIntent(text: string): boolean {
   return ORDER_INTENT_KEYWORDS.some((k) => text.includes(k)) || /(?:เอา|รับ|ซื้อ|สั่ง)\s*\d+\s*(?:ตัว|ชิ้น|อัน|คู่|ใบ|ชุด)?/.test(text)
 }
 
+function hasCheckoutDetails(text: string): boolean {
+  return /(ชื่อ|เบอร์|โทร|ที่อยู่|จัดส่ง|ถนน|ซอย|แขวง|ตำบล|เขต|อำเภอ|จังหวัด|กทม|กรุงเทพ|\d{9,10})/.test(text)
+}
+
 /** Complexity score threshold at/above which a message is routed HIGH (high-persuasion model). */
 export const HIGH_COMPLEXITY_THRESHOLD = 3
 
@@ -787,7 +791,10 @@ export function classifyMessageComplexity(
 
   const isBooking = bookingKeywords.some((k) => text.includes(k))
   const isSupport = supportKeywords.some((k) => text.includes(k))
-  const isOrderIntent = hasOrderIntent(text)
+  const recentOrderIntent = (options.recentCustomerMessages || [])
+    .slice(-5)
+    .some((msg) => hasOrderIntent(msg.toLowerCase()))
+  const isOrderIntent = hasOrderIntent(text) || (recentOrderIntent && hasCheckoutDetails(text))
 
   const complexityScore = computeComplexityScore({
     userQuery,
@@ -1047,12 +1054,15 @@ async function preparePlanningState({
 2. [Showcase] แนะนำสินค้า ราคา จุดเด่น ตามรายการสินค้าด้านล่าง
 3. [Closing] เมื่อลูกค้าพูดเชิงซื้อ เช่น "เอาเลย", "รับ 1 ตัว", "ซื้อเลย", "สั่ง" ให้ตรวจสต๊อก/ราคาก่อนถ้ายังไม่แน่ใจ แล้วถามข้อมูลที่ยังขาดให้ครบ: ชื่อ, เบอร์โทร, ที่อยู่จัดส่ง, วิธีชำระเงิน
 4. [Order Creation] เมื่อข้อมูลครบและลูกค้าตกลงซื้อแล้ว ให้เรียก Tool "take_order" ก่อน จากนั้นจึงส่งช่องทางชำระเงินหรือเรียก "send_payment_qr" ตามความเหมาะสม
-5. [Post-Sales] ขอบคุณ + แนะนำส่งสลิปกลับมาในแชท
+5. [Payment Close] หลังสร้าง/ยืนยันออเดอร์ ให้สรุปข้อมูลปิดการขายครบทุกครั้ง: รายการสินค้า, ยอดสุทธิ, ชื่อผู้รับ, เบอร์โทร, ที่อยู่จัดส่ง, วิธีชำระเงิน และขั้นตอนส่งสลิป
+6. [Post-Sales] ขอบคุณ + แนะนำส่งสลิปกลับมาในแชท
 
 [กฎสำคัญ]
 - ตอบภาษาไทยสุภาพ กระชับ
 - ใช้ Tools ที่จำเป็นให้ถูกต้อง อย่าตอบเดา
-- ห้ามสรุปว่ารับออเดอร์แล้วถ้ายังไม่ได้เรียก take_order หรือข้อมูลลูกค้ายังไม่ครบ ให้ถามข้อมูลที่ขาดแทน
+- ถ้าลูกค้าให้ชื่อ/เบอร์/ที่อยู่แล้ว ให้สรุปข้อมูลเหล่านั้นกลับให้ครบ อย่าละไว้หรือแทนด้วยหัวข้อว่าง
+- ถ้ายังขาดวิธีชำระเงิน ให้เสนอทางเลือกจากข้อมูลร้าน เช่น พร้อมเพย์/โอนธนาคาร/เก็บปลายทาง แล้วถามให้ลูกค้าเลือก ก่อนเรียก take_order
+- ห้ามสรุปว่ารับออเดอร์แล้วถ้ายังไม่ได้เรียก take_order หรือข้อมูลลูกค้ายังไม่ครบ ให้ถามเฉพาะข้อมูลที่ขาดแทน
 - ถ้าไม่มีข้อมูล ให้แจ้งลูกค้าให้รอแอดมินหรือเรียก request_human_agent
 ${knowledgeContext}${productsContext}
 ${paymentInfo}`
