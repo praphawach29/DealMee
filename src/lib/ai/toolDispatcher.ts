@@ -88,27 +88,43 @@ export function applyProductSearchFilters(query: any, args: Record<string, any>)
 
   return { query, keyword }
 }
+function cleanLineValue(value: unknown, fallback = '-'): string {
+  const text = String(value || '').replace(/[`*_~]/g, '').replace(/\s+/g, ' ').trim()
+  return text || fallback
+}
+
 export function formatPaymentInstructions(shop: any, amount?: number): string {
   const lines: string[] = []
-  const promptpayId = shop.promptpay_id || shop.promptpay_number
-  const amountLine = typeof amount === 'number' && Number.isFinite(amount)
-    ? `ยอดชำระ: ${amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท`
-    : ''
+  const promptpayId = cleanLineValue(shop.promptpay_id || shop.promptpay_number, '')
+  const promptpayName = cleanLineValue(shop.promptpay_name || shop.name)
+  const bankName = cleanLineValue(shop.bank_name, '')
+  const bankAccountNumber = cleanLineValue(shop.bank_account_number, '')
+  const bankAccountName = cleanLineValue(shop.bank_account_name || shop.name)
+
+  if (typeof amount === 'number' && Number.isFinite(amount)) {
+    lines.push(`ยอดที่ต้องชำระ: ${amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท`)
+  }
 
   if (promptpayId) {
-    lines.push(`พร้อมเพย์: ${promptpayId} (${shop.promptpay_name || shop.name})`)
+    lines.push(`พร้อมเพย์: ${promptpayId}`)
+    lines.push(`ชื่อบัญชี: ${promptpayName}`)
   }
-  if (shop.bank_account_number) {
-    lines.push(`โอนธนาคาร: ${shop.bank_name || '-'} เลขบัญชี ${shop.bank_account_number} ชื่อบัญชี ${shop.bank_account_name || shop.name}`)
+
+  if (bankAccountNumber) {
+    if (lines.length > 0) lines.push('')
+    lines.push(`ธนาคาร: ${bankName || '-'}`)
+    lines.push(`เลขบัญชี: ${bankAccountNumber}`)
+    lines.push(`ชื่อบัญชี: ${bankAccountName}`)
   }
+
   if ((shop.shipping_fee_type || '').toLowerCase().includes('cod')) {
+    if (lines.length > 0) lines.push('')
     lines.push('เก็บเงินปลายทาง: แจ้งแอดมินเพื่อยืนยันพื้นที่จัดส่ง')
   }
 
-  if (amountLine) lines.unshift(amountLine)
   if (lines.length === 0) return 'ร้านยังไม่ได้ตั้งค่าช่องทางชำระเงิน กรุณารอแอดมินยืนยันช่องทางชำระเงิน'
 
-  return `${lines.join('\n')}\nโอนแล้วกรุณาส่งสลิปกลับมาในแชทนี้นะคะ`
+  return `${lines.join('\n')}\n\nโอนแล้วส่งสลิปกลับมาในแชทนี้ได้เลยนะคะ`
 }
 
 export function formatOrderCloseSummary(shop: any, args: Record<string, any>): string {
@@ -116,14 +132,17 @@ export function formatOrderCloseSummary(shop: any, args: Record<string, any>): s
   const paymentInstructions = formatPaymentInstructions(shop, total)
   return [
     'สรุปออเดอร์เรียบร้อยค่ะ',
-    `สินค้า: ${args.product} x${args.qty}`,
-    `ยอดสุทธิ: ${total.toLocaleString('th-TH')} บาท`,
-    `ชื่อผู้รับ: ${args.name}`,
-    `เบอร์โทร: ${args.phone}`,
-    `ที่อยู่จัดส่ง: ${args.address}`,
-    `วิธีชำระเงิน: ${args.payment_method || 'โอนเงิน'}`,
     '',
-    'ช่องทางชำระเงิน:',
+    `สินค้า: ${cleanLineValue(args.product)} x${cleanLineValue(args.qty)}`,
+    `ยอดสุทธิ: ${total.toLocaleString('th-TH')} บาท`,
+    '',
+    'ข้อมูลจัดส่ง',
+    `ชื่อผู้รับ: ${cleanLineValue(args.name)}`,
+    `เบอร์โทร: ${cleanLineValue(args.phone)}`,
+    `ที่อยู่: ${cleanLineValue(args.address)}`,
+    `วิธีชำระเงิน: ${cleanLineValue(args.payment_method || 'โอนเงิน')}`,
+    '',
+    'ช่องทางชำระเงิน',
     paymentInstructions,
   ].join('\n')
 }
