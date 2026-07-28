@@ -2,7 +2,7 @@
 
 > ร่างเมื่อ: 28 กรกฎาคม 2026 | ปรับปรุงใหญ่: 28 กรกฎาคม 2026 (เพิ่มบทเรียนจาก 3 โปรเจคเดิม + วางแผนละเอียดครบ 5 หัวข้อ)
 > สถานะเอกสาร: **แผนละเอียดครบทั้ง 5 หัวข้อแล้ว — พร้อมให้ AI เซสชันไหนก็ได้หยิบไปทำต่อได้ทันที โดยไม่ต้องมีบริบทจากการสนทนาเดิม**
-> ความคืบหน้า: **2.5/5** (Customer Memory Graph, Model Router เสร็จแล้ว; Planning Layer เสร็จส่วนแกนหลัก 28 กรกฎาคม 2026 — เหลือ async ack/push + verification จริง) — เหลือ Sales Workflow Engine, Evaluation Framework
+> ความคืบหน้า: **3/5 เสร็จแล้ว** (Customer Memory Graph, Model Router, Planning Layer — 28 กรกฎาคม 2026) — เหลือ verification จริง (Playground + LINE จริง) ก่อนขึ้น production, และ Sales Workflow Engine, Evaluation Framework
 >
 > **เอกสารนี้คือ single source of truth สำหรับสถาปัตยกรรม AI Agent ของ Botify SaaS**
 > ถ้าเป็น AI ที่เพิ่งเข้ามาทำงานนี้ครั้งแรก อ่านเอกสารนี้ทั้งหมดก่อนเริ่มโค้ดใดๆ แล้วอ่าน `PROJECT_STATUS.md` (สถานะปัจจุบันของทั้งโปรเจค) กับ `ROADMAP.md` (แผนธุรกิจ/ฟีเจอร์ที่ไม่ใช่ AI-core) ประกอบ
@@ -91,8 +91,8 @@
 ```
 1. Customer Memory Graph   ✅ เสร็จแล้ว (28 กรกฎาคม 2026)
 2. Model Router ปรับปรุง   ✅ เสร็จแล้ว (28 กรกฎาคม 2026)
-3. Planning Layer          🟡 แกนหลักเสร็จแล้ว (28 กรกฎาคม 2026) — เหลือ async ack/push + verification จริง
-4. Sales Workflow Engine   ← เริ่มได้ (แกนหลักของ Planning Layer พร้อมแล้ว)
+3. Planning Layer          ✅ เสร็จแล้ว (28 กรกฎาคม 2026) — เหลือแค่ verification จริง (ดูหัวข้อ 6)
+4. Sales Workflow Engine   ← เริ่มได้เลย (Planning Layer พร้อมแล้ว)
 5. Evaluation Framework    ← ทำบางส่วนได้ทันที (conversion rate พื้นฐาน) ส่วนที่เหลือรอ Workflow Engine
 ```
 
@@ -156,7 +156,7 @@
 
 ## 6. Planning Layer — แผนละเอียด
 
-### สถานะ: 🟡 แกนหลักเสร็จแล้ว (28 กรกฎาคม 2026) — เหลือ async ack/push + verification จริง
+### สถานะ: ✅ เสร็จแล้ว (28 กรกฎาคม 2026) — เหลือ verification จริงก่อนขึ้น production (ดูหัวข้อ "ยังไม่ได้ทำ" ด้านล่าง)
 
 **สิ่งที่ทำเสร็จจริง (Phase A + B ตามแผนเดิม):**
 - **Phase A** — สร้าง `src/lib/ai/toolDispatcher.ts` (channel-agnostic, ไม่รู้จัก LINE เลย): `ToolExecutionContext`, `CustomerMessage`, `ToolExecutionResult` (`{resultForAi, immediateMessages[], scheduledMessage?}` — เป็น array ไม่ใช่ optional เดี่ยวเหมือนร่างเดิม เพราะบาง tool เช่น `send_payment_qr` ต้องส่งทั้งรูปและ caption 2 ข้อความ), `ToolExecutor` type, `executeTool()` ย้าย logic ทั้ง 17 กิ่งจาก webhook route มาไว้ที่นี่ (รวม `generateAndUploadQR` ด้วย) — webhook route แก้ให้เรียก `executeTool()` แทน ยืนยันด้วย `npx tsc --noEmit` + `npm run build` ผ่านก่อนเริ่ม Phase B (ตามที่แผนกำหนดให้ checkpoint ตรงนี้)
@@ -166,11 +166,13 @@
 - Step-limit exhaustion: flip `conversations.status = 'human'` จริง ไม่ใช่แค่บอกลูกค้าเฉยๆ
 - ยืนยันด้วย `npx tsc --noEmit` + `npm run build` ผ่านสะอาดทั้งคู่
 
-**ไฟล์ที่แก้/เพิ่ม:** `src/lib/ai/toolDispatcher.ts` (ใหม่), `src/lib/ai/salesAgentEngine.ts` (types + 3 provider functions + loop), `src/app/api/webhook/[shop_id]/route.ts` (บริโภค `immediateMessages`/`toolCallsExecuted`/`scheduledMessages` แทนการ dispatch tool เอง), `src/app/dashboard/settings/actions.ts` (`previewToolExecutor`)
+- **Async ack/push (28 กรกฎาคม 2026)** — `processSalesAgentChat` แยกภายในออกเป็น 3 เฟส: `preparePlanningState` (setup ทั้งหมด, ไม่เปลี่ยน), `runPlanningStep` (รัน 1 step, mutate `PlanningState`), `finalizeAgentResult` (sum usage แล้วสร้าง `AgentResult`) — `processSalesAgentChat` เดิมยังคงพฤติกรรมเดิมทุกอย่าง (Chat Playground เรียกใช้ตัวนี้ต่อไป ไม่ต้องแก้อะไร) แต่ตอนนี้มี 2 ฟังก์ชันใหม่ให้ webhook route ใช้แทน: `startSalesAgentPlanning()` (รันแค่ step แรก, คืนค่า `{done:true,result}` ถ้า AI ตอบจบใน 1 step หรือ `{done:false,state}` ถ้าต้องเรียก tool ต่อ) และ `continueSalesAgentPlanning(state)` (รันที่เหลือจนจบ) — webhook route ใช้สองฟังก์ชันนี้: ถ้า `done:true` reply ผ่าน `sendLineReply` เหมือนเดิมทุกอย่าง (ไม่กระทบ UX เคสส่วนใหญ่); ถ้า `done:false` ส่ง ack ("กำลังตรวจสอบให้สักครู่นะคะ...") ผ่าน `sendLineReply` ทันที (ใช้ replyToken ตอนยังสดอยู่) แล้วเรียก `continueSalesAgentPlanning(state)` แบบ fire-and-forget (`.then().catch()`ไม่ await) รัน step ที่เหลือเบื้องหลังแล้ว push คำตอบจริงด้วย `sendLinePush` เมื่อเสร็จ — ตรงตาม pattern ของ `verifySlipAndNotify` ที่มีอยู่แล้วเป๊ะ ไม่ได้คิดกลไกใหม่ ทั้ง sync/async path ใช้ helper กลาง `deliverAgentResult()` ตัวเดียว (บันทึก chat_messages/อัปเดต conversation/log tool call/เพิ่ม usage/ส่ง immediateMessages/ตั้ง scheduledMessages) ต่างกันแค่ว่าใช้ reply หรือ push สำหรับข้อความหลัก
 
-**ยังไม่ได้ทำ (ต่างจากแผนเดิม ต้องทำต่อ):**
-1. **Async ack/push ในขั้นตอนที่ 3 ของแผนเดิมยังไม่ได้เขียน** — ตอนนี้ webhook route ยังตอบแบบ sync เหมือนเดิมทุกกรณี (รอ loop จบทั้งหมดก่อนถึงจะ reply) ยังไม่มีการส่ง ack message ทันทีแล้ว push คำตอบจริงทีหลังสำหรับเคส HIGH complexity/VIP ตามที่แผนกำหนด — ความเสี่ยง: ถ้า loop ใช้ 2-3 step จริง (เรียก AI provider 2-3 ครั้ง) ผู้ใช้ LINE อาจรอนานกว่าปกติก่อนได้ reply เพราะยังไม่มี ack กันไว้
-2. **ยังไม่ได้ verify กับ Chat Playground จริง** (คำถามที่ต้องเรียก 2 tool ต่อกัน) และ**ยังไม่ได้ทดสอบผ่าน LINE จริง** — โดยเฉพาะ Gemini `functionResponse.id` ที่เป็น requirement ใหม่ ยังไม่เคย verify กับ live API เลย มีแค่ typecheck/build ผ่านเท่านั้น
+**ไฟล์ที่แก้/เพิ่ม:** `src/lib/ai/toolDispatcher.ts` (ใหม่), `src/lib/ai/salesAgentEngine.ts` (types + 3 provider functions + loop แยกเป็น prepare/step/finalize + `startSalesAgentPlanning`/`continueSalesAgentPlanning`), `src/app/api/webhook/[shop_id]/route.ts` (ack/push branching + `deliverAgentResult()` helper), `src/app/dashboard/settings/actions.ts` (`previewToolExecutor`)
+
+**ยังไม่ได้ทำ (ต้องทำก่อนไว้ใจใน production เต็มที่):**
+1. **ยังไม่ได้ verify กับ Chat Playground จริง** (คำถามที่ต้องเรียก 2 tool ต่อกัน เช่น "มีรองเท้าไซส์ 42 ไหม ถ้ามีเอาเลย 1 คู่") และ**ยังไม่ได้ทดสอบผ่าน LINE จริง** — โดยเฉพาะ Gemini `functionResponse.id` ที่เป็น requirement ใหม่ ยังไม่เคย verify กับ live API เลย มีแค่ typecheck/build ผ่านเท่านั้น (ทำไม่ได้ในเซสชันนี้เพราะไม่มีเครื่องมือควบคุมเบราว์เซอร์/ส่งข้อความ LINE จริง)
+2. **ack message ยังเป็นข้อความคงที่** ("กำลังตรวจสอบให้สักครู่นะคะ รอแป๊บนึงนะคะ 🙏") ไม่ได้ปรับตามบริบท — เพียงพอสำหรับตอนนี้ ปรับปรุงได้ทีหลังถ้าต้องการ
 
 ### เป้าหมาย
 เปลี่ยนจาก "เรียก AI 1 ครั้ง ได้ tool call เดียวจบ" เป็น "AI วางแผนและเรียก tool ต่อเนื่องกันได้หลายขั้นตอนในข้อความเดียว" (เช่น ลูกค้าถาม "มีเสื้อยืดไซส์ L ไหม ถ้ามีเอา 2 ตัวเลย" → step 1: `search_products`/`check_stock` → step 2 (เห็นว่ามีของ): `take_order`)
