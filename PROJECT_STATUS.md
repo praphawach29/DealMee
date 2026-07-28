@@ -3,7 +3,7 @@
 
 > อัปเดตล่าสุด: 28 กรกฎาคม 2026
 > GitHub: praphawach29/ai-agent-google-SDK branch main
-> Last Commit: 65de465 - feat(ai-agent): add async ack/push for multi-step Planning Layer replies
+> Last Commit: a4f1fc1 - fix(ai-agent): Gemini rejects role 'function' for tool results in multi-turn calls
 >
 > เอกสารนี้คือแหล่งข้อมูลสถานะปัจจุบันของโปรเจกต์ฉบับเดียว (single source of truth)
 > สำหรับแผนพัฒนาในอนาคตดูที่ [ROADMAP.md](./ROADMAP.md)
@@ -264,12 +264,12 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 
 - [x] `src/lib/ai/toolDispatcher.ts` (ใหม่): แยก 17 กิ่ง tool-dispatch ออกจาก webhook route มาเป็นโมดูล channel-agnostic (`executeTool()`, `ToolExecutor` type ที่ swap ได้)
 - [x] `PlanningTurn` discriminated union + bounded loop สูงสุด 3 step ต่อข้อความลูกค้า 1 ครั้ง (เรียก AI ต่อเนื่องได้หลาย tool ก่อนตอบจริง แทนที่จะ dispatch ได้แค่ 1 tool ต่อข้อความ)
-- [x] ทั้ง 3 provider (Gemini/Claude/OpenAI) รองรับ multi-turn tool result ตาม wire format ของตัวเอง (Gemini ต้องใช้ `functionResponse.id` ตรงกับ `functionCall.id` — requirement ใหม่ของ Gemini 3.6 ยังไม่เคย verify กับ live API)
+- [x] ทั้ง 3 provider (Gemini/Claude/OpenAI) รองรับ multi-turn tool result ตาม wire format ของตัวเอง — **แก้บั๊กจริงที่เจอจาก live test (28 กรกฎาคม 2026):** Gemini reject `role: 'function'` (`400 INVALID_ARGUMENT`), แก้เป็น `role: 'user'` แทน (ดู [ROADMAP_AI_AGENT.md](./ROADMAP_AI_AGENT.md) หัวข้อ 6 สำหรับ error message เต็ม)
 - [x] Chat Playground แก้เป็น `previewToolExecutor` (pluggable) — read-only lookup รันจริง, tool ที่มี side effect จริงยังคง preview-only ไม่ execute จริงเหมือนเดิม
 - [x] Usage accounting รวม token จากทุก step ก่อน increment ครั้งเดียว; hit step limit แล้ว flip `conversations.status='human'` จริง
 - [x] **Async ack/push**: `processSalesAgentChat` แยกเป็น `preparePlanningState`/`runPlanningStep`/`finalizeAgentResult` ภายใน (พฤติกรรมเดิมไม่เปลี่ยน, Chat Playground ยังเรียกใช้ตัวนี้เหมือนเดิม) บวกฟังก์ชันใหม่ `startSalesAgentPlanning()`/`continueSalesAgentPlanning()` ให้ webhook รันแค่ step แรกก่อน แล้วถ้าต้องเรียก tool ต่อ ส่ง ack ผ่าน `sendLineReply` ทันที จากนั้นรัน step ที่เหลือแบบ fire-and-forget เบื้องหลัง (`.then().catch()` ไม่ await) แล้ว push คำตอบจริงด้วย `sendLinePush` — ใช้ pattern เดียวกับ `verifySlipAndNotify` ที่มีอยู่แล้ว ไม่ได้คิดกลไกใหม่ ทั้ง sync/async path ใช้ helper กลาง `deliverAgentResult()` ตัวเดียว
 - [x] `npx tsc --noEmit` + `npm run build` ผ่านสะอาดทั้ง 2 รอบ (หลัง multi-step loop และหลัง async ack/push)
-- [ ] **ยังไม่ได้ verify**: ทดสอบ Chat Playground จริง (คำถามที่ต้องเรียก 2 tool ต่อกัน) และทดสอบผ่าน LINE จริง — โดยเฉพาะ Gemini `functionResponse.id` และการ ack/push จริงบน LINE — ยังทำไม่ได้ในเซสชันนี้เพราะไม่มีเครื่องมือควบคุมเบราว์เซอร์/ส่งข้อความ LINE จริง ควรทดสอบก่อนไว้ใจใน production
+- [ ] **ยังไม่ได้ verify ครบ**: ทดสอบ Chat Playground จริงแล้วบางส่วน (เจอ+แก้บั๊ก Gemini role ด้านบน) แต่ยังไม่เจอเคส 2-tool chaining ที่มีความหมายจริง และ**ยังไม่ได้ทดสอบผ่าน LINE จริงเลย** (ack message + push) — ควรทดสอบก่อนไว้ใจใน production เต็มที่
 
 ## Completed Features [AI Agent Upgrade — 2/5: Model Router]
 
@@ -417,6 +417,8 @@ NEXT_PUBLIC_APP_URL=               # [Phase 2] Stripe Checkout success/cancel + 
 
 ## Git History
 
+a4f1fc1  fix(ai-agent): Gemini rejects role 'function' for tool results in multi-turn calls
+cc63428  docs: record decision against splitting AI logic to a separate Railway service
 65de465  feat(ai-agent): add async ack/push for multi-step Planning Layer replies
 95fdf51  feat(ai-agent): add Planning Layer multi-step tool loop (3/5 of AI agent upgrade)
 9ec54ea  chore: organize scattered SQL files into supabase/migrations + tools
