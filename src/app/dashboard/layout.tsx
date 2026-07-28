@@ -22,10 +22,11 @@ export default async function DashboardLayout({
   const shop = await getOrCreateShopForUser(supabase, user)
 
   const bizType = shop?.business_type || 'retail'
+  const features = (shop?.features as Record<string, boolean>) || {}
   const isSuperAdmin = user.email === 'praphawach@gmail.com'
 
   return (
-    <DashboardClientLayout bizType={bizType} userEmail={user.email || ''} isSuperAdmin={isSuperAdmin}>
+    <DashboardClientLayout bizType={bizType} features={features} userEmail={user.email || ''} isSuperAdmin={isSuperAdmin}>
       {children}
     </DashboardClientLayout>
   )

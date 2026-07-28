@@ -6,6 +6,7 @@ import Link from 'next/link'
 
 interface DashboardClientLayoutProps {
   bizType: string
+  features?: Record<string, boolean>
   userEmail: string
   isSuperAdmin?: boolean
   children: React.ReactNode
@@ -13,6 +14,7 @@ interface DashboardClientLayoutProps {
 
 export default function DashboardClientLayout({
   bizType,
+  features = {},
   userEmail,
   isSuperAdmin = false,
   children,
@@ -27,7 +29,7 @@ export default function DashboardClientLayout({
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center font-bold text-white shadow-xs">B</div>
           <span className="font-headline-md text-primary font-bold tracking-tight text-lg">Botify AI</span>
         </div>
-        <SidebarNav bizType={bizType} isSuperAdmin={isSuperAdmin} />
+        <SidebarNav bizType={bizType} features={features} isSuperAdmin={isSuperAdmin} />
       </aside>
 
       {/* 2. Mobile Backdrop Overlay */}
@@ -57,7 +59,7 @@ export default function DashboardClientLayout({
           </button>
         </div>
         <div className="py-3 flex-1 overflow-y-auto">
-          <SidebarNav bizType={bizType} isSuperAdmin={isSuperAdmin} onNavClick={() => setIsMobileMenuOpen(false)} />
+          <SidebarNav bizType={bizType} features={features} isSuperAdmin={isSuperAdmin} onNavClick={() => setIsMobileMenuOpen(false)} />
         </div>
       </aside>
 

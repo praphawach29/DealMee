@@ -6,17 +6,20 @@ import { useState, useEffect } from 'react'
 
 interface SidebarNavProps {
   bizType: string
+  features?: Record<string, boolean>
   isSuperAdmin?: boolean
   onNavClick?: () => void
 }
 
-export default function SidebarNav({ bizType, isSuperAdmin = false, onNavClick }: SidebarNavProps) {
+export default function SidebarNav({ bizType, features = {}, isSuperAdmin = false, onNavClick }: SidebarNavProps) {
   const pathname = usePathname()
   const [activePath, setActivePath] = useState(pathname)
 
   useEffect(() => {
     setActivePath(pathname)
   }, [pathname])
+
+  const showBookingTools = bizType === 'booking' || bizType === 'restaurant' || features.booking_system === true
 
   const isActive = (path: string) => {
     if (path === '/dashboard') {
@@ -74,7 +77,7 @@ export default function SidebarNav({ bizType, isSuperAdmin = false, onNavClick }
         </>
       )}
 
-      {bizType === 'booking' && (
+      {showBookingTools && (
         <>
           <Link
             href="/dashboard/bookings"

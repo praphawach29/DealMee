@@ -222,6 +222,38 @@ const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionC
     const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ send_payment_qr:\n${formatPaymentInstructions(ctx.shop, amount)}`
     return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
+  if (name === 'check_available_slots') {
+    const { data: booked } = await supabase.from('bookings').select('booking_time').eq('shop_id', shopId).eq('booking_date', args.date).neq('status', 'cancelled')
+    const bookedTimes = booked?.map((b: any) => b.booking_time) ?? []
+    const allSlots = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
+    const free = allSlots.filter((s) => !bookedTimes.some((t: string) => t?.startsWith(s)))
+    const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_available_slots วันที่ ${args.date}: ${free.length ? free.join(', ') : 'ไม่มีเวลาว่าง'}`
+    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
+  }
+
+  if (name === 'check_booking') {
+    const bid = args.booking_id
+    const { data: bk } = await supabase.from('bookings').select('booking_no,customer_name,phone,service_name,booking_date,booking_time,status').eq('shop_id', shopId).or(`id.eq.${bid},booking_no.ilike.%${bid}%`).maybeSingle()
+    const line = bk
+      ? `[ทดสอบ] เรียกใช้เครื่องมือ check_booking:\n${bk.booking_no} - ${bk.customer_name} ${bk.service_name || '-'} ${bk.booking_date} ${String(bk.booking_time || '').slice(0, 5)} (${bk.status})`
+      : `[ทดสอบ] เรียกใช้เครื่องมือ check_booking แต่ไม่พบเลขที่การจอง ${bid}`
+    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
+  }
+
+  if (name === 'book_appointment') {
+    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ book_appointment:\nบริการ: ${args.service || args.service_name}\nวันที่: ${args.date}\nเวลา: ${args.time}\nลูกค้า: ${args.customer_name || '-'}\nเบอร์: ${args.phone || '-'}`
+    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
+  }
+
+  if (name === 'reschedule_booking') {
+    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ reschedule_booking: ${args.booking_id} -> ${args.new_date} ${args.new_time}`
+    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
+  }
+
+  if (name === 'cancel_booking') {
+    const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ cancel_booking: ${args.booking_id}`
+    return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
+  }
   if (name === 'get_active_promotions') {
     const today = new Date().toISOString().split('T')[0]
     const { data: promos } = await supabase.from('promotions').select('name,discount_type,discount_value,end_date,code').eq('shop_id', shopId).eq('status', 'active').or(`end_date.is.null,end_date.gte.${today}`).order('created_at', { ascending: false }).limit(5)

@@ -321,20 +321,70 @@ export async function executeTool(
   }
 
   if (toolName === 'book_appointment') {
+    const serviceName = args.service || args.service_name
     const bookingNo = `BK-${Date.now().toString().slice(-6)}`
     await supabase.from('bookings').insert({
       shop_id: shopId, booking_no: bookingNo,
       customer_name: args.customer_name || `LINE-${userId.substring(0, 6)}`,
-      phone: args.phone, service_name: args.service_name,
+      phone: args.phone, service_name: serviceName,
       booking_date: args.date, booking_time: args.time,
       status: 'confirmed', note: args.note,
     })
     return {
-      resultForAi: `จองคิว ${bookingNo}: ${args.service_name} วันที่ ${args.date} เวลา ${args.time}`,
-      immediateMessages: [{ type: 'text', content: `✅ จองคิวเรียบร้อยค่ะ!\n📋 หมายเลข: ${bookingNo}\n💆 บริการ: ${args.service_name}\n📅 ${args.date} เวลา ${args.time} น.\n\nขอบคุณค่ะ 🙏` }],
+      resultForAi: `จองคิว ${bookingNo}: ${serviceName} วันที่ ${args.date} เวลา ${args.time}`,
+      immediateMessages: [{ type: 'text', content: `✅ จองคิวเรียบร้อยค่ะ!\n📋 หมายเลข: ${bookingNo}\n💆 บริการ: ${serviceName}\n📅 ${args.date} เวลา ${args.time} น.\n\nขอบคุณค่ะ 🙏` }],
     }
   }
 
+  if (toolName === 'check_booking') {
+    const bid = args.booking_id
+    const { data: bk } = await supabase
+      .from('bookings')
+      .select('booking_no,customer_name,phone,service_name,booking_date,booking_time,status,note')
+      .eq('shop_id', shopId)
+      .or(`id.eq.${bid},booking_no.ilike.%${bid}%`)
+      .maybeSingle()
+
+    if (!bk) {
+      return { resultForAi: 'ไม่พบข้อมูลการจอง', immediateMessages: [{ type: 'text', content: 'ไม่พบข้อมูลการจองค่ะ รบกวนตรวจสอบเลขที่การจองอีกครั้งนะคะ' }] }
+    }
+
+    const info = [
+      `เลขที่การจอง: ${bk.booking_no}`,
+      `ลูกค้า: ${bk.customer_name}${bk.phone ? ` (${bk.phone})` : ''}`,
+      `บริการ: ${bk.service_name || '-'}`,
+      `วันเวลา: ${bk.booking_date} ${String(bk.booking_time || '').slice(0, 5)} น.`,
+      `สถานะ: ${bk.status}`,
+      bk.note ? `หมายเหตุ: ${bk.note}` : '',
+    ].filter(Boolean).join('\n')
+
+    return { resultForAi: info, immediateMessages: [{ type: 'text', content: `ข้อมูลการจองค่ะ\n${info}` }] }
+  }
+
+  if (toolName === 'reschedule_booking') {
+    const bid = args.booking_id
+    const { data: bk } = await supabase
+      .from('bookings')
+      .select('booking_no,service_name')
+      .eq('shop_id', shopId)
+      .or(`id.eq.${bid},booking_no.ilike.%${bid}%`)
+      .maybeSingle()
+
+    if (!bk) {
+      return { resultForAi: 'ไม่พบข้อมูลการจอง', immediateMessages: [{ type: 'text', content: 'ไม่พบข้อมูลการจองค่ะ รบกวนตรวจสอบเลขที่การจองอีกครั้งนะคะ' }] }
+    }
+
+    await supabase
+      .from('bookings')
+      .update({ booking_date: args.new_date, booking_time: args.new_time, status: 'confirmed' })
+      .eq('shop_id', shopId)
+      .or(`id.eq.${bid},booking_no.ilike.%${bid}%`)
+
+    return {
+      resultForAi: `เลื่อนคิว ${bk.booking_no} เป็นวันที่ ${args.new_date} เวลา ${args.new_time} แล้ว`,
+      immediateMessages: [{ type: 'text', content: `เลื่อนคิวเรียบร้อยค่ะ\nเลขที่การจอง: ${bk.booking_no}\nบริการ: ${bk.service_name || '-'}\nวันเวลาใหม่: ${args.new_date} ${args.new_time} น.` }],
+    }
+  }
   if (toolName === 'cancel_booking') {
     const bid = args.booking_id
     const { data: bk } = await supabase.from('bookings').select('booking_no,service_name,booking_date').eq('shop_id', shopId).or(`id.eq.${bid},booking_no.ilike.%${bid}%`).single()
