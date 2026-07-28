@@ -24,7 +24,20 @@ export interface CustomerMessage {
 export interface ToolExecutionResult {
   /** Fed back to the AI as the tool's result on the next planning-loop turn. */
   resultForAi: string
-  /** Messages to push to the customer right away (e.g. send_payment_qr needs an image push AND a caption push). */
+  /**
+   * Extra messages the customer receives *in addition to* the bot's own
+   * reply. Reserve this for things the model cannot produce itself — an
+   * image — or must not paraphrase, like a PromptPay number or an order
+   * total, where a reworded digit is a real loss.
+   *
+   * Everything else belongs in `resultForAi` only. A lookup tool that also
+   * pushed its findings here would have the customer read the same product
+   * list or slot list twice: once from this push and once from the reply the
+   * model writes after reading `resultForAi`.
+   *
+   * When a tool does push here, say so inside `resultForAi` so the model
+   * knows not to repeat what the customer already has.
+   */
   immediateMessages: CustomerMessage[]
   /** Only schedule_followup uses this — the caller (webhook route) is responsible for the actual setTimeout + LINE push, since this module has no channel/push capability of its own. */
   scheduledMessage?: { delayMs: number; message: CustomerMessage }
@@ -420,13 +433,16 @@ export async function executeTool(
     const { amount, order_summary } = args
     const promptpayId = shop.promptpay_id || shop.promptpay_number
     if (!promptpayId) {
-      return { resultForAi: 'ร้านยังไม่ได้ตั้งค่าพร้อมเพย์', immediateMessages: [] }
+      return { resultForAi: 'ร้านยังไม่ได้ตั้งค่าพร้อมเพย์ ยังส่ง QR ไม่ได้ ให้เสนอช่องทางโอนธนาคารแทน', immediateMessages: [] }
     }
+    // The QR image and the amount beside it are pushed verbatim: the model
+    // can't produce an image, and a paraphrased total or account number is a
+    // payment sent to the wrong place.
     const qrPublicUrl = await generateAndUploadQR(supabaseAdmin, amount, promptpayId, shopId)
     if (qrPublicUrl) {
-      const caption = `📋 ยอดชำระ: *${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท*${order_summary ? `\n${order_summary}` : ''}\n\n✅ บันทึกรูป QR แล้วเปิดแอปธนาคารสแกนได้เลยค่ะ\n📲 โอนเสร็จกรุณาส่งสลิปกลับมาในแชทนะคะ`
+      const caption = `📋 ยอดชำระ: ${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท${order_summary ? `\n${order_summary}` : ''}\n\n✅ บันทึกรูป QR แล้วเปิดแอปธนาคารสแกนได้เลยค่ะ\n📲 โอนเสร็จกรุณาส่งสลิปกลับมาในแชทนะคะ`
       return {
-        resultForAi: `ส่ง QR PromptPay ให้ลูกค้าแล้ว ยอด ${amount} บาท`,
+        resultForAi: `ส่งรูป QR PromptPay พร้อมยอด ${amount} บาท และวิธีชำระให้ลูกค้าไปแล้ว ห้ามพิมพ์ยอดหรือวิธีชำระซ้ำ ให้ตอบสั้นๆ เช่น ชวนสแกนแล้วส่งสลิปกลับมา`,
         immediateMessages: [
           { type: 'image', content: qrPublicUrl },
           { type: 'text', content: caption },
@@ -434,7 +450,7 @@ export async function executeTool(
       }
     }
     const fallback = `💳 ช่องทางชำระเงิน:\n- พร้อมเพย์: ${promptpayId}\n- ชื่อ: ${shop.promptpay_name || shop.name}\n- ยอด: ${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท`
-    return { resultForAi: 'สร้าง QR ไม่สำเร็จ ส่งข้อมูลบัญชีแทน', immediateMessages: [{ type: 'text', content: fallback }] }
+    return { resultForAi: 'สร้าง QR ไม่สำเร็จ ส่งเลขพร้อมเพย์และยอดให้ลูกค้าไปแล้ว ห้ามพิมพ์เลขบัญชีหรือยอดซ้ำ ให้ตอบสั้นๆ ต่อท้ายพอ', immediateMessages: [{ type: 'text', content: fallback }] }
   }
 
   if (toolName === 'take_order') {
@@ -457,14 +473,19 @@ export async function executeTool(
     // circular import at module-load time (customerMemory <-> engine).
     const { recordCustomerOrder } = await import('@/lib/customerMemory')
     await recordCustomerOrder(shopId, userId, Number(args.total_price) || 0)
+    // Pushed verbatim rather than left to the model: this block carries the
+    // order total and the shop's account number, and a reworded digit here
+    // sends the customer's money somewhere it shouldn't go.
     const confirmMsg = formatOrderCloseSummary(shop, args)
-    return { resultForAi: `สร้างออเดอร์แล้วและส่งข้อมูลชำระเงินให้ลูกค้าแล้ว:\n${confirmMsg}`, immediateMessages: [{ type: 'text', content: confirmMsg }] }
+    return {
+      resultForAi: `สร้างออเดอร์สำเร็จแล้วจริง และส่งสรุปออเดอร์พร้อมข้อมูลชำระเงินให้ลูกค้าไปแล้วครบถ้วน ห้ามพิมพ์สรุปหรือเลขบัญชีซ้ำ ให้ตอบสั้นๆ เช่น ขอบคุณและชวนส่งสลิปกลับมา`,
+      immediateMessages: [{ type: 'text', content: confirmMsg }],
+    }
   }
 
   if (toolName === 'request_human_agent') {
     await supabase.from('conversations').update({ status: 'human' }).eq('id', conversationId)
-    const handoffMsg = `🙋 กำลังเรียกแอดมินเข้ามาดูแลค่ะ กรุณารอสักครู่นะคะ...\n(เหตุผล: ${args.reason})`
-    return { resultForAi: 'โอนสายให้แอดมินแล้ว', immediateMessages: [{ type: 'text', content: handoffMsg }] }
+    return { resultForAi: 'เรียกแอดมินให้เข้ามาดูแลแล้ว ให้บอกลูกค้าว่ากำลังตามแอดมินให้และรอสักครู่', immediateMessages: [] }
   }
 
   if (toolName === 'transfer_to_agent') {
@@ -473,8 +494,8 @@ export async function executeTool(
       last_message: `[โอนสายไป ${args.target_agent}] ${args.reason}`,
     }).eq('id', conversationId)
     return {
-      resultForAi: `โอนสายไป ${args.target_agent} แล้ว`,
-      immediateMessages: [{ type: 'text', content: `🔄 กำลังส่งต่อให้แผนก ${args.target_agent} ค่ะ...` }],
+      resultForAi: `ส่งต่อให้แผนก ${args.target_agent} แล้ว ให้แจ้งลูกค้าตามนี้`,
+      immediateMessages: [],
     }
   }
 
@@ -524,24 +545,22 @@ export async function executeTool(
     const { query, keyword } = applyProductSearchFilters(baseQuery, args)
     const { data: prods } = await query
     if (!prods || prods.length === 0) {
-      return { resultForAi: `ไม่พบสินค้าที่ตรงกับ "${keyword || args.keyword || ''}"`, immediateMessages: [{ type: 'text', content: '❌ ไม่พบสินค้าที่ค้นหาค่ะ ลองคำอื่นดูนะคะ' }] }
+      return { resultForAi: `ไม่พบสินค้าที่ตรงกับ "${keyword || args.keyword || ''}" ให้แจ้งลูกค้าและชวนลองคำค้นอื่น`, immediateMessages: [] }
     }
-    const list = prods.map((p: any, i: number) => `${i + 1}. ${p.name}\n   💰 ${Number(p.price).toLocaleString()} บาท ${p.stock > 0 ? `| ${p.stock} ชิ้น` : '| หมดสต๊อก'}`).join('\n\n')
     return {
-      resultForAi: prods.map((p: any) => `${p.name}: ${p.price} บาท, สต็อก ${p.stock}`).join('; '),
-      immediateMessages: [{ type: 'text', content: `🛍️ สินค้าที่ค้นพบ:\n\n${list}\n\nสนใจสินค้าไหนบอกได้เลยนะคะ 😊` }],
+      resultForAi: `สินค้าที่พบ: ${prods.map((p: any) => `${p.name} ราคา ${Number(p.price).toLocaleString()} บาท ${p.stock > 0 ? `เหลือ ${p.stock} ชิ้น` : 'หมดสต๊อก'}`).join('; ')}`,
+      immediateMessages: [],
     }
   }
 
   if (toolName === 'check_stock') {
     const { data: prods } = await supabase.from('products').select('name,stock,price').eq('shop_id', shopId).ilike('name', `%${args.product_name}%`).limit(3)
     if (!prods || prods.length === 0) {
-      return { resultForAi: `ไม่พบสินค้า "${args.product_name}"`, immediateMessages: [{ type: 'text', content: `❌ ไม่พบสินค้า "${args.product_name}" ค่ะ` }] }
+      return { resultForAi: `ไม่พบสินค้า "${args.product_name}" ให้แจ้งลูกค้าตามนี้`, immediateMessages: [] }
     }
-    const info = prods.map((p: any) => `• ${p.name}: ${p.stock > 0 ? `${p.stock} ชิ้น | ${Number(p.price).toLocaleString()} บาท` : '❌ หมดสต๊อก'}`).join('\n')
     return {
-      resultForAi: prods.map((p: any) => `${p.name}: สต็อก ${p.stock}, ราคา ${p.price} บาท`).join('; '),
-      immediateMessages: [{ type: 'text', content: `📦 สต๊อกสินค้า:\n\n${info}` }],
+      resultForAi: prods.map((p: any) => `${p.name}: ${p.stock > 0 ? `เหลือ ${p.stock} ชิ้น` : 'หมดสต๊อก'}, ราคา ${Number(p.price).toLocaleString()} บาท`).join('; '),
+      immediateMessages: [],
     }
   }
 
@@ -549,12 +568,14 @@ export async function executeTool(
     const oid = args.order_id
     const { data: ord } = await supabase.from('orders').select('order_no,status,payment_status,tracking_no,product_name,total_amount').eq('shop_id', shopId).or(`id.eq.${oid},order_no.ilike.%${oid}%`).single()
     if (!ord) {
-      return { resultForAi: 'ไม่พบข้อมูลออเดอร์', immediateMessages: [{ type: 'text', content: '❌ ไม่พบข้อมูลออเดอร์ค่ะ' }] }
+      return { resultForAi: 'ไม่พบข้อมูลออเดอร์ ให้ขอเลขที่ออเดอร์จากลูกค้าอีกครั้ง', immediateMessages: [] }
     }
-    const sMap: Record<string, string> = { pending: '⏳ รอดำเนินการ', confirmed: '✅ ยืนยันแล้ว', processing: '🔄 กำลังดำเนินการ', shipped: '🚚 จัดส่งแล้ว', delivered: '✅ ส่งถึงแล้ว', cancelled: '❌ ยกเลิก' }
-    const pMap: Record<string, string> = { pending: '⏳ รอชำระ', paid: '✅ ชำระแล้ว', failed: '❌ ล้มเหลว' }
-    const text = `📦 ออเดอร์ ${ord.order_no}\nสินค้า: ${ord.product_name}\nยอด: ${Number(ord.total_amount).toLocaleString()} บาท\nสถานะ: ${sMap[ord.status] ?? ord.status}\nชำระเงิน: ${pMap[ord.payment_status] ?? ord.payment_status}${ord.tracking_no ? `\nพัสดุ: ${ord.tracking_no}` : ''}`
-    return { resultForAi: `ออเดอร์ ${ord.order_no}: สถานะ ${ord.status}, ชำระเงิน ${ord.payment_status}`, immediateMessages: [{ type: 'text', content: text }] }
+    const sMap: Record<string, string> = { pending: 'รอดำเนินการ', confirmed: 'ยืนยันแล้ว', processing: 'กำลังดำเนินการ', shipped: 'จัดส่งแล้ว', delivered: 'ส่งถึงแล้ว', cancelled: 'ยกเลิก' }
+    const pMap: Record<string, string> = { pending: 'รอชำระ', paid: 'ชำระแล้ว', failed: 'ล้มเหลว' }
+    return {
+      resultForAi: `ออเดอร์ ${ord.order_no}: สินค้า ${ord.product_name}, ยอด ${Number(ord.total_amount).toLocaleString()} บาท, สถานะ ${sMap[ord.status] ?? ord.status}, ชำระเงิน ${pMap[ord.payment_status] ?? ord.payment_status}${ord.tracking_no ? `, เลขพัสดุ ${ord.tracking_no}` : ''}`,
+      immediateMessages: [],
+    }
   }
 
   // ── 📅 BOOKING TOOLS ──────────────────────────────────────────────
@@ -571,8 +592,8 @@ export async function executeTool(
 
     if (service && dayKey && serviceDays?.length && !serviceDays.includes(dayKey)) {
       return {
-        resultForAi: `${serviceName} ไม่ได้เปิดให้บริการวันที่ ${bookingDate}`,
-        immediateMessages: [{ type: 'text', content: `${serviceName} ไม่ได้เปิดให้บริการวันที่ ${bookingDate} ค่ะ รบกวนเลือกวันอื่นนะคะ` }],
+        resultForAi: `${serviceName} ไม่ได้เปิดให้บริการวันที่ ${bookingDate} ให้แจ้งลูกค้าและชวนเลือกวันอื่น`,
+        immediateMessages: [],
       }
     }
 
@@ -608,7 +629,7 @@ export async function executeTool(
       // which would wrongly imply the shop is out of capacity.
       return {
         resultForAi: `รอบของวันที่ ${bookingDate} ผ่านเวลาไปหมดแล้ว (ตอนนี้ ${bangkokNowTime()} น.) ต้องให้ลูกค้าเลือกวันถัดไป ห้ามเสนอรอบที่ผ่านมาแล้ว`,
-        immediateMessages: [{ type: 'text', content: `รอบของวันนี้ผ่านเวลาไปหมดแล้วค่ะ 🙏 รบกวนเลือกวันถัดไปนะคะ` }],
+        immediateMessages: [],
       }
     }
 
@@ -620,18 +641,13 @@ export async function executeTool(
         : ''
       return {
         resultForAi: `${cadence}. รอบที่เปิดจริงวันที่ ${bookingDate}${serviceLine ? ` ${serviceLine}` : ''}: ${allSlots.join(', ')}. เวลาว่าง: ${free.join(', ')}.${requestedSlotNote} ใช้ได้เฉพาะเวลาที่อยู่ในรายการว่างเท่านั้น`,
-        immediateMessages: [{ type: 'text', content: `ช่วงเวลาว่างวันที่ ${bookingDate}${serviceLine ? ` ${serviceLine}` : ''}
-${cadence}
-
-${free.map((slot) => `- ${slot} น.`).join('\n')}
-
-ต้องการจองรอบไหนคะ?` }],
+        immediateMessages: [],
       }
     }
 
     return {
-      resultForAi: `ไม่มีเวลาว่างวันที่ ${bookingDate}`,
-      immediateMessages: [{ type: 'text', content: `ไม่มีเวลาว่างวันที่ ${bookingDate} ค่ะ กรุณาเลือกวันอื่นนะคะ` }],
+      resultForAi: `ไม่มีเวลาว่างวันที่ ${bookingDate} ทุกรอบเต็มหมดแล้ว ให้ชวนลูกค้าเลือกวันอื่น`,
+      immediateMessages: [],
     }
   }
 
@@ -646,8 +662,8 @@ ${free.map((slot) => `- ${slot} น.`).join('\n')}
     const dayKey = parseBookingDateDayKey(bookingDate)
     if (serviceRecord && dayKey && serviceDays?.length && !serviceDays.includes(dayKey)) {
       return {
-        resultForAi: `${serviceRecord.name || serviceName} ไม่ได้เปิดให้จองวันที่ ${bookingDate}`,
-        immediateMessages: [{ type: 'text', content: `${serviceRecord.name || serviceName} ไม่ได้เปิดให้จองวันที่ ${bookingDate} ค่ะ รบกวนเลือกวันอื่นนะคะ` }],
+        resultForAi: `${serviceRecord.name || serviceName} ไม่ได้เปิดให้จองวันที่ ${bookingDate} ยังไม่ได้บันทึกการจอง ให้ชวนลูกค้าเลือกวันอื่น`,
+        immediateMessages: [],
       }
     }
 
@@ -657,8 +673,8 @@ ${free.map((slot) => `- ${slot} น.`).join('\n')}
     // shop's calendar with nobody showing up.
     if (bookingDate < formatIsoDate(bangkokToday()) || dropPastSlots([bookingTime], bookingDate).length === 0) {
       return {
-        resultForAi: `เวลา ${bookingDate} ${bookingTime} ผ่านไปแล้ว (ตอนนี้ ${bangkokNowTime()} น.) จองไม่ได้ ต้องให้ลูกค้าเลือกวัน/เวลาข้างหน้า`,
-        immediateMessages: [{ type: 'text', content: `รอบ ${bookingTime} น. ของวันที่ ${bookingDate} ผ่านเวลาไปแล้วค่ะ 🙏 รบกวนเลือกวันหรือเวลาถัดไปนะคะ` }],
+        resultForAi: `เวลา ${bookingDate} ${bookingTime} ผ่านไปแล้ว (ตอนนี้ ${bangkokNowTime()} น.) ยังไม่ได้บันทึกการจอง ต้องให้ลูกค้าเลือกวัน/เวลาข้างหน้า`,
+        immediateMessages: [],
       }
     }
 
@@ -669,14 +685,8 @@ ${free.map((slot) => `- ${slot} น.`).join('\n')}
         const nearest = getNearestSlots(bookingTime, validSlots)
         const cadence = formatSlotCadence(slotInterval)
         return {
-          resultForAi: `${bookingTime} ไม่ใช่รอบจองที่เปิดไว้สำหรับ ${serviceRecord.name || serviceName}. ${cadence}. รอบที่จองได้: ${validSlots.join(', ')}. รอบใกล้เคียง: ${nearest.join(', ')}`,
-          immediateMessages: [{ type: 'text', content: `รอบ ${bookingTime} น. ยังไม่ใช่รอบที่เปิดจองค่ะ
-${cadence}
-
-รอบที่จองได้คือ ${formatSlotList(validSlots)}
-${nearest.length ? `รอบที่ใกล้ที่สุดคือ ${formatSlotList(nearest)}` : ''}
-
-ต้องการให้จองรอบไหนคะ?` }],
+          resultForAi: `${bookingTime} ไม่ใช่รอบจองที่เปิดไว้สำหรับ ${serviceRecord.name || serviceName} ยังไม่ได้บันทึกการจอง. ${cadence}. รอบที่จองได้: ${validSlots.join(', ')}. รอบใกล้เคียง: ${nearest.join(', ')}`,
+          immediateMessages: [],
         }
       }
     }
@@ -696,8 +706,8 @@ ${nearest.length ? `รอบที่ใกล้ที่สุดคือ ${
     const requestedSeats = guestCount || 1
     if (reserved + requestedSeats > capacityPerSlot) {
       return {
-        resultForAi: `เวลา ${bookingTime} วันที่ ${bookingDate} เต็มแล้ว`,
-        immediateMessages: [{ type: 'text', content: `ขออภัยค่ะ เวลา ${bookingTime} วันที่ ${bookingDate} เต็มแล้ว รบกวนเลือกเวลาอื่นนะคะ` }],
+        resultForAi: `เวลา ${bookingTime} วันที่ ${bookingDate} เต็มแล้ว ยังไม่ได้บันทึกการจอง ให้ชวนลูกค้าเลือกเวลาอื่น`,
+        immediateMessages: [],
       }
     }
 
@@ -721,30 +731,33 @@ ${nearest.length ? `รอบที่ใกล้ที่สุดคือ ${
       note: args.note,
       metadata: { raw_args: args, line_user_id: userId, conversation_id: conversationId },
     })
+    const resource = args.resource || args.resource_label || serviceRecord?.resource_label
     return {
-      resultForAi: `จองคิว ${bookingNo}: ${serviceRecord?.name || serviceName} วันที่ ${bookingDate} เวลา ${bookingTime}`,
-      immediateMessages: [{ type: 'text', content: `✅ จองเรียบร้อยค่ะ
-เลขที่การจอง: ${bookingNo}
-บริการ: ${serviceRecord?.name || serviceName}
-${guestCount ? `จำนวน: ${guestCount} ท่าน\n` : ''}${args.resource || args.resource_label || serviceRecord?.resource_label ? `พื้นที่/ผู้ให้บริการ: ${args.resource || args.resource_label || serviceRecord?.resource_label}\n` : ''}วันที่: ${bookingDate}
-เวลา: ${bookingTime} น.
-ชื่อผู้จอง: ${customerName}
-เบอร์โทร: ${customerPhone}` }],
+      // Everything the confirmation must contain, so the model can write one
+      // complete reply instead of the customer receiving the tool's summary
+      // and the model's summary back to back.
+      resultForAi: `บันทึกการจองสำเร็จแล้วจริง ให้ยืนยันกับลูกค้าโดยใส่ข้อมูลนี้ให้ครบ — ` +
+        `เลขที่การจอง: ${bookingNo}, บริการ: ${serviceRecord?.name || serviceName}, ` +
+        `วันที่: ${bookingDate}, เวลา: ${bookingTime} น.` +
+        `${guestCount ? `, จำนวน: ${guestCount} ท่าน` : ''}` +
+        `${resource ? `, พื้นที่/ผู้ให้บริการ: ${resource}` : ''}` +
+        `, ชื่อผู้จอง: ${customerName}, เบอร์โทร: ${customerPhone}`,
+      immediateMessages: [],
     }
   }
 
   if (toolName === 'check_booking') {
     const lookup = await findBookingForAction(supabase, shopId, args, userId)
     if (lookup.error) {
-      return { resultForAi: `ตรวจสอบการจองไม่สำเร็จ: ${lookup.error}`, immediateMessages: [{ type: 'text', content: 'ขออภัยค่ะ ตรวจสอบการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้งนะคะ' }] }
+      return { resultForAi: `ตรวจสอบการจองไม่สำเร็จ: ${lookup.error} ให้ขอโทษลูกค้าและชวนลองใหม่`, immediateMessages: [] }
     }
     if (lookup.matches.length > 1) {
       const list = lookup.matches.map((bk) => `${bk.booking_no}: ${bk.customer_name || '-'} ${bk.service_name || '-'} ${bk.booking_date} ${String(bk.booking_time || '').slice(0, 5)} น.`).join('\n')
-      return { resultForAi: `พบหลายรายการ ต้องให้ลูกค้าเลือกเลขที่การจอง:\n${list}`, immediateMessages: [{ type: 'text', content: `พบหลายรายการค่ะ รบกวนเลือกเลขที่การจองที่ต้องการนะคะ\n${list}` }] }
+      return { resultForAi: `พบหลายรายการ ต้องให้ลูกค้าเลือกเลขที่การจอง:\n${list}`, immediateMessages: [] }
     }
     const bk = lookup.booking
     if (!bk) {
-      return { resultForAi: 'ไม่พบข้อมูลการจอง', immediateMessages: [{ type: 'text', content: 'ไม่พบข้อมูลการจองค่ะ รบกวนแจ้งเลขที่การจอง หรือชื่อและเบอร์โทรที่ใช้จองอีกครั้งนะคะ' }] }
+      return { resultForAi: 'ไม่พบข้อมูลการจอง ให้ขอเลขที่การจอง หรือชื่อและเบอร์โทรที่ใช้จองจากลูกค้า', immediateMessages: [] }
     }
 
     const info = [
@@ -758,7 +771,7 @@ ${guestCount ? `จำนวน: ${guestCount} ท่าน\n` : ''}${args.resou
       bk.note ? `หมายเหตุ: ${bk.note}` : '',
     ].filter(Boolean).join('\n')
 
-    return { resultForAi: info, immediateMessages: [{ type: 'text', content: `ข้อมูลการจองค่ะ\n${info}` }] }
+    return { resultForAi: info, immediateMessages: [] }
   }
 
   if (toolName === 'reschedule_booking') {
@@ -766,22 +779,29 @@ ${guestCount ? `จำนวน: ${guestCount} ท่าน\n` : ''}${args.resou
     const newTime = normalizeBookingTime(args.new_time || args.time)
     if (!newDate || !newTime) {
       return {
-        resultForAi: 'ยังไม่มีวันหรือเวลาใหม่ครบถ้วน จึงเลื่อนการจองไม่ได้',
-        immediateMessages: [{ type: 'text', content: 'รบกวนแจ้งวันและเวลาใหม่ที่ต้องการเลื่อนด้วยนะคะ' }],
+        resultForAi: 'ยังไม่มีวันหรือเวลาใหม่ครบถ้วน จึงยังไม่ได้เลื่อนการจอง ให้ถามวันและเวลาใหม่จากลูกค้า',
+        immediateMessages: [],
+      }
+    }
+
+    if (newDate < formatIsoDate(bangkokToday()) || dropPastSlots([newTime], newDate).length === 0) {
+      return {
+        resultForAi: `เวลา ${newDate} ${newTime} ผ่านไปแล้ว (ตอนนี้ ${bangkokNowTime()} น.) ยังไม่ได้เลื่อนการจอง ต้องให้ลูกค้าเลือกวัน/เวลาข้างหน้า`,
+        immediateMessages: [],
       }
     }
 
     const lookup = await findBookingForAction(supabase, shopId, args, userId)
     if (lookup.error) {
-      return { resultForAi: `ค้นหาการจองไม่สำเร็จ: ${lookup.error}`, immediateMessages: [{ type: 'text', content: 'ขออภัยค่ะ ค้นหาการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้งนะคะ' }] }
+      return { resultForAi: `ค้นหาการจองไม่สำเร็จ: ${lookup.error} ยังไม่ได้เลื่อนการจอง`, immediateMessages: [] }
     }
     if (lookup.matches.length > 1) {
       const list = lookup.matches.map((bk) => `${bk.booking_no}: ${bk.customer_name || '-'} ${bk.service_name || '-'} ${bk.booking_date} ${String(bk.booking_time || '').slice(0, 5)} น.`).join('\n')
-      return { resultForAi: `พบหลายรายการ ต้องให้ลูกค้าเลือกเลขที่การจองก่อนเลื่อน:\n${list}`, immediateMessages: [{ type: 'text', content: `พบหลายรายการค่ะ รบกวนแจ้งเลขที่การจองที่ต้องการเลื่อนนะคะ\n${list}` }] }
+      return { resultForAi: `พบหลายรายการ ยังไม่ได้เลื่อน ต้องให้ลูกค้าเลือกเลขที่การจองก่อน:\n${list}`, immediateMessages: [] }
     }
     const bk = lookup.booking
     if (!bk) {
-      return { resultForAi: 'ไม่พบข้อมูลการจองสำหรับเลื่อน', immediateMessages: [{ type: 'text', content: 'ยังไม่พบรายการจองค่ะ รบกวนแจ้งเลขที่การจอง หรือชื่อ เบอร์โทร วันและเวลาเดิมอีกครั้งนะคะ' }] }
+      return { resultForAi: 'ไม่พบข้อมูลการจองสำหรับเลื่อน ให้ขอเลขที่การจอง หรือชื่อ เบอร์โทร วันและเวลาเดิมจากลูกค้า', immediateMessages: [] }
     }
 
     const { data: serviceForReschedule } = bk.service_name
@@ -801,8 +821,8 @@ ${guestCount ? `จำนวน: ${guestCount} ท่าน\n` : ''}${args.resou
       const serviceDays = rescheduleService.available_days as string[] | null | undefined
       if (dayKey && serviceDays?.length && !serviceDays.includes(dayKey)) {
         return {
-          resultForAi: `${rescheduleService.name || bk.service_name} ไม่ได้เปิดให้จองวันที่ ${newDate}`,
-          immediateMessages: [{ type: 'text', content: `${rescheduleService.name || bk.service_name} ไม่ได้เปิดให้จองวันที่ ${newDate} ค่ะ รบกวนเลือกวันอื่นนะคะ` }],
+          resultForAi: `${rescheduleService.name || bk.service_name} ไม่ได้เปิดให้จองวันที่ ${newDate} ยังไม่ได้เลื่อนการจอง ให้ชวนลูกค้าเลือกวันอื่น`,
+          immediateMessages: [],
         }
       }
 
@@ -812,14 +832,8 @@ ${guestCount ? `จำนวน: ${guestCount} ท่าน\n` : ''}${args.resou
         const nearest = getNearestSlots(newTime, validSlots)
         const cadence = formatSlotCadence(slotInterval)
         return {
-          resultForAi: `${newTime} ไม่ใช่รอบจองที่เปิดไว้สำหรับ ${rescheduleService.name || bk.service_name}. ${cadence}. รอบที่จองได้: ${validSlots.join(', ')}. รอบใกล้เคียง: ${nearest.join(', ')}`,
-          immediateMessages: [{ type: 'text', content: `รอบ ${newTime} น. ยังไม่ใช่รอบที่เปิดจองค่ะ
-${cadence}
-
-รอบที่จองได้คือ ${formatSlotList(validSlots)}
-${nearest.length ? `รอบที่ใกล้ที่สุดคือ ${formatSlotList(nearest)}` : ''}
-
-ต้องการให้เลื่อนไปเป็นรอบไหนคะ?` }],
+          resultForAi: `${newTime} ไม่ใช่รอบจองที่เปิดไว้สำหรับ ${rescheduleService.name || bk.service_name} ยังไม่ได้เลื่อนการจอง. ${cadence}. รอบที่จองได้: ${validSlots.join(', ')}. รอบใกล้เคียง: ${nearest.join(', ')}`,
+          immediateMessages: [],
         }
       }
 
@@ -837,8 +851,8 @@ ${nearest.length ? `รอบที่ใกล้ที่สุดคือ ${
       const requestedSeats = Number(bk.guest_count) || 1
       if (reserved + requestedSeats > capacityPerSlot) {
         return {
-          resultForAi: `เวลา ${newTime} วันที่ ${newDate} เต็มแล้ว`,
-          immediateMessages: [{ type: 'text', content: `ขออภัยค่ะ เวลา ${newTime} วันที่ ${newDate} เต็มแล้ว รบกวนเลือกเวลาอื่นนะคะ` }],
+          resultForAi: `เวลา ${newTime} วันที่ ${newDate} เต็มแล้ว ยังไม่ได้เลื่อนการจอง ให้ชวนลูกค้าเลือกเวลาอื่น`,
+          immediateMessages: [],
         }
       }
     }
@@ -850,43 +864,41 @@ ${nearest.length ? `รอบที่ใกล้ที่สุดคือ ${
       .eq('id', bk.id)
 
     return {
-      resultForAi: `เลื่อนคิว ${bk.booking_no} เป็นวันที่ ${newDate} เวลา ${newTime} แล้ว`,
-      immediateMessages: [{ type: 'text', content: `เลื่อนการจองเรียบร้อยค่ะ
-เลขที่การจอง: ${bk.booking_no}
-บริการ: ${bk.service_name || '-'}
-วันเวลาใหม่: ${newDate} ${newTime} น.` }],
+      resultForAi: `เลื่อนการจองสำเร็จแล้วจริง ให้ยืนยันกับลูกค้าโดยใส่ข้อมูลนี้ให้ครบ — ` +
+        `เลขที่การจอง: ${bk.booking_no}, บริการ: ${bk.service_name || '-'}, วันเวลาใหม่: ${newDate} ${newTime} น.`,
+      immediateMessages: [],
     }
   }
 
   if (toolName === 'cancel_booking') {
     const lookup = await findBookingForAction(supabase, shopId, args, userId)
     if (lookup.error) {
-      return { resultForAi: `ค้นหาการจองไม่สำเร็จ: ${lookup.error}`, immediateMessages: [{ type: 'text', content: 'ขออภัยค่ะ ค้นหาการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้งนะคะ' }] }
+      return { resultForAi: `ค้นหาการจองไม่สำเร็จ: ${lookup.error} ยังไม่ได้ยกเลิกอะไร`, immediateMessages: [] }
     }
     if (lookup.matches.length > 1) {
       const list = lookup.matches.map((bk) => `${bk.booking_no}: ${bk.customer_name || '-'} ${bk.service_name || '-'} ${bk.booking_date} ${String(bk.booking_time || '').slice(0, 5)} น.`).join('\n')
-      return { resultForAi: `พบหลายรายการ ต้องให้ลูกค้าเลือกเลขที่การจองก่อนยกเลิก:\n${list}`, immediateMessages: [{ type: 'text', content: `พบหลายรายการค่ะ รบกวนแจ้งเลขที่การจองที่ต้องการยกเลิกนะคะ\n${list}` }] }
+      return { resultForAi: `พบหลายรายการ ยังไม่ได้ยกเลิกอะไร ต้องให้ลูกค้าเลือกเลขที่การจองก่อน:\n${list}`, immediateMessages: [] }
     }
     const bk = lookup.booking
     if (!bk) {
-      return { resultForAi: 'ไม่พบข้อมูลการจองสำหรับยกเลิก', immediateMessages: [{ type: 'text', content: 'ยังไม่พบรายการจองค่ะ รบกวนแจ้งเลขที่การจอง หรือชื่อ เบอร์โทร วันและเวลาเดิมอีกครั้งนะคะ' }] }
+      return { resultForAi: 'ไม่พบข้อมูลการจองสำหรับยกเลิก ยังไม่ได้ยกเลิกอะไร ให้ขอเลขที่การจอง หรือชื่อ เบอร์โทร วันและเวลาเดิมจากลูกค้า', immediateMessages: [] }
     }
 
     await supabase.from('bookings').update({ status: 'cancelled' }).eq('shop_id', shopId).eq('id', bk.id)
     return {
-      resultForAi: `ยกเลิกการจอง ${bk.booking_no} แล้ว`,
-      immediateMessages: [{ type: 'text', content: `✅ ยกเลิกการจอง ${bk.booking_no} (${bk.service_name || '-'} วันที่ ${bk.booking_date}) เรียบร้อยค่ะ` }],
+      resultForAi: `ยกเลิกการจองสำเร็จแล้วจริง ให้ยืนยันกับลูกค้าโดยใส่ข้อมูลนี้ให้ครบ — ` +
+        `เลขที่การจอง: ${bk.booking_no}, บริการ: ${bk.service_name || '-'}, วันเดิม: ${bk.booking_date} ${String(bk.booking_time || '').slice(0, 5)} น.`,
+      immediateMessages: [],
     }
   }
   if (toolName === 'get_customer_history') {
     const { data: ords } = await supabase.from('orders').select('order_no,product_name,total_amount,status,created_at').eq('shop_id', shopId).eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(5)
     if (!ords || ords.length === 0) {
-      return { resultForAi: 'ไม่มีประวัติการสั่งซื้อ', immediateMessages: [{ type: 'text', content: '📋 ยังไม่มีประวัติการสั่งซื้อค่ะ' }] }
+      return { resultForAi: 'ลูกค้ายังไม่มีประวัติการสั่งซื้อ', immediateMessages: [] }
     }
-    const hist = ords.map((o: any) => `• ${o.order_no} - ${o.product_name}\n  ${Number(o.total_amount).toLocaleString()} บาท | ${o.status}`).join('\n\n')
     return {
-      resultForAi: ords.map((o: any) => `${o.order_no}: ${o.product_name}, ${o.total_amount} บาท, ${o.status}`).join('; '),
-      immediateMessages: [{ type: 'text', content: `📋 ประวัติการสั่งซื้อ:\n\n${hist}` }],
+      resultForAi: `ประวัติการสั่งซื้อ: ${ords.map((o: any) => `${o.order_no} ${o.product_name} ${Number(o.total_amount).toLocaleString()} บาท (${o.status})`).join('; ')}`,
+      immediateMessages: [],
     }
   }
 
@@ -895,8 +907,8 @@ ${nearest.length ? `รอบที่ใกล้ที่สุดคือ ${
     const total = paidOrds?.reduce((s: number, o: any) => s + Number(o.total_amount), 0) ?? 0
     const pts = Math.floor(total / 100)
     return {
-      resultForAi: `ยอดซื้อสะสม ${total} บาท, แต้มสะสม ${pts}`,
-      immediateMessages: [{ type: 'text', content: `⭐ แต้มสะสมของคุณ\n💰 ยอดซื้อทั้งหมด: ${total.toLocaleString()} บาท\n🎁 แต้มสะสม: ${pts.toLocaleString()} แต้ม\n(ทุก 100 บาท = 1 แต้ม)` }],
+      resultForAi: `ยอดซื้อสะสม ${total.toLocaleString()} บาท, แต้มสะสม ${pts.toLocaleString()} แต้ม (ทุก 100 บาท = 1 แต้ม)`,
+      immediateMessages: [],
     }
   }
 
@@ -905,15 +917,14 @@ ${nearest.length ? `รอบที่ใกล้ที่สุดคือ ${
     const today = new Date().toISOString().split('T')[0]
     const { data: promos } = await supabase.from('promotions').select('name,description,discount_type,discount_value,end_date,code').eq('shop_id', shopId).eq('status', 'active').or(`end_date.is.null,end_date.gte.${today}`).order('created_at', { ascending: false }).limit(5)
     if (!promos || promos.length === 0) {
-      return { resultForAi: 'ไม่มีโปรโมชั่นที่ใช้งานอยู่', immediateMessages: [{ type: 'text', content: '❌ ยังไม่มีโปรโมชั่นในขณะนี้ค่ะ' }] }
+      return { resultForAi: 'ยังไม่มีโปรโมชั่นที่ใช้งานอยู่ ให้แจ้งลูกค้าตามนี้', immediateMessages: [] }
     }
-    const list = promos.map((p: any) => {
-      const d = p.discount_type === 'percent' ? `ลด ${p.discount_value}%` : `ลด ${Number(p.discount_value).toLocaleString()} บาท`
-      return `🎁 ${p.name}\n   ${d}${p.end_date ? ` | ถึง ${p.end_date}` : ''}${p.code ? `\n   โค้ด: ${p.code}` : ''}`
-    }).join('\n\n')
     return {
-      resultForAi: promos.map((p: any) => `${p.name}: ${p.discount_type} ${p.discount_value}`).join('; '),
-      immediateMessages: [{ type: 'text', content: `🔥 โปรโมชั่นพิเศษ:\n\n${list}` }],
+      resultForAi: `โปรโมชั่นที่ใช้ได้: ${promos.map((p: any) => {
+        const d = p.discount_type === 'percent' ? `ลด ${p.discount_value}%` : `ลด ${Number(p.discount_value).toLocaleString()} บาท`
+        return `${p.name} ${d}${p.end_date ? ` ถึง ${p.end_date}` : ''}${p.code ? ` โค้ด ${p.code}` : ''}`
+      }).join('; ')}`,
+      immediateMessages: [],
     }
   }
 
