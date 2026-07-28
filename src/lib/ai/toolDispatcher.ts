@@ -127,6 +127,85 @@ function normalizeBookingTime(timeValue: unknown) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
+
+type BookingServiceRecord = {
+  id: string
+  name: string | null
+  booking_type?: string | null
+  staff_name?: string | null
+  resource_label?: string | null
+  duration_minutes?: number | null
+  available_days?: string[] | null
+  start_time?: string | null
+  end_time?: string | null
+  buffer_minutes?: number | null
+  capacity_per_slot?: number | null
+  deposit_amount?: number | null
+  required_fields?: string[] | null
+  status?: string | null
+}
+
+const BOOKING_SERVICE_SELECT = 'id,name,booking_type,staff_name,resource_label,duration_minutes,available_days,start_time,end_time,buffer_minutes,capacity_per_slot,deposit_amount,required_fields,status'
+
+function normalizeSearchText(value: unknown) {
+  return String(value || '').toLowerCase().replace(/[()\[\]{}"'`*_~]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function scoreBookingServiceCandidate(service: BookingServiceRecord, args: Record<string, any>) {
+  const queryText = normalizeSearchText([
+    args.service,
+    args.service_name,
+    args.resource,
+    args.resource_label,
+    args.zone,
+    args.booking_type,
+  ].filter(Boolean).join(' '))
+  const name = normalizeSearchText(service.name)
+  const resource = normalizeSearchText(service.resource_label)
+  const staff = normalizeSearchText(service.staff_name)
+  const type = normalizeSearchText(service.booking_type)
+  let score = 0
+
+  if (service.status === 'active' || !service.status) score += 2
+  if (type === 'table') score += 18
+  if (type === 'service') score += 6
+  if (name.includes('จองโต๊ะ') || name.includes('โต๊ะ')) score += 12
+  if (resource) score += 2
+
+  if (queryText) {
+    for (const token of queryText.split(' ').filter((part) => part.length >= 2)) {
+      if (name.includes(token)) score += 18
+      if (resource.includes(token)) score += 24
+      if (staff.includes(token)) score += 20
+      if (type.includes(token)) score += 8
+    }
+  }
+
+  return score
+}
+
+export async function resolveBookingService(supabase: SupabaseClient, shopId: string, args: Record<string, any>) {
+  const explicitService = String(args.service || args.service_name || '').trim()
+  const explicitResource = String(args.resource || args.resource_label || args.zone || '').trim()
+  const requestedType = String(args.booking_type || '').trim()
+
+  const { data } = await supabase
+    .from('services')
+    .select(BOOKING_SERVICE_SELECT)
+    .eq('shop_id', shopId)
+    .neq('status', 'inactive')
+    .order('created_at', { ascending: false })
+    .limit(30)
+
+  const services = ((data || []) as BookingServiceRecord[]).filter(Boolean)
+  if (services.length === 0) return null
+
+  if (explicitService || explicitResource || requestedType) {
+    return [...services].sort((a, b) => scoreBookingServiceCandidate(b, args) - scoreBookingServiceCandidate(a, args))[0] || null
+  }
+
+  return services.find((service) => service.booking_type === 'table') || services[0]
+}
 async function findBookingForAction(supabase: SupabaseClient, shopId: string, args: Record<string, any>, userId: string) {
   const lookup = String(args.booking_id || args.booking_no || args.query || '').trim()
   const phone = String(args.phone || '').trim()
@@ -460,21 +539,12 @@ export async function executeTool(
   // ── 📅 BOOKING TOOLS ──────────────────────────────────────────────
   if (toolName === 'check_available_slots') {
     const bookingDate = normalizeBookingDate(args.date)
-    const serviceQuery = String(args.service || args.service_name || '').trim()
-    const { data: service } = serviceQuery
-      ? await supabase
-          .from('services')
-          .select('id,name,booking_type,staff_name,resource_label,duration_minutes,available_days,start_time,end_time,buffer_minutes,capacity_per_slot,deposit_amount,required_fields,status')
-          .eq('shop_id', shopId)
-          .neq('status', 'inactive')
-          .ilike('name', `%${serviceQuery}%`)
-          .limit(1)
-          .maybeSingle()
-      : { data: null }
+    const service = await resolveBookingService(supabase, shopId, args)
+    const requestedTime = normalizeBookingTime(args.time || args.requested_time)
 
     const dayKey = parseBookingDateDayKey(bookingDate)
     const serviceDays = (service as any)?.available_days as string[] | null | undefined
-    const serviceName = (service as any)?.name || serviceQuery
+    const serviceName = (service as any)?.name || String(args.service || args.service_name || '').trim()
     const serviceId = (service as any)?.id
     const capacityPerSlot = Math.max(Number((service as any)?.capacity_per_slot) || 1, 1)
 
@@ -513,8 +583,11 @@ export async function executeTool(
     if (free.length > 0) {
       const serviceLine = serviceName ? `สำหรับ ${serviceName}${((service as any)?.resource_label || (service as any)?.staff_name) ? ` (${(service as any).resource_label || (service as any).staff_name})` : ''}` : ''
       const cadence = formatSlotCadence(slotInterval)
+      const requestedSlotNote = requestedTime && !allSlots.includes(requestedTime)
+        ? ` เวลาที่ลูกค้าถาม ${requestedTime} ไม่ใช่รอบเปิดจริง; รอบใกล้ที่สุดคือ ${getNearestSlots(requestedTime, free.length ? free : allSlots).join(', ') || '-'}.`
+        : ''
       return {
-        resultForAi: `${cadence}. เวลาว่างวันที่ ${bookingDate}${serviceLine ? ` ${serviceLine}` : ''}: ${free.join(', ')}. ใช้ได้เฉพาะเวลาที่อยู่ในรายการนี้เท่านั้น`,
+        resultForAi: `${cadence}. รอบที่เปิดจริงวันที่ ${bookingDate}${serviceLine ? ` ${serviceLine}` : ''}: ${allSlots.join(', ')}. เวลาว่าง: ${free.join(', ')}.${requestedSlotNote} ใช้ได้เฉพาะเวลาที่อยู่ในรายการว่างเท่านั้น`,
         immediateMessages: [{ type: 'text', content: `ช่วงเวลาว่างวันที่ ${bookingDate}${serviceLine ? ` ${serviceLine}` : ''}
 ${cadence}
 
@@ -531,22 +604,12 @@ ${free.map((slot) => `- ${slot} น.`).join('\n')}
   }
 
   if (toolName === 'book_appointment') {
-    const serviceName = args.service || args.service_name
+    const requestedServiceName = args.service || args.service_name
     const bookingDate = normalizeBookingDate(args.date)
     const bookingTime = normalizeBookingTime(args.time)
     const guestCount = Number(args.guest_count || args.party_size || args.people) || null
-    const { data: service } = serviceName
-      ? await supabase
-          .from('services')
-          .select('id,name,booking_type,resource_label,staff_name,deposit_amount,capacity_per_slot,duration_minutes,available_days,start_time,end_time,buffer_minutes')
-          .eq('shop_id', shopId)
-          .neq('status', 'inactive')
-          .ilike('name', `%${serviceName}%`)
-          .limit(1)
-          .maybeSingle()
-      : { data: null }
-
-    const serviceRecord = service as any
+    const serviceRecord = await resolveBookingService(supabase, shopId, args) as any
+    const serviceName = serviceRecord?.name || requestedServiceName
     const serviceDays = serviceRecord?.available_days as string[] | null | undefined
     const dayKey = parseBookingDateDayKey(bookingDate)
     if (serviceRecord && dayKey && serviceDays?.length && !serviceDays.includes(dayKey)) {

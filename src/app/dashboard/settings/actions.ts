@@ -3,7 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { processSalesAgentChat, getQuotaStatus, QUOTA_EXCEEDED_MESSAGE_TH } from '@/lib/ai/salesAgentEngine'
-import { applyProductSearchFilters, buildAvailabilitySlots, formatOrderCloseSummary, formatPaymentInstructions, getSlotIntervalMinutes, normalizeBookingDate, parseBookingDateDayKey } from '@/lib/ai/toolDispatcher'
+import { applyProductSearchFilters, buildAvailabilitySlots, formatOrderCloseSummary, formatPaymentInstructions, getSlotIntervalMinutes, normalizeBookingDate, parseBookingDateDayKey, resolveBookingService } from '@/lib/ai/toolDispatcher'
 import type { ToolExecutor, ToolExecutionContext, ToolExecutionResult } from '@/lib/ai/toolDispatcher'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { buildAutoGreeting } from '@/lib/businessGreeting'
@@ -247,21 +247,12 @@ const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionC
   }
   if (name === 'check_available_slots') {
     const bookingDate = normalizeBookingDate(args.date)
-    const serviceQuery = String(args.service || args.service_name || '').trim()
-    const { data: service } = serviceQuery
-      ? await supabase
-          .from('services')
-          .select('id,name,booking_type,staff_name,resource_label,duration_minutes,available_days,start_time,end_time,buffer_minutes,capacity_per_slot,status')
-          .eq('shop_id', shopId)
-          .neq('status', 'inactive')
-          .ilike('name', `%${serviceQuery}%`)
-          .limit(1)
-          .maybeSingle()
-      : { data: null }
+    const service = await resolveBookingService(supabase, shopId, args)
+    const requestedTime = String(args.time || args.requested_time || '').trim().replace('.', ':')
 
     const dayKey = parseBookingDateDayKey(bookingDate)
     const serviceDays = (service as any)?.available_days as string[] | null | undefined
-    const serviceName = (service as any)?.name || serviceQuery
+    const serviceName = (service as any)?.name || String(args.service || args.service_name || '').trim()
     const serviceId = (service as any)?.id
     const capacityPerSlot = Math.max(Number((service as any)?.capacity_per_slot) || 1, 1)
 
@@ -297,7 +288,10 @@ const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionC
     const free = allSlots.filter((slot) => (bookedCounts.get(slot) || 0) < capacityPerSlot)
     const resource = (service as any)?.resource_label || (service as any)?.staff_name
     const scope = serviceName ? `สำหรับ ${serviceName}${resource ? ` (${resource})` : ''}` : ''
-    const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_available_slots ${scope} วันที่ ${bookingDate}: ระบบเปิดรอบทุก ${slotInterval} นาที | รอบที่เปิดจริง ${allSlots.join(', ')} | ว่าง ${free.length ? free.join(', ') : 'ไม่มีเวลาว่าง'} | ให้เสนอเฉพาะเวลาที่อยู่ในรายการว่างเท่านั้น`
+    const requestedSlotNote = requestedTime && !allSlots.includes(requestedTime)
+      ? ` | เวลาที่ลูกค้าถาม ${requestedTime} ไม่ใช่รอบเปิดจริง ให้เสนอรอบใกล้ที่สุดจากรายการว่างเท่านั้น`
+      : ''
+    const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_available_slots ${scope} วันที่ ${bookingDate}: ระบบเปิดรอบทุก ${slotInterval} นาที | รอบที่เปิดจริง ${allSlots.join(', ')} | ว่าง ${free.length ? free.join(', ') : 'ไม่มีเวลาว่าง'}${requestedSlotNote} | ให้เสนอเฉพาะเวลาที่อยู่ในรายการว่างเท่านั้น`
     return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
   if (name === 'check_booking') {
