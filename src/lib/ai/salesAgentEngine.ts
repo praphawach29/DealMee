@@ -1237,13 +1237,11 @@ export async function continueSalesAgentPlanning(state: PlanningState): Promise<
 
 /**
  * Converts the provider-agnostic PlanningTurn[] into Gemini's `contents`
- * array. Gemini's current generateContent API requires every
- * functionResponse to carry a `call_id` matching the `id` the model
- * attached to its functionCall — a newer requirement than older Gemini
- * versions had, so this is the one part of the loop most worth a live
- * Chat Playground test before trusting in production (if it errors, the
- * fix is almost certainly adjusting where `id` goes based on the logged
- * error body below).
+ * array. Verified live (28 กรกฎาคม 2026, Chat Playground) that Gemini's
+ * current generateContent API rejects `role: 'function'` for tool results
+ * — `400 INVALID_ARGUMENT: "Role 'function' is not supported... USER,
+ * ASSISTANT, ..., MODEL, USER"` — so functionResponse parts go on a
+ * 'user' turn instead, matching MODEL/USER from that accepted list.
  */
 function buildGeminiContents(turns: PlanningTurn[]): any[] {
   return turns.map((turn) => {
@@ -1264,9 +1262,12 @@ function buildGeminiContents(turns: PlanningTurn[]): any[] {
       }
       return { role: 'model', parts }
     }
-    // tool_result
+    // tool_result — Gemini's current API rejects role: 'function' (confirmed
+    // live: "Role 'function' is not supported... USER, ASSISTANT, ...
+    // MODEL, USER"), unlike the role this used to take in older versions.
+    // functionResponse parts go on a 'user' turn instead.
     return {
-      role: 'function',
+      role: 'user',
       parts: [
         {
           functionResponse: {
