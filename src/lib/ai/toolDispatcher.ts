@@ -56,29 +56,109 @@ const GENERIC_PRODUCT_SEARCH_WORDS = [
 
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-export function parseBookingDateDayKey(dateValue: unknown) {
-  const text = String(dateValue || '').trim()
+type BookingRecord = {
+  id: string
+  booking_no: string
+  customer_name: string | null
+  phone: string | null
+  service_name: string | null
+  booking_date: string
+  booking_time: string | null
+  status: string | null
+  note?: string | null
+  resource_label?: string | null
+  guest_count?: number | null
+}
+
+function bangkokToday() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value)
+  return new Date(Date.UTC(get('year'), get('month') - 1, get('day')))
+}
+
+function formatIsoDate(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`
+}
+
+export function normalizeBookingDate(dateValue: unknown) {
+  const text = String(dateValue || '').trim().toLowerCase()
+  if (!text) return ''
+
   const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  const slash = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  let year = 0
-  let month = 0
-  let day = 0
+  if (iso) return text
 
-  if (iso) {
-    year = Number(iso[1])
-    month = Number(iso[2])
-    day = Number(iso[3])
-  } else if (slash) {
-    year = Number(slash[3])
-    month = Number(slash[2])
-    day = Number(slash[1])
-  } else {
-    return null
+  const slash = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (slash) return `${slash[3]}-${slash[2].padStart(2, '0')}-${slash[1].padStart(2, '0')}`
+
+  const today = bangkokToday()
+  const offset = text.includes('มะรืน') ? 2 : text.includes('พรุ่งนี้') ? 1 : text.includes('วันนี้') ? 0 : null
+  if (offset !== null) {
+    const date = new Date(today)
+    date.setUTCDate(date.getUTCDate() + offset)
+    return formatIsoDate(date)
   }
 
-  const date = new Date(Date.UTC(year, month - 1, day))
+  return text
+}
+
+export function parseBookingDateDayKey(dateValue: unknown) {
+  const text = normalizeBookingDate(dateValue)
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!iso) return null
+
+  const date = new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])))
   return DAY_KEYS[date.getUTCDay()]
+}
+
+function normalizeBookingTime(timeValue: unknown) {
+  const text = String(timeValue || '').trim()
+  const match = text.match(/(\d{1,2})(?::|\.)(\d{2})|^(\d{1,2})$/)
+  if (!match) return text
+  const hours = Number(match[1] || match[3])
+  const minutes = Number(match[2] || 0)
+  if (!Number.isFinite(hours) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return text
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
+async function findBookingForAction(supabase: SupabaseClient, shopId: string, args: Record<string, any>, userId: string) {
+  const lookup = String(args.booking_id || args.booking_no || args.query || '').trim()
+  const phone = String(args.phone || '').trim()
+  const customerName = String(args.customer_name || args.name || '').trim()
+  const date = normalizeBookingDate(args.date || args.booking_date || args.old_date)
+  const time = normalizeBookingTime(args.time || args.booking_time || args.old_time)
+  const baseSelect = 'id,booking_no,customer_name,phone,service_name,booking_date,booking_time,status,note,resource_label,guest_count'
+
+  let query = supabase
+    .from('bookings')
+    .select(baseSelect)
+    .eq('shop_id', shopId)
+    .neq('status', 'cancelled')
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  if (lookup) {
+    query = UUID_RE.test(lookup) ? query.eq('id', lookup) : query.ilike('booking_no', `%${lookup}%`)
+  } else if (phone || customerName || date || time) {
+    if (phone) query = query.ilike('phone', `%${phone}%`)
+    if (customerName) query = query.ilike('customer_name', `%${customerName}%`)
+    if (date) query = query.eq('booking_date', date)
+    if (time) query = query.eq('booking_time', time)
+  } else {
+    query = query.contains('metadata', { line_user_id: userId })
+  }
+
+  const { data, error } = await query
+  if (error) return { error: error.message, booking: null as BookingRecord | null, matches: [] as BookingRecord[] }
+
+  const matches = (data || []) as BookingRecord[]
+  return { error: '', booking: matches.length === 1 ? matches[0] : null, matches }
 }
 
 function timeToMinutes(value: unknown) {
@@ -358,6 +438,7 @@ export async function executeTool(
 
   // ── 📅 BOOKING TOOLS ──────────────────────────────────────────────
   if (toolName === 'check_available_slots') {
+    const bookingDate = normalizeBookingDate(args.date)
     const serviceQuery = String(args.service || args.service_name || '').trim()
     const { data: service } = serviceQuery
       ? await supabase
@@ -370,7 +451,7 @@ export async function executeTool(
           .maybeSingle()
       : { data: null }
 
-    const dayKey = parseBookingDateDayKey(args.date)
+    const dayKey = parseBookingDateDayKey(bookingDate)
     const serviceDays = (service as any)?.available_days as string[] | null | undefined
     const serviceName = (service as any)?.name || serviceQuery
     const serviceId = (service as any)?.id
@@ -378,8 +459,8 @@ export async function executeTool(
 
     if (service && dayKey && serviceDays?.length && !serviceDays.includes(dayKey)) {
       return {
-        resultForAi: `${serviceName} ไม่ได้เปิดให้บริการวันที่ ${args.date}`,
-        immediateMessages: [{ type: 'text', content: `${serviceName} ไม่ได้เปิดให้บริการวันที่ ${args.date} ค่ะ รบกวนเลือกวันอื่นนะคะ` }],
+        resultForAi: `${serviceName} ไม่ได้เปิดให้บริการวันที่ ${bookingDate}`,
+        immediateMessages: [{ type: 'text', content: `${serviceName} ไม่ได้เปิดให้บริการวันที่ ${bookingDate} ค่ะ รบกวนเลือกวันอื่นนะคะ` }],
       }
     }
 
@@ -387,7 +468,7 @@ export async function executeTool(
       .from('bookings')
       .select('booking_time,guest_count')
       .eq('shop_id', shopId)
-      .eq('booking_date', args.date)
+      .eq('booking_date', bookingDate)
       .neq('status', 'cancelled')
 
     if (serviceId) bookingQuery = bookingQuery.eq('service_id', serviceId)
@@ -408,71 +489,115 @@ export async function executeTool(
     if (free.length > 0) {
       const serviceLine = serviceName ? `สำหรับ ${serviceName}${((service as any)?.resource_label || (service as any)?.staff_name) ? ` (${(service as any).resource_label || (service as any).staff_name})` : ''}` : ''
       return {
-        resultForAi: `เวลาว่างวันที่ ${args.date}${serviceLine ? ` ${serviceLine}` : ''}: ${free.join(', ')}`,
-        immediateMessages: [{ type: 'text', content: `ช่วงเวลาว่างวันที่ ${args.date}${serviceLine ? ` ${serviceLine}` : ''}:\n\n${free.map((slot) => `- ${slot} น.`).join('\n')}\n\nต้องการจองเวลาไหนคะ?` }],
+        resultForAi: `เวลาว่างวันที่ ${bookingDate}${serviceLine ? ` ${serviceLine}` : ''}: ${free.join(', ')}`,
+        immediateMessages: [{ type: 'text', content: `ช่วงเวลาว่างวันที่ ${bookingDate}${serviceLine ? ` ${serviceLine}` : ''}:
+
+${free.map((slot) => `- ${slot} น.`).join('\n')}
+
+ต้องการจองเวลาไหนคะ?` }],
       }
     }
 
     return {
-      resultForAi: `ไม่มีเวลาว่างวันที่ ${args.date}`,
-      immediateMessages: [{ type: 'text', content: `ไม่มีเวลาว่างวันที่ ${args.date} ค่ะ กรุณาเลือกวันอื่นนะคะ` }],
+      resultForAi: `ไม่มีเวลาว่างวันที่ ${bookingDate}`,
+      immediateMessages: [{ type: 'text', content: `ไม่มีเวลาว่างวันที่ ${bookingDate} ค่ะ กรุณาเลือกวันอื่นนะคะ` }],
     }
   }
+
   if (toolName === 'book_appointment') {
     const serviceName = args.service || args.service_name
+    const bookingDate = normalizeBookingDate(args.date)
+    const bookingTime = normalizeBookingTime(args.time)
+    const guestCount = Number(args.guest_count || args.party_size || args.people) || null
     const { data: service } = serviceName
       ? await supabase
           .from('services')
-          .select('id,booking_type,resource_label,staff_name,deposit_amount,capacity_per_slot')
+          .select('id,name,booking_type,resource_label,staff_name,deposit_amount,capacity_per_slot,duration_minutes,available_days,start_time,end_time,buffer_minutes')
           .eq('shop_id', shopId)
           .neq('status', 'inactive')
           .ilike('name', `%${serviceName}%`)
           .limit(1)
           .maybeSingle()
       : { data: null }
+
+    const serviceRecord = service as any
+    const serviceDays = serviceRecord?.available_days as string[] | null | undefined
+    const dayKey = parseBookingDateDayKey(bookingDate)
+    if (serviceRecord && dayKey && serviceDays?.length && !serviceDays.includes(dayKey)) {
+      return {
+        resultForAi: `${serviceRecord.name || serviceName} ไม่ได้เปิดให้จองวันที่ ${bookingDate}`,
+        immediateMessages: [{ type: 'text', content: `${serviceRecord.name || serviceName} ไม่ได้เปิดให้จองวันที่ ${bookingDate} ค่ะ รบกวนเลือกวันอื่นนะคะ` }],
+      }
+    }
+
+    const capacityPerSlot = Math.max(Number(serviceRecord?.capacity_per_slot) || 1, 1)
+    let sameSlotQuery = supabase
+      .from('bookings')
+      .select('guest_count')
+      .eq('shop_id', shopId)
+      .eq('booking_date', bookingDate)
+      .eq('booking_time', bookingTime)
+      .neq('status', 'cancelled')
+    if (serviceRecord?.id) sameSlotQuery = sameSlotQuery.eq('service_id', serviceRecord.id)
+    else if (serviceName) sameSlotQuery = sameSlotQuery.ilike('service_name', `%${serviceName}%`)
+    const { data: sameSlotBookings } = await sameSlotQuery
+    const reserved = (sameSlotBookings || []).reduce((sum: number, row: any) => sum + (Number(row.guest_count) || 1), 0)
+    const requestedSeats = guestCount || 1
+    if (reserved + requestedSeats > capacityPerSlot) {
+      return {
+        resultForAi: `เวลา ${bookingTime} วันที่ ${bookingDate} เต็มแล้ว`,
+        immediateMessages: [{ type: 'text', content: `ขออภัยค่ะ เวลา ${bookingTime} วันที่ ${bookingDate} เต็มแล้ว รบกวนเลือกเวลาอื่นนะคะ` }],
+      }
+    }
+
     const bookingNo = `BK-${Date.now().toString().slice(-6)}`
     await supabase.from('bookings').insert({
-      shop_id: shopId, booking_no: bookingNo,
+      shop_id: shopId,
+      booking_no: bookingNo,
       customer_name: args.customer_name || args.name || `LINE-${userId.substring(0, 6)}`,
-      phone: args.phone, service_name: serviceName,
-      service_id: (service as any)?.id || null,
-      booking_type: (service as any)?.booking_type || args.booking_type || 'service',
-      resource_label: args.resource_label || args.resource || (service as any)?.resource_label || (service as any)?.staff_name || null,
-      guest_count: args.guest_count || args.party_size || args.people || null,
-      deposit_amount: (service as any)?.deposit_amount || args.deposit_amount || 0,
-      booking_date: args.date, booking_time: args.time,
-      status: 'confirmed', note: args.note,
-      metadata: { raw_args: args },
+      phone: args.phone,
+      service_name: serviceRecord?.name || serviceName,
+      service_id: serviceRecord?.id || null,
+      booking_type: serviceRecord?.booking_type || args.booking_type || 'service',
+      resource_label: args.resource_label || args.resource || serviceRecord?.resource_label || serviceRecord?.staff_name || null,
+      guest_count: guestCount,
+      deposit_amount: serviceRecord?.deposit_amount || args.deposit_amount || 0,
+      booking_date: bookingDate,
+      booking_time: bookingTime,
+      status: 'confirmed',
+      note: args.note,
+      metadata: { raw_args: args, line_user_id: userId, conversation_id: conversationId },
     })
     return {
-      resultForAi: `จองคิว ${bookingNo}: ${serviceName} วันที่ ${args.date} เวลา ${args.time}`,
-      immediateMessages: [{ type: 'text', content: `✅ จองคิวเรียบร้อยค่ะ!\n📋 หมายเลข: ${bookingNo}\n💆 บริการ: ${serviceName}\n📅 ${args.date} เวลา ${args.time} น.\n\nขอบคุณค่ะ 🙏` }],
+      resultForAi: `จองคิว ${bookingNo}: ${serviceRecord?.name || serviceName} วันที่ ${bookingDate} เวลา ${bookingTime}`,
+      immediateMessages: [{ type: 'text', content: `✅ จองเรียบร้อยค่ะ
+เลขที่การจอง: ${bookingNo}
+บริการ: ${serviceRecord?.name || serviceName}
+${guestCount ? `จำนวน: ${guestCount} ท่าน\n` : ''}${args.resource || args.resource_label || serviceRecord?.resource_label ? `พื้นที่/ผู้ให้บริการ: ${args.resource || args.resource_label || serviceRecord?.resource_label}\n` : ''}วันที่: ${bookingDate}
+เวลา: ${bookingTime} น.` }],
     }
   }
 
   if (toolName === 'check_booking') {
-    const bid = args.booking_id || args.query
-    if (!bid) {
-      return {
-        resultForAi: 'ยังไม่มีเลขที่การจองหรือคำค้นหา จึงตรวจสอบการจองไม่ได้',
-        immediateMessages: [{ type: 'text', content: 'รบกวนแจ้งเลขที่การจอง หรือชื่อและเบอร์โทรที่ใช้จองก่อนนะคะ' }],
-      }
+    const lookup = await findBookingForAction(supabase, shopId, args, userId)
+    if (lookup.error) {
+      return { resultForAi: `ตรวจสอบการจองไม่สำเร็จ: ${lookup.error}`, immediateMessages: [{ type: 'text', content: 'ขออภัยค่ะ ตรวจสอบการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้งนะคะ' }] }
     }
-    const { data: bk } = await supabase
-      .from('bookings')
-      .select('booking_no,customer_name,phone,service_name,booking_date,booking_time,status,note')
-      .eq('shop_id', shopId)
-      .or(`id.eq.${bid},booking_no.ilike.%${bid}%`)
-      .maybeSingle()
-
+    if (lookup.matches.length > 1) {
+      const list = lookup.matches.map((bk) => `${bk.booking_no}: ${bk.customer_name || '-'} ${bk.service_name || '-'} ${bk.booking_date} ${String(bk.booking_time || '').slice(0, 5)} น.`).join('\n')
+      return { resultForAi: `พบหลายรายการ ต้องให้ลูกค้าเลือกเลขที่การจอง:\n${list}`, immediateMessages: [{ type: 'text', content: `พบหลายรายการค่ะ รบกวนเลือกเลขที่การจองที่ต้องการนะคะ\n${list}` }] }
+    }
+    const bk = lookup.booking
     if (!bk) {
-      return { resultForAi: 'ไม่พบข้อมูลการจอง', immediateMessages: [{ type: 'text', content: 'ไม่พบข้อมูลการจองค่ะ รบกวนตรวจสอบเลขที่การจองอีกครั้งนะคะ' }] }
+      return { resultForAi: 'ไม่พบข้อมูลการจอง', immediateMessages: [{ type: 'text', content: 'ไม่พบข้อมูลการจองค่ะ รบกวนแจ้งเลขที่การจอง หรือชื่อและเบอร์โทรที่ใช้จองอีกครั้งนะคะ' }] }
     }
 
     const info = [
       `เลขที่การจอง: ${bk.booking_no}`,
       `ลูกค้า: ${bk.customer_name}${bk.phone ? ` (${bk.phone})` : ''}`,
       `บริการ: ${bk.service_name || '-'}`,
+      bk.resource_label ? `พื้นที่/ผู้ให้บริการ: ${bk.resource_label}` : '',
+      bk.guest_count ? `จำนวน: ${bk.guest_count}` : '',
       `วันเวลา: ${bk.booking_date} ${String(bk.booking_time || '').slice(0, 5)} น.`,
       `สถานะ: ${bk.status}`,
       bk.note ? `หมายเหตุ: ${bk.note}` : '',
@@ -482,61 +607,63 @@ export async function executeTool(
   }
 
   if (toolName === 'reschedule_booking') {
-    const bid = args.booking_id || args.query
-    if (!bid) {
-      return {
-        resultForAi: 'ยังไม่มีเลขที่การจอง จึงดำเนินการไม่ได้ ต้องขอเลขที่การจองหรือข้อมูลเดิมเพื่อค้นหาก่อน',
-        immediateMessages: [{ type: 'text', content: 'รบกวนแจ้งเลขที่การจองก่อนนะคะ หรือแจ้งชื่อ เบอร์โทร วันและเวลาเดิม เพื่อให้น้องช่วยค้นหาการจองให้ก่อนค่ะ' }],
-      }
-    }
-    if (!args.new_date || !args.new_time) {
+    const newDate = normalizeBookingDate(args.new_date || args.date)
+    const newTime = normalizeBookingTime(args.new_time || args.time)
+    if (!newDate || !newTime) {
       return {
         resultForAi: 'ยังไม่มีวันหรือเวลาใหม่ครบถ้วน จึงเลื่อนการจองไม่ได้',
         immediateMessages: [{ type: 'text', content: 'รบกวนแจ้งวันและเวลาใหม่ที่ต้องการเลื่อนด้วยนะคะ' }],
       }
     }
-    const { data: bk } = await supabase
-      .from('bookings')
-      .select('booking_no,service_name')
-      .eq('shop_id', shopId)
-      .or(`id.eq.${bid},booking_no.ilike.%${bid}%`)
-      .maybeSingle()
 
+    const lookup = await findBookingForAction(supabase, shopId, args, userId)
+    if (lookup.error) {
+      return { resultForAi: `ค้นหาการจองไม่สำเร็จ: ${lookup.error}`, immediateMessages: [{ type: 'text', content: 'ขออภัยค่ะ ค้นหาการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้งนะคะ' }] }
+    }
+    if (lookup.matches.length > 1) {
+      const list = lookup.matches.map((bk) => `${bk.booking_no}: ${bk.customer_name || '-'} ${bk.service_name || '-'} ${bk.booking_date} ${String(bk.booking_time || '').slice(0, 5)} น.`).join('\n')
+      return { resultForAi: `พบหลายรายการ ต้องให้ลูกค้าเลือกเลขที่การจองก่อนเลื่อน:\n${list}`, immediateMessages: [{ type: 'text', content: `พบหลายรายการค่ะ รบกวนแจ้งเลขที่การจองที่ต้องการเลื่อนนะคะ\n${list}` }] }
+    }
+    const bk = lookup.booking
     if (!bk) {
-      return { resultForAi: 'ไม่พบข้อมูลการจอง', immediateMessages: [{ type: 'text', content: 'ไม่พบข้อมูลการจองค่ะ รบกวนตรวจสอบเลขที่การจองอีกครั้งนะคะ' }] }
+      return { resultForAi: 'ไม่พบข้อมูลการจองสำหรับเลื่อน', immediateMessages: [{ type: 'text', content: 'ยังไม่พบรายการจองค่ะ รบกวนแจ้งเลขที่การจอง หรือชื่อ เบอร์โทร วันและเวลาเดิมอีกครั้งนะคะ' }] }
     }
 
     await supabase
       .from('bookings')
-      .update({ booking_date: args.new_date, booking_time: args.new_time, status: 'confirmed' })
+      .update({ booking_date: newDate, booking_time: newTime, status: 'confirmed' })
       .eq('shop_id', shopId)
-      .or(`id.eq.${bid},booking_no.ilike.%${bid}%`)
+      .eq('id', bk.id)
 
     return {
-      resultForAi: `เลื่อนคิว ${bk.booking_no} เป็นวันที่ ${args.new_date} เวลา ${args.new_time} แล้ว`,
-      immediateMessages: [{ type: 'text', content: `เลื่อนคิวเรียบร้อยค่ะ\nเลขที่การจอง: ${bk.booking_no}\nบริการ: ${bk.service_name || '-'}\nวันเวลาใหม่: ${args.new_date} ${args.new_time} น.` }],
+      resultForAi: `เลื่อนคิว ${bk.booking_no} เป็นวันที่ ${newDate} เวลา ${newTime} แล้ว`,
+      immediateMessages: [{ type: 'text', content: `เลื่อนการจองเรียบร้อยค่ะ
+เลขที่การจอง: ${bk.booking_no}
+บริการ: ${bk.service_name || '-'}
+วันเวลาใหม่: ${newDate} ${newTime} น.` }],
     }
   }
+
   if (toolName === 'cancel_booking') {
-    const bid = args.booking_id || args.query
-    if (!bid) {
-      return {
-        resultForAi: 'ยังไม่มีเลขที่การจอง จึงดำเนินการไม่ได้ ต้องขอเลขที่การจองหรือข้อมูลเดิมเพื่อค้นหาก่อน',
-        immediateMessages: [{ type: 'text', content: 'รบกวนแจ้งเลขที่การจองก่อนนะคะ หรือแจ้งชื่อ เบอร์โทร วันและเวลาเดิม เพื่อให้น้องช่วยค้นหาการจองให้ก่อนค่ะ' }],
-      }
+    const lookup = await findBookingForAction(supabase, shopId, args, userId)
+    if (lookup.error) {
+      return { resultForAi: `ค้นหาการจองไม่สำเร็จ: ${lookup.error}`, immediateMessages: [{ type: 'text', content: 'ขออภัยค่ะ ค้นหาการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้งนะคะ' }] }
     }
-    const { data: bk } = await supabase.from('bookings').select('booking_no,service_name,booking_date').eq('shop_id', shopId).or(`id.eq.${bid},booking_no.ilike.%${bid}%`).maybeSingle()
+    if (lookup.matches.length > 1) {
+      const list = lookup.matches.map((bk) => `${bk.booking_no}: ${bk.customer_name || '-'} ${bk.service_name || '-'} ${bk.booking_date} ${String(bk.booking_time || '').slice(0, 5)} น.`).join('\n')
+      return { resultForAi: `พบหลายรายการ ต้องให้ลูกค้าเลือกเลขที่การจองก่อนยกเลิก:\n${list}`, immediateMessages: [{ type: 'text', content: `พบหลายรายการค่ะ รบกวนแจ้งเลขที่การจองที่ต้องการยกเลิกนะคะ\n${list}` }] }
+    }
+    const bk = lookup.booking
     if (!bk) {
-      return { resultForAi: 'ไม่พบข้อมูลการจอง', immediateMessages: [{ type: 'text', content: '❌ ไม่พบข้อมูลการจองค่ะ' }] }
+      return { resultForAi: 'ไม่พบข้อมูลการจองสำหรับยกเลิก', immediateMessages: [{ type: 'text', content: 'ยังไม่พบรายการจองค่ะ รบกวนแจ้งเลขที่การจอง หรือชื่อ เบอร์โทร วันและเวลาเดิมอีกครั้งนะคะ' }] }
     }
-    await supabase.from('bookings').update({ status: 'cancelled' }).eq('shop_id', shopId).or(`id.eq.${bid},booking_no.ilike.%${bid}%`)
+
+    await supabase.from('bookings').update({ status: 'cancelled' }).eq('shop_id', shopId).eq('id', bk.id)
     return {
       resultForAi: `ยกเลิกการจอง ${bk.booking_no} แล้ว`,
-      immediateMessages: [{ type: 'text', content: `✅ ยกเลิกการจอง ${bk.booking_no} (${bk.service_name} วันที่ ${bk.booking_date}) เรียบร้อยค่ะ` }],
+      immediateMessages: [{ type: 'text', content: `✅ ยกเลิกการจอง ${bk.booking_no} (${bk.service_name || '-'} วันที่ ${bk.booking_date}) เรียบร้อยค่ะ` }],
     }
   }
-
-  // ── 👤 CUSTOMER TOOLS ─────────────────────────────────────────────
   if (toolName === 'get_customer_history') {
     const { data: ords } = await supabase.from('orders').select('order_no,product_name,total_amount,status,created_at').eq('shop_id', shopId).eq('conversation_id', conversationId).order('created_at', { ascending: false }).limit(5)
     if (!ords || ords.length === 0) {

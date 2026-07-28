@@ -1,4 +1,4 @@
-﻿'use server'
+'use server'
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
@@ -29,7 +29,8 @@ function getServicePayload(formData: FormData) {
   const duration = Math.max(getNumber(formData, 'duration', 60), 5)
   const price = Math.max(getNumber(formData, 'price', 0), 0)
   const depositAmount = Math.max(getNumber(formData, 'deposit_amount', 0), 0)
-  const capacityPerSlot = Math.max(Math.floor(getNumber(formData, 'capacity_per_slot', 1)), 1)
+  const defaultCapacity = bookingType === 'table' ? 20 : bookingType === 'class' ? 12 : 1
+  const capacityPerSlot = Math.max(Math.floor(getNumber(formData, 'capacity_per_slot', defaultCapacity)), 1)
   const bufferMinutes = Math.max(Math.floor(getNumber(formData, 'buffer_minutes', 0)), 0)
   const description = getText(formData, 'description')
   const startTime = getText(formData, 'start_time') || '09:00'

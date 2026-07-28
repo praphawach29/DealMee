@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useMemo, useState } from 'react'
 import { createService, deleteService, updateService } from './actions'
@@ -86,6 +86,7 @@ function ServiceModal({ service, loading, onClose, onSubmit }: {
   const selectedFields = service?.required_fields?.length ? service.required_fields : defaultFieldsByType[bookingType]
   const resourcePlaceholder = bookingType === 'table' ? 'เช่น โต๊ะทั่วไป, โซนริมน้ำ' : bookingType === 'class' ? 'เช่น ห้องคลาส A, ครูบี' : 'เช่น ช่างเอ, ห้องตรวจ 1'
   const capacityLabel = bookingType === 'table' ? 'จำนวนคนต่อรอบ' : bookingType === 'class' ? 'ที่นั่งต่อรอบ' : 'จำนวนจองต่อช่วงเวลา'
+  const defaultCapacity = bookingType === 'table' ? 20 : bookingType === 'class' ? 12 : 1
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/55 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
@@ -141,7 +142,7 @@ function ServiceModal({ service, loading, onClose, onSubmit }: {
             </div>
             <div className="space-y-1.5">
               <label className="block text-sm font-bold text-slate-800">{capacityLabel}</label>
-              <input name="capacity_per_slot" type="number" min="1" step="1" defaultValue={service?.capacity_per_slot || 1} required className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:bg-white focus:border-electric-blue outline-none" />
+              <input name="capacity_per_slot" type="number" min="1" step="1" defaultValue={service?.capacity_per_slot || defaultCapacity} required className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:bg-white focus:border-electric-blue outline-none" />
             </div>
           </div>
 

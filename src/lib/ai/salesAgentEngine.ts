@@ -443,38 +443,48 @@ const MASTER_TOOLS = [
   },
   {
     name: 'reschedule_booking',
-    description: 'เลื่อนคิวจองบริการเป็นวัน/เวลาใหม่ ต้องมี booking_id ก่อน ถ้ายังไม่มีให้ถามเลขที่การจองหรือเรียก check_booking เพื่อค้นหาก่อน',
+    description: 'เลื่อนคิวจองบริการเป็นวัน/เวลาใหม่ ให้ AI ดำเนินการเองเหมือนเปิดสมุดจอง: ใช้ booking_id ถ้ามี หรือใช้ชื่อ/เบอร์/วันเวลาเดิมเพื่อค้นหารายการ แล้วอัปเดตด้วยเครื่องมือนี้ ห้ามโอนให้ BookingAgent สำหรับงานปกติ',
     parameters: {
       type: 'object',
       properties: {
         booking_id: { type: 'string', description: 'รหัสคิวเดิม เช่น BK-000123' },
+        query: { type: 'string', description: 'ชื่อ เบอร์โทร เลขที่การจอง หรือข้อมูลเดิมสำหรับค้นหารายการจอง' },
+        name: { type: 'string', description: 'ชื่อลูกค้าที่ใช้จองเดิม' },
+        phone: { type: 'string', description: 'เบอร์โทรที่ใช้จองเดิม' },
+        date: { type: 'string', description: 'วันจองเดิม ถ้าทราบ' },
+        time: { type: 'string', description: 'เวลาจองเดิม ถ้าทราบ' },
         new_date: { type: 'string', description: 'วันที่ใหม่ (DD/MM/YYYY)' },
         new_time: { type: 'string', description: 'เวลาใหม่ เช่น 10:00' },
       },
-      required: ['booking_id', 'new_date', 'new_time'],
+      required: ['new_date', 'new_time'],
     },
   },
   {
     name: 'check_booking',
-    description: 'ตรวจสอบสถานะการจองนัดหมาย',
+    description: 'ตรวจสอบ/เปิดดูสมุดจอง ค้นได้ด้วย booking_id, booking_no, ชื่อ, เบอร์โทร, วัน หรือเวลา ใช้ก่อนเลื่อน/ยกเลิกถ้ายังไม่แน่ใจรายการ',
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'ชื่อลูกค้า หรือ Booking ID' },
+        query: { type: 'string', description: 'ชื่อ เบอร์โทร เลขที่การจอง หรือคำค้นหาอื่น ๆ' },
       },
-      required: ['query'],
+      required: [],
     },
   },
   {
     name: 'cancel_booking',
-    description: 'ยกเลิกการจองนัดหมาย ต้องมี booking_id ก่อน ถ้ายังไม่มีให้ถามเลขที่การจองหรือเรียก check_booking เพื่อค้นหาก่อน',
+    description: 'ยกเลิกการจองนัดหมาย ให้ AI ดำเนินการเองจากสมุดจอง: ใช้ booking_id ถ้ามี หรือใช้ชื่อ/เบอร์/วันเวลาเดิมเพื่อค้นหารายการ ห้ามโอนให้ BookingAgent สำหรับงานปกติ',
     parameters: {
       type: 'object',
       properties: {
         booking_id: { type: 'string', description: 'Booking ID ที่ต้องการยกเลิก' },
+        query: { type: 'string', description: 'ชื่อ เบอร์โทร เลขที่การจอง หรือข้อมูลเดิมสำหรับค้นหารายการจอง' },
+        name: { type: 'string', description: 'ชื่อลูกค้าที่ใช้จอง' },
+        phone: { type: 'string', description: 'เบอร์โทรที่ใช้จอง' },
+        date: { type: 'string', description: 'วันจองเดิม ถ้าทราบ' },
+        time: { type: 'string', description: 'เวลาจองเดิม ถ้าทราบ' },
         reason: { type: 'string', description: 'เหตุผลที่ยกเลิก (optional)' },
       },
-      required: ['booking_id'],
+      required: [],
     },
   },
 
@@ -689,8 +699,7 @@ const SALES_TOOL_NAMES: AgentToolName[] = [
 
 const BOOKING_TOOL_NAMES: AgentToolName[] = [
   'check_available_slots', 'book_appointment', 'reschedule_booking', 'check_booking', 'cancel_booking',
-  'get_active_promotions', 'request_human_agent', 'update_customer_note', 'transfer_to_agent',
-  'send_payment_qr', 'get_shop_info',
+  'get_active_promotions', 'update_customer_note', 'send_payment_qr', 'get_shop_info',
 ]
 
 const SUPPORT_TOOL_NAMES: AgentToolName[] = [
@@ -1036,9 +1045,12 @@ async function preparePlanningState({
 - ถ้าลูกค้าทักทายเฉยๆ ให้ตอบโดยอิงบริการจองหลักของร้าน และเสนอช่วยจอง/เช็กเวลาว่าง
 - ถ้าลูกค้าต้องการจอง ให้ถามเฉพาะข้อมูลที่ยังขาดตาม required_fields ของแม่แบบนั้น แล้วใช้ check_available_slots ก่อน book_appointment
 - สำหรับจองโต๊ะ ให้เก็บจำนวนคนใน guest_count และบอกจำนวนท่านในการสรุปการจอง
-- ถ้าลูกค้าขอเลื่อน/ยกเลิก/แก้ไขการจอง ห้ามตอบว่าสำเร็จจนกว่าจะมี booking_id และเรียก reschedule_booking หรือ cancel_booking สำเร็จจริง
-- ถ้ายังไม่มีเลขที่การจอง ให้ถามเลขที่การจองก่อน หรือขอชื่อ เบอร์โทร วันและเวลาเดิม แล้วใช้ check_booking เพื่อค้นหาก่อน
-- ถ้าลูกค้าขอเปลี่ยนเวลา ให้ยืนยันรายการจองเดิมก่อน จากนั้นเช็กเวลาว่างใหม่ แล้วค่อยเรียก reschedule_booking พร้อม booking_id, new_date, new_time`
+- งานจองทั่วไปให้ AI จัดการเองเหมือนถือสมุดจองอยู่: เปิดดูด้วย check_booking, เช็กเวลาว่างด้วย check_available_slots, บันทึกด้วย book_appointment, เลื่อนด้วย reschedule_booking, ยกเลิกด้วย cancel_booking
+- ห้ามใช้ transfer_to_agent หรือบอกว่าจะส่งให้ BookingAgent สำหรับการจอง/เลื่อน/ยกเลิก/เช็กคิวปกติ เว้นแต่ลูกค้าขอคุยกับคนจริง หรือเครื่องมือคืน error ที่แก้เองไม่ได้
+- ถ้าลูกค้าขอจองและข้อมูลครบตาม required_fields แล้ว ให้เรียก check_available_slots ก่อน จากนั้นถ้าว่างให้เรียก book_appointment เพื่อบันทึกจริง ห้ามบอกว่าเจ้าหน้าที่จะติดต่อกลับแทน
+- ถ้าลูกค้าขอเลื่อน/ยกเลิก/แก้ไขการจอง ห้ามตอบว่าสำเร็จจนกว่าจะเรียก reschedule_booking หรือ cancel_booking สำเร็จจริง
+- ถ้ายังไม่มีเลขที่การจอง ให้ใช้ชื่อ เบอร์โทร วัน/เวลาเดิม หรือรายการล่าสุดในบทสนทนาเพื่อ check_booking/ดำเนินการต่อ ถ้าพบหลายรายการค่อยถามให้ลูกค้าเลือกเลขที่การจอง
+- ถ้าลูกค้าขอเปลี่ยนเวลา ให้เช็กเวลาว่างใหม่ แล้วเรียก reschedule_booking พร้อมข้อมูลระบุรายการเดิมและ new_date, new_time`
     }
   }
   // 3. Chat History

@@ -3,7 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { processSalesAgentChat, getQuotaStatus, QUOTA_EXCEEDED_MESSAGE_TH } from '@/lib/ai/salesAgentEngine'
-import { applyProductSearchFilters, buildAvailabilitySlots, formatOrderCloseSummary, formatPaymentInstructions, parseBookingDateDayKey } from '@/lib/ai/toolDispatcher'
+import { applyProductSearchFilters, buildAvailabilitySlots, formatOrderCloseSummary, formatPaymentInstructions, normalizeBookingDate, parseBookingDateDayKey } from '@/lib/ai/toolDispatcher'
 import type { ToolExecutor, ToolExecutionContext, ToolExecutionResult } from '@/lib/ai/toolDispatcher'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { buildAutoGreeting } from '@/lib/businessGreeting'
@@ -246,6 +246,7 @@ const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionC
     return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
   if (name === 'check_available_slots') {
+    const bookingDate = normalizeBookingDate(args.date)
     const serviceQuery = String(args.service || args.service_name || '').trim()
     const { data: service } = serviceQuery
       ? await supabase
@@ -258,14 +259,14 @@ const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionC
           .maybeSingle()
       : { data: null }
 
-    const dayKey = parseBookingDateDayKey(args.date)
+    const dayKey = parseBookingDateDayKey(bookingDate)
     const serviceDays = (service as any)?.available_days as string[] | null | undefined
     const serviceName = (service as any)?.name || serviceQuery
     const serviceId = (service as any)?.id
     const capacityPerSlot = Math.max(Number((service as any)?.capacity_per_slot) || 1, 1)
 
     if (service && dayKey && serviceDays?.length && !serviceDays.includes(dayKey)) {
-      const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_available_slots: ${serviceName} ไม่เปิดให้จองวันที่ ${args.date}`
+      const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_available_slots: ${serviceName} ไม่เปิดให้จองวันที่ ${bookingDate}`
       return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
     }
 
@@ -273,7 +274,7 @@ const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionC
       .from('bookings')
       .select('booking_time,guest_count')
       .eq('shop_id', shopId)
-      .eq('booking_date', args.date)
+      .eq('booking_date', bookingDate)
       .neq('status', 'cancelled')
 
     if (serviceId) bookingQuery = bookingQuery.eq('service_id', serviceId)
@@ -293,7 +294,7 @@ const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionC
     const free = allSlots.filter((slot) => (bookedCounts.get(slot) || 0) < capacityPerSlot)
     const resource = (service as any)?.resource_label || (service as any)?.staff_name
     const scope = serviceName ? `สำหรับ ${serviceName}${resource ? ` (${resource})` : ''}` : ''
-    const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_available_slots ${scope} วันที่ ${args.date}: ${free.length ? free.join(', ') : 'ไม่มีเวลาว่าง'}`
+    const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_available_slots ${scope} วันที่ ${bookingDate}: ${free.length ? free.join(', ') : 'ไม่มีเวลาว่าง'}`
     return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
   if (name === 'check_booking') {
@@ -313,7 +314,7 @@ const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionC
     const line = `[ทดสอบ] บอทต้องการเรียกใช้เครื่องมือ book_appointment:
 เลขจองตัวอย่าง: BK-TEST
 บริการ: ${args.service || args.service_name}
-วันที่: ${args.date}
+วันที่: ${normalizeBookingDate(args.date)}
 เวลา: ${args.time}
 ลูกค้า: ${args.customer_name || args.name || '-'}
 เบอร์: ${args.phone || '-'}${args.guest_count || args.people || args.party_size ? `
