@@ -3,7 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { processSalesAgentChat, getQuotaStatus, QUOTA_EXCEEDED_MESSAGE_TH } from '@/lib/ai/salesAgentEngine'
-import { applyProductSearchFilters, buildAvailabilitySlots, formatOrderCloseSummary, formatPaymentInstructions, normalizeBookingDate, parseBookingDateDayKey } from '@/lib/ai/toolDispatcher'
+import { applyProductSearchFilters, buildAvailabilitySlots, formatOrderCloseSummary, formatPaymentInstructions, getSlotIntervalMinutes, normalizeBookingDate, parseBookingDateDayKey } from '@/lib/ai/toolDispatcher'
 import type { ToolExecutor, ToolExecutionContext, ToolExecutionResult } from '@/lib/ai/toolDispatcher'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { buildAutoGreeting } from '@/lib/businessGreeting'
@@ -291,10 +291,13 @@ const previewToolExecutor: ToolExecutor = async (name, args, ctx: ToolExecutionC
     const allSlots = service
       ? buildAvailabilitySlots((service as any).start_time, (service as any).end_time, (service as any).duration_minutes, (service as any).buffer_minutes)
       : ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
+    const slotInterval = service
+      ? getSlotIntervalMinutes((service as any).duration_minutes, (service as any).buffer_minutes)
+      : 60
     const free = allSlots.filter((slot) => (bookedCounts.get(slot) || 0) < capacityPerSlot)
     const resource = (service as any)?.resource_label || (service as any)?.staff_name
     const scope = serviceName ? `สำหรับ ${serviceName}${resource ? ` (${resource})` : ''}` : ''
-    const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_available_slots ${scope} วันที่ ${bookingDate}: ${free.length ? free.join(', ') : 'ไม่มีเวลาว่าง'}`
+    const line = `[ทดสอบ] เรียกใช้เครื่องมือ check_available_slots ${scope} วันที่ ${bookingDate}: ระบบเปิดรอบทุก ${slotInterval} นาที | รอบที่เปิดจริง ${allSlots.join(', ')} | ว่าง ${free.length ? free.join(', ') : 'ไม่มีเวลาว่าง'} | ให้เสนอเฉพาะเวลาที่อยู่ในรายการว่างเท่านั้น`
     return { resultForAi: line, immediateMessages: [{ type: 'text', content: line }] }
   }
   if (name === 'check_booking') {

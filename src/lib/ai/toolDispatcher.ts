@@ -172,11 +172,17 @@ function minutesToTime(value: number) {
   return `${hours}:${minutes}`
 }
 
+export function getSlotIntervalMinutes(durationMinutes: unknown, bufferMinutes: unknown) {
+  const duration = Math.max(Number(durationMinutes) || 60, 5)
+  const buffer = Math.max(Number(bufferMinutes) || 0, 0)
+  return Math.max(duration + buffer, 15)
+}
+
 export function buildAvailabilitySlots(startTime: unknown, endTime: unknown, durationMinutes: unknown, bufferMinutes: unknown) {
   const start = timeToMinutes(startTime || '09:00')
   const end = timeToMinutes(endTime || '18:00')
   const duration = Math.max(Number(durationMinutes) || 60, 5)
-  const step = Math.max(duration + (Number(bufferMinutes) || 0), 15)
+  const step = getSlotIntervalMinutes(durationMinutes, bufferMinutes)
   const slots: string[] = []
 
   for (let current = start; current + duration <= end; current += step) {
@@ -184,6 +190,21 @@ export function buildAvailabilitySlots(startTime: unknown, endTime: unknown, dur
   }
 
   return slots
+}
+
+function formatSlotList(slots: string[]) {
+  return slots.length > 0 ? slots.map((slot) => `${slot} น.`).join(', ') : '-'
+}
+
+function getNearestSlots(targetTime: string, slots: string[], limit = 2) {
+  const target = timeToMinutes(targetTime)
+  return [...slots]
+    .sort((a, b) => Math.abs(timeToMinutes(a) - target) - Math.abs(timeToMinutes(b) - target))
+    .slice(0, limit)
+}
+
+function formatSlotCadence(intervalMinutes: number) {
+  return `ระบบเปิดรอบจองทุก ${intervalMinutes} นาทีตามเวลาที่ร้านตั้งไว้`
 }
 export function normalizeProductSearchKeyword(rawKeyword: unknown): string {
   if (typeof rawKeyword !== 'string') return ''
@@ -484,17 +505,22 @@ export async function executeTool(
     const allSlots = service
       ? buildAvailabilitySlots((service as any).start_time, (service as any).end_time, (service as any).duration_minutes, (service as any).buffer_minutes)
       : ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
+    const slotInterval = service
+      ? getSlotIntervalMinutes((service as any).duration_minutes, (service as any).buffer_minutes)
+      : 60
     const free = allSlots.filter((slot) => (bookedCounts.get(slot) || 0) < capacityPerSlot)
 
     if (free.length > 0) {
       const serviceLine = serviceName ? `สำหรับ ${serviceName}${((service as any)?.resource_label || (service as any)?.staff_name) ? ` (${(service as any).resource_label || (service as any).staff_name})` : ''}` : ''
+      const cadence = formatSlotCadence(slotInterval)
       return {
-        resultForAi: `เวลาว่างวันที่ ${bookingDate}${serviceLine ? ` ${serviceLine}` : ''}: ${free.join(', ')}`,
-        immediateMessages: [{ type: 'text', content: `ช่วงเวลาว่างวันที่ ${bookingDate}${serviceLine ? ` ${serviceLine}` : ''}:
+        resultForAi: `${cadence}. เวลาว่างวันที่ ${bookingDate}${serviceLine ? ` ${serviceLine}` : ''}: ${free.join(', ')}. ใช้ได้เฉพาะเวลาที่อยู่ในรายการนี้เท่านั้น`,
+        immediateMessages: [{ type: 'text', content: `ช่วงเวลาว่างวันที่ ${bookingDate}${serviceLine ? ` ${serviceLine}` : ''}
+${cadence}
 
 ${free.map((slot) => `- ${slot} น.`).join('\n')}
 
-ต้องการจองเวลาไหนคะ?` }],
+ต้องการจองรอบไหนคะ?` }],
       }
     }
 
@@ -530,6 +556,25 @@ ${free.map((slot) => `- ${slot} น.`).join('\n')}
       }
     }
 
+    if (serviceRecord) {
+      const validSlots = buildAvailabilitySlots(serviceRecord.start_time, serviceRecord.end_time, serviceRecord.duration_minutes, serviceRecord.buffer_minutes)
+      const slotInterval = getSlotIntervalMinutes(serviceRecord.duration_minutes, serviceRecord.buffer_minutes)
+      if (validSlots.length > 0 && !validSlots.includes(bookingTime)) {
+        const nearest = getNearestSlots(bookingTime, validSlots)
+        const cadence = formatSlotCadence(slotInterval)
+        return {
+          resultForAi: `${bookingTime} ไม่ใช่รอบจองที่เปิดไว้สำหรับ ${serviceRecord.name || serviceName}. ${cadence}. รอบที่จองได้: ${validSlots.join(', ')}. รอบใกล้เคียง: ${nearest.join(', ')}`,
+          immediateMessages: [{ type: 'text', content: `รอบ ${bookingTime} น. ยังไม่ใช่รอบที่เปิดจองค่ะ
+${cadence}
+
+รอบที่จองได้คือ ${formatSlotList(validSlots)}
+${nearest.length ? `รอบที่ใกล้ที่สุดคือ ${formatSlotList(nearest)}` : ''}
+
+ต้องการให้จองรอบไหนคะ?` }],
+        }
+      }
+    }
+
     const capacityPerSlot = Math.max(Number(serviceRecord?.capacity_per_slot) || 1, 1)
     let sameSlotQuery = supabase
       .from('bookings')
@@ -551,10 +596,12 @@ ${free.map((slot) => `- ${slot} น.`).join('\n')}
     }
 
     const bookingNo = `BK-${Date.now().toString().slice(-6)}`
+    const customerName = args.customer_name || args.name || `LINE-${userId.substring(0, 6)}`
+    const customerPhone = args.phone || '-'
     await supabase.from('bookings').insert({
       shop_id: shopId,
       booking_no: bookingNo,
-      customer_name: args.customer_name || args.name || `LINE-${userId.substring(0, 6)}`,
+      customer_name: customerName,
       phone: args.phone,
       service_name: serviceRecord?.name || serviceName,
       service_id: serviceRecord?.id || null,
@@ -574,7 +621,9 @@ ${free.map((slot) => `- ${slot} น.`).join('\n')}
 เลขที่การจอง: ${bookingNo}
 บริการ: ${serviceRecord?.name || serviceName}
 ${guestCount ? `จำนวน: ${guestCount} ท่าน\n` : ''}${args.resource || args.resource_label || serviceRecord?.resource_label ? `พื้นที่/ผู้ให้บริการ: ${args.resource || args.resource_label || serviceRecord?.resource_label}\n` : ''}วันที่: ${bookingDate}
-เวลา: ${bookingTime} น.` }],
+เวลา: ${bookingTime} น.
+ชื่อผู้จอง: ${customerName}
+เบอร์โทร: ${customerPhone}` }],
     }
   }
 
@@ -627,6 +676,65 @@ ${guestCount ? `จำนวน: ${guestCount} ท่าน\n` : ''}${args.resou
     const bk = lookup.booking
     if (!bk) {
       return { resultForAi: 'ไม่พบข้อมูลการจองสำหรับเลื่อน', immediateMessages: [{ type: 'text', content: 'ยังไม่พบรายการจองค่ะ รบกวนแจ้งเลขที่การจอง หรือชื่อ เบอร์โทร วันและเวลาเดิมอีกครั้งนะคะ' }] }
+    }
+
+    const { data: serviceForReschedule } = bk.service_name
+      ? await supabase
+          .from('services')
+          .select('id,name,duration_minutes,start_time,end_time,buffer_minutes,capacity_per_slot,available_days')
+          .eq('shop_id', shopId)
+          .neq('status', 'inactive')
+          .ilike('name', `%${bk.service_name}%`)
+          .limit(1)
+          .maybeSingle()
+      : { data: null }
+
+    const rescheduleService = serviceForReschedule as any
+    if (rescheduleService) {
+      const dayKey = parseBookingDateDayKey(newDate)
+      const serviceDays = rescheduleService.available_days as string[] | null | undefined
+      if (dayKey && serviceDays?.length && !serviceDays.includes(dayKey)) {
+        return {
+          resultForAi: `${rescheduleService.name || bk.service_name} ไม่ได้เปิดให้จองวันที่ ${newDate}`,
+          immediateMessages: [{ type: 'text', content: `${rescheduleService.name || bk.service_name} ไม่ได้เปิดให้จองวันที่ ${newDate} ค่ะ รบกวนเลือกวันอื่นนะคะ` }],
+        }
+      }
+
+      const validSlots = buildAvailabilitySlots(rescheduleService.start_time, rescheduleService.end_time, rescheduleService.duration_minutes, rescheduleService.buffer_minutes)
+      const slotInterval = getSlotIntervalMinutes(rescheduleService.duration_minutes, rescheduleService.buffer_minutes)
+      if (validSlots.length > 0 && !validSlots.includes(newTime)) {
+        const nearest = getNearestSlots(newTime, validSlots)
+        const cadence = formatSlotCadence(slotInterval)
+        return {
+          resultForAi: `${newTime} ไม่ใช่รอบจองที่เปิดไว้สำหรับ ${rescheduleService.name || bk.service_name}. ${cadence}. รอบที่จองได้: ${validSlots.join(', ')}. รอบใกล้เคียง: ${nearest.join(', ')}`,
+          immediateMessages: [{ type: 'text', content: `รอบ ${newTime} น. ยังไม่ใช่รอบที่เปิดจองค่ะ
+${cadence}
+
+รอบที่จองได้คือ ${formatSlotList(validSlots)}
+${nearest.length ? `รอบที่ใกล้ที่สุดคือ ${formatSlotList(nearest)}` : ''}
+
+ต้องการให้เลื่อนไปเป็นรอบไหนคะ?` }],
+        }
+      }
+
+      const capacityPerSlot = Math.max(Number(rescheduleService.capacity_per_slot) || 1, 1)
+      const { data: sameSlotBookings } = await supabase
+        .from('bookings')
+        .select('guest_count')
+        .eq('shop_id', shopId)
+        .eq('booking_date', newDate)
+        .eq('booking_time', newTime)
+        .neq('status', 'cancelled')
+        .neq('id', bk.id)
+        .eq('service_id', rescheduleService.id)
+      const reserved = (sameSlotBookings || []).reduce((sum: number, row: any) => sum + (Number(row.guest_count) || 1), 0)
+      const requestedSeats = Number(bk.guest_count) || 1
+      if (reserved + requestedSeats > capacityPerSlot) {
+        return {
+          resultForAi: `เวลา ${newTime} วันที่ ${newDate} เต็มแล้ว`,
+          immediateMessages: [{ type: 'text', content: `ขออภัยค่ะ เวลา ${newTime} วันที่ ${newDate} เต็มแล้ว รบกวนเลือกเวลาอื่นนะคะ` }],
+        }
+      }
     }
 
     await supabase

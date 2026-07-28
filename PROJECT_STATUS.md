@@ -1,4 +1,4 @@
-﻿
+
 # Botify SaaS - Project Status
 
 > อัปเดตล่าสุด: 28 กรกฎาคม 2026
@@ -451,3 +451,9 @@ Phase 3: Growth & UX       [NEXT] สัปดาห์ที่ 5-7
 Phase 4: Scale & Polish           สัปดาห์ที่ 8-10
 Phase 5: Expansion                หลัง launch
 Beta Launch Target: ~2 เดือน
+### Store Manager Agent Update (2026-07-29)
+
+- Added `STORE_MANAGER_AGENT.md` as the operating blueprint for a cross-business AI store manager.
+- Added production prompt rules so AI behaves as a store manager, not only a booking/sales bot.
+- Tightened booking tools to respect service slot intervals from the database, including 120-minute table-booking rounds.
+- Booking confirmations now include more complete customer-facing details for auditability.

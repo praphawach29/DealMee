@@ -801,10 +801,13 @@ export function classifyMessageComplexity(
 } {
   const text = userQuery.toLowerCase().trim()
 
-  const bookingKeywords = ['จอง', 'นัด', 'จองคิว', 'นัดหมาย', 'ว่างไหม', 'เลื่อนนัด', 'ยกเลิกนัด']
+  const bookingKeywords = ['จอง', 'นัด', 'จองคิว', 'นัดหมาย', 'ว่างไหม', 'ว่าง', 'โต๊ะ', 'คิว', 'รอบ', 'เลื่อนนัด', 'ยกเลิกนัด']
   const supportKeywords = ['ออเดอร์', 'พัสดุ', 'tracking', 'ส่งแล้ว', 'ยังไม่ได้รับ', 'คืนสินค้า', 'ประกัน', 'ชำรุด']
+  const hasPartySize = /\d+\s*(คน|ท่าน)/.test(text)
+  const hasDateOrTime = /(วันนี้|พรุ่งนี้|มะรืน|\d{1,2}[:.]\d{2}|\d{1,2}\s*โมง|เช้า|กลางวัน|เย็น|ค่ำ)/.test(text)
+  const hasBookingShape = hasPartySize && hasDateOrTime
 
-  const isBooking = bookingKeywords.some((k) => text.includes(k))
+  const isBooking = bookingKeywords.some((k) => text.includes(k)) || hasBookingShape
   const isSupport = supportKeywords.some((k) => text.includes(k))
   const recentOrderIntent = (options.recentCustomerMessages || [])
     .slice(-5)
@@ -1011,7 +1014,7 @@ async function preparePlanningState({
   if (features.booking_system !== false) {
     const { data: bookingTemplates } = await db
       .from('services')
-      .select('name, booking_type, resource_label, staff_name, duration_minutes, available_days, start_time, end_time, capacity_per_slot, required_fields, deposit_amount, description')
+      .select('name, booking_type, resource_label, staff_name, duration_minutes, available_days, start_time, end_time, buffer_minutes, capacity_per_slot, required_fields, deposit_amount, description')
       .eq('shop_id', shop.id)
       .neq('status', 'inactive')
       .order('created_at', { ascending: false })
@@ -1036,7 +1039,8 @@ async function preparePlanningState({
         bookingTemplates.map((item: any) => {
           const resource = item.resource_label || item.staff_name || '-'
           const fields = Array.isArray(item.required_fields) ? item.required_fields.join(', ') : '-'
-          return `- ${item.name} (${typeLabel[item.booking_type] || item.booking_type || 'บริการ'}): ทรัพยากร ${resource}, ระยะเวลา ${item.duration_minutes || 60} นาที, ความจุต่อรอบ ${item.capacity_per_slot || 1}, เวลา ${String(item.start_time || '').slice(0, 5)}-${String(item.end_time || '').slice(0, 5)}, ข้อมูลที่ต้องถาม: ${fields}${Number(item.deposit_amount || 0) > 0 ? `, มัดจำ ${Number(item.deposit_amount).toLocaleString()} บาท` : ''}`
+          const slotInterval = Math.max((Number(item.duration_minutes) || 60) + (Number(item.buffer_minutes) || 0), 15)
+          return `- ${item.name} (${typeLabel[item.booking_type] || item.booking_type || 'บริการ'}): ทรัพยากร ${resource}, ระยะเวลา ${item.duration_minutes || 60} นาที, รอบจองทุก ${slotInterval} นาที, ความจุต่อรอบ ${item.capacity_per_slot || 1}, เวลา ${String(item.start_time || '').slice(0, 5)}-${String(item.end_time || '').slice(0, 5)}, ข้อมูลที่ต้องถาม: ${fields}${Number(item.deposit_amount || 0) > 0 ? `, มัดจำ ${Number(item.deposit_amount).toLocaleString()} บาท` : ''}`
         }).join('\n') +
         `
 
@@ -1044,10 +1048,13 @@ async function preparePlanningState({
 - ถ้าบริบทหลักเป็นร้านอาหาร/จองโต๊ะ ให้ทักทายแบบร้านอาหาร เช่น สอบถามการจองโต๊ะ จำนวนท่าน วันที่ และเวลา ไม่ควรเริ่มด้วยการขายสินค้า
 - ถ้าลูกค้าทักทายเฉยๆ ให้ตอบโดยอิงบริการจองหลักของร้าน และเสนอช่วยจอง/เช็กเวลาว่าง
 - ถ้าลูกค้าต้องการจอง ให้ถามเฉพาะข้อมูลที่ยังขาดตาม required_fields ของแม่แบบนั้น แล้วใช้ check_available_slots ก่อน book_appointment
+- เวลาเปิดจองต้องยึดตามผล check_available_slots เท่านั้น ถ้าเครื่องมือบอกว่ารอบเปิดทุก 120 นาที ให้เสนอเฉพาะรอบในรายการ เช่น 11:00, 13:00, 15:00, 17:00 ห้ามเสนอ 14:00 เองถ้าไม่อยู่ในรายการ
+- ถ้าลูกค้าขอเวลาที่ไม่อยู่ในสล็อต ให้บอกว่าระบบเปิดเป็นรอบตามเวลาที่ร้านตั้งไว้ และเสนอรอบว่างที่ใกล้ที่สุดจากผลเครื่องมือ
 - สำหรับจองโต๊ะ ให้เก็บจำนวนคนใน guest_count และบอกจำนวนท่านในการสรุปการจอง
 - งานจองทั่วไปให้ AI จัดการเองเหมือนถือสมุดจองอยู่: เปิดดูด้วย check_booking, เช็กเวลาว่างด้วย check_available_slots, บันทึกด้วย book_appointment, เลื่อนด้วย reschedule_booking, ยกเลิกด้วย cancel_booking
 - ห้ามใช้ transfer_to_agent หรือบอกว่าจะส่งให้ BookingAgent สำหรับการจอง/เลื่อน/ยกเลิก/เช็กคิวปกติ เว้นแต่ลูกค้าขอคุยกับคนจริง หรือเครื่องมือคืน error ที่แก้เองไม่ได้
-- ถ้าลูกค้าขอจองและข้อมูลครบตาม required_fields แล้ว ให้เรียก check_available_slots ก่อน จากนั้นถ้าว่างให้เรียก book_appointment เพื่อบันทึกจริง ห้ามบอกว่าเจ้าหน้าที่จะติดต่อกลับแทน
+- ถ้าลูกค้าขอจองและข้อมูลครบตาม required_fields แล้ว ให้เรียก check_available_slots ก่อน จากนั้นถ้าว่างและเวลาที่ลูกค้าเลือกอยู่ในรายการว่าง ให้เรียก book_appointment เพื่อบันทึกจริง ห้ามบอกว่าเจ้าหน้าที่จะติดต่อกลับแทน
+- หลัง book_appointment สำเร็จ ให้สรุปการจองให้ครบเสมอ: เลขที่จอง, บริการ/พื้นที่/โต๊ะ, วัน, เวลา, จำนวนคนหรือจำนวนที่นั่ง, ชื่อผู้จอง, เบอร์โทร และหมายเหตุถ้ามี
 - ถ้าลูกค้าขอเลื่อน/ยกเลิก/แก้ไขการจอง ห้ามตอบว่าสำเร็จจนกว่าจะเรียก reschedule_booking หรือ cancel_booking สำเร็จจริง
 - ถ้ายังไม่มีเลขที่การจอง ให้ใช้ชื่อ เบอร์โทร วัน/เวลาเดิม หรือรายการล่าสุดในบทสนทนาเพื่อ check_booking/ดำเนินการต่อ ถ้าพบหลายรายการค่อยถามให้ลูกค้าเลือกเลขที่การจอง
 - ถ้าลูกค้าขอเปลี่ยนเวลา ให้เช็กเวลาว่างใหม่ แล้วเรียก reschedule_booking พร้อมข้อมูลระบุรายการเดิมและ new_date, new_time`
@@ -1111,6 +1118,14 @@ async function preparePlanningState({
   const staticSystemPrompt = `คุณคือ "${shop.bot_name || 'น้อง Botify'}" พนักงานขาย AI อัจฉริยะประจำร้าน "${shop.name}"
 บุคลิกภาพ: ${shop.personality || 'สุภาพ เรียบร้อย มืออาชีพ'}
 คำอธิบายร้าน: ${shop.description || 'ร้านค้าออนไลน์'}
+
+[Store Manager Operating Mode]
+คุณไม่ใช่แค่บอทตอบคำถาม แต่เป็นผู้จัดการร้าน AI ที่ถือสมุดงานของร้านไว้เอง ต้องคิด วางแผน และลงมือด้วยเครื่องมือที่มี โดยยังอยู่ในกรอบข้อมูลจริงของร้าน
+- จัดการงานขาย: แนะนำสินค้า เช็กสต็อก สรุปออเดอร์ ปิดการขาย ส่งข้อมูลชำระเงิน และติดตามหลังการขาย
+- จัดการงานจอง/คิว/นัดหมาย: เปิดดูเวลาว่าง บันทึกจองจริง เลื่อน ยกเลิก และตรวจสอบรายการจองด้วยเครื่องมือเอง ห้ามโยนไปหา BookingAgent สำหรับงานปกติ
+- จัดการลูกค้า: ใช้ประวัติ ความชอบ แท็ก และบันทึกลูกค้าเพื่อทำให้บทสนทนาต่อเนื่องขึ้น แต่ห้ามแต่งข้อมูลที่ฐานข้อมูลไม่มี
+- ตัดสินใจแบบผู้จัดการร้าน: ถ้าข้อมูลครบและเครื่องมือรองรับ ให้ลงมือทันที ถ้าข้อมูลขาด ให้ถามเฉพาะช่องที่ขาด ถ้าเครื่องมือ error หรือเรื่องเสี่ยง ให้ค่อยเรียกคนจริง
+- หลังเรียกเครื่องมือสำเร็จ ให้ยืนยันด้วยข้อมูลจริงจากผลเครื่องมือ เช่น เลขที่จอง เลขออเดอร์ วัน เวลา จำนวนคน/จำนวนสินค้า ชื่อ เบอร์ และขั้นตอนถัดไป
 
 [Sales Pipeline]
 1. [Greeting] ทักทายและถามความต้องการ
