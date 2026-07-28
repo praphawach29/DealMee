@@ -3,7 +3,7 @@
 
 > อัปเดตล่าสุด: 28 กรกฎาคม 2026
 > GitHub: praphawach29/ai-agent-google-SDK branch main
-> Last Commit: e698121 - feat(ai-agent): implement Customer Memory Graph (1/5 of AI agent upgrade)
+> Last Commit: c99e20b - feat(billing): implement Claude prompt caching + admin Margin Dashboard
 >
 > เอกสารนี้คือแหล่งข้อมูลสถานะปัจจุบันของโปรเจกต์ฉบับเดียว (single source of truth)
 > สำหรับแผนพัฒนาในอนาคตดูที่ [ROADMAP.md](./ROADMAP.md)
@@ -91,6 +91,7 @@ supabase_phase2_billing.sql   - Phase 2 Billing schema (usage_logs, billing_paym
 | usage_logs | นับ messages_used/tokens_used ต่อร้านต่อเดือน (unique: shop_id+period) + increment_usage() RPC | NEW Phase 2 |
 | billing_payments | ประวัติการชำระเงิน (provider, plan_key, amount, status, provider_ref) | NEW Phase 2 |
 | customer_profiles | Customer Memory Graph: tags/notes แบบ append-only (jsonb), preferences, total_orders/total_spend/last_order_at (unique: shop_id+user_id) | NEW [AI Agent Upgrade 1/5] |
+| ai_provider_usage | ต้นทุน AI ต่อ provider ต่อร้าน/เดือน (prompt/completion/cache_read/cache_write tokens, unique: shop_id+period+provider) — ป้อนข้อมูลให้ Margin Dashboard | NEW [Cost Infra] |
 
 Supabase Storage:
 - qr-codes bucket: เก็บรูป QR PromptPay
@@ -243,6 +244,17 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 
 ---
 
+## Completed Features [Cost Infrastructure: Prompt Caching + Margin Dashboard]
+
+เกิดจากการวิเคราะห์ต้นทุน AI เทียบกับราคาแพ็กเกจ (พบว่า Starter/Pro/Agency อาจขาดทุนถ้าลูกค้าใช้เต็มโควต้า):
+
+- [x] Provider-aware usage tracking: ตาราง `ai_provider_usage` (แยกจาก `usage_logs` ที่ใช้ gate โควต้า) เก็บ token แยกตาม provider พร้อม cache_read/cache_write tokens สำหรับ Claude โดยเฉพาะ
+- [x] Claude Prompt Caching: แยก system prompt เป็น static block (identity/knowledge/products/payment — เปลี่ยนไม่บ่อย) กับ dynamic block (customer profile/history) ส่ง `cache_control: {type: "ephemeral"}` ที่ static block เท่านั้น (ขั้นต่ำ 1,024 token ถึงจะแคชได้)
+- [x] Gemini 3.6 Flash ใช้ implicit caching อัตโนมัติอยู่แล้ว (ไม่ต้องแก้โค้ด) — โครงสร้าง prompt เดิมที่วางของ dynamic ไว้ท้ายสุดเอื้อต่อ caching อยู่แล้ว
+- [x] `src/lib/billing/aiPricing.ts`: ราคาจริงต่อ 1M token ต่อ provider (ตรวจสอบผ่าน web search เพราะเป็นโมเดลหลัง knowledge cutoff) + สูตรคำนวณต้นทุน Claude แบบแยก cache read/write
+- [x] `/admin/margin` (Margin Dashboard ใหม่): สรุปรายได้เทียบต้นทุน AI ประมาณการ ทั้งแบบรวมต่อแพ็กเกจและรายร้านค้า (เรียงจากขาดทุนมากสุด) — **หมายเหตุ: ไม่มีข้อมูลย้อนหลังก่อนวันที่ฟีเจอร์นี้ขึ้น และเป็นตัวเลขประมาณการ ไม่ใช่ invoice จริง**
+- [ ] **ยังไม่ได้แก้**: `classifyMessageComplexity()` ไม่เคยส่ง `targetProvider: 'openai'` เลย — GPT-5.6 ตั้งค่าไว้แต่ไม่ถูกเรียกใช้จริงในโค้ดปัจจุบัน (พบระหว่างการวิเคราะห์นี้ ยังไม่ได้แก้ตามที่แจ้งผู้ใช้ไว้)
+
 ## Completed Features [AI Agent Upgrade — 1/5: Customer Memory Graph]
 
 แผนรวม 5 หัวข้อดูที่ [ROADMAP_AI_AGENT.md](./ROADMAP_AI_AGENT.md) — หัวข้อที่ 1 เสร็จแล้ว:
@@ -380,6 +392,7 @@ NEXT_PUBLIC_APP_URL=               # [Phase 2] Stripe Checkout success/cancel + 
 
 ## Git History
 
+c99e20b  feat(billing): implement Claude prompt caching + admin Margin Dashboard
 e698121  feat(ai-agent): implement Customer Memory Graph (1/5 of AI agent upgrade)
 64f1020  fix(playground): give Chat Playground real conversation memory
 35591c1  fix(products): remove filters on a status column that doesn't exist in production
