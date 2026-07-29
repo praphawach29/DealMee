@@ -1199,7 +1199,7 @@ async function preparePlanningState({
 - ใช้ Tools ที่จำเป็นให้ถูกต้อง อย่าตอบเดา
 - ห้ามพิมพ์หัวข้อสรุปแล้วปล่อยค่าว่าง เช่น "- **" ถ้ายังไม่มีข้อมูลจริง ให้ถามหรือเรียกเครื่องมือแทน
 - ถ้าลูกค้าให้ชื่อ/เบอร์/ที่อยู่แล้ว ให้สรุปข้อมูลเหล่านั้นกลับให้ครบ อย่าละไว้หรือแทนด้วยหัวข้อว่าง
-- เวลาส่งเลขพร้อมเพย์หรือเลขบัญชี ให้ใช้ plain text เท่านั้น ห้ามใส่ backtick, code format, markdown หรือตัวหนารอบเลขบัญชี
+- ตอบเป็น plain text ล้วนเสมอ ห้ามใช้ markdown ทุกชนิด (ตัวหนาด้วยดอกจันคู่, ตัวเอียงด้วยดอกจันเดี่ยว, code ด้วย backtick, หัวข้อด้วย #) เพราะ LINE ไม่แปลงให้ ลูกค้าจะเห็นเครื่องหมายพวกนี้ติดมาจริงๆ ถ้าอยากเน้น ให้ขึ้นบรรทัดใหม่หรือใช้อีโมจินำหน้าแทน
 - ถ้ายังขาดวิธีชำระเงิน ให้เสนอทางเลือกจากข้อมูลร้าน เช่น พร้อมเพย์/โอนธนาคาร/เก็บปลายทาง แล้วถามให้ลูกค้าเลือก ก่อนเรียก take_order
 - ห้ามสรุปว่ารับออเดอร์แล้วถ้ายังไม่ได้เรียก take_order หรือข้อมูลลูกค้ายังไม่ครบ ให้ถามเฉพาะข้อมูลที่ขาดแทน
 - ถ้าไม่มีข้อมูล ให้แจ้งลูกค้าให้รอแอดมินหรือเรียก request_human_agent
@@ -1345,6 +1345,24 @@ function salvageTruncatedText(text: string): string {
   return salvaged.length >= 60 ? salvaged : ''
 }
 
+/**
+ * Strips Markdown the model likes to reach for. LINE renders text messages
+ * literally, so `**เลขที่จอง:**` reaches the customer with the asterisks
+ * still attached. Telling the model not to use Markdown was already in the
+ * prompt and it kept doing it anyway, so the guarantee lives here instead.
+ *
+ * Bullets survive: the italic rule needs a non-space straight after the
+ * asterisk, which "* รายการ" doesn't have.
+ */
+function toPlainText(text: string): string {
+  return text
+    .replace(/\*\*([\s\S]+?)\*\*/g, '$1')
+    .replace(/(?<!\*)\*(?!\s)([^*\n]+?)(?<!\s)\*(?!\*)/g, '$1')
+    .replace(/__([\s\S]+?)__/g, '$1')
+    .replace(/`([^`\n]+)`/g, '$1')
+    .replace(/^#{1,6}[ \t]+/gm, '')
+}
+
 function finalizeAgentResult(state: PlanningState, finalText: string): AgentResult {
   // Sum usage across every step into one AgentUsage — quota/cost accounting
   // counts this as ONE customer message regardless of how many AI calls the
@@ -1361,7 +1379,7 @@ function finalizeAgentResult(state: PlanningState, finalText: string): AgentResu
     : undefined
 
   return {
-    text: finalText.trim(),
+    text: toPlainText(finalText).trim(),
     usage,
     immediateMessages: state.immediateMessages,
     toolCallsExecuted: state.toolCallsExecuted,

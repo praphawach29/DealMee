@@ -112,7 +112,10 @@ export function buildAutoGreeting(shop: any, templates: GreetingTemplateSummary[
   const botName = shop?.bot_name || 'น้อง Botify'
   const shopName = shop?.name || 'ร้านของเรา'
   const profile = getGreetingProfile(shop, templates)
-  const activeNames = templates.slice(0, 3).map((item) => item.name).filter(Boolean)
+  // Deduplicated: a restaurant commonly has one service row per zone, all
+  // named "จองโต๊ะ", which read back as "มีบริการ จองโต๊ะ, จองโต๊ะ ให้เลือก".
+  // The zone is chosen later in the conversation, so the name is enough here.
+  const activeNames = [...new Set(templates.map((item) => item.name).filter(Boolean))].slice(0, 3)
   const serviceLine = activeNames.length > 0 ? ` ตอนนี้มีบริการ ${activeNames.join(', ')} ให้เลือกค่ะ` : ''
 
   return `สวัสดีค่ะ ${botName} จากร้าน ${shopName} ยินดีให้บริการค่ะ${serviceLine} ${profile.prompt}`
