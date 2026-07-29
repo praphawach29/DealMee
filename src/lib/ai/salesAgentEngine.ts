@@ -1150,6 +1150,26 @@ async function preparePlanningState({
       : `\n\n[การจองที่บันทึกจริงแล้วของลูกค้ารายนี้]\nยังไม่มีการจองที่บันทึกจริงเลย — ถ้ายังไม่ได้เรียก book_appointment สำเร็จในเทิร์นนี้ ห้ามบอกลูกค้าว่าจองเรียบร้อยแล้วเด็ดขาด และไม่มีรายการให้ยกเลิก/เลื่อน`
   }
 
+  // 5c. Same grounding for the retail side: the model was equally free to
+  // announce an order it had never created, and now has real order numbers
+  // to quote instead of inventing one.
+  const { data: myOrders } = await db
+    .from('orders')
+    .select('order_no, product_name, quantity, total_amount, status, payment_status')
+    .eq('shop_id', shop.id)
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  const orderStateContext = myOrders?.length
+    ? `\n\n[ออเดอร์ที่บันทึกจริงแล้วของลูกค้ารายนี้]\n` +
+      myOrders.map((o: any) =>
+        `- ${o.order_no}: ${o.product_name || '-'}${o.quantity ? ` x${o.quantity}` : ''} ` +
+        `${Number(o.total_amount || 0).toLocaleString()} บาท (สถานะ ${o.status}, ชำระเงิน ${o.payment_status || '-'})`
+      ).join('\n') +
+      `\n(ใช้เลขที่ออเดอร์จากรายการนี้เท่านั้น ห้ามแต่งเลขใหม่)`
+    : `\n\n[ออเดอร์ที่บันทึกจริงแล้วของลูกค้ารายนี้]\nยังไม่มีออเดอร์ที่บันทึกจริงเลย — ถ้ายังไม่ได้เรียก take_order สำเร็จในเทิร์นนี้ ห้ามบอกลูกค้าว่ารับออเดอร์แล้วเด็ดขาด`
+
   // 5. System Instruction — split into a static block (stable per shop:
   // identity, knowledge base, products, payment info) and a dynamic block
   // (customer profile, chat history — changes per customer/message). This
@@ -1176,6 +1196,8 @@ async function preparePlanningState({
 3. [Closing] เมื่อลูกค้าพูดเชิงซื้อ เช่น "เอาเลย", "รับ 1 ตัว", "ซื้อเลย", "สั่ง" ให้ตรวจสต๊อก/ราคาก่อนถ้ายังไม่แน่ใจ แล้วถามข้อมูลที่ยังขาดให้ครบ: ชื่อ, เบอร์โทร, ที่อยู่จัดส่ง, วิธีชำระเงิน
 4. [Order Creation] เมื่อข้อมูลครบและลูกค้าตกลงซื้อแล้ว ให้เรียก Tool "take_order" ก่อน จากนั้นจึงส่งช่องทางชำระเงินหรือเรียก "send_payment_qr" ตามความเหมาะสม
 5. [Payment Close] หลังสร้าง/ยืนยันออเดอร์ ให้สรุปข้อมูลปิดการขายครบทุกครั้ง: รายการสินค้า, ยอดสุทธิ, ชื่อผู้รับ, เบอร์โทร, ที่อยู่จัดส่ง, วิธีชำระเงิน และขั้นตอนส่งสลิป
+   - ทุกครั้งที่บอกว่ารับออเดอร์แล้ว ต้องมี "เลขที่ออเดอร์" ที่ได้จากผลเครื่องมือเสมอ ถ้าไม่มีเลขที่ออเดอร์แปลว่ายังไม่ได้บันทึกจริง ห้ามบอกว่าเรียบร้อยแล้ว
+   - ลูกค้าใช้เลขที่ออเดอร์นี้เช็คสถานะภายหลัง จึงต้องแจ้งให้ชัดและไม่แต่งเลขขึ้นเอง
 6. [Post-Sales] ขอบคุณ + แนะนำส่งสลิปกลับมาในแชท
 
 [Booking Pipeline]
@@ -1207,7 +1229,7 @@ ${knowledgeContext}${productsContext}
 ${buildBusinessPromptContext(shop, bookingPromptTemplates)}${bookingContext}
 ${paymentInfo}`
 
-  const dynamicSystemPrompt = `${customerProfileContext}${bookingStateContext}
+  const dynamicSystemPrompt = `${customerProfileContext}${bookingStateContext}${orderStateContext}
 ${historyContext}`
 
   const systemInstruction = `${staticSystemPrompt}\n${dynamicSystemPrompt}`

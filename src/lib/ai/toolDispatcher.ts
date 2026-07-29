@@ -399,12 +399,13 @@ export function formatPaymentInstructions(shop: any, amount?: number): string {
   return `${lines.join('\n')}\n\nโอนแล้วส่งสลิปกลับมาในแชทนี้ได้เลยนะคะ`
 }
 
-export function formatOrderCloseSummary(shop: any, args: Record<string, any>): string {
+export function formatOrderCloseSummary(shop: any, args: Record<string, any>, orderNo: string): string {
   const total = Number(args.total_price) || 0
   const paymentInstructions = formatPaymentInstructions(shop, total)
   return [
     'สรุปออเดอร์เรียบร้อยค่ะ',
     '',
+    `เลขที่ออเดอร์: ${orderNo}`,
     `สินค้า: ${cleanLineValue(args.product)} x${cleanLineValue(args.qty)}`,
     `ยอดสุทธิ: ${total.toLocaleString('th-TH')} บาท`,
     '',
@@ -461,8 +462,14 @@ export async function executeTool(
   }
 
   if (toolName === 'take_order') {
+    // orders.order_no defaults to 'ORD-000' and nothing was overriding it, so
+    // every order the bot took shared one number: indistinguishable in the
+    // dashboard, and check_order_status had nothing real to look up. Same
+    // shape as the booking side's BK- number, which did generate one.
+    const orderNo = `ORD-${Date.now().toString().slice(-6)}`
     await supabase.from('orders').insert({
       shop_id: shopId,
+      order_no: orderNo,
       conversation_id: conversationId,
       customer_name: args.name,
       customer_phone: args.phone,
@@ -483,9 +490,9 @@ export async function executeTool(
     // Pushed verbatim rather than left to the model: this block carries the
     // order total and the shop's account number, and a reworded digit here
     // sends the customer's money somewhere it shouldn't go.
-    const confirmMsg = formatOrderCloseSummary(shop, args)
+    const confirmMsg = formatOrderCloseSummary(shop, args, orderNo)
     return {
-      resultForAi: `สร้างออเดอร์สำเร็จแล้วจริง และส่งสรุปออเดอร์พร้อมข้อมูลชำระเงินให้ลูกค้าไปแล้วครบถ้วน ห้ามพิมพ์สรุปหรือเลขบัญชีซ้ำ ให้ตอบสั้นๆ เช่น ขอบคุณและชวนส่งสลิปกลับมา`,
+      resultForAi: `สร้างออเดอร์สำเร็จแล้วจริง เลขที่ออเดอร์: ${orderNo} และส่งสรุปออเดอร์พร้อมข้อมูลชำระเงินให้ลูกค้าไปแล้วครบถ้วน ห้ามพิมพ์สรุปหรือเลขบัญชีซ้ำ ให้ตอบสั้นๆ เช่น ขอบคุณ ย้ำเลขที่ออเดอร์ และชวนส่งสลิปกลับมา`,
       immediateMessages: [{ type: 'text', content: confirmMsg }],
     }
   }
