@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import generatePayload from 'promptpay-qr'
 import qrcode from 'qrcode'
 import type { AgentToolName } from './salesAgentEngine'
+import { t, type CustomerLanguage } from '@/lib/i18n/customerMessages'
 
 const QR_BUCKET = 'qr-codes'
 
@@ -14,6 +15,8 @@ export interface ToolExecutionContext {
   supabase: SupabaseClient
   /** Service-role client — only needed for Supabase Storage (QR upload). */
   supabaseAdmin: SupabaseClient
+  /** Language of the customer's message, for the few blocks this module writes itself rather than leaving to the model. Defaults to Thai. */
+  language?: CustomerLanguage
 }
 
 export interface CustomerMessage {
@@ -365,7 +368,7 @@ function cleanLineValue(value: unknown, fallback = '-'): string {
   return text || fallback
 }
 
-export function formatPaymentInstructions(shop: any, amount?: number): string {
+export function formatPaymentInstructions(shop: any, amount?: number, lang: CustomerLanguage = 'th'): string {
   const lines: string[] = []
   const promptpayId = cleanLineValue(shop.promptpay_id || shop.promptpay_number, '')
   const promptpayName = cleanLineValue(shop.promptpay_name || shop.name)
@@ -374,48 +377,53 @@ export function formatPaymentInstructions(shop: any, amount?: number): string {
   const bankAccountName = cleanLineValue(shop.bank_account_name || shop.name)
 
   if (typeof amount === 'number' && Number.isFinite(amount)) {
-    lines.push(`ยอดที่ต้องชำระ: ${amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท`)
+    lines.push(`${t('paymentAmountDue', lang)}: ${amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} ${t('currencyBaht', lang)}`)
   }
 
   if (promptpayId) {
-    lines.push(`พร้อมเพย์: ${promptpayId}`)
-    lines.push(`ชื่อบัญชี: ${promptpayName}`)
+    lines.push(`${t('paymentPromptPay', lang)}: ${promptpayId}`)
+    lines.push(`${t('paymentAccountName', lang)}: ${promptpayName}`)
   }
 
   if (bankAccountNumber) {
     if (lines.length > 0) lines.push('')
-    lines.push(`ธนาคาร: ${bankName || '-'}`)
-    lines.push(`เลขบัญชี: ${bankAccountNumber}`)
-    lines.push(`ชื่อบัญชี: ${bankAccountName}`)
+    lines.push(`${t('paymentBank', lang)}: ${bankName || '-'}`)
+    lines.push(`${t('paymentAccountNo', lang)}: ${bankAccountNumber}`)
+    lines.push(`${t('paymentAccountName', lang)}: ${bankAccountName}`)
   }
 
   if ((shop.shipping_fee_type || '').toLowerCase().includes('cod')) {
     if (lines.length > 0) lines.push('')
-    lines.push('เก็บเงินปลายทาง: แจ้งแอดมินเพื่อยืนยันพื้นที่จัดส่ง')
+    lines.push(t('paymentCod', lang))
   }
 
-  if (lines.length === 0) return 'ร้านยังไม่ได้ตั้งค่าช่องทางชำระเงิน กรุณารอแอดมินยืนยันช่องทางชำระเงิน'
+  if (lines.length === 0) return t('paymentNotSetUp', lang)
 
-  return `${lines.join('\n')}\n\nโอนแล้วส่งสลิปกลับมาในแชทนี้ได้เลยนะคะ`
+  return `${lines.join('\n')}\n\n${t('paymentSendSlip', lang)}`
 }
 
-export function formatOrderCloseSummary(shop: any, args: Record<string, any>, orderNo: string): string {
+export function formatOrderCloseSummary(
+  shop: any,
+  args: Record<string, any>,
+  orderNo: string,
+  lang: CustomerLanguage = 'th'
+): string {
   const total = Number(args.total_price) || 0
-  const paymentInstructions = formatPaymentInstructions(shop, total)
+  const paymentInstructions = formatPaymentInstructions(shop, total, lang)
   return [
-    'สรุปออเดอร์เรียบร้อยค่ะ',
+    t('orderSummaryTitle', lang),
     '',
-    `เลขที่ออเดอร์: ${orderNo}`,
-    `สินค้า: ${cleanLineValue(args.product)} x${cleanLineValue(args.qty)}`,
-    `ยอดสุทธิ: ${total.toLocaleString('th-TH')} บาท`,
+    `${t('orderNo', lang)}: ${orderNo}`,
+    `${t('orderItem', lang)}: ${cleanLineValue(args.product)} x${cleanLineValue(args.qty)}`,
+    `${t('orderTotal', lang)}: ${total.toLocaleString('th-TH')} ${t('currencyBaht', lang)}`,
     '',
-    'ข้อมูลจัดส่ง',
-    `ชื่อผู้รับ: ${cleanLineValue(args.name)}`,
-    `เบอร์โทร: ${cleanLineValue(args.phone)}`,
-    `ที่อยู่: ${cleanLineValue(args.address)}`,
-    `วิธีชำระเงิน: ${cleanLineValue(args.payment_method || 'โอนเงิน')}`,
+    t('orderDeliveryHeading', lang),
+    `${t('orderRecipient', lang)}: ${cleanLineValue(args.name)}`,
+    `${t('orderPhone', lang)}: ${cleanLineValue(args.phone)}`,
+    `${t('orderAddress', lang)}: ${cleanLineValue(args.address)}`,
+    `${t('orderPaymentMethod', lang)}: ${cleanLineValue(args.payment_method || t('orderTransferDefault', lang))}`,
     '',
-    'ช่องทางชำระเงิน',
+    t('orderPaymentHeading', lang),
     paymentInstructions,
   ].join('\n')
 }
@@ -434,7 +442,7 @@ export async function executeTool(
   args: Record<string, any>,
   ctx: ToolExecutionContext
 ): Promise<ToolExecutionResult> {
-  const { shopId, userId, conversationId, shop, supabase, supabaseAdmin } = ctx
+  const { shopId, userId, conversationId, shop, supabase, supabaseAdmin, language: lang = 'th' } = ctx
 
   // ── 💳 PAYMENT TOOLS ─────────────────────────────────────────────────
   if (toolName === 'send_payment_qr') {
@@ -448,7 +456,7 @@ export async function executeTool(
     // payment sent to the wrong place.
     const qrPublicUrl = await generateAndUploadQR(supabaseAdmin, amount, promptpayId, shopId)
     if (qrPublicUrl) {
-      const caption = `📋 ยอดชำระ: ${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท${order_summary ? `\n${order_summary}` : ''}\n\n✅ บันทึกรูป QR แล้วเปิดแอปธนาคารสแกนได้เลยค่ะ\n📲 โอนเสร็จกรุณาส่งสลิปกลับมาในแชทนะคะ`
+      const caption = `📋 ${t('qrAmount', lang)}: ${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} ${t('currencyBaht', lang)}${order_summary ? `\n${order_summary}` : ''}\n\n✅ ${t('qrScanHint', lang)}\n📲 ${t('qrSlipHint', lang)}`
       return {
         resultForAi: `ส่งรูป QR PromptPay พร้อมยอด ${amount} บาท และวิธีชำระให้ลูกค้าไปแล้ว ห้ามพิมพ์ยอดหรือวิธีชำระซ้ำ ให้ตอบสั้นๆ เช่น ชวนสแกนแล้วส่งสลิปกลับมา`,
         immediateMessages: [
@@ -457,7 +465,7 @@ export async function executeTool(
         ],
       }
     }
-    const fallback = `💳 ช่องทางชำระเงิน:\n- พร้อมเพย์: ${promptpayId}\n- ชื่อ: ${shop.promptpay_name || shop.name}\n- ยอด: ${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท`
+    const fallback = `💳 ${t('orderPaymentHeading', lang)}\n${formatPaymentInstructions(shop, Number(amount), lang)}`
     return { resultForAi: 'สร้าง QR ไม่สำเร็จ ส่งเลขพร้อมเพย์และยอดให้ลูกค้าไปแล้ว ห้ามพิมพ์เลขบัญชีหรือยอดซ้ำ ให้ตอบสั้นๆ ต่อท้ายพอ', immediateMessages: [{ type: 'text', content: fallback }] }
   }
 
@@ -490,7 +498,7 @@ export async function executeTool(
     // Pushed verbatim rather than left to the model: this block carries the
     // order total and the shop's account number, and a reworded digit here
     // sends the customer's money somewhere it shouldn't go.
-    const confirmMsg = formatOrderCloseSummary(shop, args, orderNo)
+    const confirmMsg = formatOrderCloseSummary(shop, args, orderNo, lang)
     return {
       resultForAi: `สร้างออเดอร์สำเร็จแล้วจริง เลขที่ออเดอร์: ${orderNo} และส่งสรุปออเดอร์พร้อมข้อมูลชำระเงินให้ลูกค้าไปแล้วครบถ้วน ห้ามพิมพ์สรุปหรือเลขบัญชีซ้ำ ให้ตอบสั้นๆ เช่น ขอบคุณ ย้ำเลขที่ออเดอร์ และชวนส่งสลิปกลับมา`,
       immediateMessages: [{ type: 'text', content: confirmMsg }],

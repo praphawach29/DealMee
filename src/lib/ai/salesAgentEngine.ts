@@ -4,16 +4,23 @@ import { buildBusinessPromptContext } from '@/lib/businessGreeting'
 import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
 import { executeTool as realExecuteTool, type ToolExecutor, type ToolExecutionContext, type CustomerMessage } from '@/lib/ai/toolDispatcher'
+import { t, detectCustomerLanguage, type CustomerLanguage } from '@/lib/i18n/customerMessages'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-/** Sent the moment a plan turns out to need more than one AI call, so the customer isn't left waiting in silence. Shared so the Chat Playground shows the same wording LINE sends. */
-export const PLANNING_ACK_MESSAGE_TH = 'กำลังตรวจสอบให้สักครู่นะคะ รอแป๊บนึงนะคะ 🙏'
+/**
+ * Sent the moment a plan turns out to need more than one AI call, so the
+ * customer isn't left waiting in silence. Takes the state rather than a bare
+ * language so callers can't accidentally send it in the wrong one, and so
+ * the Chat Playground shows exactly what LINE sends.
+ */
+export function planningAckMessage(state: PlanningState): string {
+  return t('planningAck', state.language)
+}
 
-export const QUOTA_EXCEEDED_MESSAGE_TH =
-  'ขออภัยค่ะ ร้านค้าใช้ข้อความครบตามแพ็กเกจในเดือนนี้แล้ว กรุณาติดต่อทางร้านหรือรออัปเกรดแพ็กเกจเพื่อใช้งานต่อค่ะ'
+export const QUOTA_EXCEEDED_MESSAGE_TH = t('quotaExceeded', 'th')
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -172,6 +179,8 @@ export const KNOWLEDGE_INLINE_MAX_CHARS = 6000
 export interface PlanningState {
   shop: any
   conversationId: string
+  /** Language of the customer's message, so the strings the system writes itself match the language the model is replying in. */
+  language: CustomerLanguage
   turns: PlanningTurn[]
   /** Index of the step about to run (0-based) — callers own incrementing this between steps. */
   step: number
@@ -965,12 +974,14 @@ async function isOverQuota(shop: any): Promise<boolean> {
 // Main Agent Orchestrator
 // ─────────────────────────────────────────────────────────────────────────────
 
-const QUOTA_EXCEEDED_RESULT: AgentResult = {
-  text: QUOTA_EXCEEDED_MESSAGE_TH,
-  quotaExceeded: true,
-  immediateMessages: [],
-  toolCallsExecuted: [],
-  scheduledMessages: [],
+function quotaExceededResult(language: CustomerLanguage): AgentResult {
+  return {
+    text: t('quotaExceeded', language),
+    quotaExceeded: true,
+    immediateMessages: [],
+    toolCallsExecuted: [],
+    scheduledMessages: [],
+  }
 }
 
 /**
@@ -990,9 +1001,13 @@ async function preparePlanningState({
   conversationHistory,
   toolExecutor,
   supabaseClient,
-}: SalesAgentRequest): Promise<{ quotaExceeded: true } | { quotaExceeded: false; state: PlanningState }> {
+}: SalesAgentRequest): Promise<
+  { quotaExceeded: true; language: CustomerLanguage } | { quotaExceeded: false; state: PlanningState }
+> {
   if (await isOverQuota(shop)) {
-    return { quotaExceeded: true }
+    // Language still matters on this path: the quota notice is the one
+    // message a customer gets, and the model never runs to set the tone.
+    return { quotaExceeded: true, language: detectCustomerLanguage(userQuery) }
   }
 
   const db = supabaseClient || supabase
@@ -1247,7 +1262,9 @@ async function preparePlanningState({
 - หลักเดียวกันนี้ใช้กับ reschedule_booking และ take_order ด้วย
 
 [กฎสำคัญ]
-- ตอบภาษาไทยสุภาพ กระชับ ไม่เกิน 10 บรรทัด
+- ตอบด้วย "ภาษาเดียวกับที่ลูกค้าพิมพ์มา" เสมอ ลูกค้าพิมพ์ไทยตอบไทย พิมพ์อังกฤษตอบอังกฤษ พิมพ์จีนตอบจีน ห้ามสลับภาษากลางบทสนทนาเว้นแต่ลูกค้าสลับก่อน
+- รักษาความสุภาพแบบเดียวกันในทุกภาษา และตอบกระชับ ไม่เกิน 10 บรรทัด
+- ชื่อสินค้า ชื่อบริการ และชื่อร้าน ให้คงตามที่บันทึกไว้ในฐานข้อมูล ห้ามแปล เพราะลูกค้าต้องใช้ชื่อนั้นสื่อสารกับร้าน
 - ใช้ Tools ที่จำเป็นให้ถูกต้อง อย่าตอบเดา
 - ห้ามพิมพ์หัวข้อสรุปแล้วปล่อยค่าว่าง เช่น "- **" ถ้ายังไม่มีข้อมูลจริง ให้ถามหรือเรียกเครื่องมือแทน
 - ถ้าลูกค้าให้ชื่อ/เบอร์/ที่อยู่แล้ว ให้สรุปข้อมูลเหล่านั้นกลับให้ครบ อย่าละไว้หรือแทนด้วยหัวข้อว่าง
@@ -1273,11 +1290,14 @@ ${historyContext}`
     `[Botify Brain™] "${userQuery}" | ${routing.complexity} (score ${routing.complexityScore}) | ${routing.targetProvider.toUpperCase()} | Tools: ${routing.toolSet.length}${isVipCustomer ? ' | VIP customer' : ''}`
   )
 
+  const language = detectCustomerLanguage(userQuery)
+
   const executor: ToolExecutor = toolExecutor || realExecuteTool
   const toolCtx: ToolExecutionContext = {
     shopId: shop.id,
     userId,
     conversationId,
+    language,
     shop,
     supabase: db,
     supabaseAdmin: createAdminClient(),
@@ -1288,6 +1308,7 @@ ${historyContext}`
     state: {
       shop,
       conversationId,
+      language,
       turns: [{ role: 'user', text: userQuery }],
       step: 0,
       routing,
@@ -1336,7 +1357,7 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
     // the old single-shot path used when every provider call returned null.
     const finalText = state.step === 0
       ? (state.geminiKey ? `สวัสดีค่ะ ยินดีต้อนรับสู่ร้าน "${state.shop.name}" มีอะไรให้ช่วยแนะนำไหมคะ?` : (state.shop.greeting_message || 'สวัสดีค่ะ มีอะไรให้ช่วยไหมคะ?'))
-      : 'ขออภัยค่ะ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งนะคะ'
+      : t('systemBusy', state.language)
     return { done: true, finalText }
   }
 
@@ -1351,7 +1372,7 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
       const salvaged = salvageTruncatedText(response.text)
       return {
         done: true,
-        finalText: salvaged || 'ขออภัยค่ะ ระบบตอบข้อความไม่ครบ รบกวนพิมพ์คำถามอีกครั้งนะคะ 🙏',
+        finalText: salvaged || t('replyCutOff', state.language),
       }
     }
     return { done: true, finalText: response.text }
@@ -1378,7 +1399,7 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
     } catch (err) {
       console.error('[Planning Layer] Failed to flip conversation to human handoff:', err)
     }
-    return { done: true, finalText: 'ขออภัยค่ะ เรื่องนี้ซับซ้อนเกินกว่าจะตอบได้ในตอนนี้ รอสักครู่แอดมินจะติดต่อกลับนะคะ' }
+    return { done: true, finalText: t('handoffTooComplex', state.language) }
   }
 
   return { done: false }
@@ -1447,7 +1468,7 @@ function finalizeAgentResult(state: PlanningState, finalText: string): AgentResu
  */
 export async function processSalesAgentChat(request: SalesAgentRequest): Promise<AgentResult> {
   const prep = await preparePlanningState(request)
-  if (prep.quotaExceeded) return QUOTA_EXCEEDED_RESULT
+  if (prep.quotaExceeded) return quotaExceededResult(prep.language)
 
   const state = prep.state
   let finalText = ''
@@ -1474,7 +1495,7 @@ export async function processSalesAgentChat(request: SalesAgentRequest): Promise
  */
 export async function startSalesAgentPlanning(request: SalesAgentRequest): Promise<PlanningStart> {
   const prep = await preparePlanningState(request)
-  if (prep.quotaExceeded) return { done: true, result: QUOTA_EXCEEDED_RESULT }
+  if (prep.quotaExceeded) return { done: true, result: quotaExceededResult(prep.language) }
 
   const state = prep.state
   const outcome = await runPlanningStep(state)

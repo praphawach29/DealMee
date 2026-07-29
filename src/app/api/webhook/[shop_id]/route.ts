@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createHmac } from 'crypto'
-import { startSalesAgentPlanning, continueSalesAgentPlanning, PLANNING_ACK_MESSAGE_TH, type AgentResult } from '@/lib/ai/salesAgentEngine'
+import { startSalesAgentPlanning, continueSalesAgentPlanning, planningAckMessage, type AgentResult } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 import { buildAutoGreeting, isDefaultGreeting } from '@/lib/businessGreeting'
@@ -187,7 +187,7 @@ export async function POST(
           // steps in the background and push the real answer once ready.
           // Same reply-then-push-later shape as verifySlipAndNotify below.
           if (replyToken && lineToken) {
-            await sendLineReply(replyToken, PLANNING_ACK_MESSAGE_TH, lineToken)
+            await sendLineReply(replyToken, planningAckMessage(started.state), lineToken)
           }
           continueSalesAgentPlanning(started.state)
             .then((agentResult) =>

@@ -7,7 +7,7 @@ import {
   continueSalesAgentPlanning,
   getQuotaStatus,
   QUOTA_EXCEEDED_MESSAGE_TH,
-  PLANNING_ACK_MESSAGE_TH,
+  planningAckMessage,
 } from '@/lib/ai/salesAgentEngine'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { buildAutoGreeting } from '@/lib/businessGreeting'
@@ -237,7 +237,7 @@ export async function testPlaygroundChat(
     if (started.done) {
       result = started.result
     } else {
-      bubbles.push({ type: 'text', content: PLANNING_ACK_MESSAGE_TH, origin: 'ack' })
+      bubbles.push({ type: 'text', content: planningAckMessage(started.state), origin: 'ack' })
       result = await continueSalesAgentPlanning(started.state)
     }
 
