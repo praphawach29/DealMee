@@ -941,6 +941,38 @@ export async function executeTool(
     }
   }
 
+  // ── 📚 KNOWLEDGE BASE ─────────────────────────────────────────────
+  // Only part of the knowledge base fits in the system prompt; this reaches
+  // the rest. Until now the tool was declared to the model but had no
+  // implementation, so calling it silently returned "done" and the bot went
+  // on to answer from nothing.
+  if (toolName === 'search_knowledge_base') {
+    const keyword = String(args.query || args.keyword || args.question || '').trim()
+    if (!keyword) {
+      return { resultForAi: 'ยังไม่มีคำค้นหา ให้ถามลูกค้าว่าอยากทราบเรื่องอะไร', immediateMessages: [] }
+    }
+
+    const { data: found } = await supabase
+      .from('knowledge_base')
+      .select('title, content')
+      .eq('shop_id', shopId)
+      .eq('status', 'active')
+      .or(`title.ilike.%${keyword}%,content.ilike.%${keyword}%`)
+      .limit(5)
+
+    if (!found || found.length === 0) {
+      return {
+        resultForAi: `ไม่พบข้อมูลเรื่อง "${keyword}" ในคลังความรู้ของร้าน ห้ามเดาคำตอบ ให้บอกลูกค้าว่าจะให้แอดมินช่วยตรวจสอบ หรือเรียก request_human_agent`,
+        immediateMessages: [],
+      }
+    }
+
+    return {
+      resultForAi: `ข้อมูลจากคลังความรู้: ${found.map((k: any) => `${k.title} — ${k.content}`).join(' | ')}`,
+      immediateMessages: [],
+    }
+  }
+
   // ── 🎁 PROMOTIONS ─────────────────────────────────────────────────
   if (toolName === 'get_active_promotions') {
     const today = new Date().toISOString().split('T')[0]

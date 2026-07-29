@@ -3,6 +3,14 @@ import { redirect } from 'next/navigation'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import KnowledgeManager from './KnowledgeManager'
 
+/**
+ * Importing runs as a server action on this route, and fetching a page or
+ * reading a PDF and then having a model turn it into Q&A comfortably exceeds
+ * the 10s a Vercel function gets by default — the import would be killed
+ * mid-way with nothing saved.
+ */
+export const maxDuration = 60
+
 export default async function KnowledgePage() {
   const supabase = await createClient()
 

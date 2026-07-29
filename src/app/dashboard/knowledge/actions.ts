@@ -3,6 +3,11 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
+import { extractFromUrl, extractFromPdf, extractFromCsv, type ExtractedSource } from '@/lib/knowledge/extract'
+import { toKnowledgeEntries, csvToEntriesDirect, type KnowledgeEntry } from '@/lib/knowledge/ingest'
+
+/** Roughly the ceiling on what a shop owner might reasonably upload; larger files are almost always the wrong document. */
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 export async function createKnowledgeItem(formData: FormData) {
   const supabase = await createClient()
@@ -41,6 +46,123 @@ export async function createKnowledgeItem(formData: FormData) {
   revalidatePath('/dashboard/knowledge')
   revalidatePath('/dashboard')
   return { success: 'เพิ่มข้อมูลความรู้เรียบร้อยแล้ว!' }
+}
+
+/**
+ * Shared tail of every import: write the extracted entries, replacing any
+ * earlier import from the same source so re-importing an updated price list
+ * refreshes it instead of stacking a second, contradictory copy the bot
+ * would then have to choose between.
+ */
+async function saveImportedEntries(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  shopId: string,
+  entries: KnowledgeEntry[],
+  source: 'url' | 'pdf' | 'csv',
+  sourceRef: string
+) {
+  await supabase
+    .from('knowledge_base')
+    .delete()
+    .eq('shop_id', shopId)
+    .eq('source', source)
+    .eq('source_ref', sourceRef)
+
+  const { error } = await supabase.from('knowledge_base').insert(
+    entries.map((entry) => ({
+      shop_id: shopId,
+      title: entry.title,
+      content: entry.content,
+      category: 'faq',
+      source,
+      source_ref: sourceRef,
+    }))
+  )
+
+  if (error) return { error: `บันทึกข้อมูลไม่สำเร็จ: ${error.message}` }
+
+  revalidatePath('/dashboard/knowledge')
+  revalidatePath('/dashboard')
+  return { success: `เพิ่มข้อมูลจาก ${sourceRef} จำนวน ${entries.length} ข้อเรียบร้อยแล้ว!` }
+}
+
+async function resolveShop(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) return { error: 'กรุณาเข้าสู่ระบบอีกครั้ง' as const }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop?.id) return { error: 'ไม่พบข้อมูลร้านค้า' as const }
+
+  return { shop }
+}
+
+export async function importKnowledgeFromUrl(formData: FormData) {
+  const supabase = await createClient()
+  const resolved = await resolveShop(supabase)
+  if ('error' in resolved) return { error: resolved.error }
+
+  const url = String(formData.get('url') || '').trim()
+  if (!url) return { error: 'กรุณาใส่ลิงก์เว็บไซต์' }
+
+  try {
+    const source = await extractFromUrl(url)
+    const entries = await toKnowledgeEntries(source.text, resolved.shop.name || 'ร้านค้า')
+    return await saveImportedEntries(supabase, resolved.shop.id, entries, 'url', source.label)
+  } catch (err: any) {
+    return { error: err.message || 'ดึงข้อมูลจากลิงก์ไม่สำเร็จ' }
+  }
+}
+
+export async function importKnowledgeFromFile(formData: FormData) {
+  const supabase = await createClient()
+  const resolved = await resolveShop(supabase)
+  if ('error' in resolved) return { error: resolved.error }
+
+  const file = formData.get('file') as File | null
+  if (!file || file.size === 0) return { error: 'กรุณาเลือกไฟล์' }
+  if (file.size > MAX_UPLOAD_BYTES) return { error: 'ไฟล์ใหญ่เกิน 10 MB กรุณาแบ่งไฟล์ให้เล็กลง' }
+
+  const isPdf = file.name.toLowerCase().endsWith('.pdf')
+  const isCsv = file.name.toLowerCase().endsWith('.csv')
+  if (!isPdf && !isCsv) return { error: 'รองรับเฉพาะไฟล์ .pdf และ .csv เท่านั้น' }
+
+  try {
+    // A spreadsheet already laid out as question/answer columns is taken
+    // as-is: exact, free, and it keeps the shop's own wording rather than
+    // letting a model paraphrase a policy.
+    if (isCsv) {
+      const direct = csvToEntriesDirect(await file.text())
+      if (direct && direct.length > 0) {
+        return await saveImportedEntries(supabase, resolved.shop.id, direct, 'csv', file.name)
+      }
+    }
+
+    const source: ExtractedSource = isPdf ? await extractFromPdf(file) : await extractFromCsv(file)
+    const entries = await toKnowledgeEntries(source.text, resolved.shop.name || 'ร้านค้า')
+    return await saveImportedEntries(supabase, resolved.shop.id, entries, isPdf ? 'pdf' : 'csv', source.label)
+  } catch (err: any) {
+    return { error: err.message || 'อ่านไฟล์ไม่สำเร็จ' }
+  }
+}
+
+/** Removes every entry that came from one import in a single step, so a stale price list doesn't have to be deleted row by row. */
+export async function deleteKnowledgeSource(source: string, sourceRef: string) {
+  const supabase = await createClient()
+  const resolved = await resolveShop(supabase)
+  if ('error' in resolved) return { error: resolved.error }
+
+  const { error } = await supabase
+    .from('knowledge_base')
+    .delete()
+    .eq('shop_id', resolved.shop.id)
+    .eq('source', source)
+    .eq('source_ref', sourceRef)
+
+  if (error) return { error: `ลบไม่สำเร็จ: ${error.message}` }
+
+  revalidatePath('/dashboard/knowledge')
+  revalidatePath('/dashboard')
+  return { success: `ลบข้อมูลจาก ${sourceRef} เรียบร้อยแล้ว` }
 }
 
 export async function deleteKnowledgeItem(id: string) {

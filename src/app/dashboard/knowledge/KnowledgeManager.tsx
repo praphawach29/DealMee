@@ -1,7 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { createKnowledgeItem, deleteKnowledgeItem } from './actions'
+import {
+  createKnowledgeItem,
+  deleteKnowledgeItem,
+  importKnowledgeFromUrl,
+  importKnowledgeFromFile,
+} from './actions'
 
 export interface KnowledgeItem {
   id: string
@@ -19,6 +24,8 @@ export default function KnowledgeManager({ items }: { items: KnowledgeItem[] }) 
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importUrl, setImportUrl] = useState('')
 
   const filteredItems = items.filter(item => {
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -39,6 +46,21 @@ export default function KnowledgeManager({ items }: { items: KnowledgeItem[] }) 
     } else if (res?.success) {
       setMessage({ type: 'success', text: res.success })
       setIsOpenModal(false)
+    }
+  }
+
+  async function handleImport(formData: FormData, run: (fd: FormData) => Promise<any>) {
+    setImporting(true)
+    setMessage(null)
+
+    const res = await run(formData)
+    setImporting(false)
+
+    if (res?.error) {
+      setMessage({ type: 'error', text: res.error })
+    } else if (res?.success) {
+      setMessage({ type: 'success', text: res.success })
+      setImportUrl('')
     }
   }
 
@@ -109,6 +131,64 @@ export default function KnowledgeManager({ items }: { items: KnowledgeItem[] }) 
           <button onClick={() => setMessage(null)} className="text-xs opacity-70 hover:opacity-100">✕</button>
         </div>
       )}
+
+      {/* Bulk import — most shops already have this written down somewhere,
+          and retyping it by hand is the main reason the knowledge base sits
+          empty. */}
+      <div className="rounded-xl border border-outline-variant bg-surface-container-low p-4 sm:p-5 space-y-4">
+        <div>
+          <h2 className="text-sm sm:text-base font-semibold text-on-surface flex items-center gap-2">
+            <span className="material-symbols-outlined text-[20px]">auto_awesome</span>
+            นำเข้าอัตโนมัติ
+          </h2>
+          <p className="text-xs text-on-surface-variant mt-0.5">
+            ดึงข้อมูลจากเว็บไซต์หรือไฟล์ของร้าน แล้วให้ AI แปลงเป็นคำถาม-คำตอบให้อัตโนมัติ (สูงสุด 30 ข้อต่อการนำเข้า 1 ครั้ง)
+          </p>
+        </div>
+
+        <form action={(fd) => handleImport(fd, importKnowledgeFromUrl)} className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="url"
+            name="url"
+            value={importUrl}
+            onChange={(e) => setImportUrl(e.target.value)}
+            placeholder="https://ร้านของคุณ.com/about"
+            required
+            disabled={importing}
+            className="flex-1 px-3 py-2 rounded-lg border border-outline-variant bg-surface text-xs sm:text-sm text-on-surface disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={importing}
+            className="px-4 py-2 rounded-lg bg-electric-blue hover:bg-primary text-white text-xs sm:text-sm font-semibold disabled:opacity-50 cursor-pointer shrink-0"
+          >
+            {importing ? 'กำลังอ่าน...' : 'ดึงจากลิงก์'}
+          </button>
+        </form>
+
+        <form action={(fd) => handleImport(fd, importKnowledgeFromFile)} className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="file"
+            name="file"
+            accept=".pdf,.csv"
+            required
+            disabled={importing}
+            className="flex-1 text-xs sm:text-sm text-on-surface-variant file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-surface-container-high file:text-on-surface file:text-xs file:cursor-pointer disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={importing}
+            className="px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-xs sm:text-sm font-semibold border border-outline-variant disabled:opacity-50 cursor-pointer shrink-0"
+          >
+            {importing ? 'กำลังอ่าน...' : 'อัปโหลด PDF / CSV'}
+          </button>
+        </form>
+
+        <p className="text-[11px] text-on-surface-variant leading-relaxed">
+          ไฟล์ CSV ที่มีคอลัมน์ <span className="font-mono">คำถาม</span> และ <span className="font-mono">คำตอบ</span> (หรือ question/answer) จะถูกนำเข้าตรงตามที่เขียนไว้ ไม่ผ่าน AI —
+          ได้ข้อความตรงตามต้นฉบับทุกตัวอักษร ส่วนไฟล์อื่นจะให้ AI ช่วยสกัดให้ นำเข้าซ้ำจากต้นทางเดิมจะแทนที่ของเดิม ไม่ซ้อนกัน
+        </p>
+      </div>
 
       {/* Compact 3-Column Stats Grid on Mobile */}
       <div className="grid grid-cols-3 gap-2 sm:gap-5">

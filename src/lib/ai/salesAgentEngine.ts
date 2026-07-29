@@ -153,6 +153,16 @@ export const MAX_PLANNING_STEPS = 3
 export const MAX_OUTPUT_TOKENS = 4096
 
 /**
+ * How much of the knowledge base rides along in every system prompt. The
+ * remainder stays reachable through search_knowledge_base, so a shop can
+ * import a whole catalogue without every customer message carrying it. Thai
+ * costs roughly one token per character, so the character budget is close
+ * enough to a token budget to reason about.
+ */
+export const KNOWLEDGE_INLINE_MAX_ITEMS = 40
+export const KNOWLEDGE_INLINE_MAX_CHARS = 6000
+
+/**
  * Everything a planning step needs, carried across steps so the webhook
  * route can pause after step 0 (to send a LINE ack once it knows the plan
  * needs more than one AI call) and resume the rest in the background — the
@@ -992,18 +1002,38 @@ async function preparePlanningState({
   const openAiKey = process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY || ''
   const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
 
-  // 1. Knowledge Base
+  // 1. Knowledge Base — inlined up to a character budget, with the rest
+  // reachable through search_knowledge_base. Every entry used to be inlined
+  // with no limit, which was survivable while owners typed FAQs by hand but
+  // stopped being so once a whole website or PDF could be imported: the
+  // entire document would ride along on every customer message and be billed
+  // again each turn.
   const { data: knowledgeItems } = await db
     .from('knowledge_base')
-    .select('title, content, category')
+    .select('title, content')
     .eq('shop_id', shop.id)
     .eq('status', 'active')
+    .order('created_at', { ascending: true })
+    .limit(KNOWLEDGE_INLINE_MAX_ITEMS)
 
   let knowledgeContext = ''
   if (knowledgeItems && knowledgeItems.length > 0) {
+    const inlined: string[] = []
+    let budget = KNOWLEDGE_INLINE_MAX_CHARS
+    for (const item of knowledgeItems) {
+      const block = `Q: ${item.title}\nA: ${item.content}`
+      if (block.length > budget) break
+      inlined.push(block)
+      budget -= block.length
+    }
+
+    const omitted = knowledgeItems.length - inlined.length
     knowledgeContext =
       `\n\n[คลังข้อมูลความรู้ของร้าน]\n` +
-      knowledgeItems.map((k) => `Q: ${k.title}\nA: ${k.content}`).join('\n\n')
+      inlined.join('\n\n') +
+      (omitted > 0
+        ? `\n\n(ยังมีข้อมูลอีก ${omitted} ข้อที่ไม่ได้แสดงตรงนี้ ถ้าลูกค้าถามเรื่องที่ไม่มีข้างบน ให้เรียก search_knowledge_base ค้นหาก่อนตอบว่าไม่รู้)`
+        : '')
   }
 
   // 2. Products
