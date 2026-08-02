@@ -697,12 +697,13 @@ function toGeminiTools(tools: typeof MASTER_TOOLS) {
   ]
 }
 
-/** Claude: tools with input_schema */
+/** Claude: tools with input_schema and Prompt Caching enabled on the last tool */
 function toClaudeTools(tools: typeof MASTER_TOOLS) {
-  return tools.map((t) => ({
+  return tools.map((t, index) => ({
     name: t.name,
     description: t.description,
     input_schema: t.parameters,
+    ...(index === tools.length - 1 ? { cache_control: { type: 'ephemeral' } } : {}),
   }))
 }
 
@@ -1665,6 +1666,7 @@ async function callGeminiApi(
           completionTokens: usageMeta.candidatesTokenCount || 0,
           totalTokens: usageMeta.totalTokenCount || 0,
           provider: 'gemini',
+          cacheReadTokens: usageMeta.cachedContentTokenCount || 0,
         }
       : undefined
 

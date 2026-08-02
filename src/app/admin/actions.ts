@@ -134,7 +134,7 @@ export async function getPlans(): Promise<PlanItem[]> {
       name: 'เริ่มต้น',
       price: 390,
       messages: 3000,
-      tokens: 5000000,
+      tokens: 3000000,
       description: 'สำหรับร้านค้าขนาดเล็กที่เน้นปิดการขายใน LINE OA',
       badge_color: 'bg-electric-blue/10 text-electric-blue border border-electric-blue/20',
       features: ['ตอบแชทบอท LINE OA', 'คลังความรู้ไม่จำกัด', 'ระบบจัดการสินค้า 50 รายการ', 'เช็คสลิปโอนเงินอัตโนมัติ'],
