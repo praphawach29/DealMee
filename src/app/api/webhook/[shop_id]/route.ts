@@ -158,6 +158,11 @@ export async function POST(
           continue
         }
 
+        // Show LINE thinking / loading animation immediately while AI generates response
+        if (lineToken) {
+          sendLineLoadingAnimation(userId, lineToken).catch(() => {})
+        }
+
         // 5. Call AI Sales Agent Engine — run only the first planning step
         // here. Most messages resolve in one step (nothing changes for
         // those); if the AI needs to chain more tool calls, we get back a
@@ -487,5 +492,27 @@ async function sendLineImagePush(to: string, imageUrl: string, channelAccessToke
     }
   } catch (err) {
     console.error('[LINE Image Push Exception]:', err)
+  }
+}
+
+/** Start LINE Chat Loading Animation (Thinking Indicator for up to 20s) */
+async function sendLineLoadingAnimation(chatId: string, channelAccessToken: string) {
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/chat/loading/start', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${channelAccessToken}`,
+      },
+      body: JSON.stringify({
+        chatId,
+        loadingSeconds: 20,
+      }),
+    })
+    if (!res.ok) {
+      console.log('[LINE Loading Animation Note]:', res.status, await res.text())
+    }
+  } catch (err) {
+    console.error('[LINE Loading Animation Exception]:', err)
   }
 }

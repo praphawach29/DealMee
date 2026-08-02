@@ -1061,14 +1061,16 @@ async function preparePlanningState({
       .from('products')
       .select('id, name, price, stock, category, description')
       .eq('shop_id', shop.id)
-      .gt('stock', 0)
+      .limit(30)
 
     if (products && products.length > 0) {
       productsContext =
-        `\n\n[แคตตาล็อกสินค้าพร้อมส่ง]\n` +
-        products.map((p) =>
-          `- ${p.name} (${p.category || 'ทั่วไป'}): ${Number(p.price || 0).toLocaleString()} บาท (คงเหลือ ${p.stock} ชิ้น)`
-        ).join('\n')
+        `\n\n[แคตตาล็อกสินค้าของร้าน]\n` +
+        products.map((p) => {
+          const stockStr = p.stock !== null && p.stock !== undefined ? `${p.stock} ชิ้น` : 'มีพร้อมส่ง'
+          const descStr = p.description ? ` (${p.description})` : ''
+          return `- ${p.name}${descStr} [หมวดหมู่: ${p.category || 'ทั่วไป'}]: ${Number(p.price || 0).toLocaleString()} บาท (คงเหลือ: ${stockStr})`
+        }).join('\n')
     }
   }
 

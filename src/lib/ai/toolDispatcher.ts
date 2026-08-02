@@ -983,6 +983,71 @@ export async function executeTool(
     }
   }
 
+  // ── 📦 PRODUCT TOOLS ─────────────────────────────────────────────
+  if ((toolName as string) === 'search_products') {
+    const rawKeyword = String(args.keyword || args.query || args.search || '').trim()
+    const keyword = normalizeProductSearchKeyword(rawKeyword) || rawKeyword
+
+    let query = supabase
+      .from('products')
+      .select('id, name, price, stock, category, description')
+      .eq('shop_id', shopId)
+
+    if (keyword) {
+      query = query.or(`name.ilike.%${keyword}%,description.ilike.%${keyword}%,category.ilike.%${keyword}%`)
+    }
+
+    const { data: products } = await query.limit(10)
+
+    if (!products || products.length === 0) {
+      return {
+        resultForAi: `ไม่พบสินค้าตรงกับคำค้น "${rawKeyword}" ในร้านค้า ให้เสนอดูสินค้าที่มีหรือสอบถามเพิ่มเติม`,
+        immediateMessages: [],
+      }
+    }
+
+    const list = products.map((p: any) => {
+      const stockStr = p.stock !== null && p.stock !== undefined ? `${p.stock} ชิ้น` : 'มีพร้อมส่ง'
+      return `- ${p.name} (ราคา ${Number(p.price || 0).toLocaleString()} บาท, คงเหลือ ${stockStr})${p.description ? `: ${p.description}` : ''}`
+    }).join('\n')
+
+    return {
+      resultForAi: `รายการสินค้าที่พบ:\n${list}`,
+      immediateMessages: [],
+    }
+  }
+
+  if ((toolName as string) === 'check_stock') {
+    const productName = String(args.product_name || args.product || args.name || '').trim()
+    if (!productName) {
+      return { resultForAi: 'กรุณาระบุชื่อสินค้าที่ต้องการเช็กสต็อก', immediateMessages: [] }
+    }
+
+    const { data: products } = await supabase
+      .from('products')
+      .select('id, name, price, stock')
+      .eq('shop_id', shopId)
+      .ilike('name', `%${productName}%`)
+      .limit(5)
+
+    if (!products || products.length === 0) {
+      return {
+        resultForAi: `ไม่พบสินค้าชื่อ "${productName}" ในระบบ`,
+        immediateMessages: [],
+      }
+    }
+
+    const info = products.map((p: any) => {
+      const stockStr = p.stock !== null && p.stock !== undefined ? `${p.stock} ชิ้น` : 'มีสินค้าพร้อมส่ง'
+      return `${p.name}: คงเหลือ ${stockStr} (ราคา ${Number(p.price || 0).toLocaleString()} บาท)`
+    }).join('; ')
+
+    return {
+      resultForAi: `ข้อมูลสต็อกสินค้า: ${info}`,
+      immediateMessages: [],
+    }
+  }
+
   // ── 🎁 PROMOTIONS ─────────────────────────────────────────────────
   if (toolName === 'get_active_promotions') {
     const today = new Date().toISOString().split('T')[0]
