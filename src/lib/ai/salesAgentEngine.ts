@@ -6,9 +6,7 @@ import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile }
 import { executeTool as realExecuteTool, type ToolExecutor, type ToolExecutionContext, type CustomerMessage } from '@/lib/ai/toolDispatcher'
 import { t, detectCustomerLanguage, type CustomerLanguage } from '@/lib/i18n/customerMessages'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+const supabase = createAdminClient()
 
 /**
  * Sent the moment a plan turns out to need more than one AI call, so the

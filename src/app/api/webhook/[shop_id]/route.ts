@@ -177,6 +177,7 @@ export async function POST(
           userQuery: userText,
           userId,
           conversationId: conv.id,
+          supabaseClient: supabase,
         })
 
         await deliverAgentResult({
