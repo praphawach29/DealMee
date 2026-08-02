@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 
 interface SidebarNavProps {
@@ -13,6 +13,7 @@ interface SidebarNavProps {
 
 export default function SidebarNav({ bizType, features = {}, isSuperAdmin = false, onNavClick }: SidebarNavProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const [activePath, setActivePath] = useState(pathname)
 
   useEffect(() => {
@@ -33,6 +34,12 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
     if (onNavClick) onNavClick()
   }
 
+  const handleMouseEnter = (path: string) => {
+    try {
+      router.prefetch(path)
+    } catch (_) {}
+  }
+
   const linkClass = (path: string) => {
     const active = isActive(path)
     return `flex items-center px-3.5 py-2.5 rounded-xl transition-all group font-label-md text-xs sm:text-sm ${
@@ -47,6 +54,7 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
       <Link
         href="/dashboard"
         prefetch={true}
+        onMouseEnter={() => handleMouseEnter('/dashboard')}
         onClick={() => handleLinkClick('/dashboard')}
         className={linkClass('/dashboard')}
       >
@@ -59,6 +67,7 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
           <Link
             href="/dashboard/products"
             prefetch={true}
+            onMouseEnter={() => handleMouseEnter('/dashboard/products')}
             onClick={() => handleLinkClick('/dashboard/products')}
             className={linkClass('/dashboard/products')}
           >
@@ -68,6 +77,7 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
           <Link
             href="/dashboard/orders"
             prefetch={true}
+            onMouseEnter={() => handleMouseEnter('/dashboard/orders')}
             onClick={() => handleLinkClick('/dashboard/orders')}
             className={linkClass('/dashboard/orders')}
           >
@@ -82,6 +92,7 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
           <Link
             href="/dashboard/bookings"
             prefetch={true}
+            onMouseEnter={() => handleMouseEnter('/dashboard/bookings')}
             onClick={() => handleLinkClick('/dashboard/bookings')}
             className={linkClass('/dashboard/bookings')}
           >
@@ -91,6 +102,7 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
           <Link
             href="/dashboard/services"
             prefetch={true}
+            onMouseEnter={() => handleMouseEnter('/dashboard/services')}
             onClick={() => handleLinkClick('/dashboard/services')}
             className={linkClass('/dashboard/services')}
           >
@@ -104,6 +116,7 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
         <Link
           href="/dashboard/menu"
           prefetch={true}
+          onMouseEnter={() => handleMouseEnter('/dashboard/menu')}
           onClick={() => handleLinkClick('/dashboard/menu')}
           className={linkClass('/dashboard/menu')}
         >
@@ -115,6 +128,7 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
       <Link
         href="/dashboard/billing"
         prefetch={true}
+        onMouseEnter={() => handleMouseEnter('/dashboard/billing')}
         onClick={() => handleLinkClick('/dashboard/billing')}
         className={linkClass('/dashboard/billing')}
       >
@@ -125,6 +139,7 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
       <Link
         href="/dashboard/settings"
         prefetch={true}
+        onMouseEnter={() => handleMouseEnter('/dashboard/settings')}
         onClick={() => handleLinkClick('/dashboard/settings')}
         className={linkClass('/dashboard/settings')}
       >
@@ -135,6 +150,7 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
       <Link
         href="/dashboard/knowledge"
         prefetch={true}
+        onMouseEnter={() => handleMouseEnter('/dashboard/knowledge')}
         onClick={() => handleLinkClick('/dashboard/knowledge')}
         className={linkClass('/dashboard/knowledge')}
       >
@@ -145,6 +161,7 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
       <Link
         href="/dashboard/modules"
         prefetch={true}
+        onMouseEnter={() => handleMouseEnter('/dashboard/modules')}
         onClick={() => handleLinkClick('/dashboard/modules')}
         className={linkClass('/dashboard/modules')}
       >
@@ -155,6 +172,7 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
       <Link
         href="/dashboard/inbox"
         prefetch={true}
+        onMouseEnter={() => handleMouseEnter('/dashboard/inbox')}
         onClick={() => handleLinkClick('/dashboard/inbox')}
         className={linkClass('/dashboard/inbox')}
       >

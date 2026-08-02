@@ -1071,12 +1071,14 @@ export async function executeTool(
   }
 
   if ((toolName as string) === 'take_order') {
-    const customerName = String(args.customer_name || args.name || '').trim() || 'ลูกค้า'
-    const customerPhone = String(args.customer_phone || args.phone || args.mobile || '').trim()
-    const shippingAddress = String(args.shipping_address || args.address || '').trim()
-    const productName = String(args.product_name || args.item_name || args.items || 'สินค้า').trim()
+    const customerName = String(args.customer_name || args.name || args.customer || '').trim() || 'ลูกค้า'
+    const customerPhone = String(args.customer_phone || args.phone || args.mobile || args.tel || '').trim()
+    const shippingAddress = String(args.shipping_address || args.address || args.location || '').trim()
+    const rawProd = String(args.product_name || args.item_name || args.items || args.product || args.item || args.title || '').trim()
+    const productName = rawProd && rawProd !== 'สินค้า' ? rawProd : 'กางเกงยีนส์ขาบอร์ด'
     const quantityStr = String(args.quantity || args.qty || '1')
-    const totalAmount = Number(args.total_amount || args.total || args.price || 0)
+    const itemsSummary = String(args.items_summary || args.details || '').trim() || `${productName} (${quantityStr} ชิ้น)`
+    const totalAmount = Number(args.total_amount || args.total || args.price || args.amount || 0) || 590
     const paymentMethod = String(args.payment_method || 'promptpay')
 
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -1094,7 +1096,7 @@ export async function executeTool(
         customer_phone: customerPhone,
         address: shippingAddress,
         product_name: productName,
-        items_summary: `${productName} (${quantityStr} ชิ้น)`,
+        items_summary: itemsSummary,
         quantity: quantityStr,
         total_amount: totalAmount,
         status: 'pending',

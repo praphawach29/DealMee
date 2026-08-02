@@ -11,6 +11,7 @@ export interface OrderItem {
   phone: string | null
   total_amount: number
   items_summary: string | null
+  product_name?: string | null
   status: string
   tracking_no: string | null
   created_at: string
@@ -201,7 +202,7 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
                     </div>
                     <div className="flex items-start justify-between gap-4">
                       <span className="text-outline shrink-0">รายการ:</span>
-                      <span className="font-medium text-on-surface-variant text-right line-clamp-2">{ord.items_summary || '-'}</span>
+                      <span className="font-medium text-on-surface-variant text-right line-clamp-2">{ord.items_summary || ord.product_name || 'สั่งซื้อสินค้าทั่วไป'}</span>
                     </div>
                   </div>
 
@@ -255,8 +256,8 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
                         {ord.customer_name}
                         {ord.phone && <span className="text-xs font-normal text-outline block">{ord.phone}</span>}
                       </td>
-                      <td className="p-4 max-w-xs truncate text-on-surface-variant">
-                        {ord.items_summary || '-'}
+                      <td className="p-4 max-w-xs truncate text-on-surface-variant font-medium">
+                        {ord.items_summary || ord.product_name || 'สั่งซื้อสินค้าทั่วไป'}
                       </td>
                       <td className="p-4 font-bold text-on-surface">
                         ฿{Number(ord.total_amount || 0).toLocaleString()}
