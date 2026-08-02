@@ -30,15 +30,18 @@ export async function updateBotSettings(formData: FormData) {
     return { error: 'ไม่สามารถสร้างหรือค้นหาข้อมูลร้านค้าได้' }
   }
 
+  const rawToken = (formData.get('line_token') as string) || ''
+  const rawSecret = (formData.get('line_secret') as string) || ''
+
   const updateData = {
-    name: formData.get('name') as string,
-    bot_name: formData.get('bot_name') as string,
-    description: formData.get('description') as string,
-    personality: formData.get('personality') as string,
-    greeting_message: formData.get('greeting_message') as string,
-    system_prompt: formData.get('system_prompt') as string,
-    line_token: formData.get('line_token') as string,
-    line_secret: formData.get('line_secret') as string,
+    name: ((formData.get('name') as string) || '').trim(),
+    bot_name: ((formData.get('bot_name') as string) || '').trim(),
+    description: ((formData.get('description') as string) || '').trim(),
+    personality: ((formData.get('personality') as string) || '').trim(),
+    greeting_message: ((formData.get('greeting_message') as string) || '').trim(),
+    system_prompt: ((formData.get('system_prompt') as string) || '').trim(),
+    line_token: rawToken.trim(),
+    line_secret: rawSecret.trim(),
     updated_at: new Date().toISOString(),
   }
 

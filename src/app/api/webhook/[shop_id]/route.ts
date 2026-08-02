@@ -13,8 +13,10 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 // ─── LINE Signature Verification ─────────────────────────────────────────────
 function verifyLineSignature(rawBody: string, signature: string, secret: string): boolean {
   if (!signature || !secret) return false
-  const hash = createHmac('SHA256', secret).update(rawBody).digest('base64')
-  return hash === signature
+  const cleanSecret = secret.trim()
+  const cleanSignature = signature.trim()
+  const hash = createHmac('SHA256', cleanSecret).update(rawBody).digest('base64')
+  return hash === cleanSignature
 }
 
 
@@ -62,14 +64,15 @@ export async function POST(
       return NextResponse.json({ error: 'Shop not found' }, { status: 404 })
     }
 
-    const lineToken = shop.line_token
+    const lineToken = shop.line_token ? shop.line_token.trim() : undefined
+    const lineSecret = shop.line_secret ? shop.line_secret.trim() : undefined
     const features = (shop.features as Record<string, boolean>) || {}
     const isAutoReplyEnabled = features.auto_reply !== false
 
     // 2. Verify LINE Signature (reject fake webhooks)
     const lineSignature = req.headers.get('x-line-signature') || ''
-    if (shop.line_secret && lineSignature) {
-      const isValid = verifyLineSignature(rawBody, lineSignature, shop.line_secret)
+    if (lineSecret && lineSignature) {
+      const isValid = verifyLineSignature(rawBody, lineSignature, lineSecret)
       if (!isValid) {
         console.error(`[Security] Invalid LINE signature for shop ${shop_id}`)
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
