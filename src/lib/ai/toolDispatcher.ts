@@ -1076,6 +1076,93 @@ export async function executeTool(
     }
   }
 
+  if (toolName === 'create_quotation') {
+    const customerName = String(args.customer_name || args.name || '').trim() || 'ลูกค้าผู้มีอุปการคุณ'
+    const customerPhone = String(args.customer_phone || args.phone || '').trim()
+    const customerAddress = String(args.customer_address || args.address || '').trim()
+    const rawItems = args.items || []
+
+    let itemsList: Array<{ name: string; price: number; qty: number }> = []
+    if (Array.isArray(rawItems) && rawItems.length > 0) {
+      itemsList = rawItems.map((i: any) => ({
+        name: String(i.name || i.product_name || 'สินค้า').trim(),
+        price: Number(i.price || 0),
+        qty: Number(i.qty || i.quantity || 1),
+      }))
+    } else if (args.product_name || args.item_name) {
+      itemsList = [{
+        name: String(args.product_name || args.item_name || 'สินค้า').trim(),
+        price: Number(args.price || 0),
+        qty: Number(args.qty || args.quantity || 1),
+      }]
+    }
+
+    if (itemsList.length === 0) {
+      return {
+        resultForAi: 'กรุณาระบุรายการสินค้า ราคา และจำนวน ที่ต้องการให้ออกใบเสนอราคา',
+        immediateMessages: [],
+      }
+    }
+
+    const { data: shopData } = await supabase
+      .from('shops')
+      .select('vat_enabled')
+      .eq('id', shopId)
+      .single()
+
+    const vatEnabled = shopData?.vat_enabled || false
+
+    let subtotal = 0
+    itemsList.forEach((it) => {
+      subtotal += (it.price || 0) * (it.qty || 1)
+    })
+
+    const discountAmount = Number(args.discount_amount || 0)
+    const afterDiscount = Math.max(0, subtotal - discountAmount)
+    const vatAmount = vatEnabled ? Math.round(afterDiscount * 0.07 * 100) / 100 : 0
+    const totalAmount = afterDiscount + vatAmount
+
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    const randNum = Math.floor(1000 + Math.random() * 9000)
+    const docNumber = `QT-${dateStr}-${randNum}`
+
+    const admin = ctx.supabaseAdmin || supabase
+    const { data: doc, error: docErr } = await admin
+      .from('documents')
+      .insert({
+        shop_id: shopId,
+        doc_number: docNumber,
+        doc_type: 'quotation',
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        customer_address: customerAddress,
+        items: itemsList,
+        subtotal,
+        discount_amount: discountAmount,
+        vat_amount: vatAmount,
+        total_amount: totalAmount,
+        notes: String(args.notes || '').trim(),
+      })
+      .select('id')
+      .single()
+
+    if (docErr || !doc) {
+      console.error('[create_quotation Error]:', docErr)
+      return {
+        resultForAi: 'เกิดข้อผิดพลาด ไม่สามารถออกใบเสนอราคาได้ในขณะนี้',
+        immediateMessages: [],
+      }
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://botify.ai'
+    const docUrl = `${baseUrl.replace(/\/$/, '')}/doc/quotation/${doc.id}`
+
+    return {
+      resultForAi: `สร้างใบเสนอราคาเรียบร้อยแล้ว!\n- เลขที่เอกสาร: ${docNumber}\n- ผู้รับ: ${customerName}\n- ยอดรวมสุทธิ: ${totalAmount.toLocaleString()} บาท\n- ลิงก์ใบเสนอราคา (PDF): ${docUrl}\n\nให้ส่งลิงก์ใบเสนอราคานี้ให้ลูกค้าในแชททันที`,
+      immediateMessages: [],
+    }
+  }
+
   if (toolName === 'update_customer_preference') {
     const key = String(args.key || '').trim()
     const value = String(args.value || '').trim()

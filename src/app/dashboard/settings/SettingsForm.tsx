@@ -15,6 +15,13 @@ interface ShopData {
   line_token: string | null
   line_secret: string | null
   business_type: string | null
+  company_name?: string | null
+  company_tax_id?: string | null
+  company_address?: string | null
+  company_phone?: string | null
+  company_email?: string | null
+  company_logo_url?: string | null
+  vat_enabled?: boolean | null
 }
 
 export default function SettingsForm({ shop }: { shop: ShopData }) {
@@ -274,6 +281,112 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
             <p className="text-[11px] sm:text-xs text-outline mt-1 leading-relaxed">
               นำ URL นี้ไปใส่ใน LINE Developers Console → Messaging API → Webhook URL แล้วกดเปิด Verify
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Section 4: Company & Document Profile */}
+      <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
+        <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-3.5 sm:pb-4">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-600 shrink-0">
+            <span className="material-symbols-outlined text-[20px]">description</span>
+          </div>
+          <div>
+            <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">ข้อมูลบริษัทและใบเสนอราคา (Company & Documents)</h2>
+            <p className="text-[11px] sm:text-xs text-on-surface-variant">ข้อมูลสำหรับให้ AI นำไปสร้างใบเสนอราคา PDF (Quotation) ออกเอกสารให้ลูกค้าอัตโนมัติ</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+              ชื่อบริษัท / ร้านค้า (สำหรับออกเอกสาร)
+            </label>
+            <input
+              type="text"
+              name="company_name"
+              defaultValue={shop.company_name || shop.name || ''}
+              placeholder="เช่น บริษัท บอทิฟาย จำกัด (สำนักงานใหญ่)"
+              className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+              เลขประจำตัวผู้เสียภาษี (Tax ID)
+            </label>
+            <input
+              type="text"
+              name="company_tax_id"
+              defaultValue={shop.company_tax_id || ''}
+              placeholder="เช่น 0105565123456"
+              className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all font-mono"
+            />
+          </div>
+
+          <div className="space-y-1.5 sm:col-span-2">
+            <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+              ที่อยู่บริษัท (ใช้ระบุในใบเสนอราคา)
+            </label>
+            <textarea
+              name="company_address"
+              rows={2}
+              defaultValue={shop.company_address || ''}
+              placeholder="เช่น 123 อาคารซูเปอร์ทาวเวอร์ ชั้น 15 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110"
+              className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all leading-relaxed"
+            ></textarea>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+              เบอร์โทรศัพท์ติดต่อ
+            </label>
+            <input
+              type="text"
+              name="company_phone"
+              defaultValue={shop.company_phone || ''}
+              placeholder="เช่น 02-123-4567"
+              className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+              อีเมลบริษัท
+            </label>
+            <input
+              type="email"
+              name="company_email"
+              defaultValue={shop.company_email || ''}
+              placeholder="เช่น contact@company.com"
+              className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
+            />
+          </div>
+
+          <div className="space-y-1.5 sm:col-span-2">
+            <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+              URL โลโก้บริษัท (สำหรับหัวกระดาษใบเสนอราคา)
+            </label>
+            <input
+              type="url"
+              name="company_logo_url"
+              defaultValue={shop.company_logo_url || ''}
+              placeholder="เช่น https://yourdomain.com/logo.png"
+              className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 pt-2 sm:col-span-2">
+            <input
+              type="checkbox"
+              id="vat_enabled"
+              name="vat_enabled"
+              defaultChecked={shop.vat_enabled || false}
+              className="w-4 h-4 text-electric-blue rounded border-outline-variant focus:ring-electric-blue"
+            />
+            <label htmlFor="vat_enabled" className="text-xs sm:text-sm font-medium text-on-surface cursor-pointer select-none">
+              คำนวณภาษีมูลค่าเพิ่ม (VAT 7%) ในใบเสนอราคาโดยอัตโนมัติ
+            </label>
           </div>
         </div>
       </section>

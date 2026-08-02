@@ -42,6 +42,13 @@ export async function updateBotSettings(formData: FormData) {
     system_prompt: ((formData.get('system_prompt') as string) || '').trim(),
     line_token: rawToken.trim(),
     line_secret: rawSecret.trim(),
+    company_name: ((formData.get('company_name') as string) || '').trim(),
+    company_tax_id: ((formData.get('company_tax_id') as string) || '').trim(),
+    company_address: ((formData.get('company_address') as string) || '').trim(),
+    company_phone: ((formData.get('company_phone') as string) || '').trim(),
+    company_email: ((formData.get('company_email') as string) || '').trim(),
+    company_logo_url: ((formData.get('company_logo_url') as string) || '').trim(),
+    vat_enabled: formData.get('vat_enabled') === 'true' || formData.get('vat_enabled') === 'on',
     updated_at: new Date().toISOString(),
   }
 

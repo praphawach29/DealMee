@@ -40,13 +40,15 @@ export async function sendMessage(conversationId: string, messageText: string) {
     return { error: `ส่งข้อความไม่สำเร็จ: ${msgError.message}` }
   }
 
-  // 2. Update conversation last_message and status to 'human'
+  // 2. Update conversation last_message, status to 'human', and set paused_until for 1 hour Smart Auto-Pause
+  const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString()
   await supabase
     .from('conversations')
     .update({
       last_message: messageText.trim(),
       last_message_at: new Date().toISOString(),
       status: 'human', // Auto switch to Human when admin replies
+      paused_until: pausedUntil,
     })
     .eq('id', conversationId)
 

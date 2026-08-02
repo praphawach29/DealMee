@@ -149,13 +149,16 @@ export async function POST(
 
         // 4. Check if Admin Takeover is active OR Auto-Reply is disabled
         if (conv.status === 'human') {
-          // Allow customer/merchant to reset AI mode by asking a new question or typing /ai
-          const isExplicitReset = userText.trim().startsWith('/ai') || userText.includes('บอท') || userText.includes('สินค้า')
+          // Check if Smart Auto-Pause timer (1 hour) has expired
+          const isPauseExpired = conv.paused_until ? new Date() > new Date(conv.paused_until) : false
+          const isExplicitReset = userText.trim().startsWith('/ai') || isPauseExpired
+
           if (isExplicitReset) {
-            await supabase.from('conversations').update({ status: 'ai' }).eq('id', conv.id)
+            console.log(`[Webhook] Auto-resuming AI mode for ${userId} (Auto-Pause expired or explicit reset)`)
+            await supabase.from('conversations').update({ status: 'ai', paused_until: null }).eq('id', conv.id)
             conv.status = 'ai'
           } else {
-            console.log(`[Webhook] Skipping AI reply for ${userId} (Admin Takeover active)`)
+            console.log(`[Webhook] Skipping AI reply for ${userId} (Admin Takeover active until ${conv.paused_until || 'manual toggle'})`)
             continue
           }
         }
