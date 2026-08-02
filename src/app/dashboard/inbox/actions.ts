@@ -131,3 +131,27 @@ export async function createMockConversation() {
   revalidatePath('/dashboard/inbox')
   return { success: true }
 }
+
+export async function fetchCustomerProfile(userId: string) {
+  const supabase = await createClient()
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) return { error: 'Unauthenticated' }
+
+  const { data: userProfile } = await supabase
+    .from('users')
+    .select('workspace_id')
+    .eq('id', user.id)
+    .single()
+
+  if (!userProfile?.workspace_id) return { error: 'No workspace' }
+
+  const { getCustomerProfileSummary, isVipProfile } = await import('@/lib/customerMemory')
+  const profileSummary = await getCustomerProfileSummary(userProfile.workspace_id, userId)
+
+  if (!profileSummary) return { profile: null, isVip: false }
+  return {
+    profile: profileSummary,
+    isVip: isVipProfile(profileSummary),
+  }
+}

@@ -33,6 +33,8 @@ interface InboxViewProps {
   messagesMap: Record<string, ChatMessage[]>
 }
 
+import CustomerProfileDrawer from './CustomerProfileDrawer'
+
 export default function InboxView({ conversations, messagesMap }: InboxViewProps) {
   const [selectedConvId, setSelectedConvId] = useState<string | null>(
     conversations.length > 0 ? conversations[0].id : null
@@ -41,7 +43,8 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
   const [loading, setLoading] = useState(false)
   const [filterStatus, setFilterStatus] = useState<'all' | 'ai' | 'human'>('all')
   const [searchTerm, setSearchTerm] = useState('')
-  
+  const [showProfileDrawer, setShowProfileDrawer] = useState(false)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const activeConv = conversations.find(c => c.id === selectedConvId)
@@ -299,6 +302,19 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
                   <span className="sm:hidden">ให้ AI ตอบ</span>
                 </button>
               )}
+
+              <button
+                onClick={() => setShowProfileDrawer(!showProfileDrawer)}
+                className={`p-2 rounded-xl border transition-all flex items-center gap-1 text-xs font-bold ${
+                  showProfileDrawer
+                    ? 'bg-electric-blue text-white border-electric-blue'
+                    : 'bg-surface text-on-surface-variant border-outline-variant hover:bg-surface-container'
+                }`}
+                title="เปิด/ปิด โปรไฟล์ความจำลูกค้า"
+              >
+                <span className="material-symbols-outlined text-base">person_search</span>
+                <span className="hidden lg:inline">AI Memory</span>
+              </button>
             </div>
           </div>
 
@@ -376,8 +392,16 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
         </div>
       )}
 
-      {/* Pane 3: Customer Sidebar Info (Hidden on small screens) */}
-      {activeConv && (
+      {/* Pane 3: Customer Sidebar Info or AI Memory Drawer */}
+      {activeConv && showProfileDrawer && (
+        <CustomerProfileDrawer
+          userId={activeConv.user_id}
+          customerName={activeConv.customer_name}
+          onClose={() => setShowProfileDrawer(false)}
+        />
+      )}
+
+      {activeConv && !showProfileDrawer && (
         <div className="hidden lg:flex w-64 xl:w-72 border-l border-outline-variant/30 bg-surface flex-col p-5 space-y-5 shrink-0">
           <div className="text-center space-y-2 pb-4 border-b border-outline-variant/30">
             <div className="w-14 h-14 rounded-full bg-electric-blue/10 text-electric-blue flex items-center justify-center font-bold text-xl mx-auto">
@@ -411,6 +435,14 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
                 {new Date(activeConv.created_at).toLocaleDateString('th-TH')}
               </p>
             </div>
+
+            <button
+              onClick={() => setShowProfileDrawer(true)}
+              className="w-full py-2 px-3 bg-electric-blue/10 text-electric-blue hover:bg-electric-blue/20 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 mt-4"
+            >
+              <span className="material-symbols-outlined text-sm">person_search</span>
+              <span>ดูข้อมูล AI Memory</span>
+            </button>
           </div>
         </div>
       )}
