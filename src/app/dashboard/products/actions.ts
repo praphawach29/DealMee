@@ -224,45 +224,93 @@ export async function seedSampleShopData() {
 
   const shopId = shop.id
 
-  // 1. Update existing products with missing images
-  const sampleImages: Record<string, string> = {
-    'เสื้อยืดลายการ์ตูน': 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&auto=format&fit=crop&q=80',
-    'กางเกงยีนส์ขาบอร์ด': 'https://images.unsplash.com/photo-1542272604-780c36856d67?w=800&auto=format&fit=crop&q=80',
-    'กระเป๋าสะพายหนัง PU': 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=800&auto=format&fit=crop&q=80',
-    'รองเท้าผ้าใบสีขาว': 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=800&auto=format&fit=crop&q=80',
-    'หมวกแก๊ปปีกกลาย': 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=800&auto=format&fit=crop&q=80',
-    'เคสมือถือลายการ์ตูน': 'https://images.unsplash.com/photo-1580910051074-3eb694886505?w=800&auto=format&fit=crop&q=80',
-    'ผ้าพันคอไหมพรม': 'https://images.unsplash.com/photo-1520903920243-00d872a2d1c9?w=800&auto=format&fit=crop&q=80',
-    'กระบอกน้ำสแตนเลส': 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800&auto=format&fit=crop&q=80',
+  // 1. Enriched sample products with rich descriptions & high-res image URLs
+  const enrichedProductsData: Record<string, { description: string; image_url: string; price: number; category: string }> = {
+    'เสื้อยืดลายการ์ตูน': {
+      category: 'เสื้อผ้า',
+      price: 259,
+      description: 'เสื้อยืดผ้าคอตตอนคอมบ์ (Comb Cotton) 100% เนื้อผ้านุ่มระบายอากาศดี ไม่ร้อน พิมพ์ลายการ์ตูนด้วยเทคโนโลยี DTG สีสดติดทน ทรง Unisex สวมใส่ได้ทั้งชายและหญิง (มีไซส์ S, M, L, XL)',
+      image_url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&auto=format&fit=crop&q=80',
+    },
+    'กางเกงยีนส์ขาบอร์ด': {
+      category: 'เสื้อผ้า',
+      price: 590,
+      description: 'กางเกงยีนส์เอวสูงทรงขาบอร์ด (Wide-Leg Board Jeans) ผ้ายีนส์เดนิมฟอกนุ่ม ทรงสวยใส่สบาย กระเป๋าจริงหน้าหลัง เหมาะกับแต่งลุค Streetwear (มีไซส์ S 25-26", M 27-28", L 29-30")',
+      image_url: 'https://images.unsplash.com/photo-1542272604-780c36856d67?w=800&auto=format&fit=crop&q=80',
+    },
+    'กระเป๋าสะพายหนัง PU': {
+      category: 'กระเป๋า',
+      price: 890,
+      description: 'กระเป๋าสะพายหนัง PU พรีเมียม สัมผัสนุ่มทนทาน กันน้ำได้ สายสะพายปรับระดับและถอดได้ มีช่องซิปหลักและช่องใส่ของย่อย 3 ช่อง จุของได้เยอะ เหมาะสำหรับทำงานและเที่ยว',
+      image_url: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=800&auto=format&fit=crop&q=80',
+    },
+    'รองเท้าผ้าใบสีขาว': {
+      category: 'รองเท้า',
+      price: 1290,
+      description: 'รองเท้าผ้าใบสีขาวดีไซน์ Minimalist ผลิตจากผ้าแคนวาสอย่างดี พื้นยางกันลื่น นุ่มสบายเท้า ระบายอากาศได้ดี เดินทั้งวันไม่เจ็บเท้า (ไซส์ 36-44)',
+      image_url: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=800&auto=format&fit=crop&q=80',
+    },
+    'หมวกแก๊ปปีกกลาย': {
+      category: 'เครื่องประดับ',
+      price: 350,
+      description: 'หมวกแก๊ปปีกกลายสไตล์ Streetwear ผ้าคอตตอนทวิลล์ ทรงสวย ปักโลโก้ประณีต ด้านหลังมีสายปรับขนาดโลหะ เหมาะกับทุกรูปหน้า',
+      image_url: 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=800&auto=format&fit=crop&q=80',
+    },
+    'เคสมือถือลายการ์ตูน': {
+      category: 'อุปกรณ์เสริม',
+      price: 199,
+      description: 'เคสมือถือซิลิโคน TPU แบบกันกระแทก ขอบหนาปกป้องกล้องและหน้าจอ ผิวมะเหนียวนุ่มจับกระชับมือ ลายพิมพ์เกรดพรีเมียมสีไม่ลอก (รองรับ iPhone และ Samsung)',
+      image_url: 'https://images.unsplash.com/photo-1580910051074-3eb694886505?w=800&auto=format&fit=crop&q=80',
+    },
+    'ผ้าพันคอไหมพรม': {
+      category: 'เครื่องประดับ',
+      price: 450,
+      description: 'ผ้าพันคอไหมพรมเนื้อหนานุ่มพิเศษ ถักทอละเอียด กันลมและเก็บความอบอุ่นดีเยี่ยม ไม่ระคายเคืองผิว ยาว 180 ซม. แมตช์ได้กับทุกชุด',
+      image_url: 'https://images.unsplash.com/photo-1520903920243-00d872a2d1c9?w=800&auto=format&fit=crop&q=80',
+    },
+    'กระบอกน้ำสแตนเลส': {
+      category: 'ของใช้ทั่วไป',
+      price: 320,
+      description: 'กระบอกน้ำสแตนเลส 304 ฟู้ดเกรด ปลอดสาร BPA เก็บความเย็นได้ 24 ชั่วโมง และเก็บความร้อนได้ 12 ชั่วโมง ฝาล็อคกันรั่วซึม ขนาด 500ml พกพาสะดวก',
+      image_url: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800&auto=format&fit=crop&q=80',
+    },
   }
 
   const { data: existingProds } = await supabase
     .from('products')
-    .select('id, name, image_url')
+    .select('id, name, image_url, description')
     .eq('shop_id', shopId)
 
   if (existingProds && existingProds.length > 0) {
     for (const p of existingProds) {
-      if (!p.image_url || p.image_url.trim() === '') {
-        const matchedImg = sampleImages[p.name] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80'
+      const enriched = enrichedProductsData[p.name]
+      const updatePayload: Record<string, unknown> = {}
+      if (enriched) {
+        updatePayload.image_url = enriched.image_url
+        updatePayload.description = enriched.description
+      } else {
+        if (!p.image_url || p.image_url.trim() === '') {
+          updatePayload.image_url = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80'
+        }
+      }
+      if (Object.keys(updatePayload).length > 0) {
         await supabase
           .from('products')
-          .update({ image_url: matchedImg })
+          .update(updatePayload)
           .eq('id', p.id)
       }
     }
   } else {
     // Insert initial 8 sample products if shop has 0 products
-    const initialProds = [
-      { shop_id: shopId, name: 'เสื้อยืดลายการ์ตูน', category: 'เสื้อผ้า', price: 259, stock: 30, description: 'เสื้อยืดผ้าคอตตอน 100% พิมพ์ลายการ์ตูนน่ารัก มีให้เลือกหลายไซส์', image_url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&auto=format&fit=crop&q=80' },
-      { shop_id: shopId, name: 'กางเกงยีนส์ขาบอร์ด', category: 'เสื้อผ้า', price: 590, stock: 15, description: 'กางเกงยีนส์ทรงขาบอร์ด ผ้านุ่มใส่สบาย', image_url: 'https://images.unsplash.com/photo-1542272604-780c36856d67?w=800&auto=format&fit=crop&q=80' },
-      { shop_id: shopId, name: 'กระเป๋าสะพายหนัง PU', category: 'กระเป๋า', price: 890, stock: 8, description: 'กระเป๋าสะพายหนัง PU ดีไซน์เรียบหรู จุของได้เยอะ', image_url: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=800&auto=format&fit=crop&q=80' },
-      { shop_id: shopId, name: 'รองเท้าผ้าใบสีขาว', category: 'รองเท้า', price: 1290, stock: 10, description: 'รองเท้าผ้าใบสีขาวคลาสสิก ใส่ได้ทุกชุด', image_url: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=800&auto=format&fit=crop&q=80' },
-      { shop_id: shopId, name: 'หมวกแก๊ปปีกกลาย', category: 'เครื่องประดับ', price: 350, stock: 20, description: 'หมวกแก๊ปปีกกลาย สไตล์สตรีท ปรับขนาดได้', image_url: 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=800&auto=format&fit=crop&q=80' },
-      { shop_id: shopId, name: 'เคสมือถือลายการ์ตูน', category: 'อุปกรณ์เสริม', price: 199, stock: 50, description: 'เคสมือถือซิลิโคนกันกระแทก ลายการ์ตูนน่ารัก', image_url: 'https://images.unsplash.com/photo-1580910051074-3eb694886505?w=800&auto=format&fit=crop&q=80' },
-      { shop_id: shopId, name: 'ผ้าพันคอไหมพรม', category: 'เครื่องประดับ', price: 450, stock: 12, description: 'ผ้าพันคอไหมพรมหนานุ่ม กันหนาว มีหลายสี', image_url: 'https://images.unsplash.com/photo-1520903920243-00d872a2d1c9?w=800&auto=format&fit=crop&q=80' },
-      { shop_id: shopId, name: 'กระบอกน้ำสแตนเลส', category: 'ของใช้ทั่วไป', price: 320, stock: 25, description: 'กระบอกน้ำสแตนเลสเก็บความเย็น 12 ชม.', image_url: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800&auto=format&fit=crop&q=80' },
-    ]
+    const initialProds = Object.entries(enrichedProductsData).map(([name, data]) => ({
+      shop_id: shopId,
+      name,
+      category: data.category,
+      price: data.price,
+      stock: 20,
+      description: data.description,
+      image_url: data.image_url,
+    }))
     await supabase.from('products').insert(initialProds)
   }
 
