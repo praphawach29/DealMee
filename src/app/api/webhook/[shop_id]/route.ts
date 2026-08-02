@@ -149,8 +149,15 @@ export async function POST(
 
         // 4. Check if Admin Takeover is active OR Auto-Reply is disabled
         if (conv.status === 'human') {
-          console.log(`[Webhook] Skipping AI reply for ${userId} (Admin Takeover active)`)
-          continue
+          // Allow customer/merchant to reset AI mode by asking a new question or typing /ai
+          const isExplicitReset = userText.trim().startsWith('/ai') || userText.includes('บอท') || userText.includes('สินค้า')
+          if (isExplicitReset) {
+            await supabase.from('conversations').update({ status: 'ai' }).eq('id', conv.id)
+            conv.status = 'ai'
+          } else {
+            console.log(`[Webhook] Skipping AI reply for ${userId} (Admin Takeover active)`)
+            continue
+          }
         }
 
         if (!isAutoReplyEnabled) {

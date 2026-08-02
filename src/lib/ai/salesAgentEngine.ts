@@ -148,7 +148,7 @@ export interface AgentResult {
  * "มีเสื้อยืดไซส์ L ไหม ถ้ามีเอา 2 ตัว" can chain
  * search_products/check_stock -> take_order in one customer turn.
  */
-export const MAX_PLANNING_STEPS = 3
+export const MAX_PLANNING_STEPS = 6
 
 /**
  * Output-token ceiling per provider call. Deliberately generous because
@@ -1396,8 +1396,12 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
   })
 
   if (state.step === MAX_PLANNING_STEPS - 1) {
-    // Ran out of steps without a final text answer — hand off to a human
-    // rather than leaving the customer with nothing.
+    // If a tool result is already available in turns, present it to the customer instead of throwing handoff
+    const lastToolResult = [...state.turns].reverse().find((t) => t.role === 'tool_result')
+    if (lastToolResult && lastToolResult.result) {
+      return { done: true, finalText: lastToolResult.result }
+    }
+
     try {
       await state.toolCtx.supabase.from('conversations').update({ status: 'human' }).eq('id', state.conversationId)
     } catch (err) {
