@@ -209,3 +209,148 @@ export async function bulkImportProducts(productsList: Array<{
   revalidatePath('/dashboard')
   return { success: `นำเข้าสินค้าสำเร็จจำนวน ${insertData.length} รายการ!` }
 }
+
+export async function seedSampleShopData() {
+  const supabase = await createClient()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return { error: 'กรุณาเข้าสู่ระบบอีกครั้ง' }
+  }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop?.id) {
+    return { error: 'ไม่พบข้อมูลร้านค้า' }
+  }
+
+  const shopId = shop.id
+
+  // 1. Update existing products with missing images
+  const sampleImages: Record<string, string> = {
+    'เสื้อยืดลายการ์ตูน': 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&auto=format&fit=crop&q=80',
+    'กางเกงยีนส์ขาบอร์ด': 'https://images.unsplash.com/photo-1542272604-780c36856d67?w=800&auto=format&fit=crop&q=80',
+    'กระเป๋าสะพายหนัง PU': 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=800&auto=format&fit=crop&q=80',
+    'รองเท้าผ้าใบสีขาว': 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=800&auto=format&fit=crop&q=80',
+    'หมวกแก๊ปปีกกลาย': 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=800&auto=format&fit=crop&q=80',
+    'เคสมือถือลายการ์ตูน': 'https://images.unsplash.com/photo-1580910051074-3eb694886505?w=800&auto=format&fit=crop&q=80',
+    'ผ้าพันคอไหมพรม': 'https://images.unsplash.com/photo-1520903920243-00d872a2d1c9?w=800&auto=format&fit=crop&q=80',
+    'กระบอกน้ำสแตนเลส': 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800&auto=format&fit=crop&q=80',
+  }
+
+  const { data: existingProds } = await supabase
+    .from('products')
+    .select('id, name, image_url')
+    .eq('shop_id', shopId)
+
+  if (existingProds && existingProds.length > 0) {
+    for (const p of existingProds) {
+      if (!p.image_url || p.image_url.trim() === '') {
+        const matchedImg = sampleImages[p.name] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80'
+        await supabase
+          .from('products')
+          .update({ image_url: matchedImg })
+          .eq('id', p.id)
+      }
+    }
+  } else {
+    // Insert initial 8 sample products if shop has 0 products
+    const initialProds = [
+      { shop_id: shopId, name: 'เสื้อยืดลายการ์ตูน', category: 'เสื้อผ้า', price: 259, stock: 30, description: 'เสื้อยืดผ้าคอตตอน 100% พิมพ์ลายการ์ตูนน่ารัก มีให้เลือกหลายไซส์', image_url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&auto=format&fit=crop&q=80' },
+      { shop_id: shopId, name: 'กางเกงยีนส์ขาบอร์ด', category: 'เสื้อผ้า', price: 590, stock: 15, description: 'กางเกงยีนส์ทรงขาบอร์ด ผ้านุ่มใส่สบาย', image_url: 'https://images.unsplash.com/photo-1542272604-780c36856d67?w=800&auto=format&fit=crop&q=80' },
+      { shop_id: shopId, name: 'กระเป๋าสะพายหนัง PU', category: 'กระเป๋า', price: 890, stock: 8, description: 'กระเป๋าสะพายหนัง PU ดีไซน์เรียบหรู จุของได้เยอะ', image_url: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=800&auto=format&fit=crop&q=80' },
+      { shop_id: shopId, name: 'รองเท้าผ้าใบสีขาว', category: 'รองเท้า', price: 1290, stock: 10, description: 'รองเท้าผ้าใบสีขาวคลาสสิก ใส่ได้ทุกชุด', image_url: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=800&auto=format&fit=crop&q=80' },
+      { shop_id: shopId, name: 'หมวกแก๊ปปีกกลาย', category: 'เครื่องประดับ', price: 350, stock: 20, description: 'หมวกแก๊ปปีกกลาย สไตล์สตรีท ปรับขนาดได้', image_url: 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=800&auto=format&fit=crop&q=80' },
+      { shop_id: shopId, name: 'เคสมือถือลายการ์ตูน', category: 'อุปกรณ์เสริม', price: 199, stock: 50, description: 'เคสมือถือซิลิโคนกันกระแทก ลายการ์ตูนน่ารัก', image_url: 'https://images.unsplash.com/photo-1580910051074-3eb694886505?w=800&auto=format&fit=crop&q=80' },
+      { shop_id: shopId, name: 'ผ้าพันคอไหมพรม', category: 'เครื่องประดับ', price: 450, stock: 12, description: 'ผ้าพันคอไหมพรมหนานุ่ม กันหนาว มีหลายสี', image_url: 'https://images.unsplash.com/photo-1520903920243-00d872a2d1c9?w=800&auto=format&fit=crop&q=80' },
+      { shop_id: shopId, name: 'กระบอกน้ำสแตนเลส', category: 'ของใช้ทั่วไป', price: 320, stock: 25, description: 'กระบอกน้ำสแตนเลสเก็บความเย็น 12 ชม.', image_url: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800&auto=format&fit=crop&q=80' },
+    ]
+    await supabase.from('products').insert(initialProds)
+  }
+
+  // 2. Insert sample orders if shop has 0 orders
+  const { count: existingOrdersCount } = await supabase
+    .from('orders')
+    .select('*', { count: 'exact', head: true })
+    .eq('shop_id', shopId)
+
+  if (!existingOrdersCount || existingOrdersCount === 0) {
+    const sampleOrders = [
+      {
+        shop_id: shopId,
+        order_no: 'ORD-20260803-1001',
+        customer_name: 'คุณสมชาย สายโอน',
+        phone: '0812345678',
+        customer_phone: '0812345678',
+        address: '123 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กทม. 10110',
+        product_name: 'เสื้อยืดลายการ์ตูน',
+        items_summary: 'เสื้อยืดลายการ์ตูน (2 ชิ้น)',
+        quantity: '2',
+        total_amount: 518.00,
+        status: 'paid',
+        payment_status: 'paid',
+        payment_method: 'promptpay',
+      },
+      {
+        shop_id: shopId,
+        order_no: 'ORD-20260803-1002',
+        customer_name: 'คุณวิภาดา แฟชั่น',
+        phone: '0898765432',
+        customer_phone: '0898765432',
+        address: '456 ถนนพหลโยธิน แขวงจตุจักร เขตจตุจักร กทม. 10900',
+        product_name: 'กางเกงยีนส์ขาบอร์ด',
+        items_summary: 'กางเกงยีนส์ขาบอร์ด (1 ชิ้น)',
+        quantity: '1',
+        total_amount: 590.00,
+        status: 'shipped',
+        payment_status: 'paid',
+        payment_method: 'promptpay',
+      },
+      {
+        shop_id: shopId,
+        order_no: 'ORD-20260803-1003',
+        customer_name: 'คุณนพดล ชอบช็อป',
+        phone: '0865554321',
+        customer_phone: '0865554321',
+        address: '789 ถนนพระราม 9 เขตห้วยขวาง กทม. 10310',
+        product_name: 'กระเป๋าสะพายหนัง PU',
+        items_summary: 'กระเป๋าสะพายหนัง PU (1 ชิ้น)',
+        quantity: '1',
+        total_amount: 890.00,
+        status: 'pending',
+        payment_status: 'pending',
+        payment_method: 'promptpay',
+      },
+    ]
+    await supabase.from('orders').insert(sampleOrders)
+  }
+
+  // 3. Insert sample knowledge base if empty
+  const { count: existingKbCount } = await supabase
+    .from('knowledge_base')
+    .select('*', { count: 'exact', head: true })
+    .eq('shop_id', shopId)
+
+  if (!existingKbCount || existingKbCount === 0) {
+    const sampleKb = [
+      {
+        shop_id: shopId,
+        title: 'นโยบายการจัดส่งสินค้า',
+        content: 'ทางร้านจัดส่งสินค้าวันจันทร์-เสาร์ ตัดรอบส่ง 14:00 น. จัดส่งด้วย Kerry Express / Flash Express ค่าจัดส่งเหมาจ่าย 50 บาท (สั่งซื้อครบ 800 บาท ส่งฟรี)',
+        category: 'การจัดส่ง',
+      },
+      {
+        shop_id: shopId,
+        title: 'เงื่อนไขการเปลี่ยนและคืนสินค้า',
+        content: 'สามารถเปลี่ยนสินค้าได้ภายใน 7 วันหลังได้รับสินค้า หากสินค้ามีชำรุดจากโรงงาน หรือส่งผิดไซส์ โดยสินค้าต้องอยู่ในสภาพสมบูรณ์และยังไม่ซัก',
+        category: 'นโยบายร้าน',
+      },
+    ]
+    await supabase.from('knowledge_base').insert(sampleKb)
+  }
+
+  revalidatePath('/dashboard')
+  revalidatePath('/dashboard/products')
+  revalidatePath('/dashboard/orders')
+  revalidatePath('/dashboard/inbox')
+
+  return { success: 'สร้างข้อมูลตัวอย่างครบถ้วนเรียบร้อยแล้ว!' }
+}

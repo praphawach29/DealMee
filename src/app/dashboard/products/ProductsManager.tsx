@@ -230,7 +230,28 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
           </p>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={async () => {
+              setLoading(true)
+              const { seedSampleShopData } = await import('./actions')
+              const res = await seedSampleShopData()
+              setLoading(false)
+              if (res.error) {
+                alert(res.error)
+              } else if (res.success) {
+                setMessage({ type: 'success', text: res.success })
+                window.location.reload()
+              }
+            }}
+            className="flex items-center justify-center gap-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 font-label-md font-bold px-3.5 py-2 rounded-xl transition-all border border-purple-300/50 cursor-pointer text-xs sm:text-sm shadow-xs"
+          >
+            <span className="material-symbols-outlined text-[18px]">auto_fix_high</span>
+            <span>{loading ? 'กำลังปรับแต่ง...' : 'เติมรูปภาพ & ข้อมูลทดสอบ'}</span>
+          </button>
+
           <button
             onClick={() => setIsOpenImportModal(true)}
             className="flex items-center justify-center gap-1.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md font-bold px-3.5 py-2 rounded-xl transition-all border border-outline-variant/40 cursor-pointer text-xs sm:text-sm shadow-xs"

@@ -32,7 +32,11 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
     setLoading(true)
     const res = await createSampleOrder()
     setLoading(false)
-    if (res?.error) alert(res.error)
+    if (res?.error) {
+      alert(res.error)
+    } else {
+      window.location.reload()
+    }
   }
 
   async function handleStatusChange(id: string, newStatus: string) {

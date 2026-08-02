@@ -2,6 +2,8 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import OrdersManager from './OrdersManager'
 
+import { getOrCreateShopForUser } from '@/lib/shopHelper'
+
 export default async function OrdersPage() {
   const supabase = await createClient()
 
@@ -14,12 +16,7 @@ export default async function OrdersPage() {
     redirect('/login')
   }
 
-  // Fetch shop for this merchant user
-  const { data: shop } = await supabase
-    .from('shops')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
+  const shop = await getOrCreateShopForUser(supabase, user)
 
   let orders: any[] = []
   if (shop?.id) {

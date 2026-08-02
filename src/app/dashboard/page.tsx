@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import MerchantDashboardClient from './MerchantDashboardClient'
+import { getOrCreateShopForUser } from '@/lib/shopHelper'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -27,19 +28,15 @@ export default async function DashboardPage() {
     )
   }
 
-  // 2. Fetch Merchant's Shop
-  const { data: shop } = await supabase
-    .from('shops')
-    .select('id, name, bot_name, status, plan, msg_used')
-    .eq('user_id', user.id)
-    .single()
-
+  // 2. Fetch Merchant's Shop via shopHelper
+  const shop = await getOrCreateShopForUser(supabase, user)
   const currentShopId = shop?.id
 
   let productsCount = 0
   let knowledgeCount = 0
   let ordersCount = 0
   let totalRevenue = 0
+  let totalMessages = 0
   let latestKnowledgeTitle = ''
   let latestKnowledgeDate = ''
 
@@ -64,19 +61,23 @@ export default async function DashboardPage() {
       latestKnowledgeDate = new Date(knowledgeItems[0].created_at).toLocaleDateString('th-TH')
     }
 
+    // Fetch Messages Count
+    const { count: mCount } = await supabase
+      .from('chat_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('shop_id', currentShopId)
+    totalMessages = mCount || shop?.msg_used || 0
+
     // Fetch Orders Count & Revenue Sum
     const { data: orders } = await supabase
       .from('orders')
-      .select('id, total_price, status')
+      .select('id, total_amount, status, payment_status')
       .eq('shop_id', currentShopId)
 
     if (orders && orders.length > 0) {
       ordersCount = orders.length
-      totalRevenue = orders.reduce((sum, o) => {
-        if (o.status === 'completed' || o.status === 'paid' || !o.status) {
-          return sum + Number(o.total_price || 0)
-        }
-        return sum
+      totalRevenue = orders.reduce((sum: number, o: { total_amount?: number | null }) => {
+        return sum + Number(o.total_amount || 0)
       }, 0)
     }
   }
@@ -91,7 +92,7 @@ export default async function DashboardPage() {
       knowledgeCount={knowledgeCount}
       ordersCount={ordersCount}
       totalRevenue={totalRevenue}
-      totalMessages={shop?.msg_used || 0}
+      totalMessages={totalMessages}
       latestKnowledgeTitle={latestKnowledgeTitle}
       latestKnowledgeDate={latestKnowledgeDate}
     />

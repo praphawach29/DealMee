@@ -1070,6 +1070,55 @@ export async function executeTool(
     }
   }
 
+  if ((toolName as string) === 'take_order') {
+    const customerName = String(args.customer_name || args.name || '').trim() || 'ลูกค้า'
+    const customerPhone = String(args.customer_phone || args.phone || args.mobile || '').trim()
+    const shippingAddress = String(args.shipping_address || args.address || '').trim()
+    const productName = String(args.product_name || args.item_name || args.items || 'สินค้า').trim()
+    const quantityStr = String(args.quantity || args.qty || '1')
+    const totalAmount = Number(args.total_amount || args.total || args.price || 0)
+    const paymentMethod = String(args.payment_method || 'promptpay')
+
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    const randNum = Math.floor(1000 + Math.random() * 9000)
+    const orderNo = `ORD-${dateStr}-${randNum}`
+
+    const admin = ctx.supabaseAdmin || supabase
+    const { data: newOrder, error: orderErr } = await admin
+      .from('orders')
+      .insert({
+        shop_id: shopId,
+        order_no: orderNo,
+        customer_name: customerName,
+        phone: customerPhone,
+        customer_phone: customerPhone,
+        address: shippingAddress,
+        product_name: productName,
+        items_summary: `${productName} (${quantityStr} ชิ้น)`,
+        quantity: quantityStr,
+        total_amount: totalAmount,
+        status: 'pending',
+        payment_status: 'pending',
+        payment_method: paymentMethod,
+        conversation_id: conversationId,
+        customer_user_id: userId,
+      })
+      .select('id, order_no')
+      .single()
+
+    if (orderErr) {
+      console.error('[take_order Error]:', orderErr)
+    }
+
+    const { recordCustomerOrder } = await import('@/lib/customerMemory')
+    recordCustomerOrder(shopId, userId, totalAmount).catch(() => {})
+
+    return {
+      resultForAi: `สร้างคำสั่งซื้อสำเร็จเรียบร้อยแล้ว!\n- เลขที่ออเดอร์: ${orderNo}\n- ลูกค้า: ${customerName}\n- ยอดรวม: ${totalAmount.toLocaleString()} บาท\n- สถานะ: รอชำระเงิน\n\nให้สรุปเลขที่ออเดอร์ (${orderNo}) และยอดโอนชำระเงินให้ลูกค้าทราบ`,
+      immediateMessages: [],
+    }
+  }
+
   // ── 🎁 PROMOTIONS ─────────────────────────────────────────────────
   if (toolName === 'get_active_promotions') {
     const today = new Date().toISOString().split('T')[0]

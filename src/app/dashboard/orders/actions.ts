@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { getOrCreateShopForUser } from '@/lib/shopHelper'
 
 export async function createSampleOrder() {
   const supabase = await createClient()
@@ -11,23 +12,8 @@ export async function createSampleOrder() {
   } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthenticated' }
 
-  // 1. Fetch shop for merchant
-  const { data: shop } = await supabase
-    .from('shops')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-
-  let shopId = shop?.id
-
-  if (!shopId) {
-    const { data: anyShop } = await supabase
-      .from('shops')
-      .select('id')
-      .limit(1)
-      .single()
-    shopId = anyShop?.id
-  }
+  const shop = await getOrCreateShopForUser(supabase, user)
+  const shopId = shop?.id
 
   if (!shopId) return { error: 'กรุณาสร้างและเชื่อมต่อร้านค้าก่อน' }
 
