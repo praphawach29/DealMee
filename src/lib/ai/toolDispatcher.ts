@@ -993,15 +993,27 @@ export async function executeTool(
       .select('id, name, price, stock, category, description')
       .eq('shop_id', shopId)
 
-    if (keyword) {
+    // Apply specific keyword filter only if it's not a generic word like 'สินค้า'
+    const isGenericKeyword = !keyword || GENERIC_PRODUCT_SEARCH_WORDS.some((w) => rawKeyword.toLowerCase().includes(w))
+    if (!isGenericKeyword && keyword) {
       query = query.or(`name.ilike.%${keyword}%,description.ilike.%${keyword}%,category.ilike.%${keyword}%`)
     }
 
-    const { data: products } = await query.limit(10)
+    let { data: products } = await query.limit(12)
+
+    // Fallback: If filtered search yielded 0 products, fetch all products of the shop
+    if (!products || products.length === 0) {
+      const { data: allProducts } = await supabase
+        .from('products')
+        .select('id, name, price, stock, category, description')
+        .eq('shop_id', shopId)
+        .limit(12)
+      products = allProducts
+    }
 
     if (!products || products.length === 0) {
       return {
-        resultForAi: `ไม่พบสินค้าตรงกับคำค้น "${rawKeyword}" ในร้านค้า ให้เสนอดูสินค้าที่มีหรือสอบถามเพิ่มเติม`,
+        resultForAi: `ขณะนี้ทางร้านยังไม่ได้ลงรายการสินค้าในระบบ ให้สอบถามลูกค้าเพิ่มเติมหรือแจ้งแอดมิน`,
         immediateMessages: [],
       }
     }
@@ -1012,7 +1024,7 @@ export async function executeTool(
     }).join('\n')
 
     return {
-      resultForAi: `รายการสินค้าที่พบ:\n${list}`,
+      resultForAi: `รายการสินค้าของทางร้าน:\n${list}`,
       immediateMessages: [],
     }
   }
