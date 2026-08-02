@@ -90,6 +90,7 @@ export type AgentToolName =
   | 'save_lead'
   | 'update_customer_note'
   | 'add_customer_tag'
+  | 'update_customer_preference'
   | 'get_customer_history'
   | 'check_loyalty_points'
   | 'search_knowledge_base'

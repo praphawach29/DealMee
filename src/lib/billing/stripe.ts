@@ -57,9 +57,10 @@ export async function createCheckoutSession(
     }
 
     return { url: session.url }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[Stripe createCheckoutSession] Error:', err)
-    return { error: err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ Stripe' }
+    const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเชื่อมต่อ Stripe'
+    return { error: message }
   }
 }
 
@@ -76,9 +77,10 @@ export async function createPortalSession(
       return_url: `${APP_URL}/dashboard/billing`,
     })
     return { url: session.url }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[Stripe createPortalSession] Error:', err)
-    return { error: err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ Stripe' }
+    const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเชื่อมต่อ Stripe'
+    return { error: message }
   }
 }
 

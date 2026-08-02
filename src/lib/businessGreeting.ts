@@ -1,4 +1,4 @@
-﻿export type GreetingTemplateSummary = {
+export type GreetingTemplateSummary = {
   name: string
   booking_type?: string | null
   resource_label?: string | null
@@ -94,7 +94,14 @@ export function isDefaultGreeting(value?: string | null) {
   return !text || text === DEFAULT_GREETING_TH || text.includes('มีอะไรให้ช่วยไหม')
 }
 
-export function getGreetingProfile(shop: any, templates: GreetingTemplateSummary[] = []) {
+export interface ShopGreetingInfo {
+  bot_name?: string
+  name?: string
+  ai_template?: string
+  business_type?: string
+}
+
+export function getGreetingProfile(shop: ShopGreetingInfo | null, templates: GreetingTemplateSummary[] = []) {
   const templateTypes = new Set(templates.map((item) => item.booking_type).filter(Boolean) as string[])
   const bookingType = BOOKING_PRIORITY.find((type) => templateTypes.has(type))
   if (bookingType) return PROFILE_BY_BOOKING_TYPE[bookingType]
@@ -108,7 +115,7 @@ export function getGreetingProfile(shop: any, templates: GreetingTemplateSummary
   return PROFILE_BY_TEMPLATE.retail
 }
 
-export function buildAutoGreeting(shop: any, templates: GreetingTemplateSummary[] = []) {
+export function buildAutoGreeting(shop: ShopGreetingInfo | null, templates: GreetingTemplateSummary[] = []) {
   const botName = shop?.bot_name || 'น้อง Botify'
   const shopName = shop?.name || 'ร้านของเรา'
   const profile = getGreetingProfile(shop, templates)
@@ -121,7 +128,7 @@ export function buildAutoGreeting(shop: any, templates: GreetingTemplateSummary[
   return `สวัสดีค่ะ ${botName} จากร้าน ${shopName} ยินดีให้บริการค่ะ${serviceLine} ${profile.prompt}`
 }
 
-export function buildBusinessPromptContext(shop: any, templates: GreetingTemplateSummary[] = []) {
+export function buildBusinessPromptContext(shop: ShopGreetingInfo | null, templates: GreetingTemplateSummary[] = []) {
   const profile = getGreetingProfile(shop, templates)
   return `[บริบทคำทักทายของร้าน]
 ประเภทธุรกิจ/บริการหลัก: ${profile.tone}

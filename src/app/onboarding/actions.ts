@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { randomUUID } from 'crypto'
-import { getBusinessTypeForTemplate } from '@/lib/businessGreeting'
 
 export async function submitOnboarding(formData: FormData) {
   const supabase = await createClient()

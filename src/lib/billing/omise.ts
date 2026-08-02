@@ -8,6 +8,23 @@ function getAuthHeader(): string | null {
   return 'Basic ' + Buffer.from(`${secretKey}:`).toString('base64')
 }
 
+export interface OmiseCharge {
+  id: string
+  amount?: number
+  currency?: string
+  status?: string
+  paid?: boolean
+  message?: string
+  source?: {
+    scannable_code?: {
+      image?: {
+        download_uri?: string
+      }
+    }
+  }
+  metadata?: Record<string, string>
+}
+
 /**
  * Creates a one-time Omise PromptPay charge for a shop's monthly plan fee.
  * Omise has no native recurring-subscription object like Stripe — the shop
@@ -53,7 +70,7 @@ export async function createPromptPayCharge(
       }),
     })
 
-    const charge = await res.json()
+    const charge: OmiseCharge = await res.json()
 
     if (!res.ok) {
       console.error('[Omise createPromptPayCharge] Error:', charge)
@@ -76,9 +93,10 @@ export async function createPromptPayCharge(
     })
 
     return { qrImageUrl, chargeId: charge.id }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[Omise createPromptPayCharge] Exception:', err)
-    return { error: err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ Omise' }
+    const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเชื่อมต่อ Omise'
+    return { error: message }
   }
 }
 
@@ -87,7 +105,7 @@ export async function createPromptPayCharge(
  * HMAC-sign webhook payloads the way Stripe does — never trust a webhook
  * payload's status field directly, always re-verify via this call.
  */
-export async function getCharge(chargeId: string): Promise<any | { error: string }> {
+export async function getCharge(chargeId: string): Promise<OmiseCharge | { error: string }> {
   const authHeader = getAuthHeader()
   if (!authHeader) {
     return { error: 'ยังไม่ได้ตั้งค่า Payment Gateway (Omise) — กรุณาตั้งค่า OMISE_SECRET_KEY' }
@@ -97,14 +115,15 @@ export async function getCharge(chargeId: string): Promise<any | { error: string
     const res = await fetch(`${OMISE_API}/charges/${chargeId}`, {
       headers: { Authorization: authHeader },
     })
-    const charge = await res.json()
+    const charge: OmiseCharge = await res.json()
     if (!res.ok) {
       console.error('[Omise getCharge] Error:', charge)
       return { error: charge.message || 'ไม่สามารถตรวจสอบสถานะการชำระเงินได้' }
     }
     return charge
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[Omise getCharge] Exception:', err)
-    return { error: err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ Omise' }
+    const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเชื่อมต่อ Omise'
+    return { error: message }
   }
 }

@@ -495,6 +495,7 @@ export async function executeTool(
     // circular import at module-load time (customerMemory <-> engine).
     const { recordCustomerOrder } = await import('@/lib/customerMemory')
     await recordCustomerOrder(shopId, userId, Number(args.total_price) || 0)
+    await updateSalesStage(ctx, 'post_sale')
     // Pushed verbatim rather than left to the model: this block carries the
     // order total and the shop's account number, and a reworded digit here
     // sends the customer's money somewhere it shouldn't go.
@@ -768,6 +769,7 @@ export async function executeTool(
       note: args.note,
       metadata: { raw_args: args, line_user_id: userId, conversation_id: conversationId },
     })
+    await updateSalesStage(ctx, 'post_sale')
     const resource = args.resource || args.resource_label || serviceRecord?.resource_label
     return {
       // Everything the confirmation must contain, so the model can write one
@@ -989,7 +991,7 @@ export async function executeTool(
       return { resultForAi: 'ยังไม่มีโปรโมชั่นที่ใช้งานอยู่ ให้แจ้งลูกค้าตามนี้', immediateMessages: [] }
     }
     return {
-      resultForAi: `โปรโมชั่นที่ใช้ได้: ${promos.map((p: any) => {
+      resultForAi: `โปรโมชั่นที่ใช้ได้: ${promos.map((p: Record<string, unknown>) => {
         const d = p.discount_type === 'percent' ? `ลด ${p.discount_value}%` : `ลด ${Number(p.discount_value).toLocaleString()} บาท`
         return `${p.name} ${d}${p.end_date ? ` ถึง ${p.end_date}` : ''}${p.code ? ` โค้ด ${p.code}` : ''}`
       }).join('; ')}`,
@@ -997,10 +999,51 @@ export async function executeTool(
     }
   }
 
+  if (toolName === 'update_customer_preference') {
+    const key = String(args.key || '').trim()
+    const value = String(args.value || '').trim()
+    if (!key || !value) return { resultForAi: 'กรุณาระบุ key และ value ของความชอบลูกค้า', immediateMessages: [] }
+    const { updateCustomerPreference } = await import('@/lib/customerMemory')
+    await updateCustomerPreference(ctx.shopId, ctx.userId, key, value)
+    return { resultForAi: `บันทึกความชอบของลูกค้าเรียบร้อยแล้ว (${key}: ${value})`, immediateMessages: [] }
+  }
+
+  // Trigger stage transitions based on tool calls
+  if (['search_products', 'check_stock', 'get_active_promotions'].includes(toolName)) {
+    updateSalesStage(ctx, 'showcase').catch(() => {})
+  } else if (['take_order', 'send_payment_qr', 'book_appointment'].includes(toolName)) {
+    updateSalesStage(ctx, 'closing').catch(() => {})
+  }
+
   // Any tool without a live DB-backed implementation (get_product_image,
   // get_upsell_products, calculate_installment, etc.) — the AI is expected
   // to answer from context/text alone; dispatch is a no-op.
   return NO_OP
+}
+
+export type SalesStage = 'greeting' | 'showcase' | 'closing' | 'post_sale'
+
+export async function updateSalesStage(ctx: ToolExecutionContext, newStage: SalesStage): Promise<void> {
+  if (!ctx.conversationId) return
+  try {
+    const { data: conv } = await ctx.supabase
+      .from('conversations')
+      .select('sales_stage')
+      .eq('id', ctx.conversationId)
+      .maybeSingle()
+
+    const currentStage: SalesStage = (conv?.sales_stage as SalesStage) || 'greeting'
+    const STAGE_ORDER: Record<SalesStage, number> = { greeting: 0, showcase: 1, closing: 2, post_sale: 3 }
+
+    if (STAGE_ORDER[newStage] > STAGE_ORDER[currentStage]) {
+      await ctx.supabase
+        .from('conversations')
+        .update({ sales_stage: newStage, updated_at: new Date().toISOString() })
+        .eq('id', ctx.conversationId)
+    }
+  } catch (err) {
+    console.error('[Sales Stage Update Error]:', err)
+  }
 }
 
 // ─── QR Code: Generate & Upload to Supabase Storage ──────────────────────────

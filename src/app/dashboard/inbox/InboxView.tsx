@@ -14,6 +14,7 @@ export interface Conversation {
   last_message_at: string
   unread_count: number
   status: 'ai' | 'human' | 'closed'
+  sales_stage?: 'greeting' | 'showcase' | 'closing' | 'post_sale' | string | null
   created_at: string
 }
 
@@ -193,17 +194,33 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
                       {conv.last_message || 'ยังไม่มีข้อความ'}
                     </p>
 
-                    <div className="flex items-center justify-between">
-                      <span className={`px-2 py-0.5 text-[9px] sm:text-[10px] font-bold rounded-md flex items-center gap-1 ${
-                        conv.status === 'ai'
-                          ? 'bg-blue-50 text-blue-600 border border-blue-200'
-                          : 'bg-amber-50 text-amber-600 border border-amber-200'
-                      }`}>
-                        <span className="material-symbols-outlined text-[11px]">
-                          {conv.status === 'ai' ? 'smart_toy' : 'person'}
+                    <div className="flex items-center justify-between gap-1 flex-wrap">
+                      <div className="flex items-center gap-1">
+                        <span className={`px-2 py-0.5 text-[9px] sm:text-[10px] font-bold rounded-md flex items-center gap-1 ${
+                          conv.status === 'ai'
+                            ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                            : 'bg-amber-50 text-amber-600 border border-amber-200'
+                        }`}>
+                          <span className="material-symbols-outlined text-[11px]">
+                            {conv.status === 'ai' ? 'smart_toy' : 'person'}
+                          </span>
+                          {conv.status === 'ai' ? 'AI ตอบ' : 'แอดมินตอบ'}
                         </span>
-                        {conv.status === 'ai' ? 'AI ตอบ' : 'แอดมินตอบ'}
-                      </span>
+
+                        {conv.sales_stage && (
+                          <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border uppercase ${
+                            conv.sales_stage === 'post_sale'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : conv.sales_stage === 'closing'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                              : conv.sales_stage === 'showcase'
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : 'bg-blue-50 text-blue-700 border-blue-200'
+                          }`}>
+                            {conv.sales_stage}
+                          </span>
+                        )}
+                      </div>
 
                       <span className="text-[9px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded font-bold border border-green-200">
                         LINE

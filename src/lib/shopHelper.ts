@@ -1,10 +1,10 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 
-export async function getOrCreateShopForUser(supabase: SupabaseClient, user: any) {
+export async function getOrCreateShopForUser(supabase: SupabaseClient, user: { id: string; email?: string } | null) {
   if (!user) return null
 
   // 1. Try to find shop by user_id directly in shops table
-  let { data: shop } = await supabase
+  const { data: shop } = await supabase
     .from('shops')
     .select('*')
     .eq('user_id', user.id)

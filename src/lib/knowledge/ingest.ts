@@ -26,7 +26,7 @@ function parseJsonLoosely(raw: string): unknown {
 function normaliseEntries(value: unknown): KnowledgeEntry[] {
   if (!Array.isArray(value)) return []
   return value
-    .map((row: any) => ({
+    .map((row: Record<string, unknown>) => ({
       title: String(row?.title ?? row?.question ?? '').trim(),
       content: String(row?.content ?? row?.answer ?? '').trim(),
     }))
@@ -114,7 +114,7 @@ ${text}
 
   const data = await response.json()
   const raw = (data.candidates?.[0]?.content?.parts || [])
-    .map((part: any) => part.text || '')
+    .map((part: { text?: string }) => part.text || '')
     .join('')
 
   if (!raw.trim()) throw new Error('ไม่สามารถสกัดข้อมูลจากเนื้อหานี้ได้')
