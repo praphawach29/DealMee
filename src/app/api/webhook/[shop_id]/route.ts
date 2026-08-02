@@ -291,15 +291,11 @@ async function deliverAgentResult({
   // Tool execution happens INSIDE the Planning Layer (src/lib/ai/toolDispatcher.ts's
   // executeTool(), called possibly multiple times per customer message) —
   // this function's job is just to log what ran and deliver the results.
+  // Tool execution happens INSIDE the Planning Layer (src/lib/ai/toolDispatcher.ts's
+  // executeTool(), called possibly multiple times per customer message) —
+  // log tool calls to server console only, DO NOT store internal tool code in chat_messages table.
   for (const toolCall of agentResult.toolCallsExecuted) {
-    console.log(`[Webhook] AI called tool: ${toolCall.name}`, toolCall.args)
-    await supabase.from('chat_messages').insert({
-      conversation_id: conv.id,
-      shop_id: shopId,
-      sender_type: 'bot',
-      sender_name: shop.bot_name || 'น้อง Botify',
-      message: `[Tool: ${toolCall.name}] ${JSON.stringify(toolCall.args)}`,
-    })
+    console.log(`[Webhook] AI executed tool: ${toolCall.name}`, toolCall.args)
   }
 
   for (const msg of agentResult.immediateMessages) {

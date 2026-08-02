@@ -48,15 +48,20 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const activeConv = conversations.find(c => c.id === selectedConvId)
-  const activeMessages = selectedConvId ? (messagesMap[selectedConvId] || []) : []
+  const rawActiveMessages = selectedConvId ? (messagesMap[selectedConvId] || []) : []
+  // Filter out internal system/tool execution logs so only real conversation text is shown
+  const activeMessages = rawActiveMessages.filter(
+    msg => !msg.message.startsWith('[Tool:') && !msg.message.startsWith('[System:') && !msg.message.startsWith('[Evaluation:')
+  )
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeMessages])
 
   const filteredConversations = conversations.filter(c => {
+    const cleanLastMessage = c.last_message && c.last_message.startsWith('[Tool:') ? '' : c.last_message
     const matchesSearch = c.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (c.last_message && c.last_message.toLowerCase().includes(searchTerm.toLowerCase()))
+                          (cleanLastMessage && cleanLastMessage.toLowerCase().includes(searchTerm.toLowerCase()))
     const matchesFilter = filterStatus === 'all' || c.status === filterStatus
     return matchesSearch && matchesFilter
   })
@@ -194,7 +199,7 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
                     </div>
 
                     <p className="text-[11px] sm:text-xs text-on-surface-variant truncate font-body-sm mb-1.5">
-                      {conv.last_message || 'ยังไม่มีข้อความ'}
+                      {conv.last_message && conv.last_message.startsWith('[Tool:') ? 'แอดมิน/บอทอยู่ระหว่างช่วยเหลือลูกค้า' : (conv.last_message || 'ยังไม่มีข้อความ')}
                     </p>
 
                     <div className="flex items-center justify-between gap-1 flex-wrap">
