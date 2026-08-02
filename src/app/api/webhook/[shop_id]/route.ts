@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac } from 'crypto'
-import { startSalesAgentPlanning, continueSalesAgentPlanning, planningAckMessage, type AgentResult } from '@/lib/ai/salesAgentEngine'
+import { processSalesAgentChat, type AgentResult } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 import { buildAutoGreeting, isDefaultGreeting } from '@/lib/businessGreeting'
@@ -163,54 +163,25 @@ export async function POST(
           sendLineLoadingAnimation(userId, lineToken).catch(() => {})
         }
 
-        // 5. Call AI Sales Agent Engine — run only the first planning step
-        // here. Most messages resolve in one step (nothing changes for
-        // those); if the AI needs to chain more tool calls, we get back a
-        // continuation state instead of waiting for the whole plan to
-        // finish, so we can ack the customer right away.
-        const started = await startSalesAgentPlanning({
+        // 5. Call AI Sales Agent Engine (Synchronous execution — runs all planning steps
+        // including tool calls and returns final answer, while LINE Thinking Indicator is active)
+        const agentResult = await processSalesAgentChat({
           shop,
           userQuery: userText,
           userId,
           conversationId: conv.id,
         })
 
-        if (started.done) {
-          // Single-step case (the common one) — unchanged behavior: reply
-          // via the LINE Reply API once the final answer is ready.
-          await deliverAgentResult({
-            agentResult: started.result,
-            conv,
-            shop,
-            shopId: shop_id,
-            userId,
-            lineToken,
-            replyToken,
-            useReplyForText: true,
-          })
-        } else {
-          // Multi-step plan — send a short ack now (consumes the one-time
-          // replyToken while it's still fresh), then finish the remaining
-          // steps in the background and push the real answer once ready.
-          // Same reply-then-push-later shape as verifySlipAndNotify below.
-          if (replyToken && lineToken) {
-            await sendLineReply(replyToken, planningAckMessage(started.state), lineToken)
-          }
-          continueSalesAgentPlanning(started.state)
-            .then((agentResult) =>
-              deliverAgentResult({
-                agentResult,
-                conv,
-                shop,
-                shopId: shop_id,
-                userId,
-                lineToken,
-                replyToken: undefined,
-                useReplyForText: false,
-              })
-            )
-            .catch((err) => console.error('[Webhook] Planning Layer background continuation failed:', err))
-        }
+        await deliverAgentResult({
+          agentResult,
+          conv,
+          shop,
+          shopId: shop_id,
+          userId,
+          lineToken,
+          replyToken,
+          useReplyForText: true,
+        })
       }
 
       // Handle Message Event (Image) - For Slip Verification
