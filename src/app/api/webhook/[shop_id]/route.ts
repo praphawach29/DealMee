@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { createHmac } from 'crypto'
 import { startSalesAgentPlanning, continueSalesAgentPlanning, planningAckMessage, type AgentResult } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 import { buildAutoGreeting, isDefaultGreeting } from '@/lib/businessGreeting'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+import { createAdminClient } from '@/lib/supabase/admin'
+
+const supabase = createAdminClient()
 
 // ─── LINE Signature Verification ─────────────────────────────────────────────
 function verifyLineSignature(rawBody: string, signature: string, secret: string): boolean {
