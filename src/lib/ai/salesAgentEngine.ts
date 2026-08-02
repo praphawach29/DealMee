@@ -138,6 +138,8 @@ export interface AgentResult {
   toolCallsExecuted: AgentToolCall[]
   /** Delayed pushes (schedule_followup) — the engine has no channel access to set its own setTimeout, so the caller (webhook route) does it. Always an array. */
   scheduledMessages: { delayMs: number; message: CustomerMessage }[]
+  /** Products returned by search_products for rendering LINE Flex Carousel product cards. */
+  productsData?: any[]
 }
 
 /**
@@ -197,6 +199,7 @@ export interface PlanningState {
   immediateMessages: CustomerMessage[]
   toolCallsExecuted: AgentToolCall[]
   scheduledMessages: { delayMs: number; message: CustomerMessage }[]
+  productsData?: any[]
 }
 
 export type PlanningStart =
@@ -1390,6 +1393,9 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
   state.turns.push({ role: 'assistant', text: response.text, toolCall: response.toolCall })
 
   const toolResult = await state.executor(response.toolCall.name, response.toolCall.args, state.toolCtx)
+  if (toolResult.productsData && toolResult.productsData.length > 0) {
+    state.productsData = toolResult.productsData
+  }
   state.toolCallsExecuted.push({ name: response.toolCall.name, args: response.toolCall.args })
   state.immediateMessages.push(...toolResult.immediateMessages)
   if (toolResult.scheduledMessage) state.scheduledMessages.push(toolResult.scheduledMessage)
@@ -1470,6 +1476,7 @@ function finalizeAgentResult(state: PlanningState, finalText: string): AgentResu
     immediateMessages: state.immediateMessages,
     toolCallsExecuted: state.toolCallsExecuted,
     scheduledMessages: state.scheduledMessages,
+    productsData: state.productsData,
   }
 }
 

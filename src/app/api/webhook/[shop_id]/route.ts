@@ -6,6 +6,7 @@ import { upsertCustomerProfile } from '@/lib/customerMemory'
 import { buildAutoGreeting, isDefaultGreeting } from '@/lib/businessGreeting'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { buildLineFlexProductCarousel } from '@/lib/line/flexHelper'
 
 const supabase = createAdminClient()
 
@@ -266,6 +267,14 @@ async function deliverAgentResult({
     }
   }
 
+  // Send LINE Flex Product Carousel if products were searched/recommended
+  if (agentResult.productsData && agentResult.productsData.length > 0 && lineToken) {
+    const flexMsg = buildLineFlexProductCarousel(agentResult.productsData)
+    if (flexMsg) {
+      await sendLineFlexPush(userId, flexMsg, lineToken)
+    }
+  }
+
   // Skip tool logging + usage increment entirely if the AI never actually
   // ran (quota exceeded) — the customer already got the quota message above.
   if (agentResult.quotaExceeded) return
@@ -496,5 +505,27 @@ async function sendLineLoadingAnimation(chatId: string, channelAccessToken: stri
     }
   } catch (err) {
     console.error('[LINE Loading Animation Exception]:', err)
+  }
+}
+
+/** Send LINE Flex Message (Product Carousel / Rich Cards) via LINE Push API */
+async function sendLineFlexPush(to: string, flexObject: any, channelAccessToken: string) {
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${channelAccessToken}`,
+      },
+      body: JSON.stringify({
+        to,
+        messages: [flexObject],
+      }),
+    })
+    if (!res.ok) {
+      console.error('[LINE Flex Push Error]:', await res.text())
+    }
+  } catch (err) {
+    console.error('[LINE Flex Push Exception]:', err)
   }
 }

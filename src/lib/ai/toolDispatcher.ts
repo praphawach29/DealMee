@@ -44,6 +44,15 @@ export interface ToolExecutionResult {
   immediateMessages: CustomerMessage[]
   /** Only schedule_followup uses this — the caller (webhook route) is responsible for the actual setTimeout + LINE push, since this module has no channel/push capability of its own. */
   scheduledMessage?: { delayMs: number; message: CustomerMessage }
+  /** Optional product items returned by search_products, used to render LINE Flex Carousel product cards. */
+  productsData?: Array<{
+    id: string
+    name: string
+    price: number
+    stock?: number | null
+    description?: string | null
+    image_url?: string | null
+  }>
 }
 
 /** Function shape of executeTool() — lets a caller (e.g. the Chat Playground) supply a different implementation, such as a safe-preview version that never actually mutates orders/bookings/etc. */
@@ -990,7 +999,7 @@ export async function executeTool(
 
     let query = supabase
       .from('products')
-      .select('id, name, price, stock, category, description')
+      .select('id, name, price, stock, category, description, image_url')
       .eq('shop_id', shopId)
 
     // Apply specific keyword filter only if it's not a generic word like 'สินค้า'
@@ -1005,7 +1014,7 @@ export async function executeTool(
     if (!products || products.length === 0) {
       const { data: allProducts } = await supabase
         .from('products')
-        .select('id, name, price, stock, category, description')
+        .select('id, name, price, stock, category, description, image_url')
         .eq('shop_id', shopId)
         .limit(12)
       products = allProducts
@@ -1026,6 +1035,7 @@ export async function executeTool(
     return {
       resultForAi: `รายการสินค้าของทางร้าน:\n${list}`,
       immediateMessages: [],
+      productsData: products,
     }
   }
 
