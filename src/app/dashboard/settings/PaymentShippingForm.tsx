@@ -48,6 +48,10 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
     const res = await updatePaymentShippingSettings(formData)
     setLoading(false)
 
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+
     if (res?.error) {
       setMessage({ type: 'error', text: res.error })
     } else if (res?.success) {
@@ -323,7 +327,25 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
         </div>
       </section>
 
-      {/* Bottom Save Button */}
+      {/* Bottom Save Button & Notification */}
+      {message && (
+        <div
+          className={`p-4 rounded-xl text-xs sm:text-sm font-label-md flex items-center justify-between transition-all ${
+            message.type === 'success'
+              ? 'bg-success-green/10 text-success-green border border-success-green/20'
+              : 'bg-error-red/10 text-error-red border border-error-red/20'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-[20px]">
+              {message.type === 'success' ? 'check_circle' : 'error'}
+            </span>
+            <p>{message.text}</p>
+          </div>
+          <button onClick={() => setMessage(null)} className="text-xs opacity-70 hover:opacity-100">✕</button>
+        </div>
+      )}
+
       <div className="flex justify-end pt-2 sm:pt-4">
         <button
           type="submit"
