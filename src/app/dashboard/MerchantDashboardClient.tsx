@@ -189,27 +189,31 @@ export default function MerchantDashboardClient({
             </div>
 
             {/* Quota Badge */}
-            <div className="px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-right shrink-0">
-              <div className="text-[10px] text-emerald-400 font-medium">คงเหลือ</div>
-              <div className="text-xs sm:text-sm font-extrabold text-emerald-300">
-                {pushQuotaInfo.remainingCount.toLocaleString()} <span className="text-[10px] font-normal text-emerald-400/80">/ {pushQuotaInfo.totalQuota.toLocaleString()}</span>
+            <div className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-right shrink-0">
+              <div className="text-[11px] text-emerald-400 font-bold">คงเหลือ</div>
+              <div className="text-sm sm:text-base font-extrabold text-emerald-300">
+                {pushQuotaInfo.remainingCount.toLocaleString()} <span className="text-xs font-medium text-emerald-200/80">/ {pushQuotaInfo.totalQuota.toLocaleString()}</span>
               </div>
             </div>
           </div>
 
           {/* Description & Note */}
-          <div className="text-[11px] sm:text-xs text-slate-300 leading-relaxed bg-slate-900/60 p-2.5 sm:p-3 rounded-xl border border-slate-800/80">
+          <div className="text-xs text-slate-200 font-medium leading-relaxed bg-slate-950/70 p-3 rounded-xl border border-slate-800">
             โควต้าข้อความสำหรับยิงบรอดแคสต์โปรโมชัน{' '}
-            <span className="text-emerald-400 font-semibold block sm:inline mt-0.5 sm:mt-0">
+            <span className="text-emerald-400 font-bold block sm:inline mt-0.5 sm:mt-0">
               (ตอบแชท AI ปกติใช้ Reply API ฟรี 100% ไม่ถูกหักโควต้านี้)
             </span>
           </div>
 
           {/* Quota Progress Bar */}
           <div className="space-y-1.5">
-            <div className="flex justify-between items-center text-[10px] sm:text-xs text-slate-400">
-              <span>ใช้ไปแล้ว {pushQuotaInfo.usedCount.toLocaleString()} ข้อความ ({usedPercentage}%)</span>
-              <span>คงเหลือ {remainingPercentage}%</span>
+            <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">
+              <span className="text-slate-200">
+                ใช้ไปแล้ว <span className="text-white font-bold">{pushQuotaInfo.usedCount.toLocaleString()}</span> ข้อความ ({usedPercentage}%)
+              </span>
+              <span className="text-emerald-300 font-bold">
+                คงเหลือ {remainingPercentage}% ({pushQuotaInfo.remainingCount.toLocaleString()} ข้อความ)
+              </span>
             </div>
             <div className="w-full bg-slate-800/90 rounded-full h-2 overflow-hidden border border-slate-700/60">
               <div
