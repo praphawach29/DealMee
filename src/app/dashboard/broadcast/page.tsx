@@ -1,10 +1,18 @@
+import { createClient } from '@/utils/supabase/server'
+import { getOrCreateShopForUser } from '@/lib/shopHelper'
+import { getLinePushQuotaInfo } from '@/lib/billing/pushQuota'
 import { fetchBroadcastHistory } from './actions'
 import BroadcastClientView from './BroadcastClientView'
 
 export const dynamic = 'force-dynamic'
 
 export default async function BroadcastPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const shop = await getOrCreateShopForUser(supabase, user)
+
   const broadcasts = await fetchBroadcastHistory()
+  const pushQuotaInfo = await getLinePushQuotaInfo(supabase, shop?.id || '', shop?.plan || 'pro')
 
   return (
     <div className="px-4 sm:px-6 md:px-8 py-6 max-w-7xl mx-auto w-full space-y-6">
@@ -17,7 +25,7 @@ export default async function BroadcastPage() {
         </p>
       </div>
 
-      <BroadcastClientView initialBroadcasts={broadcasts} />
+      <BroadcastClientView initialBroadcasts={broadcasts} pushQuotaInfo={pushQuotaInfo} />
     </div>
   )
 }

@@ -2,6 +2,8 @@ import { createClient } from '@/utils/supabase/server'
 import MerchantDashboardClient from './MerchantDashboardClient'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 
+import { getLinePushQuotaInfo } from '@/lib/billing/pushQuota'
+
 export default async function DashboardPage() {
   const supabase = await createClient()
 
@@ -24,6 +26,13 @@ export default async function DashboardPage() {
         totalMessages={0}
         latestKnowledgeTitle="ยังไม่ได้เชื่อมต่อร้านค้า"
         latestKnowledgeDate=""
+        pushQuotaInfo={{
+          totalQuota: 300,
+          usedCount: 0,
+          remainingCount: 300,
+          period: new Date().toISOString().slice(0, 7),
+          planName: 'PRO',
+        }}
       />
     )
   }
@@ -82,6 +91,8 @@ export default async function DashboardPage() {
     }
   }
 
+  const pushQuotaInfo = await getLinePushQuotaInfo(supabase, currentShopId || '', shop?.plan || 'pro')
+
   return (
     <MerchantDashboardClient
       shopName={shop?.name || 'ร้านค้าของคุณ'}
@@ -95,6 +106,7 @@ export default async function DashboardPage() {
       totalMessages={totalMessages}
       latestKnowledgeTitle={latestKnowledgeTitle}
       latestKnowledgeDate={latestKnowledgeDate}
+      pushQuotaInfo={pushQuotaInfo}
     />
   )
 }

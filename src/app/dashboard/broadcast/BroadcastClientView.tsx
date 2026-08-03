@@ -3,11 +3,23 @@
 import { useState, useEffect } from 'react'
 import { getAudienceCount, sendBroadcast, type BroadcastItem } from './actions'
 
+import { PushQuotaInfo } from '@/lib/billing/pushQuota'
+
 interface BroadcastClientViewProps {
   initialBroadcasts: BroadcastItem[]
+  pushQuotaInfo?: PushQuotaInfo
 }
 
-export default function BroadcastClientView({ initialBroadcasts }: BroadcastClientViewProps) {
+export default function BroadcastClientView({
+  initialBroadcasts,
+  pushQuotaInfo = {
+    totalQuota: 300,
+    usedCount: 0,
+    remainingCount: 300,
+    period: new Date().toISOString().slice(0, 7),
+    planName: 'PRO',
+  },
+}: BroadcastClientViewProps) {
   const [targetTag, setTargetTag] = useState('')
   const [prefKey, setPrefKey] = useState('')
   const [prefValue, setPrefValue] = useState('')
@@ -16,6 +28,9 @@ export default function BroadcastClientView({ initialBroadcasts }: BroadcastClie
   const [audienceCount, setAudienceCount] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [broadcasts, setBroadcasts] = useState<BroadcastItem[]>(initialBroadcasts)
+
+  const usedPercentage = Math.min(100, Math.round((pushQuotaInfo.usedCount / pushQuotaInfo.totalQuota) * 100))
+  const remainingPercentage = 100 - usedPercentage
 
   useEffect(() => {
     let active = true
@@ -56,7 +71,54 @@ export default function BroadcastClientView({ initialBroadcasts }: BroadcastClie
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="space-y-6">
+      {/* LINE Push Quota Status Banner */}
+      <div className="p-5 bg-gradient-to-r from-emerald-950/80 via-slate-900/90 to-slate-900 rounded-2xl border border-emerald-500/40 shadow-md text-white">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 border border-emerald-500/40 shrink-0">
+              <span className="material-symbols-outlined text-[22px]">send</span>
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                โควต้า LINE Push Message ประจำเดือน ({pushQuotaInfo.period})
+                <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[11px] font-semibold">
+                  แพ็กเกจ {pushQuotaInfo.planName}
+                </span>
+              </h3>
+              <p className="text-xs text-slate-300">
+                คงเหลือ{' '}
+                <span className="text-emerald-400 font-bold text-sm">
+                  {pushQuotaInfo.remainingCount.toLocaleString()}
+                </span>{' '}
+                / {pushQuotaInfo.totalQuota.toLocaleString()} ข้อความ (ใช้ไปแล้ว {pushQuotaInfo.usedCount.toLocaleString()} ข้อความ)
+              </p>
+            </div>
+          </div>
+
+          <div className="text-right shrink-0">
+            <span className="inline-block px-3 py-1 rounded-full bg-slate-800 text-xs text-slate-300 font-medium border border-slate-700">
+              💡 ตอบแชทปกติฟรีไม่จำกัด ไม่หักโควต้า Push
+            </span>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="w-full bg-slate-800 rounded-full h-2 mt-3 overflow-hidden border border-slate-700">
+          <div
+            className={`h-full transition-all duration-500 rounded-full ${
+              remainingPercentage > 50
+                ? 'bg-emerald-400'
+                : remainingPercentage > 15
+                ? 'bg-amber-400'
+                : 'bg-red-500'
+            }`}
+            style={{ width: `${Math.max(2, remainingPercentage)}%` }}
+          ></div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Form Panel */}
       <div className="lg:col-span-2 p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
         <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -202,5 +264,6 @@ export default function BroadcastClientView({ initialBroadcasts }: BroadcastClie
         )}
       </div>
     </div>
-  )
+  </div>
+)
 }

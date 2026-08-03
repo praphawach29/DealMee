@@ -4,6 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import ChatPlaygroundModal from './components/ChatPlaygroundModal'
 
+import { PushQuotaInfo } from '@/lib/billing/pushQuota'
+
 export interface MerchantDashboardProps {
   shopName: string
   botName: string
@@ -16,6 +18,7 @@ export interface MerchantDashboardProps {
   totalMessages: number
   latestKnowledgeTitle: string
   latestKnowledgeDate: string
+  pushQuotaInfo?: PushQuotaInfo
 }
 
 export default function MerchantDashboardClient({
@@ -30,8 +33,18 @@ export default function MerchantDashboardClient({
   totalMessages,
   latestKnowledgeTitle,
   latestKnowledgeDate,
+  pushQuotaInfo = {
+    totalQuota: 300,
+    usedCount: 0,
+    remainingCount: 300,
+    period: new Date().toISOString().slice(0, 7),
+    planName: 'PRO',
+  },
 }: MerchantDashboardProps) {
   const [isPlaygroundOpen, setIsPlaygroundOpen] = useState(false)
+
+  const usedPercentage = Math.min(100, Math.round((pushQuotaInfo.usedCount / pushQuotaInfo.totalQuota) * 100))
+  const remainingPercentage = 100 - usedPercentage
 
   return (
     <div className="flex flex-col w-full relative">
@@ -150,6 +163,62 @@ export default function MerchantDashboardClient({
             </div>
           </div>
 
+        </div>
+
+        {/* LINE Push Quota & Broadcast Monitor Banner */}
+        <div className="bg-gradient-to-r from-emerald-950/80 via-slate-900/90 to-surface-container/90 backdrop-blur-xl rounded-2xl p-5 shadow-md border border-emerald-500/30 text-on-surface relative overflow-hidden group relative z-10">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-lg shadow-emerald-500/10">
+                <span className="material-symbols-outlined text-[24px]">send</span>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-bold text-base text-white flex items-center gap-2">
+                    ติดตามโควต้า LINE Push Message ประจำเดือน ({pushQuotaInfo.period})
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold border border-emerald-500/30">
+                    คงเหลือ {pushQuotaInfo.remainingCount.toLocaleString()} / {pushQuotaInfo.totalQuota.toLocaleString()} ข้อความ
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
+                  โควต้าข้อความ Push สำหรับการบรอดแคสต์โปรโมชั่นประจำเดือน{' '}
+                  <span className="text-emerald-400 font-semibold">(ตอบแชท AI ปกติใช้ Reply API ฟรี 100% ไม่ถูกหักโควต้านี้)</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-700/50">
+              <div className="text-right">
+                <div className="text-xs text-slate-400 font-medium">ใช้ไปแล้ว</div>
+                <div className="text-sm font-bold text-slate-200">
+                  {pushQuotaInfo.usedCount.toLocaleString()} ข้อความ ({usedPercentage}%)
+                </div>
+              </div>
+
+              <Link
+                href="/dashboard/broadcast"
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all shrink-0 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">campaign</span>
+                <span>ส่งบรอดแคสต์ลูกค้า</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* Quota Progress Bar */}
+          <div className="w-full bg-slate-800/80 rounded-full h-2 mt-4 overflow-hidden border border-slate-700/50">
+            <div
+              className={`h-full transition-all duration-500 rounded-full ${
+                remainingPercentage > 50
+                  ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
+                  : remainingPercentage > 15
+                  ? 'bg-amber-400 shadow-sm shadow-amber-400/50'
+                  : 'bg-red-500 shadow-sm shadow-red-500/50'
+              }`}
+              style={{ width: `${Math.max(2, remainingPercentage)}%` }}
+            ></div>
+          </div>
         </div>
 
         {/* Dynamic Activity Overview */}
