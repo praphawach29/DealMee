@@ -993,6 +993,16 @@ export async function executeTool(
   }
 
   // ── 📦 PRODUCT TOOLS ─────────────────────────────────────────────
+  const GENERIC_PRODUCT_SEARCH_WORDS = ['สินค้า', 'ทั้งหมด', 'รายการ', 'ของ', 'ดู', 'มีอะไรบ้าง', 'ขอชม', 'ขอดู']
+
+  function normalizeProductSearchKeyword(raw: string): string {
+    if (!raw) return ''
+    return raw
+      .replace(/^(ขอดู|ขอชม|ขอรูป|อยากดู|อยากชม|แนะนำ|มี|ขาย|ขอดูรูปภาพ|ขอดูภาพ|ขอ)/gi, '')
+      .replace(/(หน่อย|ครับ|ค่ะ|คะ|นะ|บ้าง|ไหม|มั้ย|ด้วย|จ้า|จ้าา)$/gi, '')
+      .trim()
+  }
+
   if ((toolName as string) === 'search_products') {
     const rawKeyword = String(args.keyword || args.query || args.search || '').trim()
     const keyword = normalizeProductSearchKeyword(rawKeyword) || rawKeyword

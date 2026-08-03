@@ -193,6 +193,7 @@ export async function POST(
           shop,
           shopId: shop_id,
           userId,
+          userText,
           lineToken,
           replyToken,
           useReplyForText: true,
@@ -231,13 +232,14 @@ export async function POST(
  * path (push via userId, since the replyToken was already spent on the ack).
  */
 async function deliverAgentResult({
-  agentResult, conv, shop, shopId, userId, lineToken, replyToken, useReplyForText,
+  agentResult, conv, shop, shopId, userId, userText, lineToken, replyToken, useReplyForText,
 }: {
   agentResult: AgentResult
   conv: { id: string }
   shop: Record<string, any>
   shopId: string
   userId: string
+  userText?: string
   lineToken: string | undefined
   replyToken: string | undefined
   useReplyForText: boolean
@@ -270,9 +272,37 @@ async function deliverAgentResult({
     }
   }
 
-  // Send LINE Flex Product Carousel if products were searched/recommended
-  if (agentResult.productsData && agentResult.productsData.length > 0 && lineToken) {
-    const flexMsg = buildLineFlexProductCarousel(agentResult.productsData)
+  // Send LINE Flex Product Carousel if products were searched/recommended OR mentioned
+  let flexProducts = agentResult.productsData || []
+
+  if (flexProducts.length === 0 && lineToken) {
+    const combinedText = `${userText || ''} ${aiReplyText || ''}`.toLowerCase()
+    const isProductIntent = /กางเกง|เสื้อ|กระเป๋า|รองเท้า|หมวก|เคส|ผ้าพันคอ|กระบอกน้ำ|สินค้า|ดู|ชม|รูป|ราคา|รายละเอียด/i.test(combinedText)
+
+    if (isProductIntent) {
+      const { data: shopProducts } = await supabase
+        .from('products')
+        .select('id, name, price, stock, category, description, image_url')
+        .eq('shop_id', shopId)
+        .limit(10)
+
+      if (shopProducts && shopProducts.length > 0) {
+        const matched = shopProducts.filter((p: any) => {
+          const pName = (p.name || '').toLowerCase()
+          const pCat = (p.category || '').toLowerCase()
+          return (
+            combinedText.includes(pName) ||
+            combinedText.includes(pCat) ||
+            pName.split(' ').some((w: string) => w.length >= 2 && combinedText.includes(w))
+          )
+        })
+        flexProducts = matched.length > 0 ? matched : shopProducts.slice(0, 5)
+      }
+    }
+  }
+
+  if (flexProducts.length > 0 && lineToken) {
+    const flexMsg = buildLineFlexProductCarousel(flexProducts)
     if (flexMsg) {
       await sendLineFlexPush(userId, flexMsg, lineToken)
     }
