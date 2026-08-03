@@ -264,14 +264,6 @@ async function deliverAgentResult({
     })
     .eq('id', conv.id)
 
-  if (aiReplyText && lineToken) {
-    if (useReplyForText && replyToken) {
-      await sendLineReply(replyToken, aiReplyText, lineToken)
-    } else {
-      await sendLinePush(userId, aiReplyText, lineToken)
-    }
-  }
-
   // Send LINE Flex Product Carousel if products were searched/recommended OR mentioned
   let flexProducts = agentResult.productsData || []
 
@@ -301,10 +293,26 @@ async function deliverAgentResult({
     }
   }
 
-  if (flexProducts.length > 0 && lineToken) {
-    const flexMsg = buildLineFlexProductCarousel(flexProducts)
-    if (flexMsg) {
-      await sendLineFlexPush(userId, flexMsg, lineToken)
+  const flexMsg = flexProducts.length > 0 ? buildLineFlexProductCarousel(flexProducts) : null
+
+  // Bundle text and Flex Carousel into single Reply API call (Zero Push Quota used)
+  if (lineToken) {
+    if (useReplyForText && replyToken) {
+      const replyPayload: any[] = []
+      if (aiReplyText) replyPayload.push({ type: 'text', text: aiReplyText })
+      if (flexMsg) replyPayload.push(flexMsg)
+
+      if (replyPayload.length > 0) {
+        await sendLineReply(replyToken, replyPayload, lineToken)
+      }
+    } else {
+      // Fallback Push API if replyToken was already spent
+      if (aiReplyText) {
+        await sendLinePush(userId, aiReplyText, lineToken)
+      }
+      if (flexMsg) {
+        await sendLineFlexPush(userId, flexMsg, lineToken)
+      }
     }
   }
 
@@ -443,9 +451,13 @@ async function verifySlipAndNotify({
 
 // ─── LINE Messaging Helpers ───────────────────────────────────────────────────
 
-/** Send Reply via LINE Reply API (1 replyToken = 1 use only) */
-async function sendLineReply(replyToken: string, text: string, channelAccessToken: string) {
+/** Send Reply via LINE Reply API (1 replyToken = 1 use only, up to 5 message objects per replyToken, consuming ZERO push quota) */
+async function sendLineReply(replyToken: string, payload: string | any[], channelAccessToken: string) {
   try {
+    const rawMessages = typeof payload === 'string' ? [{ type: 'text', text: payload }] : payload
+    const messages = (rawMessages || []).filter(Boolean)
+    if (messages.length === 0) return
+
     const res = await fetch('https://api.line.me/v2/bot/message/reply', {
       method: 'POST',
       headers: {
@@ -454,7 +466,7 @@ async function sendLineReply(replyToken: string, text: string, channelAccessToke
       },
       body: JSON.stringify({
         replyToken,
-        messages: [{ type: 'text', text }],
+        messages,
       }),
     })
     if (!res.ok) {
