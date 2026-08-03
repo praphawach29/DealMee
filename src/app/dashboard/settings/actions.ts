@@ -111,6 +111,47 @@ export async function updatePaymentShippingSettings(formData: FormData) {
   return { success: 'บันทึกข้อมูลชำระเงินและการจัดส่งเรียบร้อยแล้ว!' }
 }
 
+export async function updateCompanySettings(formData: FormData) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return { error: 'กรุณาเข้าสู่ระบบอีกครั้ง' }
+  }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop?.id) {
+    return { error: 'ไม่สามารถสร้างหรือค้นหาข้อมูลร้านค้าได้' }
+  }
+
+  const updateData = {
+    company_name: ((formData.get('company_name') as string) || '').trim(),
+    company_tax_id: ((formData.get('company_tax_id') as string) || '').trim(),
+    company_address: ((formData.get('company_address') as string) || '').trim(),
+    company_phone: ((formData.get('company_phone') as string) || '').trim(),
+    company_email: ((formData.get('company_email') as string) || '').trim(),
+    company_logo_url: ((formData.get('company_logo_url') as string) || '').trim(),
+    vat_enabled: formData.get('vat_enabled') === 'true' || formData.get('vat_enabled') === 'on',
+    updated_at: new Date().toISOString(),
+  }
+
+  const { error } = await supabase
+    .from('shops')
+    .update(updateData)
+    .eq('id', shop.id)
+
+  if (error) {
+    return { error: `บันทึกไม่สำเร็จ: ${error.message}` }
+  }
+
+  revalidatePath('/dashboard/settings')
+  return { success: 'บันทึกข้อมูลบริษัทและใบเสนอราคาเรียบร้อยแล้ว!' }
+}
+
 
 export async function getPlaygroundGreeting() {
   const supabase = await createClient()

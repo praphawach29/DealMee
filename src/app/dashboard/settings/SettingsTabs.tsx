@@ -2,10 +2,11 @@
 
 import { useState } from 'react'
 import SettingsForm from './SettingsForm'
+import CompanySettingsForm from './CompanySettingsForm'
 import PaymentShippingForm from './PaymentShippingForm'
 
 export default function SettingsTabs({ shop }: { shop: any }) {
-  const [activeTab, setActiveTab] = useState<'bot' | 'payment'>('bot')
+  const [activeTab, setActiveTab] = useState<'bot' | 'company' | 'payment'>('bot')
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -26,6 +27,19 @@ export default function SettingsTabs({ shop }: { shop: any }) {
 
         <button
           type="button"
+          onClick={() => setActiveTab('company')}
+          className={`flex items-center gap-2 px-4 py-3 font-label-md text-xs sm:text-sm font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === 'company'
+              ? 'border-electric-blue text-electric-blue bg-electric-blue/5 rounded-t-xl'
+              : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-t-xl'
+          }`}
+        >
+          <span className="material-symbols-outlined text-[18px] sm:text-[20px]">store</span>
+          <span>ข้อมูลร้านค้า & เอกสาร</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('payment')}
           className={`flex items-center gap-2 px-4 py-3 font-label-md text-xs sm:text-sm font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer ${
             activeTab === 'payment'
@@ -39,11 +53,9 @@ export default function SettingsTabs({ shop }: { shop: any }) {
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'bot' ? (
-        <SettingsForm shop={shop} />
-      ) : (
-        <PaymentShippingForm shop={shop} />
-      )}
+      {activeTab === 'bot' && <SettingsForm shop={shop} />}
+      {activeTab === 'company' && <CompanySettingsForm shop={shop} />}
+      {activeTab === 'payment' && <PaymentShippingForm shop={shop} />}
     </div>
   )
 }
