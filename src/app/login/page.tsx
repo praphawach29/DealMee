@@ -23,9 +23,6 @@ function LoginContent() {
 
   const handleTabChange = (newMode: 'login' | 'signup') => {
     setMode(newMode)
-    setEmail('')
-    setPassword('')
-    setConfirmPassword('')
     setLocalError(null)
     if (urlError) {
       router.replace(pathname)
@@ -53,7 +50,7 @@ function LoginContent() {
       <div className="w-full max-w-5xl mx-auto flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-12 relative z-10 my-auto">
         
         {/* Left Side Showcase - Light Gradient Blue (Desktop only) */}
-        <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-blue-600 via-indigo-600 to-blue-700 text-white rounded-3xl p-10 flex-col justify-between min-h-[560px] shadow-2xl shadow-blue-600/20 relative overflow-hidden">
+        <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-blue-600 via-indigo-600 to-blue-700 text-white rounded-3xl p-10 flex-col justify-between min-h-[570px] shadow-2xl shadow-blue-600/20 relative overflow-hidden">
           <div className="absolute -right-16 -bottom-16 w-80 h-80 rounded-full bg-white/10 blur-2xl pointer-events-none"></div>
           
           {/* Top Logo */}
@@ -109,18 +106,18 @@ function LoginContent() {
             <span className="text-2xl font-black tracking-tight text-slate-900 font-headline-lg">Botify AI</span>
           </div>
 
-          {/* Clean White Card */}
-          <div className="w-full bg-white rounded-3xl p-6 sm:p-8 md:p-9 shadow-xl shadow-slate-200/70 border border-slate-100 space-y-6">
+          {/* Clean White Card with Smooth Height Transition */}
+          <div className="w-full bg-white rounded-3xl p-6 sm:p-8 md:p-9 shadow-xl shadow-slate-200/70 border border-slate-100 space-y-6 transition-all duration-300 ease-in-out">
             
             {/* Mode Switcher Tabs */}
-            <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center shadow-inner">
+            <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center shadow-inner relative">
               <button
                 type="button"
                 onClick={() => handleTabChange('login')}
-                className={`flex-1 py-2.5 px-3 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                className={`flex-1 py-2.5 px-3 text-xs sm:text-sm font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer relative z-10 ${
                   mode === 'login'
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
                 }`}
               >
                 <span className="material-symbols-outlined text-[18px]">login</span>
@@ -129,10 +126,10 @@ function LoginContent() {
               <button
                 type="button"
                 onClick={() => handleTabChange('signup')}
-                className={`flex-1 py-2.5 px-3 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                className={`flex-1 py-2.5 px-3 text-xs sm:text-sm font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer relative z-10 ${
                   mode === 'signup'
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
                 }`}
               >
                 <span className="material-symbols-outlined text-[18px]">person_add</span>
@@ -140,12 +137,12 @@ function LoginContent() {
               </button>
             </div>
 
-            {/* Title & Subtitle */}
-            <div className="space-y-1 text-center sm:text-left">
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            {/* Title & Subtitle with Smooth Fade */}
+            <div className="space-y-1 text-center sm:text-left transition-all duration-300">
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight transition-all duration-300">
                 {mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิกใหม่'}
               </h2>
-              <p className="text-xs sm:text-sm text-slate-500 font-normal leading-relaxed">
+              <p className="text-xs sm:text-sm text-slate-500 font-normal leading-relaxed transition-all duration-300 min-h-[40px]">
                 {mode === 'login'
                   ? 'กรอกอีเมลและรหัสผ่านเพื่อเข้าสู่ระบบร้านค้าของคุณ'
                   : 'กรอกข้อมูลเพื่อเริ่มต้นใช้งานระบบจัดการบอท AI ฟรี'
@@ -155,7 +152,7 @@ function LoginContent() {
 
             {/* Error Notification */}
             {error && (
-              <div className="rounded-2xl bg-red-50 border border-red-200 p-3.5 text-xs sm:text-sm text-red-600 font-medium flex items-start gap-2.5">
+              <div className="rounded-2xl bg-red-50 border border-red-200 p-3.5 text-xs sm:text-sm text-red-600 font-medium flex items-start gap-2.5 transition-all duration-300">
                 <span className="material-symbols-outlined text-[20px] shrink-0 text-red-500">error</span>
                 <p className="leading-relaxed">{error}</p>
               </div>
@@ -224,64 +221,64 @@ function LoginContent() {
                   </div>
                 </div>
 
-                {/* Confirm Password Field (Only for Signup Mode) */}
-                {mode === 'signup' && (
-                  <div className="space-y-1.5">
-                    <label htmlFor="confirmPassword" className="block text-xs sm:text-sm font-bold text-slate-700">
-                      ยืนยันรหัสผ่าน (Confirm Password)
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                        <span className="material-symbols-outlined text-[20px]">lock_reset</span>
+                {/* Smooth Expandable Confirm Password Field */}
+                <div
+                  className={`grid transition-all duration-300 ease-in-out ${
+                    mode === 'signup'
+                      ? 'grid-rows-[1fr] opacity-100'
+                      : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div className="space-y-1.5 pt-1">
+                      <label htmlFor="confirmPassword" className="block text-xs sm:text-sm font-bold text-slate-700">
+                        ยืนยันรหัสผ่าน (Confirm Password)
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                          <span className="material-symbols-outlined text-[20px]">lock_reset</span>
+                        </div>
+                        <input
+                          id="confirmPassword"
+                          name="confirmPassword"
+                          type={showConfirmPassword ? "text" : "password"}
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          required={mode === 'signup'}
+                          className="block w-full pl-11 pr-11 py-3 rounded-2xl border border-slate-200 bg-slate-50/80 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all text-xs sm:text-sm outline-none font-medium"
+                          placeholder="••••••••"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[20px]">
+                            {showConfirmPassword ? 'visibility_off' : 'visibility'}
+                          </span>
+                        </button>
                       </div>
-                      <input
-                        id="confirmPassword"
-                        name="confirmPassword"
-                        type={showConfirmPassword ? "text" : "password"}
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        required
-                        className="block w-full pl-11 pr-11 py-3 rounded-2xl border border-slate-200 bg-slate-50/80 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all text-xs sm:text-sm outline-none font-medium"
-                        placeholder="••••••••"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[20px]">
-                          {showConfirmPassword ? 'visibility_off' : 'visibility'}
-                        </span>
-                      </button>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
 
-              {/* Submit Buttons */}
+              {/* Submit Button */}
               <div className="pt-2">
-                {mode === 'login' ? (
-                  <Button
-                    type="submit"
-                    formAction={login}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 rounded-2xl font-bold text-sm sm:text-base shadow-lg shadow-blue-600/25 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
-                  >
-                    เข้าสู่ระบบ
-                  </Button>
-                ) : (
-                  <Button
-                    type="submit"
-                    formAction={signup}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 rounded-2xl font-bold text-sm sm:text-base shadow-lg shadow-blue-600/25 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
-                  >
-                    สมัครสมาชิก & เริ่มใช้งานฟรี ➔
-                  </Button>
-                )}
+                <Button
+                  type="submit"
+                  formAction={mode === 'login' ? login : signup}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 rounded-2xl font-bold text-sm sm:text-base shadow-lg shadow-blue-600/25 transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                >
+                  <span className="transition-all duration-300">
+                    {mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก & เริ่มใช้งานฟรี ➔'}
+                  </span>
+                </Button>
               </div>
             </form>
 
             {/* Quick Switch Text */}
-            <div className="text-center pt-2 border-t border-slate-100">
+            <div className="text-center pt-2 border-t border-slate-100 transition-all duration-300">
               <p className="text-xs text-slate-500">
                 {mode === 'login' ? (
                   <>
