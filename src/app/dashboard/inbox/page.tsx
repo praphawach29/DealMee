@@ -2,6 +2,8 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import InboxView, { ChatMessage } from './InboxView'
 
+import { getOrCreateShopForUser } from '@/lib/shopHelper'
+
 export default async function InboxPage() {
   const supabase = await createClient()
 
@@ -11,13 +13,9 @@ export default async function InboxPage() {
     redirect('/login')
   }
 
-  const { data: profile } = await supabase
-    .from('users')
-    .select('workspace_id')
-    .eq('id', user.id)
-    .single()
+  const shop = await getOrCreateShopForUser(supabase, user)
 
-  if (!profile?.workspace_id) {
+  if (!shop?.id) {
     redirect('/onboarding')
   }
 
@@ -25,7 +23,7 @@ export default async function InboxPage() {
   const { data: conversations } = await supabase
     .from('conversations')
     .select('*')
-    .eq('shop_id', profile.workspace_id)
+    .eq('shop_id', shop.id)
     .order('last_message_at', { ascending: false })
 
   // Fetch messages for all conversations
