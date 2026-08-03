@@ -72,49 +72,64 @@ export default function BroadcastClientView({
 
   return (
     <div className="space-y-6">
-      {/* LINE Push Quota Status Banner */}
-      <div className="p-5 bg-gradient-to-r from-emerald-950/80 via-slate-900/90 to-slate-900 rounded-2xl border border-emerald-500/40 shadow-md text-white">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      {/* LINE Push Quota Status Banner (Mobile Perfect) */}
+      <div className="bg-gradient-to-br from-emerald-950/90 via-slate-900/95 to-slate-900 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-md border border-emerald-500/30 text-white space-y-3.5">
+        {/* Header Row */}
+        <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 border border-emerald-500/40 shrink-0">
-              <span className="material-symbols-outlined text-[22px]">send</span>
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-md shadow-emerald-500/10">
+              <span className="material-symbols-outlined text-[20px] sm:text-[22px]">send</span>
             </div>
             <div>
-              <h3 className="font-bold text-sm text-white flex items-center gap-2">
-                โควต้า LINE Push Message ประจำเดือน ({pushQuotaInfo.period})
-                <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[11px] font-semibold">
-                  แพ็กเกจ {pushQuotaInfo.planName}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h3 className="font-bold text-sm sm:text-base text-white">
+                  โควต้า LINE Push
+                </h3>
+                <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-[10px] sm:text-xs font-medium border border-slate-700">
+                  {pushQuotaInfo.period}
                 </span>
-              </h3>
-              <p className="text-xs text-slate-300">
-                คงเหลือ{' '}
-                <span className="text-emerald-400 font-bold text-sm">
-                  {pushQuotaInfo.remainingCount.toLocaleString()}
-                </span>{' '}
-                / {pushQuotaInfo.totalQuota.toLocaleString()} ข้อความ (ใช้ไปแล้ว {pushQuotaInfo.usedCount.toLocaleString()} ข้อความ)
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-300 font-medium">
+                แพ็กเกจ {pushQuotaInfo.planName}
               </p>
             </div>
           </div>
 
-          <div className="text-right shrink-0">
-            <span className="inline-block px-3 py-1 rounded-full bg-slate-800 text-xs text-slate-300 font-medium border border-slate-700">
-              💡 ตอบแชทปกติฟรีไม่จำกัด ไม่หักโควต้า Push
-            </span>
+          {/* Quota Badge */}
+          <div className="px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-right shrink-0">
+            <div className="text-[10px] text-emerald-400 font-medium">คงเหลือ</div>
+            <div className="text-xs sm:text-sm font-extrabold text-emerald-300">
+              {pushQuotaInfo.remainingCount.toLocaleString()} <span className="text-[10px] font-normal text-emerald-400/80">/ {pushQuotaInfo.totalQuota.toLocaleString()}</span>
+            </div>
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="w-full bg-slate-800 rounded-full h-2 mt-3 overflow-hidden border border-slate-700">
-          <div
-            className={`h-full transition-all duration-500 rounded-full ${
-              remainingPercentage > 50
-                ? 'bg-emerald-400'
-                : remainingPercentage > 15
-                ? 'bg-amber-400'
-                : 'bg-red-500'
-            }`}
-            style={{ width: `${Math.max(2, remainingPercentage)}%` }}
-          ></div>
+        {/* Description & Note */}
+        <div className="text-[11px] sm:text-xs text-slate-300 leading-relaxed bg-slate-900/60 p-2.5 sm:p-3 rounded-xl border border-slate-800/80">
+          โควต้าข้อความสำหรับยิงบรอดแคสต์โปรโมชัน{' '}
+          <span className="text-emerald-400 font-semibold block sm:inline mt-0.5 sm:mt-0">
+            (ตอบแชท AI ปกติใช้ Reply API ฟรี 100% ไม่ถูกหักโควต้านี้)
+          </span>
+        </div>
+
+        {/* Quota Progress Bar */}
+        <div className="space-y-1.5">
+          <div className="flex justify-between items-center text-[10px] sm:text-xs text-slate-400">
+            <span>ใช้ไปแล้ว {pushQuotaInfo.usedCount.toLocaleString()} ข้อความ ({usedPercentage}%)</span>
+            <span>คงเหลือ {remainingPercentage}%</span>
+          </div>
+          <div className="w-full bg-slate-800/90 rounded-full h-2 overflow-hidden border border-slate-700/60">
+            <div
+              className={`h-full transition-all duration-500 rounded-full ${
+                remainingPercentage > 50
+                  ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
+                  : remainingPercentage > 15
+                  ? 'bg-amber-400 shadow-sm shadow-amber-400/50'
+                  : 'bg-red-500 shadow-sm shadow-red-500/50'
+              }`}
+              style={{ width: `${Math.max(2, remainingPercentage)}%` }}
+            ></div>
+          </div>
         </div>
       </div>
 
