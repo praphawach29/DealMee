@@ -85,16 +85,26 @@ export async function updatePaymentShippingSettings(formData: FormData) {
   const freeShippingStr = formData.get('free_shipping_threshold') as string
   const free_shipping_threshold = freeShippingStr ? Number(freeShippingStr) : null
 
+  const promptpay_qr_enabled = formData.get('promptpay_qr_enabled') === 'true' || formData.get('promptpay_qr_enabled') === 'on'
+  const cod_enabled = formData.get('cod_enabled') === 'true' || formData.get('cod_enabled') === 'on'
+
   const updateData = {
-    promptpay_number: formData.get('promptpay_number') as string,
-    promptpay_name: formData.get('promptpay_name') as string,
-    bank_name: formData.get('bank_name') as string,
-    bank_account_number: formData.get('bank_account_number') as string,
-    bank_account_name: formData.get('bank_account_name') as string,
-    shipping_provider: formData.get('shipping_provider') as string,
-    shipping_fee_type: formData.get('shipping_fee_type') as string,
+    promptpay_number: ((formData.get('promptpay_number') as string) || '').trim(),
+    promptpay_name: ((formData.get('promptpay_name') as string) || '').trim(),
+    promptpay_qr_enabled,
+    bank_name: (formData.get('bank_name') as string) || '',
+    bank_account_number: ((formData.get('bank_account_number') as string) || '').trim(),
+    bank_account_name: ((formData.get('bank_account_name') as string) || '').trim(),
+    shipping_provider: (formData.get('shipping_provider') as string) || '',
+    shipping_fee_type: (formData.get('shipping_fee_type') as string) || 'flat',
     shipping_fee_amount: Number(formData.get('shipping_fee_amount') || 0),
+    shipping_zone_bkk: Number(formData.get('shipping_zone_bkk') || 40),
+    shipping_zone_upcountry: Number(formData.get('shipping_zone_upcountry') || 60),
+    shipping_zone_remote: Number(formData.get('shipping_zone_remote') || 100),
     free_shipping_threshold,
+    cod_enabled,
+    cod_fee_type: (formData.get('cod_fee_type') as string) || 'flat',
+    cod_fee_amount: Number(formData.get('cod_fee_amount') || 30),
     updated_at: new Date().toISOString(),
   }
 

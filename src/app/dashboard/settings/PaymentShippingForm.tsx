@@ -7,13 +7,20 @@ export interface PaymentShippingShopData {
   id: string
   promptpay_number?: string | null
   promptpay_name?: string | null
+  promptpay_qr_enabled?: boolean | null
   bank_name?: string | null
   bank_account_number?: string | null
   bank_account_name?: string | null
   shipping_provider?: string | null
   shipping_fee_type?: string | null
   shipping_fee_amount?: number | null
+  shipping_zone_bkk?: number | null
+  shipping_zone_upcountry?: number | null
+  shipping_zone_remote?: number | null
   free_shipping_threshold?: number | null
+  cod_enabled?: boolean | null
+  cod_fee_type?: string | null
+  cod_fee_amount?: number | null
 }
 
 const THAI_BANKS = [
@@ -40,6 +47,8 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [shippingFeeType, setShippingFeeType] = useState<string>(shop.shipping_fee_type || 'flat')
+  const [codEnabled, setCodEnabled] = useState<boolean>(shop.cod_enabled ?? false)
+  const [codFeeType, setCodFeeType] = useState<string>(shop.cod_fee_type || 'flat')
 
   async function handleSubmit(formData: FormData) {
     setLoading(true)
@@ -66,13 +75,13 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-on-surface font-headline-md leading-tight">ตั้งค่าการชำระเงินและจัดส่ง</h1>
           <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5 font-body-md">
-            กำหนดช่องทางรับเงิน บัญชีธนาคาร และอัตราค่าจัดส่งเพื่อให้บอท AI ส่งให้ลูกค้าในแชทอัตโนมัติ
+            กำหนดช่องทางรับเงิน PromptPay QR, บัญชีธนาคาร, ค่าจัดส่งแยกตามพื้นที่ และบริการเก็บเงินปลายทาง (COD)
           </p>
         </div>
         <button
           type="submit"
           disabled={loading}
-          className="flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-4 py-2 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer text-xs sm:text-sm shrink-0"
+          className="flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer text-xs sm:text-sm shrink-0"
         >
           <span className="material-symbols-outlined text-[18px]">
             {loading ? 'sync' : 'save'}
@@ -100,7 +109,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
         </div>
       )}
 
-      {/* Section 1: PromptPay Settings */}
+      {/* Section 1: PromptPay Settings & Dynamic QR */}
       <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
         <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-3.5 sm:pb-4">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-electric-blue/10 flex items-center justify-center text-electric-blue shrink-0">
@@ -108,20 +117,20 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">ชำระเงินผ่าน พร้อมเพย์ (PromptPay QR)</h2>
-            <p className="text-[11px] sm:text-xs text-on-surface-variant">บอท AI จะสร้าง QR Code สแกนจ่ายตามยอดเงินจริงให้ออเดอร์อัตโนมัติ</p>
+            <p className="text-[11px] sm:text-xs text-on-surface-variant">บอท AI จะสร้างรูปภาพ PromptPay Dynamic QR Code ฝังยอดเงินอัตโนมัติในแชทให้ลูกค้าสแกนจ่ายได้ทันที</p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-5">
           <div className="space-y-1.5">
             <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
-              เบอร์โทรศัพท์ / เลขประจำตัวประชาชน
+              เบอร์โทรศัพท์ / เลขประจำตัวประชาชน / Tax ID
             </label>
             <input
               name="promptpay_number"
               type="text"
               defaultValue={shop.promptpay_number || ''}
-              placeholder="เช่น 0812345678 หรือ 1100200..."
+              placeholder="เช่น 0812345678 หรือ 3450101..."
               className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all font-mono"
             />
           </div>
@@ -134,10 +143,23 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
               name="promptpay_name"
               type="text"
               defaultValue={shop.promptpay_name || ''}
-              placeholder="เช่น บจก. บอทิฟาย ซอฟต์แวร์"
+              placeholder="เช่น ประภาวัชร์ สุทธิประภา"
               className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
             />
           </div>
+        </div>
+
+        <div className="flex items-center gap-3 pt-1 border-t border-outline-variant/20">
+          <input
+            type="checkbox"
+            id="promptpay_qr_enabled"
+            name="promptpay_qr_enabled"
+            defaultChecked={shop.promptpay_qr_enabled ?? true}
+            className="w-4 h-4 text-electric-blue rounded border-outline-variant focus:ring-electric-blue"
+          />
+          <label htmlFor="promptpay_qr_enabled" className="text-xs sm:text-sm font-medium text-on-surface cursor-pointer select-none">
+            💡 ให้ AI สร้างและส่งรูปภาพ PromptPay QR Code สแกนจ่ายตามยอดจริงในแชทอัตโนมัติ
+          </label>
         </div>
       </section>
 
@@ -149,7 +171,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">โอนเงินผ่าน บัญชีธนาคาร (Bank Transfer)</h2>
-            <p className="text-[11px] sm:text-xs text-on-surface-variant">รายละเอียดบัญชีสำหรับให้ลูกค้าโอนและส่งสลิปยืนยัน</p>
+            <p className="text-[11px] sm:text-xs text-on-surface-variant">รายละเอียดบัญชีสำหรับให้ลูกค้าโอนผ่านแอปธนาคารและส่งสลิปยืนยัน</p>
           </div>
         </div>
 
@@ -194,7 +216,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
                 name="bank_account_name"
                 type="text"
                 defaultValue={shop.bank_account_name || ''}
-                placeholder="เช่น นายบอทิฟาย ใจดี"
+                placeholder="เช่น นายประภาวัชร์ สุทธิประภา"
                 className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
               />
             </div>
@@ -202,7 +224,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
         </div>
       </section>
 
-      {/* Section 3: Shipping Settings */}
+      {/* Section 3: Advanced Shipping Settings */}
       <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
         <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-3.5 sm:pb-4">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-success-green/10 flex items-center justify-center text-success-green shrink-0">
@@ -210,7 +232,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">อัตราค่าจัดส่งสินค้า (Shipping Rates)</h2>
-            <p className="text-[11px] sm:text-xs text-on-surface-variant">บอท AI จะบวกคำนวณค่าจัดส่งในยอดรวมเมื่อลูกค้ารวมสินค้าในตะกร้า</p>
+            <p className="text-[11px] sm:text-xs text-on-surface-variant">บอท AI จะคำนวณบวกค่าจัดส่งตามรูปแบบที่คุณเลือกในออเดอร์อัตโนมัติ</p>
           </div>
         </div>
 
@@ -236,9 +258,9 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
             <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
               รูปแบบการคิดค่าจัดส่ง
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label
-                className={`flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
                   shippingFeeType === 'flat'
                     ? 'border-electric-blue bg-electric-blue/5 text-on-surface font-semibold'
                     : 'border-outline-variant/50 bg-merchant-bg text-on-surface-variant'
@@ -250,16 +272,37 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
                   value="flat"
                   checked={shippingFeeType === 'flat'}
                   onChange={() => setShippingFeeType('flat')}
-                  className="accent-electric-blue"
+                  className="accent-electric-blue mt-0.5"
                 />
                 <div className="text-xs sm:text-sm">
-                  <p className="font-bold text-on-surface">เหมาจ่ายต่อออเดอร์</p>
-                  <p className="text-[11px] text-on-surface-variant">คิดค่าจัดส่งอัตราเดียวต่อ 1 คำสั่งซื้อ</p>
+                  <p className="font-bold text-on-surface">เหมาจ่ายอัตราเดียว</p>
+                  <p className="text-[11px] text-on-surface-variant">คิดค่าส่งเท่ากันทั่วประเทศ</p>
                 </div>
               </label>
 
               <label
-                className={`flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                  shippingFeeType === 'zone'
+                    ? 'border-electric-blue bg-electric-blue/5 text-on-surface font-semibold'
+                    : 'border-outline-variant/50 bg-merchant-bg text-on-surface-variant'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="shipping_fee_type"
+                  value="zone"
+                  checked={shippingFeeType === 'zone'}
+                  onChange={() => setShippingFeeType('zone')}
+                  className="accent-electric-blue mt-0.5"
+                />
+                <div className="text-xs sm:text-sm">
+                  <p className="font-bold text-on-surface">แยกตามพื้นที่ (กทม./ตจว.)</p>
+                  <p className="text-[11px] text-on-surface-variant">คิดค่าส่งตามจังหวัดลูกค้า</p>
+                </div>
+              </label>
+
+              <label
+                className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
                   shippingFeeType === 'free'
                     ? 'border-electric-blue bg-electric-blue/5 text-on-surface font-semibold'
                     : 'border-outline-variant/50 bg-merchant-bg text-on-surface-variant'
@@ -271,16 +314,17 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
                   value="free"
                   checked={shippingFeeType === 'free'}
                   onChange={() => setShippingFeeType('free')}
-                  className="accent-electric-blue"
+                  className="accent-electric-blue mt-0.5"
                 />
                 <div className="text-xs sm:text-sm">
                   <p className="font-bold text-on-surface">ส่งฟรีทุกออเดอร์</p>
-                  <p className="text-[11px] text-on-surface-variant">ไม่มีการเก็บค่าจัดส่งเพิ่มเติม</p>
+                  <p className="text-[11px] text-on-surface-variant">ไม่มีการเก็บค่าจัดส่ง</p>
                 </div>
               </label>
             </div>
           </div>
 
+          {/* Rate Inputs based on selection */}
           {shippingFeeType === 'flat' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-5 pt-2">
               <div className="space-y-1.5">
@@ -324,7 +368,160 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
               </div>
             </div>
           )}
+
+          {shippingFeeType === 'zone' && (
+            <div className="space-y-4 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+                    🏢 กทม. และปริมณฑล (บาท)
+                  </label>
+                  <div className="relative">
+                    <input
+                      name="shipping_zone_bkk"
+                      type="number"
+                      min="0"
+                      step="5"
+                      defaultValue={shop.shipping_zone_bkk ?? 40}
+                      placeholder="40"
+                      className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all pr-12"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant font-bold">
+                      บาท
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+                    🏞️ ต่างจังหวัด (บาท)
+                  </label>
+                  <div className="relative">
+                    <input
+                      name="shipping_zone_upcountry"
+                      type="number"
+                      min="0"
+                      step="5"
+                      defaultValue={shop.shipping_zone_upcountry ?? 60}
+                      placeholder="60"
+                      className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all pr-12"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant font-bold">
+                      บาท
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+                    🏝️ พื้นที่ห่างไกล / เกาะ (บาท)
+                  </label>
+                  <div className="relative">
+                    <input
+                      name="shipping_zone_remote"
+                      type="number"
+                      min="0"
+                      step="5"
+                      defaultValue={shop.shipping_zone_remote ?? 100}
+                      placeholder="100"
+                      className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all pr-12"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant font-bold">
+                      บาท
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+                  โปรโมชั่นส่งฟรี เมื่อยอดซื้อครบ (บาท)
+                </label>
+                <div className="relative">
+                  <input
+                    name="free_shipping_threshold"
+                    type="number"
+                    min="0"
+                    step="100"
+                    defaultValue={shop.free_shipping_threshold ?? ''}
+                    placeholder="เช่น 1000 (เว้นว่างหากไม่มี)"
+                    className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all pr-12"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant font-bold">
+                    บาท
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
+      </section>
+
+      {/* Section 4: Cash on Delivery (COD) Settings */}
+      <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
+        <div className="flex items-center justify-between border-b border-outline-variant/30 pb-3.5 sm:pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
+              <span className="material-symbols-outlined text-[20px]">payments</span>
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">บริการเก็บเงินปลายทาง (COD)</h2>
+              <p className="text-[11px] sm:text-xs text-on-surface-variant">รองรับลูกค้าที่ต้องการชำระเงินเมื่อสินค้าส่งถึงบ้าน</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="cod_enabled"
+              name="cod_enabled"
+              checked={codEnabled}
+              onChange={(e) => setCodEnabled(e.target.checked)}
+              className="w-5 h-5 text-electric-blue rounded border-outline-variant focus:ring-electric-blue cursor-pointer"
+            />
+            <label htmlFor="cod_enabled" className="text-xs sm:text-sm font-bold text-on-surface cursor-pointer select-none">
+              {codEnabled ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
+            </label>
+          </div>
+        </div>
+
+        {codEnabled && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-5 pt-1">
+            <div className="space-y-1.5">
+              <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+                ประเภทค่าธรรมเนียม COD
+              </label>
+              <select
+                name="cod_fee_type"
+                value={codFeeType}
+                onChange={(e) => setCodFeeType(e.target.value)}
+                className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
+              >
+                <option value="flat">เหมาจ่ายรายออเดอร์ (บาท)</option>
+                <option value="percent">คิดเป็น % จากยอดค่าสินค้า</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+                จำนวนค่าธรรมเนียม COD
+              </label>
+              <div className="relative">
+                <input
+                  name="cod_fee_amount"
+                  type="number"
+                  min="0"
+                  step={codFeeType === 'percent' ? '0.5' : '5'}
+                  defaultValue={shop.cod_fee_amount ?? 30}
+                  placeholder={codFeeType === 'percent' ? '3' : '30'}
+                  className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all pr-12"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant font-bold">
+                  {codFeeType === 'percent' ? '%' : 'บาท'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Bottom Save Button & Notification */}
@@ -342,7 +539,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
             </span>
             <p>{message.text}</p>
           </div>
-          <button onClick={() => setMessage(null)} className="text-xs opacity-70 hover:opacity-100">✕</button>
+          <button type="button" onClick={() => setMessage(null)} className="text-xs opacity-70 hover:opacity-100">✕</button>
         </div>
       )}
 

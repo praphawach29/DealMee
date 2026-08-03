@@ -1080,6 +1080,44 @@ export async function executeTool(
     }
   }
 
+  if ((toolName as string) === 'calculate_shipping') {
+    const province = String(args.province || args.address || '').trim()
+    const feeType = shop.shipping_fee_type || 'flat'
+
+    let rate = Number(shop.shipping_fee_amount || 40)
+    let rateDesc = 'เหมาจ่ายอัตราเดียวทั่วประเทศ'
+
+    if (feeType === 'free') {
+      rate = 0
+      rateDesc = 'ส่งฟรีทุกออเดอร์'
+    } else if (feeType === 'zone') {
+      const bkkKeywords = ['กรุงเทพ', 'กทม', 'นนทบุรี', 'ปทุมธานี', 'สมุทรปราการ', 'สมุทรสาคร', 'นครปฐม']
+      const remoteKeywords = ['ยะลา', 'ปัตตานี', 'นราธิวาส', 'เกาะ', 'แม่ฮ่องสอน']
+
+      const isBkk = bkkKeywords.some((k) => province.includes(k))
+      const isRemote = remoteKeywords.some((k) => province.includes(k))
+
+      if (isBkk) {
+        rate = Number(shop.shipping_zone_bkk || 40)
+        rateDesc = 'อัตราสำหรับ กทม. และปริมณฑล'
+      } else if (isRemote) {
+        rate = Number(shop.shipping_zone_remote || 100)
+        rateDesc = 'อัตราสำหรับพื้นที่ห่างไกล / เกาะพิเศษ'
+      } else {
+        rate = Number(shop.shipping_zone_upcountry || 60)
+        rateDesc = 'อัตราสำหรับต่างจังหวัด'
+      }
+    }
+
+    const freeThreshold = Number(shop.free_shipping_threshold || 0)
+    const freeNote = freeThreshold > 0 ? ` (ส่งฟรีเมื่อซื้อครบ ${freeThreshold.toLocaleString()} บาท)` : ''
+
+    return {
+      resultForAi: `อัตราค่าจัดส่ง (${rateDesc}): ${rate} บาท${freeNote}`,
+      immediateMessages: [],
+    }
+  }
+
   if ((toolName as string) === 'take_order') {
     const customerName = String(args.customer_name || args.name || args.customer || '').trim() || 'ลูกค้า'
     const customerPhone = String(args.customer_phone || args.phone || args.mobile || args.tel || '').trim()
