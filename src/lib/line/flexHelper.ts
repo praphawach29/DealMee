@@ -18,9 +18,50 @@ export function buildLineFlexProductCarousel(products: ProductItem[]) {
   const bubbles = products.slice(0, 10).map((p) => {
     const imageUrl = p.image_url && p.image_url.startsWith('http') ? p.image_url : defaultImage
     const priceFormatted = `฿${Number(p.price || 0).toLocaleString('th-TH')}`
-    const stockText = p.stock !== null && p.stock !== undefined ? `คงเหลือ ${p.stock} ชิ้น` : 'พร้อมส่ง'
+
+    const isOutOfStock = p.stock !== null && p.stock !== undefined && Number(p.stock) <= 0
+
+    // Stock status pill badge
+    const stockBadge = isOutOfStock
+      ? {
+          type: 'box',
+          layout: 'horizontal',
+          backgroundColor: '#FEE2E2',
+          cornerRadius: 'md',
+          paddingAll: 'xs',
+          paddingStart: 'sm',
+          paddingEnd: 'sm',
+          contents: [
+            {
+              type: 'text',
+              text: '❌ สินค้าหมดชั่วคราว (Out of Stock)',
+              size: 'xs',
+              color: '#DC2626',
+              weight: 'bold',
+            },
+          ],
+        }
+      : {
+          type: 'box',
+          layout: 'horizontal',
+          backgroundColor: '#DCFCE7',
+          cornerRadius: 'md',
+          paddingAll: 'xs',
+          paddingStart: 'sm',
+          paddingEnd: 'sm',
+          contents: [
+            {
+              type: 'text',
+              text: p.stock ? `✓ สินค้าพร้อมส่ง (คงเหลือ ${p.stock} ชิ้น)` : '✓ สินค้าพร้อมส่ง',
+              size: 'xs',
+              color: '#16A34A',
+              weight: 'bold',
+            },
+          ],
+        }
 
     const bodyContents: any[] = [
+      stockBadge,
       {
         type: 'text',
         text: p.name,
@@ -28,6 +69,7 @@ export function buildLineFlexProductCarousel(products: ProductItem[]) {
         size: 'md',
         wrap: true,
         maxLines: 2,
+        margin: 'sm',
       },
       {
         type: 'box',
@@ -39,15 +81,19 @@ export function buildLineFlexProductCarousel(products: ProductItem[]) {
             text: priceFormatted,
             weight: 'bold',
             size: 'xl',
-            color: '#06C755',
+            color: isOutOfStock ? '#9CA3AF' : '#06C755',
           },
-          {
-            type: 'text',
-            text: stockText,
-            size: 'xs',
-            color: '#888888',
-            align: 'end',
-          },
+          ...(isOutOfStock
+            ? [
+                {
+                  type: 'text',
+                  text: '(หมด)',
+                  size: 'xs',
+                  color: '#DC2626',
+                  align: 'end',
+                },
+              ]
+            : []),
         ],
       },
     ]
@@ -64,6 +110,30 @@ export function buildLineFlexProductCarousel(products: ProductItem[]) {
       })
     }
 
+    const buttonConfig = isOutOfStock
+      ? {
+          type: 'button',
+          style: 'secondary',
+          color: '#F3F4F6',
+          height: 'sm',
+          action: {
+            type: 'message',
+            label: 'แจ้งเมื่อมีสินค้าเติม',
+            text: `สอบถามสินค้าเติมสต็อก ${p.name}`,
+          },
+        }
+      : {
+          type: 'button',
+          style: 'primary',
+          color: '#06C755',
+          height: 'sm',
+          action: {
+            type: 'message',
+            label: 'สั่งซื้อสินค้านี้',
+            text: `สั่งซื้อ ${p.name}`,
+          },
+        }
+
     return {
       type: 'bubble',
       hero: {
@@ -76,26 +146,14 @@ export function buildLineFlexProductCarousel(products: ProductItem[]) {
       body: {
         type: 'box',
         layout: 'vertical',
-        spacing: 'sm',
+        spacing: 'xs',
         contents: bodyContents,
       },
       footer: {
         type: 'box',
         layout: 'vertical',
         spacing: 'sm',
-        contents: [
-          {
-            type: 'button',
-            style: 'primary',
-            color: '#06C755',
-            height: 'sm',
-            action: {
-              type: 'message',
-              label: 'สั่งซื้อสินค้านี้',
-              text: `สั่งซื้อ ${p.name}`,
-            },
-          },
-        ],
+        contents: [buttonConfig],
       },
     }
   })
