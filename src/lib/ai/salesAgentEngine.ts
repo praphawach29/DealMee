@@ -5,6 +5,11 @@ import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
 import { executeTool as realExecuteTool, type ToolExecutor, type ToolExecutionContext, type CustomerMessage } from '@/lib/ai/toolDispatcher'
 import { t, detectCustomerLanguage, type CustomerLanguage } from '@/lib/i18n/customerMessages'
+import {
+  formatSalesStagePromptContext,
+  determineNextSalesStage,
+  type SalesStage,
+} from '@/lib/ai/salesWorkflow'
 
 const supabase = createAdminClient()
 
@@ -140,6 +145,8 @@ export interface AgentResult {
   scheduledMessages: { delayMs: number; message: CustomerMessage }[]
   /** Products returned by search_products for rendering LINE Flex Carousel product cards. */
   productsData?: any[]
+  /** Active sales stage computed at the end of the turn (greeting, discovery, showcase, closing, post_sale). */
+  salesStage?: SalesStage
 }
 
 /**
@@ -180,6 +187,7 @@ export const KNOWLEDGE_INLINE_MAX_CHARS = 6000
 export interface PlanningState {
   shop: any
   conversationId: string
+  salesStage: SalesStage
   /** Language of the customer's message, so the strings the system writes itself match the language the model is replying in. */
   language: CustomerLanguage
   turns: PlanningTurn[]
@@ -1342,7 +1350,26 @@ ${knowledgeContext}${productsContext}
 ${buildBusinessPromptContext(shop, bookingPromptTemplates)}${bookingContext}
 ${paymentInfo}`
 
-  const dynamicSystemPrompt = `${customerProfileContext}${bookingStateContext}${orderStateContext}
+  // 5d. Sales Workflow Stage Context
+  let initialSalesStage: SalesStage = 'greeting'
+  let lastMessageAt: string | null = null
+  if (conversationId) {
+    const { data: convData } = await db
+      .from('conversations')
+      .select('sales_stage, last_message_at')
+      .eq('id', conversationId)
+      .single()
+
+    if (convData) {
+      initialSalesStage = (convData.sales_stage as SalesStage) || 'greeting'
+      lastMessageAt = convData.last_message_at
+    }
+  }
+
+  const salesStageContext = formatSalesStagePromptContext(initialSalesStage)
+
+  const dynamicSystemPrompt = `${salesStageContext}
+${customerProfileContext}${bookingStateContext}${orderStateContext}
 ${historyContext}`
 
   const systemInstruction = `${staticSystemPrompt}\n${dynamicSystemPrompt}`
@@ -1353,7 +1380,7 @@ ${historyContext}`
     isVip: isVipCustomer,
   })
   console.log(
-    `[Botify Brain™] "${userQuery}" | ${routing.complexity} (score ${routing.complexityScore}) | ${routing.targetProvider.toUpperCase()} | Tools: ${routing.toolSet.length}${isVipCustomer ? ' | VIP customer' : ''}`
+    `[Botify Brain™] "${userQuery}" | ${routing.complexity} (score ${routing.complexityScore}) | ${routing.targetProvider.toUpperCase()} | Tools: ${routing.toolSet.length}${isVipCustomer ? ' | VIP customer' : ''} | Stage: ${initialSalesStage}`
   )
 
   const language = detectCustomerLanguage(userQuery)
@@ -1374,6 +1401,7 @@ ${historyContext}`
     state: {
       shop,
       conversationId,
+      salesStage: initialSalesStage,
       language,
       turns: [{ role: 'user', text: userQuery }],
       step: 0,
@@ -1524,6 +1552,17 @@ function finalizeAgentResult(state: PlanningState, finalText: string): AgentResu
       }))
     : undefined
 
+  const firstUserTurn = state.turns.find((t) => t.role === 'user')
+  const userQueryText = firstUserTurn && 'text' in firstUserTurn ? firstUserTurn.text : ''
+
+  const nextStage = determineNextSalesStage({
+    currentStage: state.salesStage,
+    userQuery: userQueryText,
+    executedToolNames: state.toolCallsExecuted.map((t) => t.name),
+    hasPendingOrder: state.toolCallsExecuted.some((t) => t.name === 'send_payment_qr'),
+    hasCompletedOrder: state.toolCallsExecuted.some((t) => t.name === 'take_order' || t.name === 'book_appointment'),
+  })
+
   return {
     text: toPlainText(finalText).trim(),
     usage,
@@ -1531,6 +1570,7 @@ function finalizeAgentResult(state: PlanningState, finalText: string): AgentResu
     toolCallsExecuted: state.toolCallsExecuted,
     scheduledMessages: state.scheduledMessages,
     productsData: state.productsData,
+    salesStage: nextStage,
   }
 }
 

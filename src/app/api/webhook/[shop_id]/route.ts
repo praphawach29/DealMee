@@ -4,6 +4,7 @@ import { processSalesAgentChat, type AgentResult } from '@/lib/ai/salesAgentEngi
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 import { buildAutoGreeting, isDefaultGreeting } from '@/lib/businessGreeting'
+import { synthesizeFaqFromConversation } from '@/lib/ai/faqSynthesis'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildLineFlexProductCarousel } from '@/lib/line/flexHelper'
@@ -256,13 +257,26 @@ async function deliverAgentResult({
     })
   }
 
+  const updatePayload: Record<string, any> = {
+    last_message: aiReplyText || '[ส่ง QR Code]',
+    last_message_at: new Date().toISOString(),
+  }
+  if (agentResult.salesStage) {
+    updatePayload.sales_stage = agentResult.salesStage
+  }
+
   await supabase
     .from('conversations')
-    .update({
-      last_message: aiReplyText || '[ส่ง QR Code]',
-      last_message_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq('id', conv.id)
+
+  // Trigger Hermes-inspired FAQ synthesis in background if human handover was requested
+  const hasHumanHandover = agentResult.toolCallsExecuted.some((t) => t.name === 'request_human_agent')
+  if (hasHumanHandover) {
+    synthesizeFaqFromConversation({ shopId, conversationId: conv.id }).catch((err) =>
+      console.error('[Webhook] Background FAQ synthesis error:', err)
+    )
+  }
 
   // Send LINE Flex Product Carousel if products were searched/recommended OR mentioned
   let flexProducts = agentResult.productsData || []

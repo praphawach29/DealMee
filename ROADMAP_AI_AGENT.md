@@ -422,7 +422,8 @@ Tool ทุกตัวกรองด้วย `shop_id` เสมอ ทำใ
 
 ### 12.2 สิ่งที่นำมาปรับใช้จริงใน Botify SaaS
 1. **จาก Hermes Agent (Nous Research):**
-   - **Continuous Self-Improvement & Auto-FAQ:** เมื่อคนจริงตอบแชทแทนบอท (Human Handover) หรือพบบทสนทนาที่ AI ตอบไม่ได้ ระบบสามารถนำข้อความนั้นมาสรุปเป็น Draft FAQ / Playbook ให้เจ้าของร้านกดยืนยันขึ้นระบบได้ทันที
+   - **Continuous Self-Improvement & Auto-FAQ (✅ สำเร็จแล้ว - Option A):** มีโมดูล `faqSynthesis.ts` ที่คอยวิเคราะห์บทสนทนาจริงเมื่อมีการสลับโหมดแอดมินหรือจบการขาย แล้วสังเคราะห์ร่างคำถาม-คำตอบ (`status: 'draft'`, `source: 'ai_synthesis'`) ให้ร้านค้าตรวจสอบและกดอนุมัติใน `/dashboard/knowledge`
+   - **Stateful Sales Workflow Engine (✅ สำเร็จแล้ว - Option A):** มีโมดูล `salesWorkflow.ts` ติดตามสถานะการขาย 5 ลำดับ (`greeting` ➔ `discovery` ➔ `showcase` ➔ `closing` ➔ `post_sale`) และแสดงผล Badge สถานะการขายใน `/dashboard/inbox` พร้อมชี้นำบทสนทนาในแต่ละ Stage แบบไดนามิก
    - **Sales Trajectory Logging:** จัดเก็บ Session ปิดการขายที่สมบูรณ์เป็น Gold Standard เพื่อนำมาทำ Dynamic Few-Shot เสริมพลังโน้มน้าวใจ
 2. **จาก OpenJarvis (Stanford / Lambda Labs):**
    - **Modular Typed Specs:** จัดโครงสร้าง Persona และ Tool Spec เป็น TypeScript Interfaces ที่มี Type-Safety และแยกหมวดหมู่ชัดเจน
@@ -431,4 +432,5 @@ Tool ทุกตัวกรองด้วย `shop_id` เสมอ ทำใ
    - **Universal Channel Gateway:** ออกแบบ Inbound/Outbound Message Adapter เพื่อให้ `salesAgentEngine.ts` เชื่อมต่อ LINE, Facebook Messenger, Instagram DMs และ TikTok Shop ได้จากจุดเดียว
    - **Proactive Sales Outreach:** ระบบทักหาลูกค้าอัตโนมัติ (เช่น ตามสลิปหลังขอ QR 15 นาที, เตือนคิวจองล่วงหน้า 24 ชม., ทักทายลูกค้าเก่าเมื่อมีโปรใหม่)
    - **Merchant Back-office Copilot:** บอทผู้ช่วยเจ้าของร้านผ่าน LINE/Telegram ส่วนตัว สำหรับสั่งงาน เช็กยอดขาย และปรับสต็อกโดยไม่ต้องเข้า Dashboard
+
 

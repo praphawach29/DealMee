@@ -181,3 +181,24 @@ export async function deleteKnowledgeItem(id: string) {
   revalidatePath('/dashboard')
   return { success: true }
 }
+
+export async function approveDraftFaq(id: string) {
+  const supabase = await createClient()
+  const resolved = await resolveShop(supabase)
+  if ('error' in resolved) return { error: resolved.error }
+
+  const { error } = await supabase
+    .from('knowledge_base')
+    .update({ status: 'active' })
+    .eq('id', id)
+    .eq('shop_id', resolved.shop.id)
+
+  if (error) {
+    return { error: `อนุมัติข้อมูลไม่สำเร็จ: ${error.message}` }
+  }
+
+  revalidatePath('/dashboard/knowledge')
+  revalidatePath('/dashboard')
+  return { success: 'อนุมัติเพิ่มเข้าคลังความรู้ของร้านเรียบร้อยแล้ว!' }
+}
+

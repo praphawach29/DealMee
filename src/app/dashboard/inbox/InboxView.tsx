@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { sendMessage, toggleHandoffStatus, createMockConversation } from './actions'
+import { getSalesStageMeta, type SalesStage } from '@/lib/ai/salesWorkflow'
 
 export interface Conversation {
   id: string
@@ -206,8 +207,8 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
                       <div className="flex items-center gap-1">
                         <span className={`px-2 py-0.5 text-[9px] sm:text-[10px] font-bold rounded-md flex items-center gap-1 ${
                           conv.status === 'ai'
-                            ? 'bg-blue-50 text-blue-600 border border-blue-200'
-                            : 'bg-amber-50 text-amber-600 border border-amber-200'
+                            ? 'bg-blue-50 text-blue-600 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                            : 'bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
                         }`}>
                           <span className="material-symbols-outlined text-[11px]">
                             {conv.status === 'ai' ? 'smart_toy' : 'person'}
@@ -215,22 +216,18 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
                           {conv.status === 'ai' ? 'AI ตอบ' : 'แอดมินตอบ'}
                         </span>
 
-                        {conv.sales_stage && (
-                          <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border uppercase ${
-                            conv.sales_stage === 'post_sale'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : conv.sales_stage === 'closing'
-                              ? 'bg-amber-50 text-amber-700 border-amber-200'
-                              : conv.sales_stage === 'showcase'
-                              ? 'bg-purple-50 text-purple-700 border-purple-200'
-                              : 'bg-blue-50 text-blue-700 border-blue-200'
-                          }`}>
-                            {conv.sales_stage}
-                          </span>
-                        )}
+                        {(() => {
+                          const stageMeta = getSalesStageMeta(conv.sales_stage)
+                          return (
+                            <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border flex items-center gap-1 ${stageMeta.badgeClass}`}>
+                              <span className={`w-1 h-1 rounded-full ${stageMeta.dotClass}`} />
+                              <span>{stageMeta.label}</span>
+                            </span>
+                          )
+                        })()}
                       </div>
 
-                      <span className="text-[9px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded font-bold border border-green-200">
+                      <span className="text-[9px] bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300 dark:border-green-800 px-1.5 py-0.5 rounded font-bold border border-green-200">
                         LINE
                       </span>
                     </div>
@@ -276,11 +273,22 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
               <div className="min-w-0 flex-1">
                 <h2 className="text-xs sm:text-sm font-bold text-on-surface flex items-center gap-1.5 truncate">
                   <span className="truncate">{activeConv.customer_name}</span>
-                  <span className="text-[9px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded font-bold border border-green-200 shrink-0">
+                  <span className="text-[9px] bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300 dark:border-green-800 px-1.5 py-0.5 rounded font-bold border border-green-200 shrink-0">
                     LINE OA
                   </span>
                 </h2>
-                <p className="text-[10px] text-outline font-mono truncate">ID: {activeConv.user_id}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-[10px] text-outline font-mono truncate">ID: {activeConv.user_id}</p>
+                  {(() => {
+                    const activeStage = getSalesStageMeta(activeConv.sales_stage)
+                    return (
+                      <span className={`px-2 py-0.2 text-[9px] font-bold rounded-md flex items-center gap-1 border ${activeStage.badgeClass}`} title={activeStage.description}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${activeStage.dotClass}`} />
+                        <span>ขั้นตอน: {activeStage.label}</span>
+                      </span>
+                    )
+                  })()}
+                </div>
               </div>
             </div>
 

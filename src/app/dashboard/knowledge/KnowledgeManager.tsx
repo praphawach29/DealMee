@@ -4,6 +4,7 @@ import { useState } from 'react'
 import {
   createKnowledgeItem,
   deleteKnowledgeItem,
+  approveDraftFaq,
   importKnowledgeFromUrl,
   importKnowledgeFromFile,
 } from './actions'
@@ -15,6 +16,8 @@ export interface KnowledgeItem {
   content: string
   category: string
   status: string
+  source?: string | null
+  source_ref?: string | null
   created_at: string
 }
 
@@ -27,12 +30,29 @@ export default function KnowledgeManager({ items }: { items: KnowledgeItem[] }) 
   const [importing, setImporting] = useState(false)
   const [importUrl, setImportUrl] = useState('')
 
+  const draftsCount = items.filter((i) => i.status === 'draft' || i.source === 'ai_synthesis').length
+
   const filteredItems = items.filter(item => {
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           item.content.toLowerCase().includes(searchTerm.toLowerCase())
+    if (selectedCategory === 'draft') {
+      return (item.status === 'draft' || item.source === 'ai_synthesis') && matchesSearch
+    }
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory
     return matchesSearch && matchesCategory
   })
+
+  async function handleApprove(id: string) {
+    setLoading(true)
+    setMessage(null)
+    const res = await approveDraftFaq(id)
+    setLoading(false)
+    if (res?.error) {
+      setMessage({ type: 'error', text: res.error })
+    } else if (res?.success) {
+      setMessage({ type: 'success', text: res.success })
+    }
+  }
 
   async function handleAddSubmit(formData: FormData) {
     setLoading(true)
@@ -268,61 +288,119 @@ export default function KnowledgeManager({ items }: { items: KnowledgeItem[] }) 
                     : 'bg-surface text-on-surface-variant border-outline-variant/50 hover:bg-surface-container'
                 }`}
               >
-                {cat === 'all' && 'ทั้งหมด'}
+                {cat === 'all' && `ทั้งหมด (${items.length})`}
                 {cat === 'faq' && '❓ FAQ'}
                 {cat === 'product' && '📦 สินค้า'}
                 {cat === 'policy' && '📜 เงื่อนไข'}
                 {cat === 'general' && '💡 ทั่วไป'}
               </button>
             ))}
+
+            {draftsCount > 0 && (
+              <button
+                onClick={() => setSelectedCategory('draft')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all border shrink-0 flex items-center gap-1 ${
+                  selectedCategory === 'draft'
+                    ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                    : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[14px]">psychology</span>
+                <span>💡 ร่างจาก AI ({draftsCount})</span>
+              </button>
+            )}
           </div>
         </div>
         
         {/* Items List */}
         {filteredItems.length > 0 ? (
           <div className="divide-y divide-outline-variant/30">
-            {filteredItems.map((item) => (
-              <div key={item.id} className="p-4 sm:p-6 hover:bg-surface-container-lowest/50 transition-colors flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4">
-                <div className="space-y-1.5 sm:space-y-2 max-w-3xl w-full">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 text-[10px] sm:text-[11px] font-bold rounded-md border ${categoryBadgeColor(item.category)} shrink-0`}>
-                        {categoryLabel(item.category)}
-                      </span>
-                      <h3 className="text-sm sm:text-base font-bold text-on-surface line-clamp-1">{item.title}</h3>
+            {filteredItems.map((item) => {
+              const isDraft = item.status === 'draft' || item.source === 'ai_synthesis'
+              return (
+                <div
+                  key={item.id}
+                  className={`p-4 sm:p-6 transition-colors flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4 ${
+                    isDraft ? 'bg-amber-50/40 dark:bg-amber-950/10 hover:bg-amber-50/70 border-l-4 border-l-amber-500' : 'hover:bg-surface-container-lowest/50'
+                  }`}
+                >
+                  <div className="space-y-1.5 sm:space-y-2 max-w-3xl w-full">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {isDraft ? (
+                          <span className="px-2 py-0.5 text-[10px] sm:text-[11px] font-bold rounded-md bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-900/50 dark:text-amber-200 dark:border-amber-700 flex items-center gap-1 shrink-0">
+                            <span className="material-symbols-outlined text-[13px]">auto_awesome</span>
+                            <span>AI ร่างจากแชทจริง (รออนุมัติ)</span>
+                          </span>
+                        ) : (
+                          <span className={`px-2 py-0.5 text-[10px] sm:text-[11px] font-bold rounded-md border ${categoryBadgeColor(item.category)} shrink-0`}>
+                            {categoryLabel(item.category)}
+                          </span>
+                        )}
+                        <h3 className="text-sm sm:text-base font-bold text-on-surface line-clamp-1">{item.title}</h3>
+                      </div>
+                      
+                      {/* Mobile action buttons */}
+                      <div className="md:hidden flex items-center gap-1.5 shrink-0">
+                        {isDraft && (
+                          <button
+                            onClick={() => handleApprove(item.id)}
+                            disabled={loading}
+                            className="p-1.5 text-emerald-700 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition-all"
+                            title="อนุมัติเข้าคลังความรู้"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          disabled={loading}
+                          className="p-1.5 text-outline hover:text-error-red hover:bg-error-red/10 rounded-lg transition-all"
+                          title={isDraft ? 'ปฏิเสธ/ลบร่าง' : 'ลบข้อมูล'}
+                        >
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                        </button>
+                      </div>
                     </div>
-                    {/* Delete button for mobile top-right */}
+
+                    <p className="text-xs sm:text-sm text-on-surface-variant line-clamp-2 leading-relaxed">
+                      {item.content}
+                    </p>
+                    <p className="text-[10px] sm:text-[11px] text-outline" suppressHydrationWarning>
+                      {isDraft ? '💡 สังเคราะห์จากบทสนทนาจริงเมื่อ: ' : 'เพิ่มเมื่อ: '}
+                      {new Date(item.created_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })}
+                    </p>
+                  </div>
+
+                  {/* Desktop action buttons */}
+                  <div className="hidden md:flex items-center gap-2 self-center shrink-0">
+                    {isDraft && (
+                      <button
+                        onClick={() => handleApprove(item.id)}
+                        disabled={loading}
+                        className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-all shadow-xs cursor-pointer"
+                        title="อนุมัติคำถาม-คำตอบนี้เข้าคลังความรู้จริง เพื่อให้บอทนำไปตอบลูกค้าทันที"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                        <span>อนุมัติเข้าคลัง</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDelete(item.id)}
                       disabled={loading}
-                      className="md:hidden p-1.5 text-outline hover:text-error-red hover:bg-error-red/10 rounded-lg transition-all shrink-0"
-                      title="ลบข้อมูล"
+                      className={`p-2 rounded-lg transition-all cursor-pointer ${
+                        isDraft
+                          ? 'text-outline hover:text-error-red hover:bg-error-red/10'
+                          : 'text-outline hover:text-error-red hover:bg-error-red/10'
+                      }`}
+                      title={isDraft ? 'ปฏิเสธ/ลบร่าง' : 'ลบข้อมูล'}
                     >
-                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                      <span className="material-symbols-outlined text-[20px]">delete</span>
                     </button>
                   </div>
-
-                  <p className="text-xs sm:text-sm text-on-surface-variant line-clamp-2 leading-relaxed">
-                    {item.content}
-                  </p>
-                  <p className="text-[10px] sm:text-[11px] text-outline" suppressHydrationWarning>
-                    เพิ่มเมื่อ: {new Date(item.created_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })}
-                  </p>
                 </div>
-
-                {/* Delete button for desktop */}
-                <div className="hidden md:flex items-center gap-2 self-center shrink-0">
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    disabled={loading}
-                    className="p-2 text-outline hover:text-error-red hover:bg-error-red/10 rounded-lg transition-all cursor-pointer"
-                    title="ลบข้อมูล"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">delete</span>
-                  </button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         ) : (
           /* Empty State */

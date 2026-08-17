@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { synthesizeFaqFromConversation } from '@/lib/ai/faqSynthesis'
 
 export async function sendMessage(conversationId: string, messageText: string) {
   const supabase = await createClient()
@@ -51,6 +52,12 @@ export async function sendMessage(conversationId: string, messageText: string) {
       paused_until: pausedUntil,
     })
     .eq('id', conversationId)
+
+  // 3. Trigger Hermes-inspired continuous learning in background
+  synthesizeFaqFromConversation({
+    shopId: profile.workspace_id,
+    conversationId,
+  }).catch((err) => console.error('[Inbox Actions] Background FAQ synthesis error:', err))
 
   revalidatePath('/dashboard/inbox')
   return { success: true }

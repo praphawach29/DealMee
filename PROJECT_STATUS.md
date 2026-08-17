@@ -2,7 +2,7 @@
 
 > อัปเดตล่าสุด: 17 สิงหาคม 2026
 > GitHub: praphawach29/ai-agent-google-SDK branch main
-> Last Commit: Consultative Sales & Objection Handling Upgrade
+> Last Commit: Stateful Sales Workflow Engine & Hermes-inspired Auto-FAQ Synthesis
 >
 > เอกสารนี้คือแหล่งข้อมูลสถานะปัจจุบันของโปรเจกต์ฉบับเดียว (single source of truth)
 > สำหรับแผนพัฒนาในอนาคตดูที่ [ROADMAP.md](./ROADMAP.md)
@@ -13,10 +13,10 @@
 ## Overall Progress
 
 Foundation    ████████████████░░░░  80%
-AI Engine     ███████████████████░  95%
+AI Engine     ████████████████████  98%
 Reliability   ████████████████░░░░  80%  [Phase 1 DONE]
 Billing       ████████████████░░░░  80%  [Phase 2 DONE - รอ live API keys]
-Core UX       █████████████░░░░░░░  65%
+Core UX       ██████████████░░░░░░  70%
 
 ---
 
