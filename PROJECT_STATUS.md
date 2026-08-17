@@ -1,9 +1,8 @@
-
 # Botify SaaS - Project Status
 
-> อัปเดตล่าสุด: 28 กรกฎาคม 2026
+> อัปเดตล่าสุด: 17 สิงหาคม 2026
 > GitHub: praphawach29/ai-agent-google-SDK branch main
-> Last Commit: a4f1fc1 - fix(ai-agent): Gemini rejects role 'function' for tool results in multi-turn calls
+> Last Commit: Consultative Sales & Objection Handling Upgrade
 >
 > เอกสารนี้คือแหล่งข้อมูลสถานะปัจจุบันของโปรเจกต์ฉบับเดียว (single source of truth)
 > สำหรับแผนพัฒนาในอนาคตดูที่ [ROADMAP.md](./ROADMAP.md)
@@ -14,7 +13,7 @@
 ## Overall Progress
 
 Foundation    ████████████████░░░░  80%
-AI Engine     ██████████████████░░  90%
+AI Engine     ███████████████████░  95%
 Reliability   ████████████████░░░░  80%  [Phase 1 DONE]
 Billing       ████████████████░░░░  80%  [Phase 2 DONE - รอ live API keys]
 Core UX       █████████████░░░░░░░  65%
@@ -99,6 +98,12 @@ Supabase Storage:
 
 ## AI Brain - salesAgentEngine.ts
 
+### Consultative Sales Closer & Objection Handling [UPGRADED 17 สิงหาคม 2026]
+- **Bridge Questions:** ทุกคำตอบลงท้ายด้วยคำถาม 1 คำถามเพื่อคุมบทสนทนาและนำทางสู่ขั้นตอนต่อไปเสมอ
+- **Objection & Hesitation Handling Matrix:** รับมือข้อกังวล 4 ด้าน (ราคา, คุณภาพ/ความมั่นใจ, ไซส์/สูตร, การจัดส่ง) พร้อมชูความคุ้มค่าและ Social Proof
+- **Alternative Close:** ปิดการขายด้วยตัวเลือก 2 ทาง (เช่น รับ 1 ชิ้น หรือเซ็ต 2 ชิ้นส่งฟรี / QR หรือเก็บปลายทาง)
+- **Hesitation Scoring:** ตรวจจับคำว่า 'คิดดูก่อน', 'ขอดูก่อน', 'ของแท้ไหม', 'กลัวแพ้' ฯลฯ เพื่อกระตุ้น Model Router ให้ส่งโมเดล High-Persuasion
+
 ### Customer Memory Graph [NEW - AI Agent Upgrade 1/5, 28 กรกฎาคม 2026]
 ทุกข้อความจะ auto-inject โปรไฟล์ลูกค้า (`customer_profiles`) เข้า system prompt โดยไม่ต้องเรียก tool — เห็น tags/notes ที่สะสมมา (append-only ไม่ overwrite เหมือน `conversations.customer_note`/`customer_tag` แบบเดิม), preferences, และสรุปยอดซื้อสะสม (`total_orders`/`total_spend`) ที่อัปเดตอัตโนมัติทุกครั้งที่ `take_order` สำเร็จ ดูรายละเอียดที่ [ROADMAP_AI_AGENT.md](./ROADMAP_AI_AGENT.md)
 
@@ -107,7 +112,7 @@ Router เลือก Tool Set ตาม intent ลูกค้า:
 
 | Intent | Tool Set | Provider |
 |---|---|---|
-| ต่อรองราคา/ขอส่วนลด | Sales Tools (27) | Claude (High-Persuasion) |
+| ต่อรองราคา/ลังเล/ขอส่วนลด | Sales Tools (27) | Claude (High-Persuasion) / GPT-5.6 |
 | จอง/นัดหมาย | Booking Tools (10) | Gemini |
 | ถามออเดอร์/พัสดุ | Support Tools (10) | Gemini |
 | ถามทั่วไป | General Tools (4) | Gemini |

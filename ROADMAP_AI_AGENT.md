@@ -410,3 +410,25 @@ Tool ทุกตัวกรองด้วย `shop_id` เสมอ ทำใ
 - ไม่มี tool ตัวไหนคืนข้อมูลของลูกค้ารายอื่นได้ แม้จะรู้เลขที่จอง/เลขออเดอร์
 - ทดสอบได้จริงใน Chat Playground: ลองถามเลขออเดอร์ที่ไม่ใช่ของตัวเอง ต้องไม่เห็นข้อมูล
 - ทุก tool ที่เพิ่มใหม่ในอนาคตต้องผ่านกฎเหล็กข้อ 6 (ดูหัวข้อ 0)
+
+---
+
+## 12. การบูรณาการจุดเด่นจากสุดยอด AI Agents (Hermes Agent, OpenJarvis, OpenClaw) — 17 สิงหาคม 2026
+
+เพื่อยกระดับ Botify SaaS ให้มีความสามารถเทียบเท่า AI Agent ระดับโลก โดยไม่เพิ่มความซับซ้อนของโครงสร้างพื้นฐาน (ยึดตามกฎเหล็กข้อ 1-6):
+
+### 12.1 บทเรียนและสิ่งที่ไม่ควรทำ
+- **ห้ามนำ Runtime / Daemon ของ Hermes / OpenJarvis / OpenClaw มารันเป็นเซิร์ฟเวอร์แยกใน Production:** เพราะทั้งหมดถูกออกแบบมาสำหรับ Single-user / Local Personal Agent ไม่รองรับ Multi-tenancy (RLS `shop_id`) และไม่เหมาะกับ Serverless Next.js
+
+### 12.2 สิ่งที่นำมาปรับใช้จริงใน Botify SaaS
+1. **จาก Hermes Agent (Nous Research):**
+   - **Continuous Self-Improvement & Auto-FAQ:** เมื่อคนจริงตอบแชทแทนบอท (Human Handover) หรือพบบทสนทนาที่ AI ตอบไม่ได้ ระบบสามารถนำข้อความนั้นมาสรุปเป็น Draft FAQ / Playbook ให้เจ้าของร้านกดยืนยันขึ้นระบบได้ทันที
+   - **Sales Trajectory Logging:** จัดเก็บ Session ปิดการขายที่สมบูรณ์เป็น Gold Standard เพื่อนำมาทำ Dynamic Few-Shot เสริมพลังโน้มน้าวใจ
+2. **จาก OpenJarvis (Stanford / Lambda Labs):**
+   - **Modular Typed Specs:** จัดโครงสร้าง Persona และ Tool Spec เป็น TypeScript Interfaces ที่มี Type-Safety และแยกหมวดหมู่ชัดเจน
+   - **Intelligence-Cost Balancing:** ระบบจัดสรร Model Router (Gemini -> Claude -> OpenAI) ตามคะแนนความซับซ้อนและงบประมาณต่อร้านค้า
+3. **จาก OpenClaw (Peter Steinberger):**
+   - **Universal Channel Gateway:** ออกแบบ Inbound/Outbound Message Adapter เพื่อให้ `salesAgentEngine.ts` เชื่อมต่อ LINE, Facebook Messenger, Instagram DMs และ TikTok Shop ได้จากจุดเดียว
+   - **Proactive Sales Outreach:** ระบบทักหาลูกค้าอัตโนมัติ (เช่น ตามสลิปหลังขอ QR 15 นาที, เตือนคิวจองล่วงหน้า 24 ชม., ทักทายลูกค้าเก่าเมื่อมีโปรใหม่)
+   - **Merchant Back-office Copilot:** บอทผู้ช่วยเจ้าของร้านผ่าน LINE/Telegram ส่วนตัว สำหรับสั่งงาน เช็กยอดขาย และปรับสต็อกโดยไม่ต้องเข้า Dashboard
+
