@@ -3,6 +3,7 @@ import generatePayload from 'promptpay-qr'
 import qrcode from 'qrcode'
 import type { AgentToolName } from './salesAgentEngine'
 import { t, type CustomerLanguage } from '@/lib/i18n/customerMessages'
+import { scheduleQrFollowUp, scheduleBookingReminder } from '@/lib/ai/proactiveFollowUp'
 
 const QR_BUCKET = 'qr-codes'
 
@@ -464,6 +465,16 @@ export async function executeTool(
     // can't produce an image, and a paraphrased total or account number is a
     // payment sent to the wrong place.
     const qrPublicUrl = await generateAndUploadQR(supabaseAdmin, amount, promptpayId, shopId)
+    const effectiveOrderNo = args.order_id || `QR-${Date.now().toString().slice(-6)}`
+    scheduleQrFollowUp({
+      shopId,
+      conversationId,
+      userId,
+      orderNumber: effectiveOrderNo,
+      amount: Number(amount) || 0,
+      customerName: args.name || args.customer_name,
+    }).catch((err) => console.error('[scheduleQrFollowUp Error]:', err))
+
     if (qrPublicUrl) {
       const caption = `📋 ${t('qrAmount', lang)}: ${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} ${t('currencyBaht', lang)}${order_summary ? `\n${order_summary}` : ''}\n\n✅ ${t('qrScanHint', lang)}\n📲 ${t('qrSlipHint', lang)}`
       return {
@@ -499,6 +510,16 @@ export async function executeTool(
       tax_invoice: args.tax_invoice,
       status: 'pending',
     })
+    // Schedule proactive QR/Payment follow-up task
+    scheduleQrFollowUp({
+      shopId,
+      conversationId,
+      userId,
+      orderNumber: orderNo,
+      amount: Number(args.total_price) || 0,
+      customerName: args.name,
+    }).catch((err) => console.error('[scheduleQrFollowUp Error]:', err))
+
     // Customer Memory Graph: roll up order stats automatically — no
     // dedicated AI tool call needed for this. Imported lazily to avoid a
     // circular import at module-load time (customerMemory <-> engine).
@@ -778,6 +799,19 @@ export async function executeTool(
       note: args.note,
       metadata: { raw_args: args, line_user_id: userId, conversation_id: conversationId },
     })
+
+    // Schedule proactive booking reminders (24h and 3h before)
+    scheduleBookingReminder({
+      shopId,
+      conversationId,
+      userId,
+      bookingId: bookingNo,
+      bookingDate,
+      bookingTime,
+      serviceName: serviceRecord?.name || serviceName,
+      customerName,
+    }).catch((err) => console.error('[scheduleBookingReminder Error]:', err))
+
     await updateSalesStage(ctx, 'post_sale')
     const resource = args.resource || args.resource_label || serviceRecord?.resource_label
     return {

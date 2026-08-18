@@ -5,6 +5,7 @@ import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 import { buildAutoGreeting, isDefaultGreeting } from '@/lib/businessGreeting'
 import { synthesizeFaqFromConversation } from '@/lib/ai/faqSynthesis'
+import { cancelFollowUpTasks, scheduleRepurchaseFollowUp } from '@/lib/ai/proactiveFollowUp'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildLineFlexProductCarousel } from '@/lib/line/flexHelper'
@@ -404,6 +405,34 @@ async function verifySlipAndNotify({
     // 2. No API key → mock mode
     if (!easySlipKey) {
       console.warn('[SlipVerify] EASYSLIP_API_KEY not set — mock approval')
+      const { data: pendingOrds } = await supabase
+        .from('orders')
+        .select('id,order_no,product_name')
+        .eq('shop_id', shopId)
+        .eq('payment_status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (pendingOrds && pendingOrds.length > 0) {
+        await supabase.from('orders')
+          .update({ payment_status: 'paid', slip_url: `LINE-Image:${messageId}` })
+          .eq('id', pendingOrds[0].id)
+
+        await cancelFollowUpTasks({
+          shopId,
+          referenceId: pendingOrds[0].order_no,
+          taskType: 'qr_recovery',
+        })
+
+        await scheduleRepurchaseFollowUp({
+          shopId,
+          userId,
+          orderNumber: pendingOrds[0].order_no,
+          productSummary: pendingOrds[0].product_name,
+          daysDelay: 21,
+        })
+      }
+
       await sendLinePush(userId, '✅ ตรวจสอบสลิปสำเร็จค่ะ! ออเดอร์ของคุณได้รับการยืนยันแล้ว 🎉', lineToken)
       return
     }
@@ -427,7 +456,7 @@ async function verifySlipAndNotify({
       // 4. Update most recent pending order for this shop
       const { data: pendingOrds } = await supabase
         .from('orders')
-        .select('id,order_no')
+        .select('id,order_no,product_name')
         .eq('shop_id', shopId)
         .eq('payment_status', 'pending')
         .order('created_at', { ascending: false })
@@ -437,6 +466,20 @@ async function verifySlipAndNotify({
         await supabase.from('orders')
           .update({ payment_status: 'paid', slip_url: `LINE-Image:${messageId}` })
           .eq('id', pendingOrds[0].id)
+
+        await cancelFollowUpTasks({
+          shopId,
+          referenceId: pendingOrds[0].order_no,
+          taskType: 'qr_recovery',
+        })
+
+        await scheduleRepurchaseFollowUp({
+          shopId,
+          userId,
+          orderNumber: pendingOrds[0].order_no,
+          productSummary: pendingOrds[0].product_name,
+          daysDelay: 21,
+        })
       }
 
       await sendLinePush(

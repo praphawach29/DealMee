@@ -33,6 +33,20 @@ export async function updateBotSettings(formData: FormData) {
   const rawToken = (formData.get('line_token') as string) || ''
   const rawSecret = (formData.get('line_secret') as string) || ''
 
+  const qrRecoveryEnabled = formData.get('qr_recovery_enabled') === 'true' || formData.get('qr_recovery_enabled') === 'on'
+  const qrRecoveryDelayMins = Number(formData.get('qr_recovery_delay_mins')) || 20
+  const bookingReminderEnabled = formData.get('booking_reminder_enabled') === 'true' || formData.get('booking_reminder_enabled') === 'on'
+  const repurchaseEnabled = formData.get('repurchase_enabled') === 'true' || formData.get('repurchase_enabled') === 'on'
+  const repurchaseDelayDays = Number(formData.get('repurchase_delay_days')) || 21
+
+  const followUpConfig = {
+    qr_recovery_enabled: qrRecoveryEnabled,
+    qr_recovery_delay_mins: qrRecoveryDelayMins,
+    booking_reminder_enabled: bookingReminderEnabled,
+    repurchase_enabled: repurchaseEnabled,
+    repurchase_delay_days: repurchaseDelayDays,
+  }
+
   const updateData = {
     name: ((formData.get('name') as string) || '').trim(),
     bot_name: ((formData.get('bot_name') as string) || '').trim(),
@@ -49,6 +63,7 @@ export async function updateBotSettings(formData: FormData) {
     company_email: ((formData.get('company_email') as string) || '').trim(),
     company_logo_url: ((formData.get('company_logo_url') as string) || '').trim(),
     vat_enabled: formData.get('vat_enabled') === 'true' || formData.get('vat_enabled') === 'on',
+    follow_up_config: followUpConfig,
     updated_at: new Date().toISOString(),
   }
 
