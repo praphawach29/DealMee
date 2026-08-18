@@ -26,4 +26,17 @@ CREATE INDEX IF NOT EXISTS idx_sales_trajectories_shop_status
 CREATE INDEX IF NOT EXISTS idx_sales_trajectories_objection
   ON public.sales_trajectories(shop_id, customer_objection_type);
 
+-- RLS Policies
+ALTER TABLE public.sales_trajectories ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can manage their shop sales trajectories" ON public.sales_trajectories;
+CREATE POLICY "Users can manage their shop sales trajectories" ON public.sales_trajectories
+  FOR ALL
+  USING (
+    shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid())
+  )
+  WITH CHECK (
+    shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid())
+  );
+
 SELECT 'Sales trajectories schema created successfully' AS result;
