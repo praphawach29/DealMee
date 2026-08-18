@@ -7,6 +7,9 @@ import {
   approveDraftFaq,
   updateKnowledgeItem,
   triggerChatFaqScan,
+  deleteTrajectory,
+  toggleTrajectoryStatus,
+  triggerScanGoldenClosers,
   importKnowledgeFromUrl,
   importKnowledgeFromFile,
 } from './actions'
@@ -23,11 +26,32 @@ export interface KnowledgeItem {
   created_at: string
 }
 
-export default function KnowledgeManager({ items }: { items: KnowledgeItem[] }) {
+export interface GoldenTrajectory {
+  id: string
+  shop_id: string
+  conversation_id: string | null
+  order_id: string | null
+  customer_objection_type: string
+  customer_intent_summary: string
+  winning_turn_dialogue: Array<{ sender: 'customer' | 'bot' | 'agent'; text: string }>
+  closing_technique: string
+  revenue: number
+  status: 'active' | 'archived'
+  created_at: string
+}
+
+export default function KnowledgeManager({
+  items,
+  trajectories = [],
+}: {
+  items: KnowledgeItem[]
+  trajectories?: GoldenTrajectory[]
+}) {
   const [isOpenModal, setIsOpenModal] = useState(false)
   const [editingItem, setEditingItem] = useState<KnowledgeItem | null>(null)
   const [loading, setLoading] = useState(false)
   const [scanningChat, setScanningChat] = useState(false)
+  const [scanningClosers, setScanningClosers] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -63,6 +87,43 @@ export default function KnowledgeManager({ items }: { items: KnowledgeItem[] }) 
     setMessage(null)
     const res = await triggerChatFaqScan()
     setScanningChat(false)
+    if (res?.error) {
+      setMessage({ type: 'error', text: res.error })
+    } else if (res?.success) {
+      setMessage({ type: 'success', text: res.success })
+    }
+  }
+
+  async function handleScanGoldenClosers() {
+    setScanningClosers(true)
+    setMessage(null)
+    const res = await triggerScanGoldenClosers()
+    setScanningClosers(false)
+    if (res?.error) {
+      setMessage({ type: 'error', text: res.error })
+    } else if (res?.success) {
+      setMessage({ type: 'success', text: res.success })
+    }
+  }
+
+  async function handleToggleTrajectory(id: string, currentStatus: string) {
+    setLoading(true)
+    setMessage(null)
+    const res = await toggleTrajectoryStatus(id, currentStatus)
+    setLoading(false)
+    if (res?.error) {
+      setMessage({ type: 'error', text: res.error })
+    } else if (res?.success) {
+      setMessage({ type: 'success', text: res.success })
+    }
+  }
+
+  async function handleDeleteTrajectory(id: string) {
+    if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบตัวอย่างบทสนทนาปิดการขายนี้?')) return
+    setLoading(true)
+    setMessage(null)
+    const res = await deleteTrajectory(id)
+    setLoading(false)
     if (res?.error) {
       setMessage({ type: 'error', text: res.error })
     } else if (res?.success) {
@@ -141,6 +202,23 @@ export default function KnowledgeManager({ items }: { items: KnowledgeItem[] }) 
       case 'product': return 'bg-purple-50 text-purple-700 border-purple-200'
       case 'policy': return 'bg-amber-50 text-amber-700 border-amber-200'
       default: return 'bg-gray-100 text-gray-700 border-gray-200'
+    }
+  }
+
+  const objectionBadge = (obj: string) => {
+    switch (obj) {
+      case 'price_hesitation':
+        return { label: '💰 ลังเลราคา/ขอส่วนลด', color: 'bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' }
+      case 'product_comparison':
+        return { label: '⚖️ เปรียบเทียบสินค้า/รุ่น', color: 'bg-purple-50 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800' }
+      case 'shipping_doubt':
+        return { label: '🚚 การจัดส่ง/รอบส่ง', color: 'bg-blue-50 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800' }
+      case 'trust_building':
+        return { label: '🛡️ ความมั่นใจ/รับประกัน', color: 'bg-indigo-50 text-indigo-800 border-indigo-300 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800' }
+      case 'urgency_promotion':
+        return { label: '🎁 โปรโมชั่น/ของแถม', color: 'bg-pink-50 text-pink-800 border-pink-300 dark:bg-pink-950/40 dark:text-pink-300 dark:border-pink-800' }
+      default:
+        return { label: '🛍️ ปิดการขายทั่วไป', color: 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800' }
     }
   }
 
@@ -339,9 +417,55 @@ export default function KnowledgeManager({ items }: { items: KnowledgeItem[] }) 
                 <span>💡 ร่างจาก AI ({draftsCount})</span>
               </button>
             )}
+
+            <button
+              onClick={() => setSelectedCategory('closers')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all border shrink-0 flex items-center gap-1 ${
+                selectedCategory === 'closers'
+                  ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                  : 'bg-purple-50 text-purple-800 border-purple-300 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[14px]">military_tech</span>
+              <span>🏆 ปิดการขายจริง ({trajectories.length})</span>
+            </button>
           </div>
         </div>
         
+        {/* Golden Closers Banner when Closers tab is selected */}
+        {selectedCategory === 'closers' && (
+          <div className="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-950/40 dark:to-indigo-950/30 border-b border-purple-200 dark:border-purple-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-600 flex items-center justify-center shrink-0 mt-0.5">
+                <span className="material-symbols-outlined text-[20px]">military_tech</span>
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
+                  <span>🏆 ถอดรหัสบทสนทนาปิดการขาย (Golden Closers / Sales Trajectories)</span>
+                  <span className="text-[10px] bg-purple-200 text-purple-900 dark:bg-purple-900 dark:text-purple-200 px-1.5 py-0.2 rounded font-bold">
+                    {trajectories.filter(t => t.status === 'active').length} สคริปต์ใช้งานอยู่
+                  </span>
+                </h4>
+                <p className="text-[11px] sm:text-xs text-purple-800/80 dark:text-purple-300/80 mt-0.5">
+                  ระบบถอดรหัสจังหวะที่ลูกค้าลังเลแล้วบอทหรือแอดมินตอบจนปิดยอดโอนเงินได้สำเร็จ เพื่อนำมาสอน AI เป็นตัวอย่างเลียนแบบไหวพริบการขายแบบเรียลไทม์
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={handleScanGoldenClosers}
+              disabled={scanningClosers || loading}
+              className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer shrink-0"
+              title="สั่งให้ AI สแกนบทสนทนาของออเดอร์ที่ปิดยอดได้สำเร็จเพื่อสกัดสคริปต์ใหม่"
+            >
+              <span className={`material-symbols-outlined text-[16px] ${scanningClosers ? 'animate-spin' : ''}`}>
+                {scanningClosers ? 'sync' : 'auto_fix_high'}
+              </span>
+              <span>{scanningClosers ? 'กำลังถอดรหัสสคริปต์...' : 'สแกนออเดอร์ถอดรหัสขาย'}</span>
+            </button>
+          </div>
+        )}
+
         {/* AI Auto-FAQ Synthesis Banner when Draft tab is selected */}
         {selectedCategory === 'draft' && (
           <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/30 border-b border-amber-200 dark:border-amber-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -376,8 +500,115 @@ export default function KnowledgeManager({ items }: { items: KnowledgeItem[] }) 
           </div>
         )}
         
-        {/* Items List */}
-        {filteredItems.length > 0 ? (
+        {/* Items List or Golden Closers List */}
+        {selectedCategory === 'closers' ? (
+          trajectories.length > 0 ? (
+            <div className="divide-y divide-outline-variant/30">
+              {trajectories.map((traj) => {
+                const badge = objectionBadge(traj.customer_objection_type)
+                const isActive = traj.status === 'active'
+                return (
+                  <div
+                    key={traj.id}
+                    className={`p-4 sm:p-6 transition-colors flex flex-col gap-3 sm:gap-4 ${
+                      isActive ? 'bg-surface hover:bg-surface-container-lowest/50' : 'bg-slate-50/50 dark:bg-slate-900/30 opacity-75'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`px-2 py-0.5 text-[10px] sm:text-[11px] font-bold rounded-md border ${badge.color}`}>
+                          {badge.label}
+                        </span>
+                        {traj.revenue > 0 && (
+                          <span className="px-2 py-0.5 text-[10px] sm:text-[11px] font-bold rounded-md bg-emerald-100 text-emerald-900 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[13px]">payments</span>
+                            <span>ปิดยอดได้ {Number(traj.revenue).toLocaleString()} ฿</span>
+                          </span>
+                        )}
+                        <span className="text-xs text-outline">
+                          เทคนิค: <strong className="text-on-surface">{traj.closing_technique}</strong>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <button
+                          onClick={() => handleToggleTrajectory(traj.id, traj.status)}
+                          disabled={loading}
+                          className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all border flex items-center gap-1 cursor-pointer ${
+                            isActive
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
+                              : 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[14px]">
+                            {isActive ? 'check_circle' : 'pause_circle'}
+                          </span>
+                          <span>{isActive ? 'ใช้งานอยู่' : 'พักไว้'}</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTrajectory(traj.id)}
+                          disabled={loading}
+                          className="p-1.5 text-outline hover:text-error-red hover:bg-error-red/10 rounded-lg transition-all cursor-pointer"
+                          title="ลบตัวอย่างนี้"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <p className="text-xs sm:text-sm font-semibold text-on-surface">
+                        💡 บริบท/สิ่งที่ลูกค้าถาม: <span className="font-normal text-on-surface-variant">{traj.customer_intent_summary}</span>
+                      </p>
+                    </div>
+
+                    {/* Dialogue Turns Box */}
+                    {Array.isArray(traj.winning_turn_dialogue) && traj.winning_turn_dialogue.length > 0 && (
+                      <div className="p-3 sm:p-4 rounded-xl bg-surface-container-high/40 border border-outline-variant/30 space-y-2 text-xs">
+                        <div className="text-[10px] font-bold text-outline uppercase tracking-wider">
+                          บทสนทนาจริงที่ปิดการขายได้ (Winning Turn):
+                        </div>
+                        {traj.winning_turn_dialogue.map((turn, idx) => (
+                          <div
+                            key={idx}
+                            className={`flex gap-2 items-start ${
+                              turn.sender === 'customer' ? 'text-slate-700 dark:text-slate-300' : 'text-purple-900 dark:text-purple-200 font-medium'
+                            }`}
+                          >
+                            <span className="font-bold shrink-0">
+                              {turn.sender === 'customer' ? '👤 ลูกค้า:' : '🤖 พนักงานขาย:'}
+                            </span>
+                            <span className="leading-relaxed whitespace-pre-line">{turn.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-16 sm:py-20 text-center px-4">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-purple-500/10 rounded-2xl flex items-center justify-center mb-4 text-purple-600">
+                <span className="material-symbols-outlined text-2xl sm:text-3xl">military_tech</span>
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-on-surface mb-1">ยังไม่มีบทสนทนาปิดการขาย (Golden Closers)</h3>
+              <p className="text-xs sm:text-sm text-on-surface-variant max-w-sm mb-6">
+                เมื่อมีลูกค้าสั่งซื้อและชำระเงินสำเร็จ ระบบจะถอดรหัสจังหวะปิดการขายมาเป็นตัวอย่างให้ AI โดยอัตโนมัติ หรือกดปุ่มด้านล่างเพื่อสแกนออเดอร์เดิมได้เลย
+              </p>
+              <button
+                onClick={handleScanGoldenClosers}
+                disabled={scanningClosers || loading}
+                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-label-md font-semibold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-purple-600/20 text-xs sm:text-sm cursor-pointer"
+              >
+                <span className={`material-symbols-outlined text-[18px] ${scanningClosers ? 'animate-spin' : ''}`}>
+                  {scanningClosers ? 'sync' : 'auto_awesome'}
+                </span>
+                <span>{scanningClosers ? 'กำลังถอดรหัสสคริปต์...' : 'สแกนออเดอร์ถอดรหัสขาย'}</span>
+              </button>
+            </div>
+          )
+        ) : filteredItems.length > 0 ? (
           <div className="divide-y divide-outline-variant/30">
             {filteredItems.map((item) => {
               const isDraft = item.status === 'draft' || item.source === 'ai_synthesis'

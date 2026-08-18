@@ -6,6 +6,7 @@ import { upsertCustomerProfile } from '@/lib/customerMemory'
 import { buildAutoGreeting, isDefaultGreeting } from '@/lib/businessGreeting'
 import { synthesizeFaqFromConversation } from '@/lib/ai/faqSynthesis'
 import { cancelFollowUpTasks, scheduleRepurchaseFollowUp } from '@/lib/ai/proactiveFollowUp'
+import { extractGoldenTrajectoryFromOrder } from '@/lib/ai/salesTrajectory'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildLineFlexProductCarousel } from '@/lib/line/flexHelper'
@@ -407,7 +408,7 @@ async function verifySlipAndNotify({
       console.warn('[SlipVerify] EASYSLIP_API_KEY not set — mock approval')
       const { data: pendingOrds } = await supabase
         .from('orders')
-        .select('id,order_no,product_name')
+        .select('id,order_no,product_name,conversation_id,total_amount')
         .eq('shop_id', shopId)
         .eq('payment_status', 'pending')
         .order('created_at', { ascending: false })
@@ -431,6 +432,14 @@ async function verifySlipAndNotify({
           productSummary: pendingOrds[0].product_name,
           daysDelay: 21,
         })
+
+        // Extract Golden Trajectory from this winning order
+        extractGoldenTrajectoryFromOrder({
+          shopId,
+          orderId: pendingOrds[0].id,
+          conversationId: (pendingOrds[0] as any).conversation_id,
+          revenue: Number((pendingOrds[0] as any).total_amount) || 0,
+        }).catch((err) => console.error('[SalesTrajectory Error]:', err))
       }
 
       await sendLinePush(userId, '✅ ตรวจสอบสลิปสำเร็จค่ะ! ออเดอร์ของคุณได้รับการยืนยันแล้ว 🎉', lineToken)
@@ -456,7 +465,7 @@ async function verifySlipAndNotify({
       // 4. Update most recent pending order for this shop
       const { data: pendingOrds } = await supabase
         .from('orders')
-        .select('id,order_no,product_name')
+        .select('id,order_no,product_name,conversation_id,total_amount')
         .eq('shop_id', shopId)
         .eq('payment_status', 'pending')
         .order('created_at', { ascending: false })
@@ -480,6 +489,14 @@ async function verifySlipAndNotify({
           productSummary: pendingOrds[0].product_name,
           daysDelay: 21,
         })
+
+        // Extract Golden Trajectory from this winning order
+        extractGoldenTrajectoryFromOrder({
+          shopId,
+          orderId: pendingOrds[0].id,
+          conversationId: (pendingOrds[0] as any).conversation_id,
+          revenue: Number((pendingOrds[0] as any).total_amount) || 0,
+        }).catch((err) => console.error('[SalesTrajectory Error]:', err))
       }
 
       await sendLinePush(

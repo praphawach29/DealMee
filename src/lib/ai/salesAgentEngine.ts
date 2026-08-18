@@ -10,6 +10,10 @@ import {
   determineNextSalesStage,
   type SalesStage,
 } from '@/lib/ai/salesWorkflow'
+import {
+  retrieveWinningTrajectories,
+  formatGoldenClosersPromptContext,
+} from '@/lib/ai/salesTrajectory'
 
 const supabase = createAdminClient()
 
@@ -1368,7 +1372,15 @@ ${paymentInfo}`
 
   const salesStageContext = formatSalesStagePromptContext(initialSalesStage)
 
-  const dynamicSystemPrompt = `${salesStageContext}
+  // 5e. Golden Closers (Few-Shot Winning Sales Trajectories)
+  const goldenTrajectories = await retrieveWinningTrajectories({
+    shopId: shop.id,
+    userQuery,
+    limit: 2,
+  })
+  const goldenClosersContext = formatGoldenClosersPromptContext(goldenTrajectories)
+
+  const dynamicSystemPrompt = `${salesStageContext}${goldenClosersContext ? `\n\n${goldenClosersContext}` : ''}
 ${customerProfileContext}${bookingStateContext}${orderStateContext}
 ${historyContext}`
 

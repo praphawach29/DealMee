@@ -266,4 +266,84 @@ export async function triggerChatFaqScan() {
   return { success: result.message }
 }
 
+export async function deleteTrajectory(id: string) {
+  const supabase = await createClient()
+  const resolved = await resolveShop(supabase)
+  if ('error' in resolved) return { error: resolved.error }
+
+  const { error } = await supabase
+    .from('sales_trajectories')
+    .delete()
+    .eq('id', id)
+    .eq('shop_id', resolved.shop.id)
+
+  if (error) {
+    return { error: `ลบไม่สำเร็จ: ${error.message}` }
+  }
+
+  revalidatePath('/dashboard/knowledge')
+  return { success: 'ลบตัวอย่างการปิดการขายเรียบร้อยแล้ว' }
+}
+
+export async function toggleTrajectoryStatus(id: string, currentStatus: string) {
+  const supabase = await createClient()
+  const resolved = await resolveShop(supabase)
+  if ('error' in resolved) return { error: resolved.error }
+
+  const nextStatus = currentStatus === 'active' ? 'archived' : 'active'
+  const { error } = await supabase
+    .from('sales_trajectories')
+    .update({ status: nextStatus })
+    .eq('id', id)
+    .eq('shop_id', resolved.shop.id)
+
+  if (error) {
+    return { error: `เปลี่ยนสถานะไม่สำเร็จ: ${error.message}` }
+  }
+
+  revalidatePath('/dashboard/knowledge')
+  return { success: nextStatus === 'active' ? 'เปิดใช้งานตัวอย่างนี้แล้ว' : 'ปิดใช้งานตัวอย่างนี้ชั่วคราวแล้ว' }
+}
+
+export async function triggerScanGoldenClosers() {
+  const supabase = await createClient()
+  const resolved = await resolveShop(supabase)
+  if ('error' in resolved) return { error: resolved.error }
+
+  const { extractGoldenTrajectoryFromOrder } = await import('@/lib/ai/salesTrajectory')
+  
+  // Find completed/paid orders with conversations that don't have trajectories yet
+  const { data: paidOrders, error: orderErr } = await supabase
+    .from('orders')
+    .select('id, conversation_id, total_amount')
+    .eq('shop_id', resolved.shop.id)
+    .eq('payment_status', 'paid')
+    .not('conversation_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(8)
+
+  if (orderErr || !paidOrders || paidOrders.length === 0) {
+    return { success: 'ยังไม่พบบทสนทนาของออเดอร์ที่ชำระเงินแล้วเพื่อนำมาวิเคราะห์' }
+  }
+
+  let extractedCount = 0
+  for (const ord of paidOrders) {
+    const res = await extractGoldenTrajectoryFromOrder({
+      shopId: resolved.shop.id,
+      orderId: ord.id,
+      conversationId: ord.conversation_id,
+      revenue: Number(ord.total_amount) || 0,
+    })
+    if (res.success) extractedCount++
+  }
+
+  revalidatePath('/dashboard/knowledge')
+  return {
+    success: extractedCount > 0
+      ? `สกัดบทสนทนาปิดการขายชั้นเยี่ยมได้สำเร็จ ${extractedCount} รายการ!`
+      : 'วิเคราะห์ออเดอร์แล้ว ไม่มีบทสนทนาใหม่ที่ต้องสกัดเพิ่มเติม',
+  }
+}
+
+
 
