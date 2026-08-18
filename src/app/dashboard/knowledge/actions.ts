@@ -202,3 +202,68 @@ export async function approveDraftFaq(id: string) {
   return { success: 'อนุมัติเพิ่มเข้าคลังความรู้ของร้านเรียบร้อยแล้ว!' }
 }
 
+export async function updateKnowledgeItem(id: string, formData: FormData) {
+  const supabase = await createClient()
+  const resolved = await resolveShop(supabase)
+  if ('error' in resolved) return { error: resolved.error }
+
+  const title = (formData.get('title') as string || '').trim()
+  const content = (formData.get('content') as string || '').trim()
+  const category = (formData.get('category') as string || 'faq').trim()
+  const approveImmediately = formData.get('approveImmediately') === 'true'
+
+  if (!title || !content) {
+    return { error: 'กรุณากรอกหัวข้อและรายละเอียดข้อมูล' }
+  }
+
+  const updatePayload: Record<string, any> = {
+    title,
+    content,
+    category,
+  }
+
+  if (approveImmediately) {
+    updatePayload.status = 'active'
+  }
+
+  const { error } = await supabase
+    .from('knowledge_base')
+    .update(updatePayload)
+    .eq('id', id)
+    .eq('shop_id', resolved.shop.id)
+
+  if (error) {
+    return { error: `บันทึกการแก้ไขไม่สำเร็จ: ${error.message}` }
+  }
+
+  revalidatePath('/dashboard/knowledge')
+  revalidatePath('/dashboard')
+  return {
+    success: approveImmediately
+      ? 'บันทึกและอนุมัติเข้าคลังความรู้เรียบร้อยแล้ว!'
+      : 'บันทึกการแก้ไขเรียบร้อยแล้ว!',
+  }
+}
+
+export async function triggerChatFaqScan() {
+  const supabase = await createClient()
+  const resolved = await resolveShop(supabase)
+  if ('error' in resolved) return { error: resolved.error }
+
+  const { synthesizeFaqFromShopConversations } = await import('@/lib/ai/faqSynthesis')
+  const result = await synthesizeFaqFromShopConversations({
+    shopId: resolved.shop.id,
+    limit: 10,
+  })
+
+  revalidatePath('/dashboard/knowledge')
+  revalidatePath('/dashboard')
+
+  if (!result.success) {
+    return { error: result.message }
+  }
+
+  return { success: result.message }
+}
+
+

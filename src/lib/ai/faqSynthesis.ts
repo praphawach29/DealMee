@@ -10,7 +10,7 @@ export interface SynthesizedFaq {
  * Hermes-inspired Continuous Learning & Auto-FAQ Synthesis
  *
  * Analyzes conversation transcripts (especially when human staff steps in or
- * after customer questions) to synthesize reusable FAQ entries in 'draft' status.
+ * after customer inquiries) to synthesize reusable FAQ entries in 'draft' status.
  */
 export async function synthesizeFaqFromConversation({
   shopId,
@@ -28,10 +28,10 @@ export async function synthesizeFaqFromConversation({
       .select('sender_type, message, created_at')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
-      .limit(20)
+      .limit(25)
 
     if (msgError || !messages || messages.length < 2) {
-      return { success: false, createdCount: 0, message: 'Not enough conversation turns for synthesis' }
+      return { success: false, createdCount: 0, message: 'บทสนทนามีข้อความไม่เพียงพอสำหรับการวิเคราะห์' }
     }
 
     // 2. Fetch existing knowledge base titles to prevent duplicates
@@ -44,13 +44,13 @@ export async function synthesizeFaqFromConversation({
 
     // 3. Format transcript for Gemini
     const transcript = messages
-      .map((m) => `${m.sender_type === 'user' ? 'ลูกค้า' : m.sender_type === 'human' ? 'แอดมินคนจริง' : 'บอท AI'}: ${m.message}`)
+      .map((m) => `${m.sender_type === 'user' ? 'ลูกค้า' : m.sender_type === 'human' || m.sender_type === 'agent' ? 'แอดมินคนจริง' : 'บอท AI'}: ${m.message}`)
       .join('\n')
 
     const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
     if (!apiKey) {
       console.warn('[FaqSynthesis] GEMINI_API_KEY not configured, skipping auto-synthesis')
-      return { success: false, createdCount: 0, message: 'Missing API key' }
+      return { success: false, createdCount: 0, message: 'ยังไม่ได้ตั้งค่า API Key' }
     }
 
     const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
@@ -59,10 +59,10 @@ export async function synthesizeFaqFromConversation({
 
 กติกาเข้มงวด:
 1. หากบทสนทนาเป็นเพียงการทักทายทั่วไป, การสั่งซื้อปกติที่ไม่มีคำถามพิเศษ, หรือยังไม่มีคำตอบที่ชัดเจน ให้ตอบเป็น Array ว่าง []
-2. ห้ามสกัดข้อมูลส่วนตัวของลูกค้า เช่น ชื่อ เบอร์โทร เลขที่บ้าน เลขสลิป หรือเลขบัญชีเด็ดขาด
-3. ให้สกัดเฉพาะข้อมูลนโยบายร้าน, วิธีการใช้งาน, คุณสมบัติสินค้า, เงื่อนไขบริการ, หรือรอบส่งของที่ตอบเป็นความรู้ทั่วไปได้
-4. หัวข้อ (title) ต้องเป็นรูปประโยคคำถามชัดเจน เช่น "ร้านมีบริการเก็บเงินปลายทางไหม", "สินค้ามีรับประกันกี่วัน"
-5. คำตอบ (content) ต้องกระชับ สุภาพ และถูกต้องตามที่แอดมินหรือร้านค้าตอบ
+2. ห้ามสกัดข้อมูลส่วนบุคคลของลูกค้า เช่น ชื่อ เบอร์โทร เลขที่บ้าน เลขสลิป หรือเลขบัญชีเด็ดขาด
+3. ให้สกัดเฉพาะข้อมูลนโยบายร้าน, วิธีการใช้งาน, คุณสมบัติสินค้า, เงื่อนไขบริการ, วิธีชำระเงิน, หรือรอบส่งของที่ตอบเป็นความรู้ทั่วไปได้
+4. หัวข้อ (title) ต้องเป็นรูปประโยคคำถามชัดเจน เช่น "ร้านมีบริการเก็บเงินปลายทางไหม", "สินค้ามีรับประกันกี่วัน", "ส่งของกี่วันถึง"
+5. คำตอบ (content) ต้องกระชับ สุภาพ ครบถ้วน และถูกต้องตามที่ร้านหรือแอดมินตอบจริง
 6. ตอบเป็น JSON array เท่านั้น รูปแบบ: [{"title":"...","content":"...","category":"faq"}]
 
 รายการ FAQ ที่ร้านมีอยู่แล้ว (ห้ามสร้างซ้ำ):
@@ -149,5 +149,53 @@ ${transcript}
   } catch (err: any) {
     console.error('[FaqSynthesis] Exception:', err)
     return { success: false, createdCount: 0, message: err.message }
+  }
+}
+
+/**
+ * Scans multiple recent conversations of a shop and synthesizes candidate FAQs
+ * into draft status (On-demand scan trigger).
+ */
+export async function synthesizeFaqFromShopConversations({
+  shopId,
+  limit = 8,
+}: {
+  shopId: string
+  limit?: number
+}): Promise<{ success: boolean; totalCreated: number; message: string }> {
+  try {
+    const supabase = createAdminClient()
+    const { data: conversations, error } = await supabase
+      .from('conversations')
+      .select('id, status, last_message_at')
+      .eq('shop_id', shopId)
+      .order('last_message_at', { ascending: false })
+      .limit(limit)
+
+    if (error || !conversations || conversations.length === 0) {
+      return { success: true, totalCreated: 0, message: 'ไม่พบบทสนทนาที่สามารถนำมาวิเคราะห์ได้' }
+    }
+
+    let totalCreated = 0
+    for (const conv of conversations) {
+      const res = await synthesizeFaqFromConversation({
+        shopId,
+        conversationId: conv.id,
+      })
+      if (res.success && res.createdCount > 0) {
+        totalCreated += res.createdCount
+      }
+    }
+
+    return {
+      success: true,
+      totalCreated,
+      message: totalCreated > 0
+        ? `วิเคราะห์บทสนทนาเรียบร้อย สังเคราะห์คำถามแนะนำใหม่ได้ ${totalCreated} ข้อ!`
+        : 'วิเคราะห์บทสนทนาแล้ว ยังไม่พบคำถาม-คำตอบใหม่ที่ต้องเพิ่มเข้าคลังความรู้',
+    }
+  } catch (err: any) {
+    console.error('[FaqSynthesis] synthesizeFaqFromShopConversations error:', err)
+    return { success: false, totalCreated: 0, message: err.message || 'เกิดข้อผิดพลาดในการสแกน' }
   }
 }
