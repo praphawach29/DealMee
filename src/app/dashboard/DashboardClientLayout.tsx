@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import SidebarNav from './SidebarNav'
 import Link from 'next/link'
+import MerchantCopilotDrawer from '@/components/dashboard/MerchantCopilotDrawer'
 
 interface DashboardClientLayoutProps {
   bizType: string
@@ -20,6 +21,7 @@ export default function DashboardClientLayout({
   children,
 }: DashboardClientLayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isCopilotOpen, setIsCopilotOpen] = useState(false)
 
   return (
     <div className="bg-merchant-bg text-on-surface font-body-md min-h-screen">
@@ -92,6 +94,16 @@ export default function DashboardClientLayout({
           </div>
 
           <div className="flex items-center gap-3 lg:gap-5">
+            {/* AI Jarvis Copilot Button in Header */}
+            <button
+              onClick={() => setIsCopilotOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs font-label-md transition-all shadow-xs hover:shadow-md hover:shadow-indigo-500/20 cursor-pointer shrink-0"
+              title="เปิดผู้ช่วย AI Jarvis ประจำร้าน"
+            >
+              <span className="material-symbols-outlined text-[16px] animate-pulse">smart_toy</span>
+              <span className="hidden sm:inline">AI Copilot</span>
+            </button>
+
             <button className="relative p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors">
               <span className="material-symbols-outlined text-[20px]">notifications</span>
               <span className="absolute top-2 right-2 w-2 h-2 bg-error-red rounded-full"></span>
@@ -129,6 +141,27 @@ export default function DashboardClientLayout({
           {children}
         </main>
       </div>
+
+      {/* Floating Copilot Button */}
+      {!isCopilotOpen && (
+        <button
+          onClick={() => setIsCopilotOpen(true)}
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white px-4 py-2.5 sm:py-3 rounded-full shadow-lg shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-600/40 hover:-translate-y-0.5 transition-all cursor-pointer font-bold text-xs group"
+          title="ปรึกษา Botify Jarvis AI Copilot"
+        >
+          <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+            <span className="material-symbols-outlined text-[16px]">smart_toy</span>
+          </div>
+          <span className="hidden sm:inline">ถาม AI Jarvis</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+        </button>
+      )}
+
+      {/* Copilot Drawer */}
+      <MerchantCopilotDrawer
+        isOpen={isCopilotOpen}
+        onClose={() => setIsCopilotOpen(false)}
+      />
     </div>
   )
 }
