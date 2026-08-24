@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { Bot, X, Send, Zap, Loader2 } from 'lucide-react'
 
 interface Message {
   id: string
@@ -120,17 +121,17 @@ export default function MerchantCopilotDrawer({
       {/* Backdrop */}
       <div
         onClick={onClose}
-        className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+        className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity animate-fade-in"
       />
 
       {/* Drawer */}
       <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-md sm:max-w-lg bg-surface border-l border-outline-variant/30 shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-300">
+        <div className="w-screen max-w-md sm:max-w-lg bg-surface border-l border-outline-variant/30 shadow-2xl flex flex-col h-full animate-slide-in-right">
           {/* Header */}
           <div className="px-5 py-4 border-b border-outline-variant/30 bg-gradient-to-r from-indigo-900 via-indigo-800 to-purple-900 text-white flex items-center justify-between shrink-0 shadow-xs">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 text-indigo-200 shadow-inner">
-                <span className="material-symbols-outlined text-[24px]">smart_toy</span>
+                <Bot className="h-6 w-6" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
@@ -145,9 +146,10 @@ export default function MerchantCopilotDrawer({
 
             <button
               onClick={onClose}
-              className="p-1.5 rounded-xl text-indigo-200 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              className="p-2 rounded-xl text-indigo-200 hover:text-white hover:bg-white/10 transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+              aria-label="Close Copilot"
             >
-              <span className="material-symbols-outlined text-[22px]">close</span>
+              <X className="h-5 w-5" />
             </button>
           </div>
 
@@ -159,7 +161,7 @@ export default function MerchantCopilotDrawer({
                   key={idx}
                   onClick={() => handleSend(qp.prompt)}
                   disabled={loading}
-                  className="px-2.5 py-1 text-[11px] sm:text-xs font-semibold rounded-lg bg-surface border border-outline-variant/50 text-on-surface-variant hover:border-indigo-500 hover:text-indigo-600 transition-all cursor-pointer shadow-2xs shrink-0 disabled:opacity-50"
+                  className="px-2.5 py-1 text-[11px] sm:text-xs font-semibold rounded-lg bg-surface border border-outline-variant/50 text-on-surface-variant hover:border-indigo-500 hover:text-indigo-600 transition-all active:scale-[0.98] cursor-pointer shadow-2xs shrink-0 disabled:opacity-50"
                 >
                   {qp.label}
                 </button>
@@ -176,7 +178,7 @@ export default function MerchantCopilotDrawer({
               >
                 {msg.role === 'assistant' && (
                   <div className="w-7 h-7 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
-                    <span className="material-symbols-outlined text-[16px]">smart_toy</span>
+                    <Bot className="h-4 w-4" />
                   </div>
                 )}
 
@@ -195,7 +197,7 @@ export default function MerchantCopilotDrawer({
                           key={idx}
                           className="px-1.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-0.5"
                         >
-                          <span className="material-symbols-outlined text-[11px]">bolt</span>
+                          <Zap className="h-3 w-3" />
                           <span>{t}</span>
                         </span>
                       ))}
@@ -210,7 +212,7 @@ export default function MerchantCopilotDrawer({
             {loading && (
               <div className="flex gap-2.5 justify-start">
                 <div className="w-7 h-7 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="material-symbols-outlined text-[16px] animate-spin">sync</span>
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 </div>
                 <div className="bg-surface-container border border-outline-variant/30 rounded-2xl rounded-tl-xs p-3 text-xs text-on-surface-variant flex items-center gap-2">
                   <span className="inline-block w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
@@ -241,9 +243,10 @@ export default function MerchantCopilotDrawer({
               <button
                 type="submit"
                 disabled={!input.trim() || loading}
-                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white p-2.5 rounded-xl transition-all shadow-xs cursor-pointer shrink-0 flex items-center justify-center"
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white p-2.5 rounded-xl transition-all active:scale-[0.98] shadow-xs cursor-pointer shrink-0 flex items-center justify-center min-h-[44px] min-w-[44px]"
+                aria-label="Send message"
               >
-                <span className="material-symbols-outlined text-[20px]">send</span>
+                <Send className="h-4 w-4" />
               </button>
             </form>
           </div>

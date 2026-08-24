@@ -2,6 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import {
+  LayoutDashboard,
+  Store,
+  CreditCard,
+  TrendingUp,
+  History,
+} from 'lucide-react'
 
 interface AdminSidebarNavProps {
   onNavClick?: () => void
@@ -14,28 +21,28 @@ export default function AdminSidebarNav({ onNavClick }: AdminSidebarNavProps) {
     {
       label: 'ภาพรวมระบบ',
       href: '/admin',
-      icon: 'query_stats',
+      icon: LayoutDashboard,
       exact: true,
     },
     {
       label: 'จัดการร้านค้า',
       href: '/admin/shops',
-      icon: 'storefront',
+      icon: Store,
     },
     {
       label: 'แพ็กเกจและราคา',
       href: '/admin/plans',
-      icon: 'loyalty',
+      icon: CreditCard,
     },
     {
       label: 'Margin Dashboard',
       href: '/admin/margin',
-      icon: 'monitoring',
+      icon: TrendingUp,
     },
     {
       label: 'ประวัติระบบ',
       href: '/admin/logs',
-      icon: 'history',
+      icon: History,
     },
   ]
 
@@ -54,24 +61,23 @@ export default function AdminSidebarNav({ onNavClick }: AdminSidebarNavProps) {
 
       {navItems.map((item) => {
         const active = isActive(item.href, item.exact)
+        const IconComponent = item.icon
         return (
           <Link
             key={item.href}
             href={item.href}
             onClick={onNavClick}
-            className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl transition-all font-medium text-xs sm:text-sm ${
+            className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl transition-all font-medium text-xs sm:text-sm active:scale-[0.98] ${
               active
                 ? 'bg-amber-500/10 text-amber-500 font-bold border border-amber-500/20 shadow-xs'
                 : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
             }`}
           >
-            <span
-              className={`material-symbols-outlined text-[20px] transition-colors ${
+            <IconComponent
+              className={`h-[18px] w-[18px] transition-colors shrink-0 ${
                 active ? 'text-amber-500' : 'text-slate-400'
               }`}
-            >
-              {item.icon}
-            </span>
+            />
             <span>{item.label}</span>
           </Link>
         )

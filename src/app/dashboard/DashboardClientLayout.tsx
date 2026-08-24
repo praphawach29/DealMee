@@ -3,6 +3,15 @@
 import { useState } from 'react'
 import SidebarNav from './SidebarNav'
 import Link from 'next/link'
+import {
+  Menu,
+  X,
+  Search,
+  Bot,
+  Bell,
+  ShieldAlert,
+  LogOut,
+} from 'lucide-react'
 import MerchantCopilotDrawer from '@/components/dashboard/MerchantCopilotDrawer'
 
 interface DashboardClientLayoutProps {
@@ -38,7 +47,7 @@ export default function DashboardClientLayout({
       {isMobileMenuOpen && (
         <div
           onClick={() => setIsMobileMenuOpen(false)}
-          className="lg:hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+          className="lg:hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs transition-opacity animate-fade-in"
         />
       )}
 
@@ -55,9 +64,10 @@ export default function DashboardClientLayout({
           </div>
           <button
             onClick={() => setIsMobileMenuOpen(false)}
-            className="p-1 rounded-lg text-outline hover:text-on-surface"
+            className="p-2 rounded-lg text-outline hover:text-on-surface min-h-[44px] min-w-[44px] flex items-center justify-center"
+            aria-label="Close menu"
           >
-            <span className="material-symbols-outlined text-[22px]">close</span>
+            <X className="h-5 w-5" />
           </button>
         </div>
         <div className="py-3 flex-1 overflow-y-auto">
@@ -73,17 +83,18 @@ export default function DashboardClientLayout({
             {/* Hamburger Button for Mobile */}
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="lg:hidden p-1.5 rounded-xl text-on-surface hover:bg-surface-container transition-colors"
+              className="lg:hidden p-2 rounded-xl text-on-surface hover:bg-surface-container transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+              aria-label="Open navigation menu"
             >
-              <span className="material-symbols-outlined text-[24px]">menu</span>
+              <Menu className="h-5 w-5" />
             </button>
 
-            <div className="hidden sm:flex items-center gap-3">
-              <span className="material-symbols-outlined text-outline text-[20px]">search</span>
+            <div className="hidden sm:flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-surface-container/60 border border-outline-variant/30">
+              <Search className="h-4 w-4 text-outline" />
               <input
                 type="text"
                 placeholder="ค้นหาความช่วยเหลือ..."
-                className="bg-transparent border-none outline-none text-outline font-label-md text-xs placeholder:text-outline/70 w-40 md:w-56"
+                className="bg-transparent border-none outline-none text-on-surface font-label-md text-xs placeholder:text-outline w-40 md:w-56"
               />
             </div>
             
@@ -97,25 +108,28 @@ export default function DashboardClientLayout({
             {/* AI Jarvis Copilot Button in Header */}
             <button
               onClick={() => setIsCopilotOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs font-label-md transition-all shadow-xs hover:shadow-md hover:shadow-indigo-500/20 cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs font-label-md transition-all active:scale-[0.98] shadow-xs hover:shadow-md hover:shadow-indigo-500/20 cursor-pointer shrink-0 min-h-[36px]"
               title="เปิดผู้ช่วย AI Jarvis ประจำร้าน"
             >
-              <span className="material-symbols-outlined text-[16px] animate-pulse">smart_toy</span>
+              <Bot className="h-4 w-4 animate-pulse" />
               <span className="hidden sm:inline">AI Copilot</span>
             </button>
 
-            <button className="relative p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors">
-              <span className="material-symbols-outlined text-[20px]">notifications</span>
-              <span className="absolute top-2 right-2 w-2 h-2 bg-error-red rounded-full"></span>
+            <button
+              className="relative p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+              aria-label="Notifications"
+            >
+              <Bell className="h-5 w-5" />
+              <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-error-red rounded-full"></span>
             </button>
 
             <div className="flex items-center gap-3 pl-2 sm:pl-4 border-l border-outline-variant/50">
               {isSuperAdmin && (
                 <Link
                   href="/admin"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 font-bold text-xs font-label-md transition-all border border-amber-500/30 shrink-0"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 font-bold text-xs font-label-md transition-all border border-amber-500/30 shrink-0 active:scale-[0.98]"
                 >
-                  <span className="material-symbols-outlined text-[16px] text-amber-500">admin_panel_settings</span>
+                  <ShieldAlert className="h-4 w-4 text-amber-500" />
                   <span className="hidden sm:inline">Super Admin</span>
                 </Link>
               )}
@@ -129,8 +143,12 @@ export default function DashboardClientLayout({
             </div>
 
             <form action="/auth/signout" method="post" className="ml-1">
-              <button title="ลงชื่อออก" className="p-1.5 text-on-surface-variant hover:bg-error-red/10 hover:text-error-red rounded-full transition-colors flex items-center justify-center cursor-pointer">
-                <span className="material-symbols-outlined text-[18px]">logout</span>
+              <button
+                title="ลงชื่อออก"
+                className="p-2 text-on-surface-variant hover:bg-error-red/10 hover:text-error-red rounded-full transition-colors flex items-center justify-center cursor-pointer min-h-[44px] min-w-[44px]"
+                aria-label="Sign out"
+              >
+                <LogOut className="h-4 w-4" />
               </button>
             </form>
           </div>
@@ -146,11 +164,11 @@ export default function DashboardClientLayout({
       {!isCopilotOpen && (
         <button
           onClick={() => setIsCopilotOpen(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white px-4 py-2.5 sm:py-3 rounded-full shadow-lg shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-600/40 hover:-translate-y-0.5 transition-all cursor-pointer font-bold text-xs group"
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white px-4 py-2.5 sm:py-3 rounded-full shadow-lg shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-600/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer font-bold text-xs group"
           title="ปรึกษา Botify Jarvis AI Copilot"
         >
           <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
-            <span className="material-symbols-outlined text-[16px]">smart_toy</span>
+            <Bot className="h-4 w-4" />
           </div>
           <span className="hidden sm:inline">ถาม AI Jarvis</span>
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>

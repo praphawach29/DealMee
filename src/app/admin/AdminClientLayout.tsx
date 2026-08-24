@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import AdminSidebarNav from './AdminSidebarNav'
+import { Crown, Menu, X, LogOut } from 'lucide-react'
 
 interface AdminClientLayoutProps {
   userEmail: string
@@ -21,13 +22,13 @@ export default function AdminClientLayout({
         <div className="px-6 py-5 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-bold text-slate-950 shadow-md">
-              👑
+              <Crown className="h-4 w-4 text-slate-950" />
             </div>
             <div>
               <span className="font-headline-md text-white font-bold tracking-tight text-base block leading-none">
                 Botify AI
               </span>
-              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block mt-1">
+              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block mt-1 font-mono">
                 Super Admin
               </span>
             </div>
@@ -40,7 +41,7 @@ export default function AdminClientLayout({
       {isMobileMenuOpen && (
         <div
           onClick={() => setIsMobileMenuOpen(false)}
-          className="lg:hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs transition-opacity"
+          className="lg:hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs transition-opacity animate-fade-in"
         />
       )}
 
@@ -53,22 +54,23 @@ export default function AdminClientLayout({
         <div className="px-5 py-5 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-bold text-slate-950 shadow-md">
-              👑
+              <Crown className="h-4 w-4 text-slate-950" />
             </div>
             <div>
               <span className="font-headline-md text-white font-bold tracking-tight text-base block leading-none">
                 Botify AI
               </span>
-              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block mt-1">
+              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block mt-1 font-mono">
                 Super Admin
               </span>
             </div>
           </div>
           <button
             onClick={() => setIsMobileMenuOpen(false)}
-            className="p-1 rounded-lg text-slate-400 hover:text-white"
+            className="p-2 rounded-lg text-slate-400 hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"
+            aria-label="Close admin menu"
           >
-            <span className="material-symbols-outlined text-[22px]">close</span>
+            <X className="h-5 w-5" />
           </button>
         </div>
         <div className="py-3 flex-1 overflow-y-auto">
@@ -84,9 +86,10 @@ export default function AdminClientLayout({
             {/* Hamburger Button for Mobile */}
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="lg:hidden p-1.5 rounded-xl text-on-surface hover:bg-surface-container transition-colors"
+              className="lg:hidden p-2 rounded-xl text-on-surface hover:bg-surface-container transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+              aria-label="Open admin navigation"
             >
-              <span className="material-symbols-outlined text-[24px]">menu</span>
+              <Menu className="h-5 w-5" />
             </button>
 
             {/* Super Admin Badge Indicator */}
@@ -103,13 +106,17 @@ export default function AdminClientLayout({
                 <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider">System Owner</p>
               </div>
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 border-amber-500 bg-amber-500/10 flex items-center justify-center font-bold text-amber-600 text-xs shadow-xs">
-                👑
+                <Crown className="h-4 w-4" />
               </div>
             </div>
 
             <form action="/auth/signout" method="post" className="ml-1">
-              <button title="ลงชื่อออก" className="p-1.5 text-on-surface-variant hover:bg-error-red/10 hover:text-error-red rounded-full transition-colors flex items-center justify-center cursor-pointer">
-                <span className="material-symbols-outlined text-[18px]">logout</span>
+              <button
+                title="ลงชื่อออก"
+                className="p-2 text-on-surface-variant hover:bg-error-red/10 hover:text-error-red rounded-full transition-colors flex items-center justify-center cursor-pointer min-h-[44px] min-w-[44px]"
+                aria-label="Sign out"
+              >
+                <LogOut className="h-4 w-4" />
               </button>
             </form>
           </div>

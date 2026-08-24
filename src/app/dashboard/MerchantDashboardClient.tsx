@@ -2,8 +2,21 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import {
+  Sparkles,
+  MessageSquare,
+  Package,
+  ShoppingBag,
+  Banknote,
+  Send,
+  Megaphone,
+  PlusSquare,
+  Brain,
+  QrCode,
+  Zap,
+  CheckCircle2,
+} from 'lucide-react'
 import ChatPlaygroundModal from './components/ChatPlaygroundModal'
-
 import { PushQuotaInfo } from '@/lib/billing/pushQuota'
 
 export interface MerchantDashboardProps {
@@ -73,37 +86,37 @@ export default function MerchantDashboardClient({
           <div className="flex items-center gap-2 sm:gap-3">
             <Link
               href="/dashboard/knowledge"
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 bg-surface-container rounded-xl text-on-surface hover:bg-surface-container-high transition-all shadow-sm font-label-md text-xs font-semibold group cursor-pointer border border-outline-variant/40"
+              className="flex-1 sm:flex-initial min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 bg-surface-container rounded-xl text-on-surface hover:bg-surface-container-high transition-all duration-150 active:scale-[0.98] shadow-sm font-label-md text-xs font-semibold group cursor-pointer border border-outline-variant/40"
             >
-              <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+              <Sparkles className="h-4 w-4 text-electric-blue" />
               <span>คลังความรู้ ({knowledgeCount})</span>
             </Link>
             <button
               onClick={() => setIsPlaygroundOpen(true)}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 bg-electric-blue rounded-xl text-white hover:bg-primary transition-all shadow-md shadow-electric-blue/20 font-label-md text-xs font-semibold group cursor-pointer border-none"
+              className="flex-1 sm:flex-initial min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 bg-electric-blue rounded-xl text-white hover:bg-primary transition-all duration-150 active:scale-[0.98] shadow-md shadow-electric-blue/20 font-label-md text-xs font-semibold group cursor-pointer border-none"
             >
-              <span className="material-symbols-outlined text-[18px]">chat</span>
+              <MessageSquare className="h-4 w-4 text-white" />
               <span>ทดสอบสนทนา</span>
             </button>
           </div>
         </div>
 
         {/* 4 Real Metric KPI Bento Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 relative z-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 relative z-10">
 
           {/* KPI 1: AI Messages Handled */}
           <div className="bg-surface/90 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group border border-outline-variant/30 flex flex-col justify-between h-full min-h-[110px]">
             <div className="flex justify-between items-start mb-3 relative z-10">
               <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                <span className="material-symbols-outlined text-[18px]">forum</span>
+                <MessageSquare className="h-4 w-4" />
               </div>
-              <span className="px-2 py-0.5 rounded-md bg-success-green/10 text-success-green font-label-sm flex items-center gap-0.5 text-[10px] font-semibold">
-                <span className="material-symbols-outlined text-[12px]">verified</span> เรียลไทม์
+              <span className="px-2 py-0.5 rounded-md bg-success-green/10 text-success-green font-label-sm flex items-center gap-1 text-[10px] font-semibold">
+                <CheckCircle2 className="h-3 w-3" /> เรียลไทม์
               </span>
             </div>
             <div>
               <p className="font-label-md text-xs text-on-surface-variant mb-0.5 relative z-10 font-medium truncate">ข้อความตอบสะสม</p>
-              <h3 className="font-headline-md text-lg sm:text-2xl font-bold text-on-surface relative z-10">
+              <h3 className="font-headline-md text-lg sm:text-2xl font-bold text-on-surface relative z-10 font-mono">
                 {totalMessages.toLocaleString()}
               </h3>
             </div>
@@ -113,16 +126,16 @@ export default function MerchantDashboardClient({
           <div className="bg-surface/90 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group border border-outline-variant/30 flex flex-col justify-between h-full min-h-[110px]">
             <div className="flex justify-between items-start mb-3 relative z-10">
               <div className="w-8 h-8 rounded-xl bg-secondary flex items-center justify-center text-secondary-foreground shrink-0">
-                <span className="material-symbols-outlined text-[18px]">inventory_2</span>
+                <Package className="h-4 w-4" />
               </div>
-              <span className="px-2 py-0.5 rounded-md bg-electric-blue/10 text-electric-blue font-label-sm flex items-center gap-0.5 text-[10px] font-semibold">
-                <span className="material-symbols-outlined text-[12px]">store</span> สินค้า
+              <span className="px-2 py-0.5 rounded-md bg-electric-blue/10 text-electric-blue font-label-sm flex items-center gap-1 text-[10px] font-semibold">
+                สินค้า
               </span>
             </div>
             <div>
               <p className="font-label-md text-xs text-on-surface-variant mb-0.5 relative z-10 font-medium truncate">รายการสินค้าพร้อมส่ง</p>
-              <h3 className="font-headline-md text-lg sm:text-2xl font-bold text-on-surface relative z-10">
-                {productsCount.toLocaleString()} <span className="text-xs font-normal text-on-surface-variant">รายการ</span>
+              <h3 className="font-headline-md text-lg sm:text-2xl font-bold text-on-surface relative z-10 font-mono">
+                {productsCount.toLocaleString()} <span className="text-xs font-normal text-on-surface-variant font-sans">รายการ</span>
               </h3>
             </div>
           </div>
@@ -131,16 +144,16 @@ export default function MerchantDashboardClient({
           <div className="bg-surface/90 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group border border-outline-variant/30 flex flex-col justify-between h-full min-h-[110px]">
             <div className="flex justify-between items-start mb-3 relative z-10">
               <div className="w-8 h-8 rounded-xl bg-warning-amber/10 flex items-center justify-center text-warning-amber shrink-0">
-                <span className="material-symbols-outlined text-[18px]">shopping_bag</span>
+                <ShoppingBag className="h-4 w-4" />
               </div>
-              <span className="px-2 py-0.5 rounded-md bg-success-green/10 text-success-green font-label-sm flex items-center gap-0.5 text-[10px] font-semibold">
-                <span className="material-symbols-outlined text-[12px]">check_circle</span> สำเร็จ
+              <span className="px-2 py-0.5 rounded-md bg-success-green/10 text-success-green font-label-sm flex items-center gap-1 text-[10px] font-semibold">
+                <CheckCircle2 className="h-3 w-3" /> สำเร็จ
               </span>
             </div>
             <div>
               <p className="font-label-md text-xs text-on-surface-variant mb-0.5 relative z-10 font-medium truncate">คำสั่งซื้อทั้งหมด</p>
-              <h3 className="font-headline-md text-lg sm:text-2xl font-bold text-on-surface relative z-10">
-                {ordersCount.toLocaleString()} <span className="text-xs font-normal text-on-surface-variant">ออเดอร์</span>
+              <h3 className="font-headline-md text-lg sm:text-2xl font-bold text-on-surface relative z-10 font-mono">
+                {ordersCount.toLocaleString()} <span className="text-xs font-normal text-on-surface-variant font-sans">ออเดอร์</span>
               </h3>
             </div>
           </div>
@@ -149,15 +162,15 @@ export default function MerchantDashboardClient({
           <div className="bg-surface/90 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group border border-outline-variant/30 flex flex-col justify-between h-full min-h-[110px]">
             <div className="flex justify-between items-start mb-3 relative z-10">
               <div className="w-8 h-8 rounded-xl bg-success-green/10 flex items-center justify-center text-success-green shrink-0">
-                <span className="material-symbols-outlined text-[18px]">payments</span>
+                <Banknote className="h-4 w-4" />
               </div>
-              <span className="px-2 py-0.5 rounded-md bg-success-green/10 text-success-green font-label-sm flex items-center gap-0.5 text-[10px] font-semibold">
-                <span className="material-symbols-outlined text-[12px]">trending_up</span> ยอดขาย
+              <span className="px-2 py-0.5 rounded-md bg-success-green/10 text-success-green font-label-sm flex items-center gap-1 text-[10px] font-semibold">
+                ยอดขาย
               </span>
             </div>
             <div>
               <p className="font-label-md text-xs text-on-surface-variant mb-0.5 relative z-10 font-medium truncate">ยอดขายสะสมในระบบ</p>
-              <h3 className="font-headline-md text-lg sm:text-2xl font-bold text-on-surface relative z-10">
+              <h3 className="font-headline-md text-lg sm:text-2xl font-bold text-on-surface relative z-10 font-mono">
                 ฿{totalRevenue.toLocaleString()}
               </h3>
             </div>
@@ -165,20 +178,20 @@ export default function MerchantDashboardClient({
 
         </div>
 
-        {/* LINE Push Quota & Broadcast Monitor Banner (Mobile Perfect) */}
+        {/* LINE Push Quota & Broadcast Monitor Banner */}
         <div className="bg-gradient-to-br from-emerald-950/90 via-slate-900/95 to-surface-container/90 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-md border border-emerald-500/30 text-on-surface relative overflow-hidden group relative z-10 space-y-3.5">
           {/* Header Row */}
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-md shadow-emerald-500/10">
-                <span className="material-symbols-outlined text-[20px] sm:text-[22px]">send</span>
+                <Send className="h-5 w-5" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <h3 className="font-bold text-sm sm:text-base text-white">
                     โควต้า LINE Push
                   </h3>
-                  <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-[10px] sm:text-xs font-medium border border-slate-700">
+                  <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-[10px] sm:text-xs font-medium border border-slate-700 font-mono">
                     {pushQuotaInfo.period}
                   </span>
                 </div>
@@ -191,7 +204,7 @@ export default function MerchantDashboardClient({
             {/* Quota Badge */}
             <div className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-right shrink-0">
               <div className="text-[11px] text-emerald-400 font-bold">คงเหลือ</div>
-              <div className="text-sm sm:text-base font-extrabold text-emerald-300">
+              <div className="text-sm sm:text-base font-extrabold text-emerald-300 font-mono">
                 {pushQuotaInfo.remainingCount.toLocaleString()} <span className="text-xs font-medium text-emerald-200/80">/ {pushQuotaInfo.totalQuota.toLocaleString()}</span>
               </div>
             </div>
@@ -209,7 +222,7 @@ export default function MerchantDashboardClient({
           <div className="space-y-1.5">
             <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">
               <span className="text-slate-200">
-                ใช้ไปแล้ว <span className="text-white font-bold">{pushQuotaInfo.usedCount.toLocaleString()}</span> ข้อความ ({usedPercentage}%)
+                ใช้ไปแล้ว <span className="text-white font-bold font-mono">{pushQuotaInfo.usedCount.toLocaleString()}</span> ข้อความ ({usedPercentage}%)
               </span>
               <span className="text-emerald-300 font-bold">
                 คงเหลือ {remainingPercentage}% ({pushQuotaInfo.remainingCount.toLocaleString()} ข้อความ)
@@ -233,9 +246,9 @@ export default function MerchantDashboardClient({
           <div className="pt-1 flex items-center justify-end">
             <Link
               href="/dashboard/broadcast"
-              className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+              className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.98] cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[18px]">campaign</span>
+              <Megaphone className="h-4 w-4" />
               <span>ส่งบรอดแคสต์หาลูกค้า</span>
             </Link>
           </div>
@@ -253,25 +266,25 @@ export default function MerchantDashboardClient({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Link href="/dashboard/products" className="p-4 rounded-xl bg-surface-container/60 hover:bg-surface-container transition-colors border border-outline-variant/30 flex flex-col gap-2 group">
+              <Link href="/dashboard/products" className="p-4 rounded-xl bg-surface-container/60 hover:bg-surface-container transition-all active:scale-[0.98] border border-outline-variant/30 flex flex-col gap-2 group">
                 <div className="w-9 h-9 rounded-lg bg-electric-blue/10 flex items-center justify-center text-electric-blue group-hover:scale-110 transition-transform">
-                  <span className="material-symbols-outlined text-[20px]">add_box</span>
+                  <PlusSquare className="h-5 w-5" />
                 </div>
                 <h3 className="font-bold text-sm text-on-surface">เพิ่ม / นำเข้าสินค้า</h3>
                 <p className="text-xs text-on-surface-variant">จัดการแคตตาล็อกสินค้าพร้อมส่ง และเขียนคำอธิบายด้วย AI</p>
               </Link>
 
-              <Link href="/dashboard/knowledge" className="p-4 rounded-xl bg-surface-container/60 hover:bg-surface-container transition-colors border border-outline-variant/30 flex flex-col gap-2 group">
+              <Link href="/dashboard/knowledge" className="p-4 rounded-xl bg-surface-container/60 hover:bg-surface-container transition-all active:scale-[0.98] border border-outline-variant/30 flex flex-col gap-2 group">
                 <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600 group-hover:scale-110 transition-transform">
-                  <span className="material-symbols-outlined text-[20px]">psychology</span>
+                  <Brain className="h-5 w-5" />
                 </div>
                 <h3 className="font-bold text-sm text-on-surface">ฝึกอบรมคลังความรู้ AI</h3>
                 <p className="text-xs text-on-surface-variant">เพิ่มข้อมูล FAQ, โปรโมชั่น และข้อมูลตอบคำถามของร้าน</p>
               </Link>
 
-              <Link href="/dashboard/settings" className="p-4 rounded-xl bg-surface-container/60 hover:bg-surface-container transition-colors border border-outline-variant/30 flex flex-col gap-2 group">
+              <Link href="/dashboard/settings" className="p-4 rounded-xl bg-surface-container/60 hover:bg-surface-container transition-all active:scale-[0.98] border border-outline-variant/30 flex flex-col gap-2 group">
                 <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
-                  <span className="material-symbols-outlined text-[20px]">qr_code_2</span>
+                  <QrCode className="h-5 w-5" />
                 </div>
                 <h3 className="font-bold text-sm text-on-surface">ตั้งค่าบัญชีโอนเงิน</h3>
                 <p className="text-xs text-on-surface-variant">กำหนดเลขพร้อมเพย์ ธนาคาร และข้อความทักทายลูกค้า</p>
@@ -284,7 +297,7 @@ export default function MerchantDashboardClient({
             <div>
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center text-secondary-foreground shrink-0">
-                  <span className="material-symbols-outlined text-[20px]">psychology</span>
+                  <Brain className="h-5 w-5" />
                 </div>
                 <div>
                   <h3 className="font-headline-md text-base font-bold text-on-surface leading-tight">คลังความรู้ AI ของร้าน</h3>
@@ -296,7 +309,7 @@ export default function MerchantDashboardClient({
 
               <div className="space-y-3">
                 <div className="bg-surface rounded-xl p-3.5 shadow-xs flex items-start gap-3 border border-outline-variant/20">
-                  <span className="material-symbols-outlined text-success-green text-[18px] mt-0.5">check_circle</span>
+                  <CheckCircle2 className="h-4 w-4 text-success-green mt-0.5 shrink-0" />
                   <div>
                     <p className="font-label-md text-xs font-bold text-on-surface">
                       {latestKnowledgeTitle || 'คลังข้อมูลสินค้าและคำถามพบบ่อย'}
@@ -308,7 +321,7 @@ export default function MerchantDashboardClient({
                 </div>
 
                 <div className="bg-surface rounded-xl p-3.5 shadow-xs flex items-start gap-3 relative overflow-hidden border border-outline-variant/20">
-                  <span className="material-symbols-outlined text-electric-blue text-[18px] mt-0.5">bolt</span>
+                  <Zap className="h-4 w-4 text-electric-blue mt-0.5 shrink-0" />
                   <div>
                     <p className="font-label-md text-xs font-bold text-on-surface">Botify Brain Engine™</p>
                     <p className="font-label-sm text-[11px] font-medium text-outline mt-0.5">

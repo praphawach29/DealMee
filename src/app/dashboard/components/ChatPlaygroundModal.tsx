@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { testPlaygroundChat, getPlaygroundQuotaStatus, getPlaygroundGreeting } from '../settings/actions'
+import { Bot, X, Send } from 'lucide-react'
 
 interface ChatMessage {
   id: string
@@ -9,10 +10,8 @@ interface ChatMessage {
   text: string
   timestamp: string
   quotaExceeded?: boolean
-  /** Mirrors how LINE delivers this message, so a shop owner can see that e.g. a QR arrives as its own separate message rather than part of the reply. */
   origin?: 'ack' | 'reply' | 'tool'
   imageUrl?: string
-  /** Tools that really ran for this turn, shown under the bubble. */
   toolCalls?: { name: string; args: Record<string, any> }[]
   scheduled?: { delayMinutes: number; content: string }[]
 }
@@ -46,7 +45,7 @@ export default function ChatPlaygroundModal({
     {
       id: 'welcome',
       sender: 'bot',
-      text: `สวัสดีค่ะ ยินดีต้อนรับสู่ระบบแชทจำลอง! หนูชื่อ "${initialBotName}" พนักงานขาย AI ประจำร้าน ลองพิมพ์ถามข้อมูลสินค้า ราคา หรือโปรโมชั่นเพื่อทดสอบการตอบได้เลยค่ะ 😊`,
+      text: `สวัสดีค่ะ ยินดีต้อนรับสู่ระบบแชทจำลอง! หนูชื่อ "${initialBotName}" พนักงานขาย AI ประจำร้าน ลองพิมพ์ถามข้อมูลสินค้า ราคา หรือโปรโมชั่นเพื่อทดสอบการตอบได้เลยค่ะ`,
       timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
     },
   ])
@@ -65,7 +64,7 @@ export default function ChatPlaygroundModal({
 
   const handleSend = async (queryText?: string, simulateQuotaExceeded?: boolean) => {
     const textToSend = simulateQuotaExceeded
-      ? '🚫 [ทดสอบ] จำลองข้อความเมื่อโควต้าหมด'
+      ? '[ทดสอบ] จำลองข้อความเมื่อโควต้าหมด'
       : queryText || inputQuery
     if (!textToSend.trim() || loading) return
 
@@ -76,11 +75,6 @@ export default function ChatPlaygroundModal({
       timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
     }
 
-    // Snapshot before appending the new user message — this becomes the
-    // conversation history sent to the AI so it remembers prior turns
-    // (e.g. "รับ 2 ตัว" referring to a product mentioned earlier). The
-    // Playground never writes to chat_messages like the real LINE webhook
-    // does, so without this the AI would have no memory between messages.
     const history = messages
       .filter((m) => m.id !== 'welcome')
       .map((m) => ({ sender: m.sender, text: m.text }))
@@ -99,9 +93,6 @@ export default function ChatPlaygroundModal({
       return
     }
 
-    // One bubble per message, in the order LINE would deliver them — the old
-    // Playground concatenated everything into a single bubble, which hid
-    // problems like the bot and a tool both answering the same question.
     const replies: ChatMessage[] = res.bubbles.map((bubble, i) => ({
       id: `${Date.now()}-${i}`,
       sender: 'bot' as const,
@@ -116,8 +107,6 @@ export default function ChatPlaygroundModal({
       replies.push({ id: `${Date.now()}-empty`, sender: 'bot', text: 'ขออภัยค่ะ ระบบทดสอบขัดข้องชั่วคราว', timestamp })
     }
 
-    // Hang the debug detail off the last bubble so it reads as a footnote to
-    // the whole turn rather than to one message.
     replies[replies.length - 1].toolCalls = res.toolCalls
     replies[replies.length - 1].scheduled = res.scheduled
 
@@ -143,8 +132,8 @@ export default function ChatPlaygroundModal({
         <div className="p-3.5 sm:p-4 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
             <div className="relative">
-              <div className="w-10 h-10 rounded-full bg-electric-blue/20 border border-electric-blue/40 flex items-center justify-center text-electric-blue font-bold text-lg">
-                🤖
+              <div className="w-10 h-10 rounded-full bg-electric-blue/20 border border-electric-blue/40 flex items-center justify-center text-electric-blue">
+                <Bot className="h-5 w-5" />
               </div>
               <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-slate-900 rounded-full"></span>
             </div>
@@ -166,14 +155,14 @@ export default function ChatPlaygroundModal({
                 ทดสอบคำตอบของพนักงานขายก่อนใช้งานจริงบน LINE OA
               </p>
               {quotaStatus && (
-                <p className="text-[10px] mt-1 flex items-center gap-1.5">
-                  <span className={quotaStatus.isOverQuota ? 'text-rose-400 font-bold' : 'text-slate-500'}>
+                <p className="text-[10px] mt-1 flex items-center gap-1.5 font-mono">
+                  <span className={quotaStatus.isOverQuota ? 'text-rose-400 font-bold' : 'text-slate-400'}>
                     {quotaStatus.isUnlimited
                       ? 'โควต้าข้อความ: ไม่จำกัด'
                       : `โควต้าข้อความเดือนนี้: ${quotaStatus.messagesUsed.toLocaleString()} / ${quotaStatus.messageLimit.toLocaleString()} (${usagePct}%)`}
                   </span>
                   {quotaStatus.isOverQuota && (
-                    <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-1.5 py-0.5 rounded font-bold">
+                    <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-1.5 py-0.5 rounded font-bold font-sans">
                       หมดโควต้าแล้ว
                     </span>
                   )}
@@ -184,9 +173,10 @@ export default function ChatPlaygroundModal({
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+            className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer min-h-[44px] min-w-[44px]"
+            aria-label="Close playground"
           >
-            <span className="material-symbols-outlined text-[20px]">close</span>
+            <X className="h-5 w-5" />
           </button>
         </div>
 
@@ -198,7 +188,7 @@ export default function ChatPlaygroundModal({
               key={idx}
               disabled={loading}
               onClick={() => handleSend(preset.replace(/^[^\s]+\s/, ''))}
-              className="text-xs px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/60 whitespace-nowrap transition-colors cursor-pointer disabled:opacity-50"
+              className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/60 whitespace-nowrap transition-colors cursor-pointer disabled:opacity-50 min-h-[36px] flex items-center active:scale-[0.98]"
             >
               {preset}
             </button>
@@ -207,9 +197,9 @@ export default function ChatPlaygroundModal({
             disabled={loading}
             onClick={() => handleSend(undefined, true)}
             title="ดูตัวอย่างข้อความที่ลูกค้าจะเห็นเมื่อโควต้าหมด โดยไม่หักโควต้าจริงของร้าน"
-            className="text-xs px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 whitespace-nowrap transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+            className="text-xs px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 whitespace-nowrap transition-colors cursor-pointer disabled:opacity-50 shrink-0 min-h-[36px] flex items-center active:scale-[0.98]"
           >
-            🚫 จำลองโควต้าหมด
+            จำลองโควต้าหมด
           </button>
         </div>
 
@@ -222,8 +212,8 @@ export default function ChatPlaygroundModal({
             >
               <div className="flex items-end gap-2 max-w-[85%] sm:max-w-[75%]">
                 {msg.sender === 'bot' && (
-                  <div className="w-7 h-7 rounded-full bg-electric-blue/20 border border-electric-blue/40 flex items-center justify-center text-xs shrink-0 mb-1">
-                    🤖
+                  <div className="w-7 h-7 rounded-full bg-electric-blue/20 border border-electric-blue/40 flex items-center justify-center text-electric-blue shrink-0 mb-1">
+                    <Bot className="h-3.5 w-3.5" />
                   </div>
                 )}
                 <div
@@ -236,12 +226,12 @@ export default function ChatPlaygroundModal({
                   }`}
                 >
                   {msg.origin === 'ack' && (
-                    <div className="text-[10px] uppercase tracking-wide text-amber-400/80 mb-1">
+                    <div className="text-[10px] uppercase tracking-wide text-amber-400/80 mb-1 font-semibold">
                       ข้อความตอบรับทันที (LINE Reply)
                     </div>
                   )}
                   {msg.origin === 'tool' && (
-                    <div className="text-[10px] uppercase tracking-wide text-emerald-400/80 mb-1">
+                    <div className="text-[10px] uppercase tracking-wide text-emerald-400/80 mb-1 font-semibold">
                       ส่งแยกอีกข้อความ (LINE Push)
                     </div>
                   )}
@@ -271,7 +261,7 @@ export default function ChatPlaygroundModal({
                 </div>
               )}
 
-              <span className="text-[10px] text-slate-500 mt-1 px-1">{msg.timestamp}</span>
+              <span className="text-[10px] text-slate-500 mt-1 px-1 font-mono">{msg.timestamp}</span>
             </div>
           ))}
 
@@ -294,15 +284,16 @@ export default function ChatPlaygroundModal({
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             placeholder="พิมพ์คำถามทดสอบที่ลูกค้าอาจถาม (เช่น ราคาเท่าไหร่, ขอส่วนลด)..."
             disabled={loading}
-            className="flex-1 bg-slate-800 border border-slate-700/80 text-slate-100 text-xs sm:text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:border-electric-blue transition-all disabled:opacity-50 placeholder:text-slate-500"
+            className="flex-1 bg-slate-800 border border-slate-700/80 text-slate-100 text-xs sm:text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:border-electric-blue transition-all disabled:opacity-50 placeholder:text-slate-500 min-h-[44px]"
           />
           <button
             onClick={() => handleSend()}
             disabled={loading || !inputQuery.trim()}
-            className="bg-electric-blue hover:bg-primary text-white font-bold px-4 py-2.5 rounded-xl transition-all shadow-md shadow-electric-blue/20 disabled:opacity-50 cursor-pointer flex items-center gap-1 shrink-0 text-xs sm:text-sm"
+            className="bg-electric-blue hover:bg-primary text-white font-bold px-4 py-2.5 rounded-xl transition-all shadow-md shadow-electric-blue/20 disabled:opacity-50 cursor-pointer flex items-center gap-1 shrink-0 text-xs sm:text-sm min-h-[44px] min-w-[44px] active:scale-[0.98]"
+            aria-label="Send message"
           >
             <span>ส่ง</span>
-            <span className="material-symbols-outlined text-[16px]">send</span>
+            <Send className="h-4 w-4" />
           </button>
         </div>
 

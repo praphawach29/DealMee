@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import AdminClientLayout from './AdminClientLayout'
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
+import { Lock, ShieldCheck } from 'lucide-react'
 
 export const SUPER_ADMIN_EMAILS = [
   'praphawach@gmail.com',
@@ -54,8 +55,8 @@ export default async function AdminLayout({
     return (
       <div className="min-h-screen bg-merchant-bg text-on-surface flex items-center justify-center p-4">
         <div className="bg-surface border border-outline-variant/40 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-lg space-y-6 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto text-3xl">
-            🔒
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto">
+            <Lock className="h-8 w-8 text-amber-500" />
           </div>
 
           <div>
@@ -67,8 +68,8 @@ export default async function AdminLayout({
             </p>
           </div>
 
-          <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 text-xs text-amber-700 text-left space-y-1">
-            <p className="font-bold">💡 คำแนะนำ:</p>
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 text-xs text-amber-700 dark:text-amber-300 text-left space-y-1">
+            <p className="font-bold">คำแนะนำ:</p>
             <p>คุณสามารถกดปุ่มเปิดใช้งานสิทธิ์ Super Admin ด้านล่างเพื่อปรับเปลี่ยนสิทธิ์บัญชีนี้เป็น Super Admin ทันที</p>
           </div>
 
@@ -76,16 +77,16 @@ export default async function AdminLayout({
             <form action={grantSuperAdminAction}>
               <button
                 type="submit"
-                className="w-full py-3 px-4 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2"
+                className="w-full py-3 px-4 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2 min-h-[44px] active:scale-[0.98]"
               >
-                <span className="material-symbols-outlined text-[20px]">verified</span>
+                <ShieldCheck className="h-5 w-5" />
                 <span>เปิดใช้งานสิทธิ์ Super Admin บัญชีนี้</span>
               </button>
             </form>
 
             <Link
               href="/dashboard"
-              className="w-full py-2.5 px-4 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-bold text-xs sm:text-sm rounded-xl transition-all border border-outline-variant/40 text-center"
+              className="w-full py-2.5 px-4 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-bold text-xs sm:text-sm rounded-xl transition-all border border-outline-variant/40 text-center min-h-[44px] flex items-center justify-center"
             >
               กลับสู่หน้าร้านค้าปกติ
             </Link>

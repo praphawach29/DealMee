@@ -4,6 +4,17 @@ import { useState, Suspense } from 'react'
 import { login, signup } from './actions'
 import { Button } from '@/components/ui/button'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
+import {
+  LogIn,
+  UserPlus,
+  Mail,
+  Lock,
+  KeyRound,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  AlertCircle,
+} from 'lucide-react'
 
 function LoginContent() {
   const searchParams = useSearchParams()
@@ -76,11 +87,11 @@ function LoginContent() {
 
             <div className="space-y-3 pt-2">
               <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15">
-                <span className="material-symbols-outlined text-emerald-300 text-2xl">check_circle</span>
+                <CheckCircle2 className="h-5 w-5 text-emerald-300 shrink-0" />
                 <span className="text-sm text-white font-medium">สร้าง Dynamic PromptPay QR Code สแกนจ่ายตามยอดจริง</span>
               </div>
               <div className="flex items-center gap-3 bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15">
-                <span className="material-symbols-outlined text-emerald-300 text-2xl">check_circle</span>
+                <CheckCircle2 className="h-5 w-5 text-emerald-300 shrink-0" />
                 <span className="text-sm text-white font-medium">คำนวณค่าจัดส่งแยก กทม. ต่างจังหวัด และพื้นที่ห่างไกล</span>
               </div>
             </div>
@@ -89,8 +100,8 @@ function LoginContent() {
           {/* Footer */}
           <div className="relative z-10 text-xs text-blue-200 border-t border-white/20 pt-4 flex justify-between items-center">
             <span>© 2026 Botify AI Agent Inc.</span>
-            <span className="flex items-center gap-1 text-emerald-300 font-medium">
-              ● พร้อมใช้งาน 24/7
+            <span className="flex items-center gap-1.5 text-emerald-300 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></span> พร้อมใช้งาน 24/7
             </span>
           </div>
         </div>
@@ -114,25 +125,25 @@ function LoginContent() {
               <button
                 type="button"
                 onClick={() => handleTabChange('login')}
-                className={`flex-1 py-2.5 px-3 text-xs sm:text-sm font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer relative z-10 ${
+                className={`flex-1 py-2.5 px-3 text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer relative z-10 min-h-[44px] ${
                   mode === 'login'
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
                 }`}
               >
-                <span className="material-symbols-outlined text-[18px]">login</span>
+                <LogIn className="h-4 w-4" />
                 <span>เข้าสู่ระบบ</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleTabChange('signup')}
-                className={`flex-1 py-2.5 px-3 text-xs sm:text-sm font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer relative z-10 ${
+                className={`flex-1 py-2.5 px-3 text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer relative z-10 min-h-[44px] ${
                   mode === 'signup'
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
                 }`}
               >
-                <span className="material-symbols-outlined text-[18px]">person_add</span>
+                <UserPlus className="h-4 w-4" />
                 <span>สมัครสมาชิก</span>
               </button>
             </div>
@@ -153,7 +164,7 @@ function LoginContent() {
             {/* Error Notification */}
             {error && (
               <div className="rounded-2xl bg-red-50 border border-red-200 p-3.5 text-xs sm:text-sm text-red-600 font-medium flex items-start gap-2.5 transition-all duration-300">
-                <span className="material-symbols-outlined text-[20px] shrink-0 text-red-500">error</span>
+                <AlertCircle className="h-5 w-5 shrink-0 text-red-500 mt-0.5" />
                 <p className="leading-relaxed">{error}</p>
               </div>
             )}
@@ -168,7 +179,7 @@ function LoginContent() {
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                      <span className="material-symbols-outlined text-[20px]">mail</span>
+                      <Mail className="h-4 w-4" />
                     </div>
                     <input
                       id="email"
@@ -197,7 +208,7 @@ function LoginContent() {
                   </div>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                      <span className="material-symbols-outlined text-[20px]">lock</span>
+                      <Lock className="h-4 w-4" />
                     </div>
                     <input
                       id="password"
@@ -212,11 +223,10 @@ function LoginContent() {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer min-h-[44px] min-w-[44px] justify-center"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
                     >
-                      <span className="material-symbols-outlined text-[20px]">
-                        {showPassword ? 'visibility_off' : 'visibility'}
-                      </span>
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
                 </div>
@@ -236,7 +246,7 @@ function LoginContent() {
                       </label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                          <span className="material-symbols-outlined text-[20px]">lock_reset</span>
+                          <KeyRound className="h-4 w-4" />
                         </div>
                         <input
                           id="confirmPassword"
@@ -251,11 +261,10 @@ function LoginContent() {
                         <button
                           type="button"
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer min-h-[44px] min-w-[44px] justify-center"
+                          aria-label={showConfirmPassword ? "Hide password" : "Show password"}
                         >
-                          <span className="material-symbols-outlined text-[20px]">
-                            {showConfirmPassword ? 'visibility_off' : 'visibility'}
-                          </span>
+                          {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
                     </div>
@@ -268,7 +277,7 @@ function LoginContent() {
                 <Button
                   type="submit"
                   formAction={mode === 'login' ? login : signup}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 rounded-2xl font-bold text-sm sm:text-base shadow-lg shadow-blue-600/25 transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 rounded-2xl font-bold text-sm sm:text-base shadow-lg shadow-blue-600/25 transition-all duration-200 hover:scale-[1.01] active:scale-[0.98] cursor-pointer min-h-[48px]"
                 >
                   <span className="transition-all duration-300">
                     {mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก & เริ่มใช้งานฟรี ➔'}
@@ -286,7 +295,7 @@ function LoginContent() {
                     <button
                       type="button"
                       onClick={() => handleTabChange('signup')}
-                      className="text-blue-600 font-bold hover:underline cursor-pointer"
+                      className="text-blue-600 font-bold hover:underline cursor-pointer min-h-[44px] inline-flex items-center"
                     >
                       สมัครสมาชิกฟรี
                     </button>
@@ -297,7 +306,7 @@ function LoginContent() {
                     <button
                       type="button"
                       onClick={() => handleTabChange('login')}
-                      className="text-blue-600 font-bold hover:underline cursor-pointer"
+                      className="text-blue-600 font-bold hover:underline cursor-pointer min-h-[44px] inline-flex items-center"
                     >
                       เข้าสู่ระบบที่นี่
                     </button>

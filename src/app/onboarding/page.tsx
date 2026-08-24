@@ -1,5 +1,6 @@
 import { submitOnboarding } from './actions'
 import { Button } from '@/components/ui/button'
+import { Check } from 'lucide-react'
 
 const TEMPLATES = [
   { id: 'beauty', emoji: '💄', label: 'ความงาม & เครื่องสำอาง', type: 'retail', description: 'ร้านขายสกินแคร์, เครื่องสำอาง, เวชสำอาง' },
@@ -15,32 +16,32 @@ const TEMPLATES = [
 
 export default function OnboardingPage() {
   return (
-    <div className="min-h-screen bg-merchant-bg py-12 px-4 sm:px-6 lg:px-8 flex justify-center">
+    <div className="min-h-screen bg-merchant-bg py-12 px-4 sm:px-6 lg:px-8 flex justify-center items-center">
       <div className="max-w-3xl w-full">
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-xl bg-electric-blue flex items-center justify-center font-bold text-2xl text-white shadow-lg shadow-electric-blue/20">B</div>
+            <div className="w-12 h-12 rounded-2xl bg-electric-blue flex items-center justify-center font-bold text-2xl text-white shadow-lg shadow-electric-blue/20">B</div>
             <span className="text-3xl font-bold tracking-tight text-deep-indigo font-headline-xl">Botify AI</span>
           </div>
           <h2 className="text-3xl font-bold text-on-surface font-headline-lg">ตั้งค่าร้านค้าของคุณ</h2>
           <p className="mt-2 text-on-surface-variant font-body-lg">กรุณากรอกข้อมูลเบื้องต้นเพื่อเริ่มต้นใช้งาน</p>
         </div>
 
-        <div className="bg-surface rounded-3xl p-8 shadow-sm border border-outline-variant">
+        <div className="bg-surface rounded-3xl p-6 sm:p-8 shadow-sm border border-outline-variant">
           <form action={submitOnboarding} className="space-y-8">
             {/* Step 1 */}
             <div>
               <h3 className="text-xl font-bold text-on-surface mb-4 font-headline-md flex items-center gap-2">
-                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-electric-blue/10 text-electric-blue text-sm">1</span>
+                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-electric-blue/10 text-electric-blue text-sm font-bold">1</span>
                 ชื่อร้านค้า (Shop Name)
               </h3>
-              <div className="pl-10">
+              <div className="pl-0 sm:pl-10">
                 <input
                   type="text"
                   name="shopName"
                   required
                   placeholder="เช่น ร้านขายเสื้อผ้าแฟชั่น Botify"
-                  className="w-full rounded-xl border border-outline-variant px-4 py-3 text-on-surface bg-surface placeholder:text-outline focus:border-electric-blue focus:ring-1 focus:ring-electric-blue transition-all outline-none"
+                  className="w-full rounded-xl border border-outline-variant/60 px-4 py-3 text-on-surface bg-surface placeholder:text-outline focus:border-electric-blue focus:ring-2 focus:ring-electric-blue/20 transition-all outline-none text-sm font-medium"
                 />
               </div>
             </div>
@@ -50,15 +51,15 @@ export default function OnboardingPage() {
             {/* Step 2 & 3 Combined in UI for simplicity */}
             <div>
               <h3 className="text-xl font-bold text-on-surface mb-4 font-headline-md flex items-center gap-2">
-                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-electric-blue/10 text-electric-blue text-sm">2</span>
+                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-electric-blue/10 text-electric-blue text-sm font-bold">2</span>
                 เลือกแม่แบบธุรกิจ (Template)
               </h3>
-              <p className="text-on-surface-variant text-sm mb-4 pl-10 font-body-md">
+              <p className="text-on-surface-variant text-sm mb-4 pl-0 sm:pl-10 font-body-md">
                 ระบบจะตั้งค่าลักษณะการตอบของ AI และเมนูที่เหมาะสมกับประเภทธุรกิจของคุณโดยอัตโนมัติ
               </p>
               
-              <div className="pl-10">
-                {/* We use radio buttons styled as cards */}
+              <div className="pl-0 sm:pl-10">
+                {/* Radio buttons styled as cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {TEMPLATES.map((tmpl, i) => (
                     <label key={tmpl.id} className="cursor-pointer relative">
@@ -69,14 +70,13 @@ export default function OnboardingPage() {
                         defaultChecked={i === 0}
                         className="peer sr-only" 
                       />
-                      {/* We store the business_type associated with the template in a hidden input so we can read it on the server */}
                       <input type="hidden" name="businessType" value={tmpl.type} disabled className="peer-checked:!block hidden" />
                       
                       <div className="p-4 rounded-2xl border-2 border-outline-variant/50 bg-surface hover:border-electric-blue/50 transition-all peer-checked:border-electric-blue peer-checked:bg-electric-blue/5 peer-checked:ring-1 peer-checked:ring-electric-blue group h-full">
                         <div className="flex justify-between items-start mb-2">
                           <div className="text-3xl filter drop-shadow-sm">{tmpl.emoji}</div>
-                          <div className="hidden peer-checked:block bg-electric-blue text-white rounded-full">
-                            <span className="material-symbols-outlined text-[16px] p-1">check</span>
+                          <div className="hidden peer-checked:flex bg-electric-blue text-white rounded-full p-1 items-center justify-center">
+                            <Check className="h-3 w-3" />
                           </div>
                         </div>
                         <h4 className="font-bold text-on-surface text-base mb-1 group-peer-checked:text-deep-indigo">{tmpl.label}</h4>
@@ -89,7 +89,7 @@ export default function OnboardingPage() {
             </div>
 
             <div className="pt-6">
-              <Button type="submit" className="w-full bg-electric-blue hover:bg-primary text-white py-6 rounded-xl font-label-md text-lg shadow-sm transition-all hover:-translate-y-0.5">
+              <Button type="submit" className="w-full bg-electric-blue hover:bg-primary text-white py-6 rounded-xl font-label-md text-lg shadow-sm transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] min-h-[48px]">
                 เริ่มต้นใช้งาน Dashboard
               </Button>
             </div>

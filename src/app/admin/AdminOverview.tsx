@@ -1,6 +1,15 @@
 'use client'
 
 import Link from 'next/link'
+import {
+  Banknote,
+  Store,
+  MessageSquare,
+  Cpu,
+  Activity,
+  ArrowRight,
+} from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 
 interface ShopOverview {
   id: string
@@ -28,6 +37,8 @@ export default function AdminOverview({
   estimatedMrr,
   recentShops,
 }: OverviewProps) {
+  const activePercentage = shopsCount > 0 ? Math.round((activeShopsCount / shopsCount) * 100) : 0
+
   return (
     <div className="space-y-5 sm:space-y-6">
       {/* Header */}
@@ -49,14 +60,16 @@ export default function AdminOverview({
               รายได้ประจำเดือนรวม
             </span>
             <div className="w-8 h-8 rounded-xl bg-success-green/10 flex items-center justify-center text-success-green">
-              <span className="material-symbols-outlined text-[18px]">payments</span>
+              <Banknote className="h-[18px] w-[18px]" />
             </div>
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-lg sm:text-2xl font-bold text-on-surface font-headline-lg">
               ฿{estimatedMrr.toLocaleString()}
             </span>
-            <span className="text-[10px] text-success-green font-bold">+12% เดือนนี้</span>
+            <Badge variant="success" size="sm">
+              คำนวณตามแพ็กเกจ
+            </Badge>
           </div>
           <p className="text-[10px] text-outline">ประเมินจากแพ็กเกจปัจจุบันของทุกร้านค้า</p>
         </div>
@@ -68,7 +81,7 @@ export default function AdminOverview({
               ร้านค้าที่เปิดใช้งาน
             </span>
             <div className="w-8 h-8 rounded-xl bg-electric-blue/10 flex items-center justify-center text-electric-blue">
-              <span className="material-symbols-outlined text-[18px]">storefront</span>
+              <Store className="h-[18px] w-[18px]" />
             </div>
           </div>
           <div className="flex items-baseline gap-2">
@@ -79,7 +92,7 @@ export default function AdminOverview({
               จากทั้งหมด {shopsCount} ร้าน
             </span>
           </div>
-          <p className="text-[10px] text-outline">อัตราการใช้งาน 95% ทั่วทั้งระบบ</p>
+          <p className="text-[10px] text-outline">อัตราการใช้งานจริง {activePercentage}% ทั่วทั้งระบบ</p>
         </div>
 
         {/* Card 3: Total AI Messages */}
@@ -89,11 +102,11 @@ export default function AdminOverview({
               ข้อความ AI เดือนนี้
             </span>
             <div className="w-8 h-8 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-600">
-              <span className="material-symbols-outlined text-[18px]">forum</span>
+              <MessageSquare className="h-[18px] w-[18px]" />
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-lg sm:text-2xl font-bold text-on-surface font-headline-lg">
+            <span className="text-lg sm:text-2xl font-bold text-on-surface font-headline-lg font-mono">
               {totalMessages.toLocaleString()}
             </span>
             <span className="text-[10px] text-purple-600 font-bold">ข้อความ</span>
@@ -108,11 +121,11 @@ export default function AdminOverview({
               ปริมาณการใช้ Token รวม
             </span>
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600">
-              <span className="material-symbols-outlined text-[18px]">memory</span>
+              <Cpu className="h-[18px] w-[18px]" />
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-lg sm:text-2xl font-bold text-on-surface font-headline-lg">
+            <span className="text-lg sm:text-2xl font-bold text-on-surface font-headline-lg font-mono">
               {(totalTokens / 1000000).toFixed(1)}M
             </span>
             <span className="text-[10px] text-amber-600 font-bold">Tokens</span>
@@ -125,7 +138,7 @@ export default function AdminOverview({
       <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
         <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-3.5">
           <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
-            <span className="material-symbols-outlined text-[20px]">monitor_heart</span>
+            <Activity className="h-5 w-5" />
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">
@@ -175,7 +188,7 @@ export default function AdminOverview({
         <div className="flex items-center justify-between border-b border-outline-variant/30 pb-3.5">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-electric-blue/10 flex items-center justify-center text-electric-blue shrink-0">
-              <span className="material-symbols-outlined text-[20px]">store</span>
+              <Store className="h-5 w-5" />
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">
@@ -189,10 +202,10 @@ export default function AdminOverview({
 
           <Link
             href="/admin/shops"
-            className="text-xs font-bold text-electric-blue hover:text-primary flex items-center gap-1 transition-colors"
+            className="text-xs font-bold text-electric-blue hover:text-primary flex items-center gap-1 transition-colors group min-h-[44px] min-w-[44px] justify-end"
           >
             <span>ดูทั้งหมด</span>
-            <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
 
@@ -212,7 +225,7 @@ export default function AdminOverview({
               </div>
               <div className="flex justify-between items-center text-[11px] text-on-surface-variant">
                 <span>แพ็กเกจ: <strong className="text-on-surface uppercase">{shop.plan || 'Free'}</strong></span>
-                <span>ส่งข้อความ: <strong className="text-on-surface">{shop.msg_used.toLocaleString()}</strong></span>
+                <span>ส่งข้อความ: <strong className="text-on-surface font-mono">{shop.msg_used.toLocaleString()}</strong></span>
               </div>
             </div>
           ))}
