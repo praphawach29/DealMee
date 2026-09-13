@@ -3,11 +3,11 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
-import { extractFromUrl, extractFromPdf, extractFromCsv, type ExtractedSource } from '@/lib/knowledge/extract'
+import { extractFromUrl, extractFromPdf, extractFromCsv, extractUniversalDocument, type ExtractedSource } from '@/lib/knowledge/extract'
 import { toKnowledgeEntries, csvToEntriesDirect, type KnowledgeEntry } from '@/lib/knowledge/ingest'
 
 /** Roughly the ceiling on what a shop owner might reasonably upload; larger files are almost always the wrong document. */
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 
 export async function createKnowledgeItem(formData: FormData) {
   const supabase = await createClient()
@@ -58,7 +58,7 @@ async function saveImportedEntries(
   supabase: Awaited<ReturnType<typeof createClient>>,
   shopId: string,
   entries: KnowledgeEntry[],
-  source: 'url' | 'pdf' | 'csv',
+  source: string,
   sourceRef: string
 ) {
   await supabase
@@ -120,26 +120,36 @@ export async function importKnowledgeFromFile(formData: FormData) {
 
   const file = formData.get('file') as File | null
   if (!file || file.size === 0) return { error: 'กรุณาเลือกไฟล์' }
-  if (file.size > MAX_UPLOAD_BYTES) return { error: 'ไฟล์ใหญ่เกิน 10 MB กรุณาแบ่งไฟล์ให้เล็กลง' }
+  if (file.size > MAX_UPLOAD_BYTES) return { error: 'ไฟล์ใหญ่เกิน 15 MB กรุณาแบ่งไฟล์ให้เล็กลง' }
 
-  const isPdf = file.name.toLowerCase().endsWith('.pdf')
-  const isCsv = file.name.toLowerCase().endsWith('.csv')
-  if (!isPdf && !isCsv) return { error: 'รองรับเฉพาะไฟล์ .pdf และ .csv เท่านั้น' }
+  const lowerName = file.name.toLowerCase()
+  const isSupported = /\.(pdf|docx?|xlsx?|pptx?|csv|png|jpe?g|webp)$/i.test(lowerName)
+  if (!isSupported) {
+    return { error: 'รองรับไฟล์ PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx), CSV และรูปภาพ เท่านั้น' }
+  }
+
+  let sourceTag = 'document'
+  if (lowerName.endsWith('.pdf')) sourceTag = 'pdf'
+  else if (lowerName.endsWith('.docx') || lowerName.endsWith('.doc')) sourceTag = 'docx'
+  else if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) sourceTag = 'xlsx'
+  else if (lowerName.endsWith('.pptx') || lowerName.endsWith('.ppt')) sourceTag = 'pptx'
+  else if (lowerName.endsWith('.csv')) sourceTag = 'csv'
+  else if (/\.(png|jpe?g|webp)$/i.test(lowerName)) sourceTag = 'image'
 
   try {
     // A spreadsheet already laid out as question/answer columns is taken
     // as-is: exact, free, and it keeps the shop's own wording rather than
     // letting a model paraphrase a policy.
-    if (isCsv) {
+    if (lowerName.endsWith('.csv')) {
       const direct = csvToEntriesDirect(await file.text())
       if (direct && direct.length > 0) {
         return await saveImportedEntries(supabase, resolved.shop.id, direct, 'csv', file.name)
       }
     }
 
-    const source: ExtractedSource = isPdf ? await extractFromPdf(file) : await extractFromCsv(file)
+    const source: ExtractedSource = await extractUniversalDocument(file)
     const entries = await toKnowledgeEntries(source.text, resolved.shop.name || 'ร้านค้า')
-    return await saveImportedEntries(supabase, resolved.shop.id, entries, isPdf ? 'pdf' : 'csv', source.label)
+    return await saveImportedEntries(supabase, resolved.shop.id, entries, sourceTag, source.label)
   } catch (err: any) {
     return { error: err.message || 'อ่านไฟล์ไม่สำเร็จ' }
   }

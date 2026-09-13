@@ -156,3 +156,36 @@ export async function extractFromCsv(file: File): Promise<ExtractedSource> {
 
   return { text: truncate(text), label: file.name }
 }
+
+/**
+ * Universal document extractor using Microsoft MarkItDown.
+ * Seamlessly handles: .docx, .xlsx, .pptx, .pdf, .csv, .png, .jpg
+ * Preserves tables and markdown structure for maximum RAG accuracy.
+ */
+export async function extractUniversalDocument(file: File): Promise<ExtractedSource> {
+  try {
+    const { parseDocumentWithMarkItDown } = await import('@/lib/documentProcessor')
+    const buffer = await file.arrayBuffer()
+    const result = await parseDocumentWithMarkItDown(buffer, file.name)
+
+    if (result.success && result.markdown && result.markdown.trim().length >= 20) {
+      return {
+        text: truncate(result.markdown.trim()),
+        label: file.name,
+      }
+    }
+  } catch (err) {
+    console.warn('[extractUniversalDocument] MarkItDown parser warning, falling back:', err)
+  }
+
+  // Graceful fallbacks if MarkItDown is unavailable or couldn't parse
+  const ext = file.name.toLowerCase()
+  if (ext.endsWith('.pdf')) {
+    return await extractFromPdf(file)
+  }
+  if (ext.endsWith('.csv')) {
+    return await extractFromCsv(file)
+  }
+
+  throw new Error(`ไม่สามารถอ่านข้อมูลจากไฟล์ ${file.name} ได้ กรุณาตรวจสอบว่าเป็นเอกสารที่เปิดอ่านได้ปกติ`)
+}

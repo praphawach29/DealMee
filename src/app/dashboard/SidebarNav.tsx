@@ -13,6 +13,7 @@ import {
   CreditCard,
   Bot,
   Database,
+  FileSpreadsheet,
   Blocks,
   MessageSquare,
   ShieldAlert,
@@ -170,6 +171,17 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
       >
         <Database className="mr-2.5 h-[18px] w-[18px] shrink-0" />
         <span>คลังความรู้</span>
+      </Link>
+
+      <Link
+        href="/dashboard/documents"
+        prefetch={true}
+        onMouseEnter={() => handleMouseEnter('/dashboard/documents')}
+        onClick={() => handleLinkClick('/dashboard/documents')}
+        className={linkClass('/dashboard/documents')}
+      >
+        <FileSpreadsheet className="mr-2.5 h-[18px] w-[18px] shrink-0" />
+        <span>เอกสาร & ใบเสนอราคา</span>
       </Link>
 
       <Link

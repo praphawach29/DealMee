@@ -298,7 +298,7 @@ export default function KnowledgeManager({
           <input
             type="file"
             name="file"
-            accept=".pdf,.csv"
+            accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.csv,.png,.jpg,.jpeg,.webp"
             required
             disabled={importing}
             className="flex-1 text-xs sm:text-sm text-on-surface-variant file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-surface-container-high file:text-on-surface file:text-xs file:cursor-pointer disabled:opacity-50"
@@ -308,13 +308,12 @@ export default function KnowledgeManager({
             disabled={importing}
             className="px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-xs sm:text-sm font-semibold border border-outline-variant disabled:opacity-50 cursor-pointer shrink-0"
           >
-            {importing ? 'กำลังอ่าน...' : 'อัปโหลด PDF / CSV'}
+            {importing ? 'กำลังอ่านเอกสาร...' : 'อัปโหลดเอกสาร (PDF, Office, รูปภาพ)'}
           </button>
         </form>
 
         <p className="text-[11px] text-on-surface-variant leading-relaxed">
-          ไฟล์ CSV ที่มีคอลัมน์ <span className="font-mono">คำถาม</span> และ <span className="font-mono">คำตอบ</span> (หรือ question/answer) จะถูกนำเข้าตรงตามที่เขียนไว้ ไม่ผ่าน AI —
-          ได้ข้อความตรงตามต้นฉบับทุกตัวอักษร ส่วนไฟล์อื่นจะให้ AI ช่วยสกัดให้ นำเข้าซ้ำจากต้นทางเดิมจะแทนที่ของเดิม ไม่ซ้อนกัน
+          รองรับ <span className="font-medium text-on-surface">PDF, Word (.docx), Excel (.xlsx), สไลด์ (.pptx), CSV และรูปภาพ/สแกน</span> โดยใช้เทคโนโลยี MarkItDown ถอดตารางราคา สเปกสินค้า และหัวข้อออกมาให้ AI เข้าใจได้อย่างแม่นยำ
         </p>
       </div>
 
