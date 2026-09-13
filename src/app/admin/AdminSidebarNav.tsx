@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Store,
   CreditCard,
+  Receipt,
   TrendingUp,
   History,
 } from 'lucide-react'
@@ -23,6 +24,11 @@ export default function AdminSidebarNav({ onNavClick }: AdminSidebarNavProps) {
       href: '/admin',
       icon: LayoutDashboard,
       exact: true,
+    },
+    {
+      label: 'รายการชำระเงิน',
+      href: '/admin/payments',
+      icon: Receipt,
     },
     {
       label: 'จัดการร้านค้า',

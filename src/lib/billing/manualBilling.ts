@@ -1,0 +1,180 @@
+import { createAdminClient } from '@/lib/supabase/admin'
+import generatePayload from 'promptpay-qr'
+import qrcode from 'qrcode'
+
+export interface PlatformBillingSettings {
+  id: string
+  account_name: string
+  promptpay_id: string
+  bank_name: string
+  bank_account_number: string
+  is_vat_registered: boolean
+  payee_tax_id: string
+  company_address: string
+  company_phone: string
+  company_email: string
+  updated_at?: string
+}
+
+export interface EnhancedBillingPayment {
+  id: string
+  shop_id: string
+  plan_key: string
+  billed_amount: number
+  withheld_amount: number
+  transferred_amount: number
+  amount: number
+  currency: string
+  provider: string
+  status: 'pending' | 'verified' | 'rejected' | 'succeeded' | 'failed'
+  slip_url?: string
+  slip_reference?: string
+  receipt_number?: string
+  verified_at?: string
+  verified_by?: string
+  rejected_reason?: string
+  customer_notes?: string
+  created_at: string
+  shop_name?: string
+  shop_email?: string
+}
+
+export const DEFAULT_PLATFORM_SETTINGS: PlatformBillingSettings = {
+  id: 'default',
+  account_name: 'Botify AI Co., Ltd.',
+  promptpay_id: '0812345678',
+  bank_name: 'ธนาคารกสิกรไทย (KBANK)',
+  bank_account_number: '123-4-56789-0',
+  is_vat_registered: false,
+  payee_tax_id: '0105567000000',
+  company_address: 'อาคารดิจิทัลเทค ชั้น 12 ถนนสุขุมวิท คลองเตย กรุงเทพมหานคร 10110',
+  company_phone: '02-000-0000',
+  company_email: 'billing@botify.ai',
+}
+
+/**
+ * Fetch platform owner's billing settings from database
+ */
+export async function getPlatformBillingSettings(): Promise<PlatformBillingSettings> {
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from('platform_billing_settings')
+      .select('*')
+      .limit(1)
+      .maybeSingle()
+
+    if (error || !data) {
+      return DEFAULT_PLATFORM_SETTINGS
+    }
+
+    return {
+      id: data.id,
+      account_name: data.account_name || DEFAULT_PLATFORM_SETTINGS.account_name,
+      promptpay_id: data.promptpay_id || DEFAULT_PLATFORM_SETTINGS.promptpay_id,
+      bank_name: data.bank_name || DEFAULT_PLATFORM_SETTINGS.bank_name,
+      bank_account_number: data.bank_account_number || DEFAULT_PLATFORM_SETTINGS.bank_account_number,
+      is_vat_registered: Boolean(data.is_vat_registered),
+      payee_tax_id: data.payee_tax_id || DEFAULT_PLATFORM_SETTINGS.payee_tax_id,
+      company_address: data.company_address || DEFAULT_PLATFORM_SETTINGS.company_address,
+      company_phone: data.company_phone || DEFAULT_PLATFORM_SETTINGS.company_phone,
+      company_email: data.company_email || DEFAULT_PLATFORM_SETTINGS.company_email,
+      updated_at: data.updated_at,
+    }
+  } catch (err) {
+    console.error('[ManualBilling] Error getting platform settings:', err)
+    return DEFAULT_PLATFORM_SETTINGS
+  }
+}
+
+/**
+ * Generate PromptPay QR Code as base64 data URL
+ */
+export async function generatePromptPayQRImage(
+  promptpayId: string,
+  amount?: number
+): Promise<{ payload: string; qrDataUrl: string }> {
+  const sanitizedId = promptpayId.replace(/[^0-9]/g, '')
+  const payload = generatePayload(sanitizedId, {
+    amount: amount && amount > 0 ? Number(amount.toFixed(2)) : undefined,
+  })
+
+  const qrDataUrl = await qrcode.toDataURL(payload, {
+    errorCorrectionLevel: 'M',
+    margin: 2,
+    width: 380,
+    color: {
+      dark: '#1e1b4b', // deep indigo
+      light: '#ffffff',
+    },
+  })
+
+  return { payload, qrDataUrl }
+}
+
+/**
+ * Call EasySlip API to verify slip
+ */
+export async function verifySlipWithEasySlip(
+  imageBase64: string,
+  mimeType: string = 'image/jpeg'
+): Promise<{
+  success: boolean
+  status: number
+  data?: {
+    transRef?: string
+    date?: string
+    time?: string
+    amount?: { amount: number; local?: { amount: number } }
+    sender?: { displayName?: string; account?: { value: string } }
+    receiver?: { displayName?: string; account?: { value: string } }
+    ref1?: string
+  }
+  message?: string
+}> {
+  const apiKey = process.env.EASYSLIP_API_KEY
+  if (!apiKey) {
+    return {
+      success: false,
+      status: 400,
+      message: 'ไม่ได้ตั้งค่า EASYSLIP_API_KEY ในระบบ',
+    }
+  }
+
+  try {
+    const payload = {
+      image: `data:${mimeType};base64,${imageBase64}`,
+    }
+
+    const res = await fetch('https://developer.easyslip.com/api/v1/verify', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+
+    const result = await res.json()
+    if (res.ok && result.status === 200) {
+      return {
+        success: true,
+        status: 200,
+        data: result.data,
+      }
+    }
+
+    return {
+      success: false,
+      status: result.status || res.status,
+      message: result.message || 'ไม่สามารถตรวจสอบความถูกต้องของสลิปได้',
+    }
+  } catch (err: any) {
+    console.error('[ManualBilling] EasySlip API error:', err)
+    return {
+      success: false,
+      status: 500,
+      message: err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ EasySlip',
+    }
+  }
+}

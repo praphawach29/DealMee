@@ -1,12 +1,17 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { PlanItem } from '@/app/admin/actions'
+import { PlatformBillingSettings } from '@/lib/billing/manualBilling'
 import UpgradeButton from './UpgradeButton'
+import PromptPayPaymentModal from './PromptPayPaymentModal'
+import { QrCode, FileText, ExternalLink, CheckCircle2, Clock, XCircle } from 'lucide-react'
 
 interface BillingClientProps {
   shop: any
   plans: PlanItem[]
+  platformSettings: PlatformBillingSettings
   usage: { messages_used: number; tokens_used: number }
   payments: any[]
 }
@@ -17,13 +22,22 @@ const STATUS_LABEL_TH: Record<string, string> = {
   canceled: 'ยกเลิกแล้ว',
 }
 
-const PAYMENT_STATUS_LABEL_TH: Record<string, string> = {
-  succeeded: 'สำเร็จ',
-  pending: 'รอดำเนินการ',
-  failed: 'ล้มเหลว',
+const PAYMENT_STATUS_LABEL_TH: Record<string, { label: string; color: string; icon: any }> = {
+  succeeded: { label: 'ชำระสำเร็จ', color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800', icon: CheckCircle2 },
+  verified: { label: 'ชำระสำเร็จ', color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800', icon: CheckCircle2 },
+  pending: { label: 'รอตรวจสอบ', color: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800', icon: Clock },
+  rejected: { label: 'ไม่ผ่าน', color: 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800', icon: XCircle },
+  failed: { label: 'ล้มเหลว', color: 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800', icon: XCircle },
 }
 
-export default function BillingClient({ shop, plans, usage, payments }: BillingClientProps) {
+export default function BillingClient({
+  shop,
+  plans,
+  platformSettings,
+  usage,
+  payments,
+}: BillingClientProps) {
+  const [selectedPromptPayPlan, setSelectedPromptPayPlan] = useState<PlanItem | null>(null)
   const [qrImageUrl, setQrImageUrl] = useState<string | null>(null)
   const [portalLoading, setPortalLoading] = useState(false)
   const [portalError, setPortalError] = useState<string | null>(null)
@@ -78,10 +92,10 @@ export default function BillingClient({ shop, plans, usage, payments }: BillingC
             </span>
             <p className="text-xs text-on-surface-variant mt-1.5">
               สถานะ: {STATUS_LABEL_TH[shop.subscription_status] || shop.subscription_status || 'ใช้งานอยู่'}
-              {shop.subscription_provider ? ` · ชำระผ่าน ${shop.subscription_provider === 'stripe' ? 'Stripe' : 'Omise (PromptPay)'}` : ''}
+              {shop.subscription_provider ? ` · ชำระผ่าน ${shop.subscription_provider === 'stripe' ? 'Stripe' : 'PromptPay'}` : ''}
             </p>
             {shop.plan_expires_at && (
-              <p className="text-xs text-on-surface-variant mt-0.5">
+              <p className="text-xs text-on-surface-variant mt-0.5 font-semibold text-indigo-600 dark:text-indigo-400">
                 ใช้งานได้ถึง: {new Date(shop.plan_expires_at).toLocaleDateString('th-TH')}
               </p>
             )}
@@ -190,21 +204,25 @@ export default function BillingClient({ shop, plans, usage, payments }: BillingC
               </div>
 
               {!isCurrent && !isFree && (
-                <div className="grid grid-cols-2 gap-2">
-                  <UpgradeButton
-                    planKey={plan.key}
-                    provider="stripe"
-                    label="บัตรเครดิต"
-                    className="w-full py-2.5 px-3 bg-electric-blue/10 hover:bg-electric-blue/20 text-electric-blue font-bold text-xs rounded-xl transition-all border border-electric-blue/20 cursor-pointer disabled:opacity-50"
-                    onQrReady={setQrImageUrl}
-                  />
-                  <UpgradeButton
-                    planKey={plan.key}
-                    provider="omise"
-                    label="PromptPay"
-                    className="w-full py-2.5 px-3 bg-success-green/10 hover:bg-success-green/20 text-success-green font-bold text-xs rounded-xl transition-all border border-success-green/20 cursor-pointer disabled:opacity-50"
-                    onQrReady={setQrImageUrl}
-                  />
+                <div className="space-y-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPromptPayPlan(plan)}
+                    className="w-full py-2.5 px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs hover:shadow-md cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98]"
+                  >
+                    <QrCode className="h-4 w-4" />
+                    <span>PromptPay (สแกนจ่าย + แนบสลิป)</span>
+                  </button>
+
+                  <div className="flex gap-2">
+                    <UpgradeButton
+                      planKey={plan.key}
+                      provider="stripe"
+                      label="บัตรเครดิต (Stripe)"
+                      className="w-full py-2 px-3 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface font-semibold text-[11px] rounded-xl transition-all border border-outline-variant/30 cursor-pointer disabled:opacity-50 text-center"
+                      onQrReady={setQrImageUrl}
+                    />
+                  </div>
                 </div>
               )}
             </div>
@@ -212,38 +230,98 @@ export default function BillingClient({ shop, plans, usage, payments }: BillingC
         })}
       </div>
 
-      {/* Payment History */}
+      {/* Payment History Table */}
       {payments.length > 0 && (
-        <div className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-5 shadow-sm">
-          <h2 className="text-sm font-bold text-on-surface mb-3">ประวัติการชำระเงิน</h2>
+        <div className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-on-surface">ประวัติการชำระเงินและใบเสร็จ</h2>
+            <span className="text-[11px] text-on-surface-variant">แสดง {payments.length} รายการล่าสุด</span>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-on-surface-variant text-left border-b border-outline-variant/30">
-                  <th className="py-2 pr-4">วันที่</th>
-                  <th className="py-2 pr-4">ช่องทาง</th>
-                  <th className="py-2 pr-4">แพ็กเกจ</th>
-                  <th className="py-2 pr-4">ยอดเงิน</th>
-                  <th className="py-2 pr-4">สถานะ</th>
+                  <th className="py-2.5 pr-4">วันที่</th>
+                  <th className="py-2.5 pr-4">ช่องทาง</th>
+                  <th className="py-2.5 pr-4">แพ็กเกจ</th>
+                  <th className="py-2.5 pr-4">ยอดเงินสุทธิ</th>
+                  <th className="py-2.5 pr-4">สถานะ</th>
+                  <th className="py-2.5 pr-4 text-right">เอกสาร</th>
                 </tr>
               </thead>
-              <tbody>
-                {payments.map((p) => (
-                  <tr key={p.id} className="border-b border-outline-variant/10">
-                    <td className="py-2 pr-4 text-on-surface-variant">{new Date(p.created_at).toLocaleDateString('th-TH')}</td>
-                    <td className="py-2 pr-4">{p.provider === 'stripe' ? 'Stripe' : 'Omise'}</td>
-                    <td className="py-2 pr-4">{p.plan_key || '-'}</td>
-                    <td className="py-2 pr-4 font-mono">฿{Number(p.amount).toLocaleString()}</td>
-                    <td className="py-2 pr-4">{PAYMENT_STATUS_LABEL_TH[p.status] || p.status}</td>
-                  </tr>
-                ))}
+              <tbody className="divide-y divide-outline-variant/10">
+                {payments.map((p) => {
+                  const statusConfig = PAYMENT_STATUS_LABEL_TH[p.status] || {
+                    label: p.status,
+                    color: 'bg-slate-100 text-slate-700 border-slate-200',
+                    icon: Clock,
+                  }
+                  const StatusIcon = statusConfig.icon
+                  const isVerified = p.status === 'verified' || p.status === 'succeeded'
+
+                  return (
+                    <tr key={p.id} className="hover:bg-surface-container-lowest transition-colors">
+                      <td className="py-3 pr-4 text-on-surface-variant font-mono">
+                        {new Date(p.created_at).toLocaleDateString('th-TH')}
+                      </td>
+                      <td className="py-3 pr-4 font-medium">
+                        {p.provider === 'promptpay' ? 'PromptPay QR' : p.provider === 'stripe' ? 'Stripe' : 'Omise'}
+                      </td>
+                      <td className="py-3 pr-4 font-bold uppercase">{p.plan_key || '-'}</td>
+                      <td className="py-3 pr-4 font-mono font-bold">
+                        ฿{Number(p.transferred_amount || p.amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                        {Number(p.withheld_amount || 0) > 0 && (
+                          <span className="block text-[10px] text-amber-600 font-normal">
+                            หัก ณ ที่จ่าย 3%: ฿{Number(p.withheld_amount).toLocaleString()}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border ${statusConfig.color}`}>
+                          <StatusIcon className="h-3 w-3" />
+                          <span>{statusConfig.label}</span>
+                        </span>
+                      </td>
+                      <td className="py-3 pr-4 text-right">
+                        {isVerified ? (
+                          <a
+                            href={`/dashboard/billing/receipt/${p.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-400 font-bold text-[11px] border border-indigo-200 dark:border-indigo-800/80 transition-all cursor-pointer"
+                          >
+                            <FileText className="h-3 w-3" />
+                            <span>ดูใบเสร็จ</span>
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          </a>
+                        ) : (
+                          <span className="text-outline text-[11px]">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* Omise QR Modal */}
+      {/* PromptPay Payment Modal */}
+      {selectedPromptPayPlan && (
+        <PromptPayPaymentModal
+          isOpen={Boolean(selectedPromptPayPlan)}
+          onClose={() => setSelectedPromptPayPlan(null)}
+          plan={selectedPromptPayPlan}
+          platformSettings={platformSettings}
+          onPaymentSuccess={() => {
+            // Refreshes data after success
+          }}
+        />
+      )}
+
+      {/* Legacy Omise QR Modal (if triggered via UpgradeButton) */}
       {qrImageUrl && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
           <div className="bg-slate-900 text-white border border-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4 text-center">
@@ -274,3 +352,4 @@ export default function BillingClient({ shop, plans, usage, payments }: BillingC
     </div>
   )
 }
+
