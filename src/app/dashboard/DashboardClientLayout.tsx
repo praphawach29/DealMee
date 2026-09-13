@@ -108,11 +108,14 @@ export default function DashboardClientLayout({
             {/* AI Jarvis Copilot Button in Header */}
             <button
               onClick={() => setIsCopilotOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs font-label-md transition-all active:scale-[0.98] shadow-xs hover:shadow-md hover:shadow-indigo-500/20 cursor-pointer shrink-0 min-h-[36px]"
-              title="เปิดผู้ช่วย AI Jarvis ประจำร้าน"
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs transition-all active:scale-[0.98] shadow-xs hover:shadow-md hover:shadow-indigo-500/25 cursor-pointer shrink-0 min-h-[36px] border border-indigo-400/30"
+              title="เปิดผู้ช่วย Botify Jarvis (AI Copilot วิเคราะห์ร้านค้า)"
             >
-              <Bot className="h-4 w-4 animate-pulse" />
-              <span className="hidden sm:inline">AI Copilot</span>
+              <div className="w-5 h-5 rounded-lg bg-white/20 flex items-center justify-center">
+                <Bot className="h-3.5 w-3.5" />
+              </div>
+              <span className="hidden sm:inline">Jarvis Copilot</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs"></span>
             </button>
 
             <button
@@ -160,18 +163,21 @@ export default function DashboardClientLayout({
         </main>
       </div>
 
-      {/* Floating Copilot Button */}
+      {/* Floating Jarvis Copilot FAB Button */}
       {!isCopilotOpen && (
         <button
           onClick={() => setIsCopilotOpen(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white px-4 py-2.5 sm:py-3 rounded-full shadow-lg shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-600/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer font-bold text-xs group"
-          title="ปรึกษา Botify Jarvis AI Copilot"
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white px-4 py-3 rounded-full shadow-xl shadow-indigo-600/30 hover:shadow-2xl hover:shadow-indigo-600/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer font-bold text-xs border border-white/20 group"
+          title="ปรึกษา Botify Jarvis AI Copilot (วิเคราะห์ยอดขาย, สต็อก, ออเดอร์, คิวจอง)"
         >
-          <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
-            <Bot className="h-4 w-4" />
+          <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <Bot className="h-3.5 w-3.5 text-white" />
           </div>
-          <span className="hidden sm:inline">ถาม AI Jarvis</span>
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          <span className="inline">ถาม AI Jarvis</span>
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+          </span>
         </button>
       )}
 

@@ -373,10 +373,7 @@ export async function runMerchantCopilotChat({
 
       turns.push({
         role: 'model',
-        parts: [
-          ...(stepText ? [{ text: stepText }] : []),
-          { functionCall: { name: toolName, args: toolArgs } },
-        ],
+        parts: parts,
       })
 
       const toolResult = await executeCopilotTool(toolName, toolArgs, shopId)
