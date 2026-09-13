@@ -7,6 +7,7 @@ import {
   PlatformBillingSettings,
   getPlatformBillingSettings,
 } from '@/lib/billing/manualBilling'
+import { SUPER_ADMIN_EMAILS } from '@/app/admin/layout'
 
 async function assertSuperAdmin() {
   const supabase = await createClient()
@@ -20,12 +21,13 @@ async function assertSuperAdmin() {
 
   const { data: dbUser } = await supabase
     .from('users')
-    .select('is_super_admin')
+    .select('role')
     .eq('id', user.id)
     .single()
 
   const isSuperAdmin =
-    dbUser?.is_super_admin ||
+    dbUser?.role === 'superadmin' ||
+    SUPER_ADMIN_EMAILS.includes(user.email || '') ||
     user.email === 'admin@botify.ai' ||
     user.email?.includes('superadmin') ||
     user.email === 'jack291625@gmail.com'

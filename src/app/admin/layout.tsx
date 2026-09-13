@@ -8,6 +8,7 @@ import { Lock, ShieldCheck } from 'lucide-react'
 export const SUPER_ADMIN_EMAILS = [
   'praphawach@gmail.com',
   'admin@botify.ai',
+  'jack291625@gmail.com',
 ]
 
 export default async function AdminLayout({

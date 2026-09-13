@@ -3,6 +3,35 @@
 -- Platform billing settings, slip verification, receipt numbering, and RPCs
 -- ==============================================================================
 
+-- Ensure users table has role column
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin';
+
+-- Ensure shops table has billing/subscription columns
+ALTER TABLE public.shops ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'free';
+ALTER TABLE public.shops ADD COLUMN IF NOT EXISTS plan_key TEXT DEFAULT 'free';
+ALTER TABLE public.shops ADD COLUMN IF NOT EXISTS subscription_provider TEXT;
+ALTER TABLE public.shops ADD COLUMN IF NOT EXISTS subscription_status TEXT DEFAULT 'active';
+ALTER TABLE public.shops ADD COLUMN IF NOT EXISTS plan_expires_at TIMESTAMPTZ;
+
+-- Ensure billing_payments table exists before altering
+CREATE TABLE IF NOT EXISTS public.billing_payments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  shop_id UUID REFERENCES public.shops(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL DEFAULT 'promptpay',
+  plan_key TEXT,
+  amount NUMERIC NOT NULL DEFAULT 0,
+  currency TEXT NOT NULL DEFAULT 'THB',
+  status TEXT NOT NULL DEFAULT 'pending',
+  provider_ref TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.billing_payments ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "billing_payments_select" ON public.billing_payments;
+CREATE POLICY "billing_payments_select" ON public.billing_payments FOR SELECT
+  USING (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()));
+
 -- 1. Platform Billing Settings (Single-row configuration for platform owner)
 CREATE TABLE IF NOT EXISTS public.platform_billing_settings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -31,11 +60,20 @@ DROP POLICY IF EXISTS "platform_billing_settings_select" ON public.platform_bill
 CREATE POLICY "platform_billing_settings_select" ON public.platform_billing_settings
   FOR SELECT TO authenticated USING (true);
 
--- Allow superadmins to update billing settings
+-- Allow superadmins to update billing settings (checks role or admin emails)
 DROP POLICY IF EXISTS "platform_billing_settings_update" ON public.platform_billing_settings;
 CREATE POLICY "platform_billing_settings_update" ON public.platform_billing_settings
   FOR UPDATE TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_super_admin = true));
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users 
+      WHERE id = auth.uid() 
+        AND (
+          role = 'superadmin' 
+          OR email IN ('praphawach@gmail.com', 'admin@botify.ai', 'jack291625@gmail.com')
+        )
+    )
+  );
 
 
 -- 2. Enhance billing_payments table with CheckMee fields
@@ -207,7 +245,6 @@ BEGIN
   UPDATE public.shops
   SET plan_key = v_payment.plan_key,
       plan = v_payment.plan_key,
-      package_name = v_payment.plan_key,
       subscription_provider = 'promptpay',
       subscription_status = 'active',
       plan_expires_at = v_expires_at,
