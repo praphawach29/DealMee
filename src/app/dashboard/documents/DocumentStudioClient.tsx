@@ -1077,25 +1077,25 @@ export default function DocumentStudioClient({
       {showPreviewModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex flex-col items-center justify-start p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
           {/* Top Control Bar */}
-          <div className="sticky top-0 z-10 w-full max-w-4xl bg-surface/95 backdrop-blur-md rounded-2xl p-3.5 mb-4 shadow-lg border border-outline-variant/50 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="p-2 rounded-xl bg-electric-blue/10 text-electric-blue">
+          <div className="sticky top-0 z-10 w-full max-w-4xl bg-white dark:bg-slate-900 rounded-2xl p-3.5 mb-4 shadow-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-electric-blue shrink-0">
                 <Eye className="w-5 h-5" />
               </span>
               <div>
-                <h3 className="font-bold text-sm sm:text-base text-on-surface flex items-center gap-2">
+                <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white flex items-center gap-2">
                   <span>ตัวอย่างหน้าใบเสนอราคาจริง</span>
-                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800">
                     แบบร่างจำลอง A4
                   </span>
                 </h3>
-                <p className="text-xs text-on-surface-variant hidden sm:block">
+                <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
                   จำลองหัวกระดาษบริษัท โลโก้ และยอดรวมตามการตั้งค่าจริงของร้าน
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => {
@@ -1111,8 +1111,9 @@ export default function DocumentStudioClient({
               <button
                 type="button"
                 onClick={() => setShowPreviewModal(false)}
-                className="p-2 rounded-xl hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition cursor-pointer"
-                title="ปิดหน้าต่าง"
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 hover:text-slate-900 dark:text-slate-200 dark:hover:text-white border border-slate-300 dark:border-slate-700 transition cursor-pointer flex items-center justify-center shadow-xs"
+                title="ปิดหน้าต่างตัวอย่าง"
+                aria-label="ปิดหน้าต่าง"
               >
                 <X className="w-5 h-5" />
               </button>
