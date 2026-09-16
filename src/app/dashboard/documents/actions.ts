@@ -92,6 +92,7 @@ export async function saveQuotationAction(data: {
     .from('documents')
     .insert({
       shop_id: resolved.shop.id,
+      doc_no: docNumber,
       doc_number: docNumber,
       doc_type: 'quotation',
       customer_name: data.customer_name || 'ลูกค้าผู้มีอุปการคุณ',

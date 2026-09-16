@@ -1307,6 +1307,7 @@ function detectThaiShippingZone(address: string): 'bkk' | 'remote' | 'upcountry'
       .from('documents')
       .insert({
         shop_id: shopId,
+        doc_no: docNumber,
         doc_number: docNumber,
         doc_type: 'quotation',
         customer_name: customerName,

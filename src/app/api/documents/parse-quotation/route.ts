@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
       .from('documents')
       .insert({
         shop_id: shop.id,
+        doc_no: docNumber,
         doc_number: docNumber,
         doc_type: 'quotation',
         customer_name: quotation.customer_name || 'ลูกค้าผู้มีอุปการคุณ',
