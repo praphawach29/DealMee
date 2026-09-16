@@ -321,7 +321,11 @@ export async function testPlaygroundChat(
     // then anything a tool pushed on its own.
     if (result.text) bubbles.push({ type: 'text', content: result.text, origin: 'reply' })
     for (const msg of result.immediateMessages) {
-      bubbles.push({ type: msg.type, content: msg.content, origin: 'tool' })
+      if (msg.type === 'text' || msg.type === 'image') {
+        bubbles.push({ type: msg.type, content: msg.content, origin: 'tool' })
+      } else if (msg.type === 'flex') {
+        bubbles.push({ type: 'text', content: msg.content || '📄 ใบเสนอราคา (LINE Flex Card)', origin: 'tool' })
+      }
     }
 
     return {

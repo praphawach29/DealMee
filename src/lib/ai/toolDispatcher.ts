@@ -4,6 +4,7 @@ import qrcode from 'qrcode'
 import type { AgentToolName } from './salesAgentEngine'
 import { t, type CustomerLanguage } from '@/lib/i18n/customerMessages'
 import { scheduleQrFollowUp, scheduleBookingReminder } from '@/lib/ai/proactiveFollowUp'
+import { buildLineFlexQuotationMessage } from '@/lib/line/flexHelper'
 
 const QR_BUCKET = 'qr-codes'
 
@@ -21,8 +22,9 @@ export interface ToolExecutionContext {
 }
 
 export interface CustomerMessage {
-  type: 'text' | 'image'
+  type: 'text' | 'image' | 'flex'
   content: string
+  flexData?: Record<string, any>
 }
 
 export interface ToolExecutionResult {
@@ -1280,7 +1282,7 @@ function detectThaiShippingZone(address: string): 'bkk' | 'remote' | 'upcountry'
 
     const { data: shopData } = await supabase
       .from('shops')
-      .select('vat_enabled')
+      .select('name, company_name, company_logo_url, vat_enabled')
       .eq('id', shopId)
       .single()
 
@@ -1328,12 +1330,34 @@ function detectThaiShippingZone(address: string): 'bkk' | 'remote' | 'upcountry'
       }
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://botify.ai'
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://ai-agent-google-sdk-jade.vercel.app'
     const docUrl = `${baseUrl.replace(/\/$/, '')}/doc/quotation/${doc.id}`
 
+    const flexQuotation = buildLineFlexQuotationMessage({
+      shopName: shopData?.name || 'ร้านค้า',
+      companyName: shopData?.company_name || shopData?.name || 'ร้านค้า',
+      logoUrl: shopData?.company_logo_url || undefined,
+      docNumber,
+      customerName,
+      customerPhone,
+      customerAddress,
+      items: itemsList,
+      subtotal,
+      discountAmount,
+      vatAmount,
+      totalAmount,
+      docUrl,
+    })
+
     return {
-      resultForAi: `สร้างใบเสนอราคาเรียบร้อยแล้ว!\n- เลขที่เอกสาร: ${docNumber}\n- ผู้รับ: ${customerName}\n- ยอดรวมสุทธิ: ${totalAmount.toLocaleString()} บาท\n- ลิงก์ใบเสนอราคา (PDF): ${docUrl}\n\nให้ส่งลิงก์ใบเสนอราคานี้ให้ลูกค้าในแชททันที`,
-      immediateMessages: [],
+      resultForAi: `สร้างใบเสนอราคาเรียบร้อยแล้ว และระบบได้แนบการ์ดใบเสนอราคา (LINE Flex Card) ส่งให้ลูกค้าแล้ว!\n- เลขที่เอกสาร: ${docNumber}\n- ผู้รับ: ${customerName}\n- ยอดรวมสุทธิ: ${totalAmount.toLocaleString()} บาท\n- ลิงก์ใบเสนอราคา (PDF): ${docUrl}\n\nให้ตอบสรุปยอดสั้นๆ และบอกลูกค้าว่าสามารถแตะปุ่ม "ดูใบเสนอราคา / บันทึก PDF" ในการ์ดเพื่อเปิดดูเอกสาร A4 ฉบับเต็มได้เลยค่ะ`,
+      immediateMessages: [
+        {
+          type: 'flex',
+          content: `📄 ใบเสนอราคา ${docNumber} ยอดรวม ฿${totalAmount.toLocaleString()} บาท`,
+          flexData: flexQuotation,
+        },
+      ],
     }
   }
 

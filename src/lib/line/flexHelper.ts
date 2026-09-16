@@ -167,3 +167,255 @@ export function buildLineFlexProductCarousel(products: ProductItem[]) {
     },
   }
 }
+
+export interface QuotationFlexData {
+  shopName: string
+  companyName?: string
+  logoUrl?: string
+  docNumber: string
+  customerName: string
+  customerPhone?: string
+  customerAddress?: string
+  items: Array<{ name: string; qty: number; price: number; unit?: string }>
+  subtotal: number
+  discountAmount?: number
+  vatAmount?: number
+  totalAmount: number
+  docUrl: string
+}
+
+/**
+ * Builds a professional LINE Flex Message card for Quotations with detailed items and a direct view/print button.
+ */
+export function buildLineFlexQuotationMessage(data: QuotationFlexData) {
+  const items = data.items || []
+  const formattedTotal = Number(data.totalAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const formattedSubtotal = Number(data.subtotal || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  const itemRows: any[] = items.slice(0, 5).map((it) => ({
+    type: 'box',
+    layout: 'horizontal',
+    contents: [
+      {
+        type: 'text',
+        text: `${it.name || 'สินค้า'} x${it.qty || 1}`,
+        size: 'xs',
+        color: '#334155',
+        flex: 4,
+        wrap: true,
+      },
+      {
+        type: 'text',
+        text: `฿${Number((it.price || 0) * (it.qty || 1)).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`,
+        size: 'xs',
+        color: '#0F172A',
+        weight: 'bold',
+        align: 'end',
+        flex: 3,
+      },
+    ],
+  }))
+
+  const bodyContents: any[] = [
+    {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'xs',
+      contents: [
+        {
+          type: 'text',
+          text: 'เรียน (เสนอราคาถึง):',
+          size: 'xxs',
+          color: '#94A3B8',
+          weight: 'bold',
+        },
+        {
+          type: 'text',
+          text: data.customerName || 'ลูกค้าผู้มีอุปการคุณ',
+          size: 'sm',
+          weight: 'bold',
+          color: '#1E293B',
+        },
+        ...(data.customerPhone
+          ? [
+              {
+                type: 'text',
+                text: `เบอร์ติดต่อ: ${data.customerPhone}`,
+                size: 'xs',
+                color: '#64748B',
+              },
+            ]
+          : []),
+      ],
+    },
+    { type: 'separator', color: '#F1F5F9', margin: 'md' },
+    {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'sm',
+      margin: 'md',
+      contents: [
+        {
+          type: 'text',
+          text: 'รายการสินค้าและบริการ',
+          size: 'xxs',
+          color: '#94A3B8',
+          weight: 'bold',
+        },
+        ...itemRows,
+        ...(items.length > 5
+          ? [
+              {
+                type: 'text',
+                text: `...และรายการอื่นๆ อีก ${items.length - 5} รายการ`,
+                size: 'xxs',
+                color: '#64748B',
+                style: 'italic',
+              },
+            ]
+          : []),
+      ],
+    },
+    { type: 'separator', color: '#F1F5F9', margin: 'md' },
+    {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'xs',
+      margin: 'md',
+      contents: [
+        {
+          type: 'box',
+          layout: 'horizontal',
+          contents: [
+            { type: 'text', text: 'ยอดรวมก่อนภาษี', size: 'xs', color: '#64748B' },
+            { type: 'text', text: `฿${formattedSubtotal}`, size: 'xs', color: '#334155', align: 'end' },
+          ],
+        },
+        ...(data.discountAmount && data.discountAmount > 0
+          ? [
+              {
+                type: 'box',
+                layout: 'horizontal',
+                contents: [
+                  { type: 'text', text: 'ส่วนลด (Discount)', size: 'xs', color: '#EF4444' },
+                  {
+                    type: 'text',
+                    text: `-฿${Number(data.discountAmount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`,
+                    size: 'xs',
+                    color: '#EF4444',
+                    align: 'end',
+                  },
+                ],
+              },
+            ]
+          : []),
+        ...(data.vatAmount && data.vatAmount > 0
+          ? [
+              {
+                type: 'box',
+                layout: 'horizontal',
+                contents: [
+                  { type: 'text', text: 'ภาษีมูลค่าเพิ่ม (VAT 7%)', size: 'xs', color: '#64748B' },
+                  {
+                    type: 'text',
+                    text: `฿${Number(data.vatAmount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`,
+                    size: 'xs',
+                    color: '#334155',
+                    align: 'end',
+                  },
+                ],
+              },
+            ]
+          : []),
+        {
+          type: 'box',
+          layout: 'horizontal',
+          margin: 'sm',
+          contents: [
+            { type: 'text', text: 'ยอดสุทธิทั้งสิ้น', size: 'sm', weight: 'bold', color: '#1E293B' },
+            { type: 'text', text: `฿${formattedTotal}`, size: 'lg', weight: 'bold', color: '#2E5BFF', align: 'end' },
+          ],
+        },
+      ],
+    },
+  ]
+
+  return {
+    type: 'flex',
+    altText: `📄 ใบเสนอราคา ${data.docNumber} ยอดรวม ฿${formattedTotal} บาท`,
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#2E5BFF',
+        paddingAll: 'xl',
+        paddingBottom: 'lg',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              {
+                type: 'text',
+                text: '📄 ใบเสนอราคา (QUOTATION)',
+                color: '#FFFFFF',
+                weight: 'bold',
+                size: 'xs',
+              },
+            ],
+          },
+          {
+            type: 'text',
+            text: data.docNumber,
+            color: '#FFFFFF',
+            weight: 'bold',
+            size: 'md',
+            margin: 'xs',
+          },
+          {
+            type: 'text',
+            text: data.companyName || data.shopName,
+            color: '#E0E7FF',
+            size: 'xs',
+            margin: 'xs',
+          },
+        ],
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: 'xl',
+        contents: bodyContents,
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: 'lg',
+        spacing: 'xs',
+        contents: [
+          {
+            type: 'button',
+            style: 'primary',
+            color: '#2E5BFF',
+            height: 'sm',
+            action: {
+              type: 'uri',
+              label: '📄 ดูใบเสนอราคา / บันทึก PDF',
+              uri: data.docUrl,
+            },
+          },
+          {
+            type: 'text',
+            text: 'แตะเพื่อเปิดดูหน้า A4 ฉบับเต็มและพิมพ์ PDF',
+            size: 'xxs',
+            color: '#94A3B8',
+            align: 'center',
+            margin: 'xs',
+          },
+        ],
+      },
+    },
+  }
+}

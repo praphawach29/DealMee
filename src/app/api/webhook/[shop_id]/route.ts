@@ -311,12 +311,29 @@ async function deliverAgentResult({
 
   const flexMsg = flexProducts.length > 0 ? buildLineFlexProductCarousel(flexProducts) : null
 
-  // Bundle text and Flex Carousel into single Reply API call (Zero Push Quota used)
+  // Bundle text, Flex Carousel, and any immediate Tool Messages (e.g. Quotation Flex Card) into single Reply API call (Zero Push Quota used)
+  let immediateMessagesDelivered = false
   if (lineToken) {
     if (useReplyForText && replyToken) {
       const replyPayload: any[] = []
       if (aiReplyText) replyPayload.push({ type: 'text', text: aiReplyText })
       if (flexMsg) replyPayload.push(flexMsg)
+      if (agentResult.immediateMessages && agentResult.immediateMessages.length > 0) {
+        for (const im of agentResult.immediateMessages) {
+          if (im.type === 'flex' && im.flexData) {
+            replyPayload.push(im.flexData)
+          } else if (im.type === 'image') {
+            replyPayload.push({
+              type: 'image',
+              originalContentUrl: im.content,
+              previewImageUrl: im.content,
+            })
+          } else if (im.type === 'text') {
+            replyPayload.push({ type: 'text', text: im.content })
+          }
+        }
+        immediateMessagesDelivered = true
+      }
 
       if (replyPayload.length > 0) {
         await sendLineReply(replyToken, replyPayload, lineToken)
@@ -328,6 +345,18 @@ async function deliverAgentResult({
       }
       if (flexMsg) {
         await sendLineFlexPush(userId, flexMsg, lineToken)
+      }
+      if (agentResult.immediateMessages && agentResult.immediateMessages.length > 0) {
+        for (const im of agentResult.immediateMessages) {
+          if (im.type === 'flex' && im.flexData) {
+            await sendLineFlexPush(userId, im.flexData, lineToken)
+          } else if (im.type === 'image') {
+            await sendLineImagePush(userId, im.content, lineToken)
+          } else if (im.type === 'text') {
+            await sendLinePush(userId, im.content, lineToken)
+          }
+        }
+        immediateMessagesDelivered = true
       }
     }
   }
@@ -348,19 +377,20 @@ async function deliverAgentResult({
   // Tool execution happens INSIDE the Planning Layer (src/lib/ai/toolDispatcher.ts's
   // executeTool(), called possibly multiple times per customer message) —
   // this function's job is just to log what ran and deliver the results.
-  // Tool execution happens INSIDE the Planning Layer (src/lib/ai/toolDispatcher.ts's
-  // executeTool(), called possibly multiple times per customer message) —
   // log tool calls to server console only, DO NOT store internal tool code in chat_messages table.
   for (const toolCall of agentResult.toolCallsExecuted) {
     console.log(`[Webhook] AI executed tool: ${toolCall.name}`, toolCall.args)
   }
 
-  for (const msg of agentResult.immediateMessages) {
-    if (!lineToken) continue
-    if (msg.type === 'image') {
-      await sendLineImagePush(userId, msg.content, lineToken)
-    } else {
-      await sendLinePush(userId, msg.content, lineToken)
+  if (!immediateMessagesDelivered && lineToken) {
+    for (const msg of agentResult.immediateMessages) {
+      if (msg.type === 'image') {
+        await sendLineImagePush(userId, msg.content, lineToken)
+      } else if (msg.type === 'flex' && msg.flexData) {
+        await sendLineFlexPush(userId, msg.flexData, lineToken)
+      } else {
+        await sendLinePush(userId, msg.content, lineToken)
+      }
     }
   }
 
