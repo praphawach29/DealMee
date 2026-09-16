@@ -29,6 +29,21 @@ export default async function DocumentsPage() {
     .eq('shop_id', shop.id)
     .order('created_at', { ascending: false })
 
+  const companyProfile = {
+    name: shop.name || 'ร้านค้า',
+    companyName: shop.company_name || shop.name || 'บริษัท/ร้านค้า',
+    taxId: shop.company_tax_id || '',
+    address: shop.company_address || '',
+    phone: shop.company_phone || '',
+    email: shop.company_email || '',
+    logoUrl: shop.company_logo_url || '',
+    vatEnabled: shop.vat_enabled || false,
+    bankName: shop.bank_name || '',
+    bankAccountNumber: shop.bank_account_number || '',
+    bankAccountName: shop.bank_account_name || '',
+    promptpayId: shop.promptpay_id || '',
+  }
+
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <DocumentStudioClient
@@ -36,6 +51,7 @@ export default async function DocumentsPage() {
         shopName={shop.name || 'ร้านค้า'}
         companyName={shop.company_name || shop.name}
         vatEnabled={shop.vat_enabled || false}
+        companyProfile={companyProfile}
       />
     </div>
   )

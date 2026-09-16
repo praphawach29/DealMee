@@ -73,41 +73,41 @@ export default function BroadcastClientView({
   return (
     <div className="space-y-6">
       {/* LINE Push Quota Status Banner (Mobile Perfect) */}
-      <div className="bg-gradient-to-br from-emerald-950/90 via-slate-900/95 to-slate-900 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-md border border-emerald-500/30 text-white space-y-3.5">
+      <div className="bg-surface/90 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-sm border border-outline-variant/30 text-on-surface space-y-3.5">
         {/* Header Row */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-md shadow-emerald-500/10">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-electric-blue/10 border border-electric-blue/20 flex items-center justify-center text-electric-blue shrink-0 shadow-sm">
               <span className="material-symbols-outlined text-[20px] sm:text-[22px]">send</span>
             </div>
             <div>
               <div className="flex items-center gap-1.5 flex-wrap">
-                <h3 className="font-bold text-sm sm:text-base text-white">
+                <h3 className="font-bold text-sm sm:text-base text-on-surface font-headline-md">
                   โควต้า LINE Push
                 </h3>
-                <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-[10px] sm:text-xs font-medium border border-slate-700">
+                <span className="px-2 py-0.5 rounded-md bg-surface-container-high text-on-surface-variant text-[10px] sm:text-xs font-medium border border-outline-variant/50 font-mono">
                   {pushQuotaInfo.period}
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-slate-300 font-medium">
-                แพ็กเกจ {pushQuotaInfo.planName}
+              <p className="text-[11px] sm:text-xs text-on-surface-variant font-medium">
+                แพ็กเกจ <span className="font-semibold text-on-surface">{pushQuotaInfo.planName}</span>
               </p>
             </div>
           </div>
 
           {/* Quota Badge */}
-          <div className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-right shrink-0">
-            <div className="text-[11px] text-emerald-400 font-bold">คงเหลือ</div>
-            <div className="text-sm sm:text-base font-extrabold text-emerald-300">
-              {pushQuotaInfo.remainingCount.toLocaleString()} <span className="text-xs font-medium text-emerald-200/80">/ {pushQuotaInfo.totalQuota.toLocaleString()}</span>
+          <div className="px-3.5 py-1.5 rounded-xl bg-electric-blue/10 border border-electric-blue/20 text-right shrink-0">
+            <div className="text-[11px] text-electric-blue font-bold">คงเหลือ</div>
+            <div className="text-sm sm:text-base font-extrabold text-on-surface font-mono">
+              {pushQuotaInfo.remainingCount.toLocaleString()} <span className="text-xs font-medium text-on-surface-variant">/ {pushQuotaInfo.totalQuota.toLocaleString()}</span>
             </div>
           </div>
         </div>
 
         {/* Description & Note */}
-        <div className="text-xs text-slate-200 font-medium leading-relaxed bg-slate-950/70 p-3 rounded-xl border border-slate-800">
+        <div className="text-xs text-on-surface-variant font-medium leading-relaxed bg-surface-container-low/80 p-3 rounded-xl border border-outline-variant/40">
           โควต้าข้อความสำหรับยิงบรอดแคสต์โปรโมชัน{' '}
-          <span className="text-emerald-400 font-bold block sm:inline mt-0.5 sm:mt-0">
+          <span className="text-electric-blue font-semibold block sm:inline mt-0.5 sm:mt-0">
             (ตอบแชท AI ปกติใช้ Reply API ฟรี 100% ไม่ถูกหักโควต้านี้)
           </span>
         </div>
@@ -115,21 +115,21 @@ export default function BroadcastClientView({
         {/* Quota Progress Bar */}
         <div className="space-y-1.5">
           <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">
-            <span className="text-slate-200">
-              ใช้ไปแล้ว <span className="text-white font-bold">{pushQuotaInfo.usedCount.toLocaleString()}</span> ข้อความ ({usedPercentage}%)
+            <span className="text-on-surface-variant">
+              ใช้ไปแล้ว <span className="text-on-surface font-bold font-mono">{pushQuotaInfo.usedCount.toLocaleString()}</span> ข้อความ ({usedPercentage}%)
             </span>
-            <span className="text-emerald-300 font-bold">
+            <span className="text-electric-blue font-bold">
               คงเหลือ {remainingPercentage}% ({pushQuotaInfo.remainingCount.toLocaleString()} ข้อความ)
             </span>
           </div>
-          <div className="w-full bg-slate-800/90 rounded-full h-2 overflow-hidden border border-slate-700/60">
+          <div className="w-full bg-surface-container-highest rounded-full h-2.5 overflow-hidden border border-outline-variant/40">
             <div
               className={`h-full transition-all duration-500 rounded-full ${
                 remainingPercentage > 50
-                  ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
+                  ? 'bg-gradient-to-r from-electric-blue to-blue-500 shadow-sm shadow-electric-blue/30'
                   : remainingPercentage > 15
-                  ? 'bg-amber-400 shadow-sm shadow-amber-400/50'
-                  : 'bg-red-500 shadow-sm shadow-red-500/50'
+                  ? 'bg-amber-500 shadow-sm shadow-amber-500/30'
+                  : 'bg-rose-500 shadow-sm shadow-rose-500/30'
               }`}
               style={{ width: `${Math.max(2, remainingPercentage)}%` }}
             ></div>

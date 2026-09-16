@@ -18,6 +18,8 @@ import {
   Search,
   ArrowRight,
   RefreshCw,
+  Eye,
+  X,
 } from 'lucide-react'
 import {
   parseDocumentToQuotationAction,
@@ -39,11 +41,27 @@ interface DocumentItem {
   notes?: string | null
 }
 
+export interface CompanyProfile {
+  name: string
+  companyName?: string | null
+  taxId?: string | null
+  address?: string | null
+  phone?: string | null
+  email?: string | null
+  logoUrl?: string | null
+  vatEnabled?: boolean | null
+  bankName?: string | null
+  bankAccountNumber?: string | null
+  bankAccountName?: string | null
+  promptpayId?: string | null
+}
+
 interface DocumentStudioProps {
   initialDocuments: DocumentItem[]
   shopName: string
   companyName?: string
   vatEnabled?: boolean
+  companyProfile?: CompanyProfile
 }
 
 type TabType = 'quotations' | 'official' | 'archive'
@@ -53,12 +71,14 @@ export default function DocumentStudioClient({
   shopName,
   companyName,
   vatEnabled = false,
+  companyProfile,
 }: DocumentStudioProps) {
   const [activeTab, setActiveTab] = useState<TabType>('quotations')
   const [documents, setDocuments] = useState<DocumentItem[]>(initialDocuments)
   const [searchQuery, setSearchQuery] = useState('')
 
   // ── Quotation State ──
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [parsingQuote, setParsingQuote] = useState(false)
   const [quoteFile, setQuoteFile] = useState<File | null>(null)
   const [quoteCustomerName, setQuoteCustomerName] = useState('')
@@ -653,6 +673,17 @@ export default function DocumentStudioClient({
                 )}
 
                 <button
+                  type="button"
+                  onClick={() => setShowPreviewModal(true)}
+                  disabled={quoteItems.length === 0}
+                  className="px-4 py-2.5 rounded-xl border border-electric-blue/30 bg-electric-blue/10 hover:bg-electric-blue/20 text-electric-blue text-xs sm:text-sm font-bold shadow-2xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  title="ดูตัวอย่างหัวกระดาษและเลย์เอาต์ A4 ก่อนอนุมัติจริง"
+                >
+                  <Eye className="w-4 h-4" />
+                  <span>ดูตัวอย่างหน้ากระดาษ (Preview)</span>
+                </button>
+
+                <button
                   onClick={handleSaveQuotation}
                   disabled={quoteSaving || quoteItems.length === 0}
                   className="px-5 py-2.5 rounded-xl bg-electric-blue hover:bg-primary text-white text-xs sm:text-sm font-bold shadow-sm transition disabled:opacity-50 flex items-center gap-2 cursor-pointer"
@@ -1039,6 +1070,276 @@ export default function DocumentStudioClient({
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── A4 LIVE PREVIEW MODAL ──────────────────────────────────────────────── */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex flex-col items-center justify-start p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
+          {/* Top Control Bar */}
+          <div className="sticky top-0 z-10 w-full max-w-4xl bg-surface/95 backdrop-blur-md rounded-2xl p-3.5 mb-4 shadow-lg border border-outline-variant/50 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="p-2 rounded-xl bg-electric-blue/10 text-electric-blue">
+                <Eye className="w-5 h-5" />
+              </span>
+              <div>
+                <h3 className="font-bold text-sm sm:text-base text-on-surface flex items-center gap-2">
+                  <span>ตัวอย่างหน้าใบเสนอราคาจริง</span>
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                    แบบร่างจำลอง A4
+                  </span>
+                </h3>
+                <p className="text-xs text-on-surface-variant hidden sm:block">
+                  จำลองหัวกระดาษบริษัท โลโก้ และยอดรวมตามการตั้งค่าจริงของร้าน
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPreviewModal(false)
+                  handleSaveQuotation()
+                }}
+                disabled={quoteSaving || quoteItems.length === 0}
+                className="px-4 py-2 rounded-xl bg-electric-blue hover:bg-primary text-white text-xs sm:text-sm font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {quoteSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                <span>อนุมัติและบันทึกเอกสารจริง</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="p-2 rounded-xl hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition cursor-pointer"
+                title="ปิดหน้าต่าง"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Realistic A4 Paper View */}
+          <div className="w-full max-w-4xl bg-white text-gray-800 p-6 sm:p-12 rounded-2xl shadow-2xl border border-gray-200 font-sans space-y-6">
+            {/* Header: Company & Doc Details */}
+            <div className="flex flex-col sm:flex-row justify-between items-start border-b border-gray-200 pb-6 gap-6">
+              <div className="flex items-start gap-4">
+                {companyProfile?.logoUrl ? (
+                  <img
+                    src={companyProfile.logoUrl}
+                    alt="Logo"
+                    className="w-16 h-16 object-contain rounded-xl border border-gray-100 bg-gray-50 p-1 shrink-0"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg shrink-0">
+                    {(companyProfile?.companyName || companyName || shopName).charAt(0)}
+                  </div>
+                )}
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">
+                    {companyProfile?.companyName || companyName || shopName}
+                  </h1>
+                  <p className="text-xs text-gray-500 mt-1 max-w-md leading-relaxed">
+                    {companyProfile?.address || 'ที่อยู่บริษัท (สามารถระบุได้ที่ ตั้งค่า > ข้อมูลบริษัท)'}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    <span>เลขประจำตัวผู้เสียภาษี: <span className="font-mono font-medium">{companyProfile?.taxId || '-'}</span></span>
+                    <span className="mx-2">|</span>
+                    <span>โทร: <span className="font-mono">{companyProfile?.phone || '-'}</span></span>
+                    {companyProfile?.email && (
+                      <>
+                        <span className="mx-2">|</span>
+                        <span>อีเมล: {companyProfile.email}</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-left sm:text-right shrink-0">
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-blue-600 tracking-wider">
+                  ใบเสนอราคา
+                </h2>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-0.5">
+                  QUOTATION
+                </p>
+                <div className="mt-3 text-xs text-gray-600 space-y-1">
+                  <p>
+                    <span className="text-gray-400">เลขที่เอกสาร:</span>{' '}
+                    <span className="font-mono font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">
+                      QT-DRAFT-PREVIEW
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-gray-400">วันที่ออกเอกสาร:</span>{' '}
+                    <span className="font-medium text-gray-800">
+                      {new Date().toLocaleDateString('th-TH', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Customer Details Box */}
+            <div className="p-4 bg-gray-50/80 rounded-xl border border-gray-200 flex flex-col sm:flex-row justify-between gap-4">
+              <div className="space-y-1">
+                <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                  เรียน (เสนอราคาถึง):
+                </h3>
+                <p className="text-base font-bold text-gray-900">
+                  {quoteCustomerName || 'ลูกค้าผู้มีอุปการคุณ'}
+                </p>
+                {quoteCustomerPhone && (
+                  <p className="text-xs text-gray-600 flex items-center gap-1.5">
+                    <span className="text-gray-400">เบอร์โทร:</span>
+                    <span className="font-mono font-medium">{quoteCustomerPhone}</span>
+                  </p>
+                )}
+                {quoteCustomerAddress && (
+                  <p className="text-xs text-gray-600">
+                    <span className="text-gray-400">ที่อยู่ / หน้างาน:</span> {quoteCustomerAddress}
+                  </p>
+                )}
+              </div>
+              <div className="flex sm:flex-col justify-end items-start sm:items-end">
+                <span className="inline-flex items-center px-3 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full border border-blue-200/60">
+                  ● สถานะ: รออนุมัติการสั่งซื้อ
+                </span>
+              </div>
+            </div>
+
+            {/* Items Table */}
+            <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="bg-gray-50/90 border-b border-gray-200 text-xs font-bold text-gray-600 uppercase">
+                    <th className="py-3 px-3 w-12 text-center">#</th>
+                    <th className="py-3 px-4">รายการสินค้า / บริการ</th>
+                    <th className="py-3 px-3 text-center w-24">หน่วย</th>
+                    <th className="py-3 px-3 text-center w-20">จำนวน</th>
+                    <th className="py-3 px-4 text-right w-28">ราคา/หน่วย (บาท)</th>
+                    <th className="py-3 px-4 text-right w-32">จำนวนเงิน (บาท)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {quoteItems.map((item, idx) => {
+                    const rowTotal = (Number(item.price) || 0) * (Number(item.qty) || 1)
+                    return (
+                      <tr key={idx} className="hover:bg-gray-50/50">
+                        <td className="py-3 px-3 text-center text-xs text-gray-400">{idx + 1}</td>
+                        <td className="py-3 px-4 font-medium text-gray-900">
+                          {item.name || <span className="text-gray-300 italic">(ยังไม่ได้ระบุชื่อสินค้า)</span>}
+                        </td>
+                        <td className="py-3 px-3 text-center text-xs text-gray-500">{item.unit || 'ชิ้น'}</td>
+                        <td className="py-3 px-3 text-center font-mono text-xs">{item.qty}</td>
+                        <td className="py-3 px-4 text-right font-mono text-xs">
+                          {Number(item.price || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900">
+                          {rowTotal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Calculations & Payment Terms */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
+              <div className="space-y-3">
+                <div>
+                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                    เงื่อนไขการชำระเงินและข้อกำหนด:
+                  </h4>
+                  <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded-xl border border-gray-200 leading-relaxed whitespace-pre-line">
+                    {quoteNotes || '• กำหนดยืนราคาภายใน 30 วันนับจากวันที่ออกเอกสาร\n• กรุณาชำระเงินตามเงื่อนไขที่ตกลงกัน'}
+                  </div>
+                </div>
+
+                {/* Bank / Payment Info */}
+                {(companyProfile?.bankAccountNumber || companyProfile?.promptpayId) && (
+                  <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 text-xs text-gray-700 space-y-1">
+                    <span className="font-bold text-blue-900 block">ข้อมูลการชำระเงิน:</span>
+                    {companyProfile.bankName && (
+                      <p>
+                        ธนาคาร: <span className="font-semibold">{companyProfile.bankName}</span>
+                      </p>
+                    )}
+                    {companyProfile.bankAccountNumber && (
+                      <p>
+                        เลขที่บัญชี: <span className="font-mono font-bold text-gray-900">{companyProfile.bankAccountNumber}</span>
+                        {companyProfile.bankAccountName && <span> ({companyProfile.bankAccountName})</span>}
+                      </p>
+                    )}
+                    {companyProfile.promptpayId && (
+                      <p>
+                        PromptPay: <span className="font-mono font-bold text-gray-900">{companyProfile.promptpayId}</span>
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Totals Table */}
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-2 text-xs sm:text-sm">
+                <div className="flex justify-between text-gray-600">
+                  <span>ยอดรวมก่อนภาษี (Subtotal):</span>
+                  <span className="font-mono font-semibold text-gray-900">
+                    {subtotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
+                  </span>
+                </div>
+
+                {quoteDiscount > 0 && (
+                  <div className="flex justify-between text-rose-600 font-medium">
+                    <span>ส่วนลด (Discount):</span>
+                    <span className="font-mono">
+                      -{quoteDiscount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
+                    </span>
+                  </div>
+                )}
+
+                {quoteApplyVat && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>ภาษีมูลค่าเพิ่ม VAT 7%:</span>
+                    <span className="font-mono font-semibold text-gray-900">
+                      {vatAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex justify-between text-base font-bold text-gray-900 pt-2 border-t border-gray-300">
+                  <span>ยอดสุทธิทั้งสิ้น (Grand Total):</span>
+                  <span className="font-mono text-blue-600 text-lg sm:text-xl font-extrabold">
+                    {totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Signature Blocks */}
+            <div className="grid grid-cols-2 gap-8 pt-8 border-t border-gray-200 text-center text-xs text-gray-600">
+              <div className="space-y-8">
+                <p className="font-medium text-gray-700">ในนาม {companyProfile?.companyName || companyName || shopName}</p>
+                <div className="w-48 mx-auto border-b border-gray-300"></div>
+                <p>( ผู้มีอำนาจลงนาม / ผู้เสนอราคา )</p>
+              </div>
+              <div className="space-y-8">
+                <p className="font-medium text-gray-700">ผู้สั่งซื้อ / ผู้อนุมัติ</p>
+                <div className="w-48 mx-auto border-b border-gray-300"></div>
+                <p>( {quoteCustomerName || '...........................................'} )</p>
+              </div>
+            </div>
+
+            {/* Preview Banner Note */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center text-xs text-amber-700 font-medium">
+              💡 นี่คือตัวอย่างหน้ากระดาษก่อนอนุมัติจริง เมื่อคุณกด "อนุมัติและบันทึกเอกสารจริง" ระบบจะสร้าง URL และให้สิทธิ์ในการพิมพ์เป็น PDF ทางการได้ทันที
+            </div>
+          </div>
         </div>
       )}
     </div>
