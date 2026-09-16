@@ -1331,7 +1331,7 @@ function detectThaiShippingZone(address: string): 'bkk' | 'remote' | 'upcountry'
       }
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://ai-agent-google-sdk-jade.vercel.app'
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.dealmee.app'
     const docUrl = `${baseUrl.replace(/\/$/, '')}/doc/quotation/${doc.id}`
 
     const flexQuotation = buildLineFlexQuotationMessage({
