@@ -323,7 +323,7 @@ export default function MerchantDashboardClient({
                 <div className="bg-surface rounded-xl p-3.5 shadow-xs flex items-start gap-3 relative overflow-hidden border border-outline-variant/20">
                   <Zap className="h-4 w-4 text-electric-blue mt-0.5 shrink-0" />
                   <div>
-                    <p className="font-label-md text-xs font-bold text-on-surface">Botify Brain Engine™</p>
+                    <p className="font-label-md text-xs font-bold text-on-surface">DealMee Brain Engine™</p>
                     <p className="font-label-sm text-[11px] font-medium text-outline mt-0.5">
                       สลับโมเดลอัตโนมัติ (Gemini 3.6 Flash / Claude Sonnet 5)
                     </p>

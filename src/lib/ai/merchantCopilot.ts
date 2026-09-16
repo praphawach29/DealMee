@@ -284,7 +284,7 @@ export async function runMerchantCopilotChat({
 
     const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
 
-    const systemPrompt = `คุณคือ "Botify Jarvis" ผู้ช่วย AI อัจฉริยะประจำตัวเจ้าของร้าน (Merchant Copilot) ของร้าน "${shop?.name || 'ร้านค้า'}"
+    const systemPrompt = `คุณคือ "DealMee Copilot" ผู้ช่วย AI อัจฉริยะประจำตัวเจ้าของร้าน (Merchant Copilot) ของร้าน "${shop?.name || 'ร้านค้า'}"
 หน้าที่ของคุณ:
 1. วิเคราะห์ข้อมูลธุรกิจ ยอดขาย รายได้ ออเดอร์ ลูกค้า สต็อกสินค้า และคิวการจองของร้าน
 2. ตอบคำถามเจ้าของร้านอย่างมืออาชีพ กระชับ ชัดเจน มีตัวเลขและสถิติอ้างอิง

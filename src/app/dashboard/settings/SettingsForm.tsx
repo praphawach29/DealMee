@@ -39,7 +39,7 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
 
   const webhookUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/webhook/${shop.id}`
-    : `https://botify.ai/api/webhook/${shop.id}`
+    : `https://app.dealmee.app/api/webhook/${shop.id}`
 
   const handleCopy = () => {
     navigator.clipboard.writeText(webhookUrl)
@@ -148,7 +148,7 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
             <input
               name="bot_name"
               type="text"
-              defaultValue={shop.bot_name || 'น้อง Botify'}
+              defaultValue={shop.bot_name || 'น้อง DealMee'}
               placeholder="เช่น น้องเสิร์ฟ, น้องแคร์"
               className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
             />
@@ -447,7 +447,7 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
     <ChatPlaygroundModal
       isOpen={isPlaygroundOpen}
       onClose={() => setIsPlaygroundOpen(false)}
-      initialBotName={shop.bot_name || 'น้อง Botify'}
+      initialBotName={shop.bot_name || 'น้อง DealMee'}
       initialPersonality={shop.personality || 'สุภาพ เรียบร้อย มืออาชีพ และมุ่งมั่นให้บริการ'}
     />
     </>

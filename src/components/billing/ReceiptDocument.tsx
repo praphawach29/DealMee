@@ -203,7 +203,7 @@ export default function ReceiptDocument({
                 <td className="py-4 text-left font-mono">1</td>
                 <td className="py-4 text-left">
                   <p className="font-bold text-slate-900 text-sm">
-                    ค่าบริการใช้งานระบบ Botify AI - แพ็กเกจ {plan_name}
+                    ค่าบริการใช้งานระบบ DealMee AI - แพ็กเกจ {plan_name}
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
                     ระยะเวลาการใช้งาน 1 เดือน (SaaS Cloud Subscription Period: 30 Days)
@@ -268,7 +268,7 @@ export default function ReceiptDocument({
               <span>เอกสารนี้ถูกสร้างโดยระบบอิเล็กทรอนิกส์สมบูรณ์</span>
             </p>
             <p className="text-[11px] leading-relaxed">
-              การชำระเงินได้รับการยืนยันและบันทึกประวัติเข้าระบบ Botify AI Platform เรียบร้อยแล้ว
+              การชำระเงินได้รับการยืนยันและบันทึกประวัติเข้าระบบ DealMee AI Platform เรียบร้อยแล้ว
             </p>
           </div>
 

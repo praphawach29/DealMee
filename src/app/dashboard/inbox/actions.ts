@@ -125,7 +125,7 @@ export async function createMockConversation() {
       conversation_id: conv.id,
       shop_id: profile.workspace_id,
       sender_type: 'bot',
-      sender_name: 'น้อง Botify (AI)',
+      sender_name: 'น้อง DealMee (AI)',
       message: 'สวัสดีค่ะ! สินค้าของทางร้านมีพร้อมส่งทุกรายการเลยนะคะ คุณลูกค้าสนใจสินค้าชิ้นไหนเป็นพิเศษไหมคะ? 😊',
     },
     {

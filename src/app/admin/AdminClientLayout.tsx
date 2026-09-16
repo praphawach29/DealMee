@@ -26,7 +26,7 @@ export default function AdminClientLayout({
             </div>
             <div>
               <span className="font-headline-md text-white font-bold tracking-tight text-base block leading-none">
-                Botify AI
+                DealMee AI
               </span>
               <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block mt-1 font-mono">
                 Super Admin
@@ -58,7 +58,7 @@ export default function AdminClientLayout({
             </div>
             <div>
               <span className="font-headline-md text-white font-bold tracking-tight text-base block leading-none">
-                Botify AI
+                DealMee AI
               </span>
               <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block mt-1 font-mono">
                 Super Admin

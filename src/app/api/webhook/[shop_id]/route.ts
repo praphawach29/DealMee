@@ -254,7 +254,7 @@ async function deliverAgentResult({
       conversation_id: conv.id,
       shop_id: shopId,
       sender_type: 'bot',
-      sender_name: shop.bot_name || 'น้อง Botify',
+      sender_name: shop.bot_name || 'น้อง DealMee',
       message: aiReplyText,
     })
   }

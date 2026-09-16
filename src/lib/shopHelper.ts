@@ -38,7 +38,7 @@ export async function getOrCreateShopForUser(supabase: SupabaseClient, user: { i
     .insert({
       user_id: user.id,
       name: shopName,
-      bot_name: 'น้อง Botify',
+      bot_name: 'น้อง DealMee',
       plan: 'pro',
       status: 'active',
       business_type: 'retail',

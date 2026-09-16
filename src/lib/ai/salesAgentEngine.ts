@@ -643,7 +643,7 @@ const MASTER_TOOLS = [
     },
   },
 
-  // ── ✨ NEW Tools (Added in botify-saas-web) ────────────────────────────────────
+  // ── ✨ NEW Tools (Added in dealmee-saas-web) ────────────────────────────────────
   {
     name: 'get_shop_info',
     description: 'ดึงข้อมูลทั่วไปของร้านค้า เช่น เวลาเปิด-ปิด ที่อยู่ ช่องทางติดต่อ เมื่อลูกค้าถามเกี่ยวกับร้าน',
@@ -771,7 +771,7 @@ function filterTools(names: AgentToolName[]) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Botify Brain Engine™: Complexity Classifier & Router
+// DealMee Brain Engine™: Complexity Classifier & Router
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Negotiation/discount keywords — expanded per ROADMAP_AI_AGENT.md §4 step 1
@@ -1263,7 +1263,7 @@ async function preparePlanningState({
   // instead of every message); Gemini/OpenAI keep receiving them combined
   // since Gemini's caching is automatic regardless of structure and OpenAI
   // isn't currently reachable by the routing below.
-  const staticSystemPrompt = `คุณคือ "${shop.bot_name || 'น้อง Botify'}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
+  const staticSystemPrompt = `คุณคือ "${shop.bot_name || 'น้อง DealMee'}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
 บุคลิกภาพ: ${shop.personality || 'สุภาพ เรียบร้อย มืออาชีพ เป็นมิตรและมีไหวพริบในการขายสูง'}
 คำอธิบายร้าน: ${shop.description || 'ร้านค้าออนไลน์'}
 
@@ -1392,7 +1392,7 @@ ${historyContext}`
     isVip: isVipCustomer,
   })
   console.log(
-    `[Botify Brain™] "${userQuery}" | ${routing.complexity} (score ${routing.complexityScore}) | ${routing.targetProvider.toUpperCase()} | Tools: ${routing.toolSet.length}${isVipCustomer ? ' | VIP customer' : ''} | Stage: ${initialSalesStage}`
+    `[DealMee Brain™] "${userQuery}" | ${routing.complexity} (score ${routing.complexityScore}) | ${routing.targetProvider.toUpperCase()} | Tools: ${routing.toolSet.length}${isVipCustomer ? ' | VIP customer' : ''} | Stage: ${initialSalesStage}`
   )
 
   const language = detectCustomerLanguage(userQuery)

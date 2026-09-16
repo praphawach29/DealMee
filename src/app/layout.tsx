@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Botify SaaS Web",
-  description: "Manage your AI Agents easily",
+  title: "DealMee - ผู้ช่วยขาย AI อัจฉริยะ 24 ชม. บน LINE OA & Social Commerce",
+  description: "DealMee AI ระบบผู้ช่วยปิดการขายอัจฉริยะ ตรวจสลิป EasySlip ออกใบเสนอราคา A4 และดูแลลูกค้าอัตโนมัติตลอด 24 ชั่วโมง",
 };
 
 export default function RootLayout({

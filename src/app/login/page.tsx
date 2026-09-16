@@ -67,11 +67,11 @@ function LoginContent() {
           {/* Top Logo */}
           <div className="flex items-center gap-3 relative z-10">
             <div className="w-10 h-10 rounded-2xl bg-white text-blue-600 flex items-center justify-center font-black text-xl shadow-md">
-              B
+              D
             </div>
-            <span className="text-2xl font-black tracking-tight text-white font-headline-lg">Botify AI</span>
+            <span className="text-2xl font-black tracking-tight text-white font-headline-lg">DealMee AI</span>
             <span className="px-2.5 py-0.5 rounded-full bg-white/20 text-white text-xs font-semibold backdrop-blur-md">
-              Light Edition
+              Sales Closer AI
             </span>
           </div>
 
@@ -82,7 +82,7 @@ function LoginContent() {
               ตอบแชท & ปิดการขายอัตโนมัติ
             </h1>
             <p className="text-base text-blue-100 leading-relaxed font-body-lg max-w-md">
-              ช่วยคุณจัดการร้านค้า ออกใบเสนอราคา PDF สรุปยอด และดูแลลูกค้าตลอด 24 ชั่วโมง
+              ช่วยคุณจัดการร้านค้า ออกใบเสนอราคา Flex สวยหรู สรุปยอด และดูแลลูกค้าตลอด 24 ชั่วโมง
             </p>
 
             <div className="space-y-3 pt-2">
@@ -99,7 +99,7 @@ function LoginContent() {
 
           {/* Footer */}
           <div className="relative z-10 text-xs text-blue-200 border-t border-white/20 pt-4 flex justify-between items-center">
-            <span>© 2026 Botify AI Agent Inc.</span>
+            <span>© 2026 DealMee AI Platform (dealmee.app)</span>
             <span className="flex items-center gap-1.5 text-emerald-300 font-medium">
               <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></span> พร้อมใช้งาน 24/7
             </span>
@@ -112,9 +112,9 @@ function LoginContent() {
           {/* Top Brand Logo for Mobile & Tablet */}
           <div className="lg:hidden flex items-center justify-center gap-2.5 mb-6">
             <div className="w-9 h-9 rounded-2xl bg-blue-600 flex items-center justify-center font-black text-lg text-white shadow-md shadow-blue-600/30">
-              B
+              D
             </div>
-            <span className="text-2xl font-black tracking-tight text-slate-900 font-headline-lg">Botify AI</span>
+            <span className="text-2xl font-black tracking-tight text-slate-900 font-headline-lg">DealMee AI</span>
           </div>
 
           {/* Clean White Card with Smooth Height Transition */}

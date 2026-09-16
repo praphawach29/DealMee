@@ -37,8 +37,8 @@ export default function DashboardClientLayout({
       {/* 1. Desktop Sidebar */}
       <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white z-50 flex-col border-r border-outline-variant/30 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
         <div className="px-6 py-6 flex items-center gap-3 border-b border-outline-variant/20">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center font-bold text-white shadow-xs">B</div>
-          <span className="font-headline-md text-primary font-bold tracking-tight text-lg">Botify AI</span>
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center font-bold text-white shadow-xs">D</div>
+          <span className="font-headline-md text-primary font-bold tracking-tight text-lg">DealMee AI</span>
         </div>
         <SidebarNav bizType={bizType} features={features} isSuperAdmin={isSuperAdmin} />
       </aside>
@@ -59,8 +59,8 @@ export default function DashboardClientLayout({
       >
         <div className="px-5 py-5 flex items-center justify-between border-b border-outline-variant/30">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center font-bold text-white shadow-xs">B</div>
-            <span className="font-headline-md text-primary font-bold tracking-tight text-lg">Botify AI</span>
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center font-bold text-white shadow-xs">D</div>
+            <span className="font-headline-md text-primary font-bold tracking-tight text-lg">DealMee AI</span>
           </div>
           <button
             onClick={() => setIsMobileMenuOpen(false)}
@@ -100,21 +100,21 @@ export default function DashboardClientLayout({
             
             {/* Mobile Brand Title */}
             <span className="sm:hidden font-headline-md text-primary font-bold text-base">
-              Botify AI
+              DealMee AI
             </span>
           </div>
 
           <div className="flex items-center gap-3 lg:gap-5">
-            {/* AI Jarvis Copilot Button in Header */}
+            {/* AI Copilot Button in Header */}
             <button
               onClick={() => setIsCopilotOpen(true)}
               className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs transition-all active:scale-[0.98] shadow-xs hover:shadow-md hover:shadow-indigo-500/25 cursor-pointer shrink-0 min-h-[36px] border border-indigo-400/30"
-              title="เปิดผู้ช่วย Botify Jarvis (AI Copilot วิเคราะห์ร้านค้า)"
+              title="เปิดผู้ช่วย DealMee Copilot (AI วิเคราะห์ร้านค้า)"
             >
               <div className="w-5 h-5 rounded-lg bg-white/20 flex items-center justify-center">
                 <Bot className="h-3.5 w-3.5" />
               </div>
-              <span className="hidden sm:inline">Jarvis Copilot</span>
+              <span className="hidden sm:inline">DealMee Copilot</span>
               <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs"></span>
             </button>
 
@@ -163,17 +163,17 @@ export default function DashboardClientLayout({
         </main>
       </div>
 
-      {/* Floating Jarvis Copilot FAB Button */}
+      {/* Floating Copilot FAB Button */}
       {!isCopilotOpen && (
         <button
           onClick={() => setIsCopilotOpen(true)}
           className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white px-4 py-3 rounded-full shadow-xl shadow-indigo-600/30 hover:shadow-2xl hover:shadow-indigo-600/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer font-bold text-xs border border-white/20 group"
-          title="ปรึกษา Botify Jarvis AI Copilot (วิเคราะห์ยอดขาย, สต็อก, ออเดอร์, คิวจอง)"
+          title="ปรึกษา DealMee AI Copilot (วิเคราะห์ยอดขาย, สต็อก, ออเดอร์, คิวจอง)"
         >
           <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
             <Bot className="h-3.5 w-3.5 text-white" />
           </div>
-          <span className="inline">ถาม AI Jarvis</span>
+          <span className="inline">ถาม Copilot</span>
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>

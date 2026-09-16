@@ -20,8 +20,8 @@ export default function OnboardingPage() {
       <div className="max-w-3xl w-full">
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-2xl bg-electric-blue flex items-center justify-center font-bold text-2xl text-white shadow-lg shadow-electric-blue/20">B</div>
-            <span className="text-3xl font-bold tracking-tight text-deep-indigo font-headline-xl">Botify AI</span>
+            <div className="w-12 h-12 rounded-2xl bg-electric-blue flex items-center justify-center font-bold text-2xl text-white shadow-lg shadow-electric-blue/20">D</div>
+            <span className="text-3xl font-bold tracking-tight text-deep-indigo font-headline-xl">DealMee AI</span>
           </div>
           <h2 className="text-3xl font-bold text-on-surface font-headline-lg">ตั้งค่าร้านค้าของคุณ</h2>
           <p className="mt-2 text-on-surface-variant font-body-lg">กรุณากรอกข้อมูลเบื้องต้นเพื่อเริ่มต้นใช้งาน</p>
@@ -40,7 +40,7 @@ export default function OnboardingPage() {
                   type="text"
                   name="shopName"
                   required
-                  placeholder="เช่น ร้านขายเสื้อผ้าแฟชั่น Botify"
+                  placeholder="เช่น ร้านค้าแฟชั่น DealMee"
                   className="w-full rounded-xl border border-outline-variant/60 px-4 py-3 text-on-surface bg-surface placeholder:text-outline focus:border-electric-blue focus:ring-2 focus:ring-electric-blue/20 transition-all outline-none text-sm font-medium"
                 />
               </div>

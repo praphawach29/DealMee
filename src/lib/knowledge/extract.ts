@@ -72,7 +72,7 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractedSource> {
     headers: {
       // Some sites serve a stripped page to unknown clients; a plain browser
       // UA gets the same HTML a shop owner sees when they check their site.
-      'User-Agent': 'Mozilla/5.0 (compatible; BotifyKnowledgeBot/1.0)',
+      'User-Agent': 'Mozilla/5.0 (compatible; DealMeeKnowledgeBot/1.0)',
       Accept: 'text/html,application/xhtml+xml',
     },
     signal: AbortSignal.timeout(20_000),

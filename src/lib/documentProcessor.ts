@@ -74,7 +74,7 @@ export async function parseDocumentWithMarkItDown(
   try {
     const ext = path.extname(filename).toLowerCase() || '.bin'
     const tempDir = os.tmpdir()
-    const safeName = `botify_doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`
+    const safeName = `dealmee_doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`
     tempFilePath = path.join(tempDir, safeName)
 
     await fs.writeFile(tempFilePath, buffer)

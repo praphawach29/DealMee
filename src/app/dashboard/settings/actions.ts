@@ -276,7 +276,7 @@ export async function testPlaygroundChat(
 
   const customShop = {
     ...shop,
-    bot_name: customBotName || shop.bot_name || 'น้อง Botify',
+    bot_name: customBotName || shop.bot_name || 'น้อง DealMee',
     personality: customPersonality || shop.personality || 'สุภาพ เรียบร้อย มืออาชีพ และมุ่งมั่นให้บริการ',
   }
 

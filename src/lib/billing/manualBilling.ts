@@ -41,7 +41,7 @@ export interface EnhancedBillingPayment {
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformBillingSettings = {
   id: 'default',
-  account_name: 'Botify AI Co., Ltd.',
+  account_name: 'DealMee Co., Ltd.',
   promptpay_id: '0812345678',
   bank_name: 'ธนาคารกสิกรไทย (KBANK)',
   bank_account_number: '123-4-56789-0',
@@ -49,7 +49,7 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformBillingSettings = {
   payee_tax_id: '0105567000000',
   company_address: 'อาคารดิจิทัลเทค ชั้น 12 ถนนสุขุมวิท คลองเตย กรุงเทพมหานคร 10110',
   company_phone: '02-000-0000',
-  company_email: 'billing@botify.ai',
+  company_email: 'billing@dealmee.app',
 }
 
 /**

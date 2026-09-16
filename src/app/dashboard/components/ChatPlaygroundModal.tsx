@@ -33,7 +33,7 @@ interface ChatPlaygroundModalProps {
 export default function ChatPlaygroundModal({
   isOpen,
   onClose,
-  initialBotName = 'น้อง Botify',
+  initialBotName = 'น้อง DealMee',
   initialPersonality = 'สุภาพ เรียบร้อย มืออาชีพ และมุ่งมั่นให้บริการ',
 }: ChatPlaygroundModalProps) {
   const [botName, setBotName] = useState(initialBotName)

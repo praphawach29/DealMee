@@ -59,6 +59,7 @@ export default async function ReceiptPage({ params }: PageProps) {
   const isSuperAdmin =
     dbUser?.role === 'superadmin' ||
     SUPER_ADMIN_EMAILS.includes(user.email || '') ||
+    user.email === 'admin@dealmee.app' ||
     user.email === 'admin@botify.ai' ||
     user.email === 'jack291625@gmail.com'
 

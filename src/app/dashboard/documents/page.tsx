@@ -5,7 +5,7 @@ import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import DocumentStudioClient from './DocumentStudioClient'
 
 export const metadata: Metadata = {
-  title: 'เอกสารและใบเสนอราคาอัจฉริยะ (Smart Documents) | Botify',
+  title: 'เอกสารและใบเสนอราคาอัจฉริยะ (Smart Documents) | DealMee AI',
   description: 'ระบบสร้างใบเสนอราคา BOQ และร่างหนังสือราชการอัตโนมัติด้วย AI',
 }
 

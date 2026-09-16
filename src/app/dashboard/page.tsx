@@ -16,7 +16,7 @@ export default async function DashboardPage() {
     return (
       <MerchantDashboardClient
         shopName="ร้านค้าตัวอย่าง"
-        botName="น้อง Botify"
+        botName="น้อง DealMee"
         botStatus="active"
         plan="PRO"
         productsCount={0}
@@ -96,7 +96,7 @@ export default async function DashboardPage() {
   return (
     <MerchantDashboardClient
       shopName={shop?.name || 'ร้านค้าของคุณ'}
-      botName={shop?.bot_name || 'น้อง Botify'}
+      botName={shop?.bot_name || 'น้อง DealMee'}
       botStatus={shop?.status || 'active'}
       plan={(shop?.plan || 'pro').toUpperCase()}
       productsCount={productsCount}

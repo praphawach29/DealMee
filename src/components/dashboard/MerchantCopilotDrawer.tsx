@@ -29,7 +29,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_follow_up_engine_stats: 'สถิติระบบทวงสลิป AI',
 }
 
-const WELCOME_CONTENT = `สวัสดีครับ! ผมคือ **Botify Jarvis** ผู้ช่วย AI วิเคราะห์ข้อมูลร้านค้าของคุณ 🤖✨
+const WELCOME_CONTENT = `สวัสดีครับ! ผมคือ **DealMee Copilot** ผู้ช่วย AI วิเคราะห์ข้อมูลร้านค้าของคุณ 🤖✨
 
 ผมสามารถช่วยคุณ:
 • 📊 **วิเคราะห์ยอดขาย & รายได้**
@@ -185,7 +185,7 @@ export default function MerchantCopilotDrawer({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-sm sm:text-base tracking-tight text-white">Botify Jarvis</h3>
+                <h3 className="font-bold text-sm sm:text-base tracking-tight text-white">DealMee Copilot</h3>
                 <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   Online
@@ -280,7 +280,7 @@ export default function MerchantCopilotDrawer({
               </div>
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl rounded-tl-xs p-3.5 text-xs text-slate-700 dark:text-slate-300 flex items-center gap-2.5 shadow-xs">
                 <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
-                <span>Jarvis กำลังดึงข้อมูลร้านค้าและวิเคราะห์คำตอบ...</span>
+                <span>DealMee Copilot กำลังดึงข้อมูลร้านค้าและวิเคราะห์คำตอบ...</span>
               </div>
             </div>
           )}
@@ -315,7 +315,7 @@ export default function MerchantCopilotDrawer({
           </form>
           <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 px-1">
             <span>⚡ เชื่อมต่อฐานข้อมูลร้านค้าแบบเรียลไทม์</span>
-            <span>Botify AI Copilot</span>
+            <span>DealMee AI Copilot</span>
           </div>
         </div>
       </aside>
