@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { updateCompanySettings } from './actions'
+import { Save, CheckCircle2, AlertCircle, FileText, RefreshCw } from 'lucide-react'
 
 interface ShopData {
   id: string
@@ -54,7 +55,7 @@ export default function CompanySettingsForm({ shop }: { shop: ShopData }) {
           disabled={loading}
           className="flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 cursor-pointer disabled:opacity-50 shrink-0 text-xs sm:text-sm"
         >
-          <span className="material-symbols-outlined text-[18px]">save</span>
+          {loading ? <RefreshCw className="w-4 h-4 shrink-0 animate-spin" /> : <Save className="w-4 h-4 shrink-0" />}
           <span>{loading ? 'กำลังบันทึก...' : 'บันทึกข้อมูลบริษัท'}</span>
         </button>
       </div>
@@ -69,9 +70,11 @@ export default function CompanySettingsForm({ shop }: { shop: ShopData }) {
           }`}
         >
           <div className="flex items-center gap-2.5">
-            <span className="material-symbols-outlined text-[20px]">
-              {message.type === 'success' ? 'check_circle' : 'error'}
-            </span>
+            {message.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-success-green shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-error-red shrink-0" />
+            )}
             <p>{message.text}</p>
           </div>
           <button onClick={() => setMessage(null)} className="text-xs opacity-70 hover:opacity-100">✕</button>
@@ -82,7 +85,7 @@ export default function CompanySettingsForm({ shop }: { shop: ShopData }) {
       <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
         <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-3.5 sm:pb-4">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-600 shrink-0">
-            <span className="material-symbols-outlined text-[20px]">description</span>
+            <FileText className="w-5 h-5" />
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">
@@ -194,9 +197,11 @@ export default function CompanySettingsForm({ shop }: { shop: ShopData }) {
           disabled={loading}
           className="w-full sm:w-auto flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-8 py-3 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer text-xs sm:text-sm"
         >
-          <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
-            {loading ? 'sync' : 'save'}
-          </span>
+          {loading ? (
+            <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          )}
           <span>{loading ? 'กำลังบันทึก...' : 'บันทึกข้อมูลบริษัท'}</span>
         </button>
       </div>

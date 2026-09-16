@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Bot, Store, CreditCard } from 'lucide-react'
 import SettingsForm from './SettingsForm'
 import CompanySettingsForm from './CompanySettingsForm'
 import PaymentShippingForm from './PaymentShippingForm'
@@ -21,7 +22,7 @@ export default function SettingsTabs({ shop }: { shop: any }) {
               : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-t-xl'
           }`}
         >
-          <span className="material-symbols-outlined text-[18px] sm:text-[20px]">smart_toy</span>
+          <Bot className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
           <span>บอท & LINE OA</span>
         </button>
 
@@ -34,7 +35,7 @@ export default function SettingsTabs({ shop }: { shop: any }) {
               : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-t-xl'
           }`}
         >
-          <span className="material-symbols-outlined text-[18px] sm:text-[20px]">store</span>
+          <Store className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
           <span>ข้อมูลร้านค้า & เอกสาร</span>
         </button>
 
@@ -47,7 +48,7 @@ export default function SettingsTabs({ shop }: { shop: any }) {
               : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-t-xl'
           }`}
         >
-          <span className="material-symbols-outlined text-[18px] sm:text-[20px]">payments</span>
+          <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
           <span>การชำระเงิน & จัดส่ง</span>
         </button>
       </div>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { updatePaymentShippingSettings } from './actions'
+import { Save, CheckCircle2, AlertCircle, QrCode, Building2, Truck, Banknote, RefreshCw } from 'lucide-react'
 
 export interface PaymentShippingShopData {
   id: string
@@ -70,12 +71,14 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
 
   return (
     <form action={handleSubmit} className="space-y-5 sm:space-y-6">
-      {/* Header & Save Button */}
+      {/* Top Header & Save Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-on-surface font-headline-md leading-tight">ตั้งค่าการชำระเงินและจัดส่ง</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-on-surface font-headline-md leading-tight">
+            การชำระเงินและการจัดส่ง (Payment & Shipping)
+          </h1>
           <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5 font-body-md">
-            กำหนดช่องทางรับเงิน PromptPay QR, บัญชีธนาคาร, ค่าจัดส่งแยกตามพื้นที่ และบริการเก็บเงินปลายทาง (COD)
+            ตั้งค่าช่องทางการรับเงินของร้าน อัตราค่าส่งสินค้า และเปิดใช้ PromptPay QR ฝังยอดอัจฉริยะ
           </p>
         </div>
         <button
@@ -83,9 +86,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
           disabled={loading}
           className="flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer text-xs sm:text-sm shrink-0"
         >
-          <span className="material-symbols-outlined text-[18px]">
-            {loading ? 'sync' : 'save'}
-          </span>
+          {loading ? <RefreshCw className="w-4 h-4 shrink-0 animate-spin" /> : <Save className="w-4 h-4 shrink-0" />}
           <span>{loading ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}</span>
         </button>
       </div>
@@ -100,9 +101,11 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
           }`}
         >
           <div className="flex items-center gap-2.5">
-            <span className="material-symbols-outlined text-[20px]">
-              {message.type === 'success' ? 'check_circle' : 'error'}
-            </span>
+            {message.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-success-green shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-error-red shrink-0" />
+            )}
             <p>{message.text}</p>
           </div>
           <button type="button" onClick={() => setMessage(null)} className="text-xs opacity-70 hover:opacity-100">✕</button>
@@ -113,7 +116,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
       <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
         <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-3.5 sm:pb-4">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-electric-blue/10 flex items-center justify-center text-electric-blue shrink-0">
-            <span className="material-symbols-outlined text-[20px]">qr_code_2</span>
+            <QrCode className="w-5 h-5" />
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">ชำระเงินผ่าน พร้อมเพย์ (PromptPay QR)</h2>
@@ -167,7 +170,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
       <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
         <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-3.5 sm:pb-4">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-600 shrink-0">
-            <span className="material-symbols-outlined text-[20px]">account_balance</span>
+            <Building2 className="w-5 h-5" />
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">โอนเงินผ่าน บัญชีธนาคาร (Bank Transfer)</h2>
@@ -228,7 +231,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
       <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
         <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-3.5 sm:pb-4">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-success-green/10 flex items-center justify-center text-success-green shrink-0">
-            <span className="material-symbols-outlined text-[20px]">local_shipping</span>
+            <Truck className="w-5 h-5" />
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">อัตราค่าจัดส่งสินค้า (Shipping Rates)</h2>
@@ -462,7 +465,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
         <div className="flex items-center justify-between border-b border-outline-variant/30 pb-3.5 sm:pb-4">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
-              <span className="material-symbols-outlined text-[20px]">payments</span>
+              <Banknote className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">บริการเก็บเงินปลายทาง (COD)</h2>
@@ -534,9 +537,11 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
           }`}
         >
           <div className="flex items-center gap-2.5">
-            <span className="material-symbols-outlined text-[20px]">
-              {message.type === 'success' ? 'check_circle' : 'error'}
-            </span>
+            {message.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-success-green shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-error-red shrink-0" />
+            )}
             <p>{message.text}</p>
           </div>
           <button type="button" onClick={() => setMessage(null)} className="text-xs opacity-70 hover:opacity-100">✕</button>
@@ -549,9 +554,11 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
           disabled={loading}
           className="w-full sm:w-auto flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-8 py-3 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer text-xs sm:text-sm"
         >
-          <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
-            {loading ? 'sync' : 'save'}
-          </span>
+          {loading ? (
+            <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          )}
           <span>{loading ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่าทั้งหมด'}</span>
         </button>
       </div>

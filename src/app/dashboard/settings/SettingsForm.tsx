@@ -3,6 +3,22 @@
 import { useState } from 'react'
 import { updateBotSettings } from './actions'
 import ChatPlaygroundModal from '../components/ChatPlaygroundModal'
+import {
+  MessageSquare,
+  Save,
+  CheckCircle2,
+  AlertCircle,
+  Bot,
+  Brain,
+  Bell,
+  QrCode,
+  Calendar,
+  HeartHandshake,
+  MessageCircle,
+  Copy,
+  Check,
+  RefreshCw,
+} from 'lucide-react'
 
 interface ShopData {
   id: string
@@ -82,7 +98,7 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
               onClick={() => setIsPlaygroundOpen(true)}
               className="flex items-center justify-center gap-2 bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md font-semibold px-4 py-2 rounded-xl transition-all border border-outline-variant/40 shadow-sm cursor-pointer text-xs sm:text-sm"
             >
-              <span className="material-symbols-outlined text-[18px]">chat</span>
+              <MessageSquare className="w-4 h-4 shrink-0 text-on-surface-variant" />
               <span>ทดสอบแชทจำลอง</span>
             </button>
             <button
@@ -90,7 +106,7 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
               disabled={loading}
               className="flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-4 py-2 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 cursor-pointer disabled:opacity-50 shrink-0 text-xs sm:text-sm"
             >
-              <span className="material-symbols-outlined text-[18px]">save</span>
+              {loading ? <RefreshCw className="w-4 h-4 shrink-0 animate-spin" /> : <Save className="w-4 h-4 shrink-0" />}
               <span>{loading ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}</span>
             </button>
           </div>
@@ -106,9 +122,11 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
           }`}
         >
           <div className="flex items-center gap-2.5">
-            <span className="material-symbols-outlined text-[20px]">
-              {message.type === 'success' ? 'check_circle' : 'error'}
-            </span>
+            {message.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-success-green shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-error-red shrink-0" />
+            )}
             <p>{message.text}</p>
           </div>
           <button onClick={() => setMessage(null)} className="text-xs opacity-70 hover:opacity-100">✕</button>
@@ -119,7 +137,7 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
       <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
         <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-3.5 sm:pb-4">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-electric-blue/10 flex items-center justify-center text-electric-blue shrink-0">
-            <span className="material-symbols-outlined text-[20px]">smart_toy</span>
+            <Bot className="w-5 h-5" />
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">โปรไฟล์และตัวตนของบอท</h2>
@@ -189,7 +207,7 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
       <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
         <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-3.5 sm:pb-4">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-600 shrink-0">
-            <span className="material-symbols-outlined text-[20px]">psychology</span>
+            <Brain className="w-5 h-5" />
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">คำสั่งและกฎกติกาการตอบ (System Prompt)</h2>
@@ -228,7 +246,7 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
       <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
         <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-3.5 sm:pb-4">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
-            <span className="material-symbols-outlined text-[20px]">notifications_active</span>
+            <Bell className="w-5 h-5" />
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm flex items-center gap-2">
@@ -248,7 +266,7 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
           <div className="p-4 rounded-xl border border-outline-variant/50 bg-surface-container-lowest space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-amber-600 text-lg">qr_code_scanner</span>
+                <QrCode className="w-4 h-4 text-amber-600 shrink-0" />
                 <span className="text-xs sm:text-sm font-bold text-on-surface">ทักตามสลิป QR Code ค้างชำระ</span>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -284,7 +302,7 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
           <div className="p-4 rounded-xl border border-outline-variant/50 bg-surface-container-lowest space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-blue-600 text-lg">event_available</span>
+                <Calendar className="w-4 h-4 text-blue-600 shrink-0" />
                 <span className="text-xs sm:text-sm font-bold text-on-surface">ส่งข้อความเตือนนัดหมาย</span>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -310,7 +328,7 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
           <div className="p-4 rounded-xl border border-outline-variant/50 bg-surface-container-lowest space-y-3 md:col-span-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-emerald-600 text-lg">loyalty</span>
+                <HeartHandshake className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span className="text-xs sm:text-sm font-bold text-on-surface">ทักถามความพึงพอใจ & เสนอโปรซื้อซ้ำ</span>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -347,7 +365,7 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
       <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
         <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-3.5 sm:pb-4">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-success-green/10 flex items-center justify-center text-success-green shrink-0">
-            <span className="material-symbols-outlined text-[20px]">forum</span>
+            <MessageCircle className="w-5 h-5" />
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">เชื่อมต่อ LINE Official Account</h2>
@@ -398,9 +416,7 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
                 onClick={handleCopy}
                 className="w-full sm:w-auto px-4 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md text-xs sm:text-sm rounded-xl transition-all flex items-center justify-center gap-1.5 border border-outline-variant/50 shrink-0 cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[18px]">
-                  {copied ? 'check' : 'content_copy'}
-                </span>
+                {copied ? <Check className="w-4 h-4 text-success-green shrink-0" /> : <Copy className="w-4 h-4 shrink-0" />}
                 <span>{copied ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
               </button>
             </div>
@@ -421,9 +437,11 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
           }`}
         >
           <div className="flex items-center gap-2.5">
-            <span className="material-symbols-outlined text-[20px]">
-              {message.type === 'success' ? 'check_circle' : 'error'}
-            </span>
+            {message.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-success-green shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-error-red shrink-0" />
+            )}
             <p>{message.text}</p>
           </div>
           <button onClick={() => setMessage(null)} className="text-xs opacity-70 hover:opacity-100">✕</button>
@@ -436,9 +454,11 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
           disabled={loading}
           className="w-full sm:w-auto flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-8 py-3 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer text-xs sm:text-sm"
         >
-          <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
-            {loading ? 'sync' : 'save'}
-          </span>
+          {loading ? (
+            <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+          )}
           <span>{loading ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่าทั้งหมด'}</span>
         </button>
       </div>
