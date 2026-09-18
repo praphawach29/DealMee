@@ -24,7 +24,7 @@ const features: Feature[] = [
   },
   {
     icon: '💳',
-    title: 'ตรวจสลิปแท้ 100% (EasySlip)',
+    title: 'ตรวจสลิปแท้ 100% (Bank-Grade)',
     desc: 'สแกน QR ตรวจสอบชื่อบัญชี ยอดเงิน วันเวลา และตรวจจับสลิปปลอมทันที',
     color: 'emerald',
   },

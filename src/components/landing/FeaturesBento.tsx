@@ -82,7 +82,7 @@ export default function FeaturesBento() {
                   Bank-Grade Verification
                 </span>
                 <h3 className="text-xl sm:text-2xl font-bold text-slate-900">
-                  ตรวจสลิปโอนเงิน EasySlip
+                  ตรวจสลิปโอนเงินอัตโนมัติ
                 </h3>
               </div>
               <p className="text-slate-600 text-base leading-relaxed">

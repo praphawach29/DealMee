@@ -66,7 +66,7 @@ export default function Footer() {
             </h4>
             <ul className="space-y-2.5 text-sm text-slate-400">
               <li>LINE Official Account Messaging API</li>
-              <li>Bank-Grade EasySlip Verification</li>
+              <li>Bank-Grade Slip Verification (Multi-Provider)</li>
               <li>Supabase PostgreSQL Row Level Security</li>
               <li>Gemini & Claude Multimodal AI</li>
             </ul>
