@@ -75,7 +75,7 @@ export async function toKnowledgeEntries(text: string, shopName: string): Promis
   const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
   if (!apiKey) throw new Error('ยังไม่ได้ตั้งค่า GEMINI_API_KEY จึงแปลงข้อมูลอัตโนมัติไม่ได้')
 
-  const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
+  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
   const prompt = `คุณคือผู้ช่วยจัดระเบียบข้อมูลของร้าน "${shopName}"
 
 ด้านล่างคือข้อความดิบที่ดึงมาจากเว็บไซต์หรือเอกสารของร้าน

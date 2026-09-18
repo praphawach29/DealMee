@@ -1053,7 +1053,7 @@ async function preparePlanningState({
   const geminiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
   const claudeKey = process.env.CLAUDE_API_KEY || process.env.CLAUDE_KEY || process.env.NEXT_PUBLIC_CLAUDE_API_KEY || ''
   const openAiKey = process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY || ''
-  const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
+  const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
 
   // 1. Knowledge Base — inlined up to a character budget, with the rest
   // reachable through search_knowledge_base. Every entry used to be inlined

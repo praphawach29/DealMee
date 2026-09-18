@@ -53,7 +53,7 @@ export async function synthesizeFaqFromConversation({
       return { success: false, createdCount: 0, message: 'ยังไม่ได้ตั้งค่า API Key' }
     }
 
-    const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
+    const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
     const prompt = `คุณคือผู้เชี่ยวชาญการถอดบทเรียนและสร้างคลังความรู้ (Knowledge Synthesizer) สำหรับร้านค้า
 บทบาทของคุณคือวิเคราะห์บทสนทนาระหว่างลูกค้าและร้านค้าด้านล่างนี้ และตรวจสอบว่ามี "คำถามสำคัญที่ลูกค้าถาม และได้รับคำตอบที่ชัดเจนถูกต้อง" ซึ่งควรค่าแก่การเก็บเป็น FAQ ประจำร้านหรือไม่
 

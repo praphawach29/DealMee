@@ -65,7 +65,7 @@ export async function extractGoldenTrajectoryFromOrder({
       return { success: false, error: 'Missing Gemini API Key' }
     }
 
-    const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
+    const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
     const prompt = `คุณคือสุดยอดโค้ชวิเคราะห์การขาย (Sales Trajectory Analyst)
 จงวิเคราะห์บทสนทนานี้ซึ่งปิดการขายสำเร็จและลูกค้าโอนเงินแล้ว เพื่อถอดรหัส "จังหวะปิดการขายที่ดีที่สุด" (Winning Closing Turn)
 

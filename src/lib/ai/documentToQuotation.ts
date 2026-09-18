@@ -40,7 +40,7 @@ export async function extractQuotationFromMarkdown(
   const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
   if (!apiKey) throw new Error('ยังไม่ได้ตั้งค่า GEMINI_API_KEY')
 
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
   const prompt = `คุณคือผู้เชี่ยวชาญการถอดรหัสเอกสารใบเสนอราคา, รายการวัสดุ (BOQ), หรือรายการสั่งซื้อ
 หน้าที่ของคุณคืออ่านข้อมูล Markdown ที่แปลงมาจากเอกสาร และดึงรายการสินค้า ปริมาณ และราคา ออกมาให้ถูกต้องที่สุด
 
