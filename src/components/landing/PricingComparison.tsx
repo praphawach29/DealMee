@@ -24,7 +24,10 @@ export default function PricingComparison() {
         </div>
 
         {/* Comparison Table Container */}
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
+        <div
+          className="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm no-scrollbar"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
           <table className="w-full text-left border-collapse min-w-[700px]">
             {/* Table Header */}
             <thead>

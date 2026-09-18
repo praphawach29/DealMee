@@ -86,6 +86,8 @@ export default function ChatSimulatorSection() {
     setRunKey((k) => k + 1)
   }
 
+  const chatContainerRef = React.useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     if (elapsed >= totalDuration) return
     const timer = setInterval(() => {
@@ -93,6 +95,16 @@ export default function ChatSimulatorSection() {
     }, 50)
     return () => clearInterval(timer)
   }, [elapsed, totalDuration])
+
+  // Auto-scroll to latest message
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth',
+      })
+    }
+  }, [elapsed, activeTab])
 
   return (
     <section id="demo" className="py-20 px-4 sm:px-6 lg:px-8 bg-white relative">
@@ -165,8 +177,13 @@ export default function ChatSimulatorSection() {
 
           {/* Chat Bubble Area */}
           <div
+            ref={chatContainerRef}
             key={`${currentScenario.key}-${runKey}`}
-            className="bg-[#ECE5DD] p-4 flex flex-col gap-2.5 min-h-[420px] max-h-[500px] overflow-y-auto"
+            className="bg-[#ECE5DD] p-4 flex flex-col gap-2.5 min-h-[420px] max-h-[500px] overflow-y-auto no-scrollbar"
+            style={{
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+            }}
           >
             {entries.map((entry) => {
               // Typing Indicator
