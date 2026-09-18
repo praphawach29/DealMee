@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DealMee - ผู้ช่วยขาย AI อัจฉริยะ 24 ชม. บน LINE OA & Social Commerce",
-  description: "DealMee AI ระบบผู้ช่วยปิดการขายอัจฉริยะ ตรวจสลิป EasySlip ออกใบเสนอราคา A4 และดูแลลูกค้าอัตโนมัติตลอด 24 ชั่วโมง",
+  title: "DealMee AI - พนักงานขาย AI อัจฉริยะ 24 ชม. บน LINE OA | DealMee.app",
+  description: "DealMee AI (DealMee.app) ระบบผู้ช่วยปิดการขายอัจฉริยะบน LINE Official Account รับออเดอร์ ตรวจสลิป EasySlip คำนวณค่าส่ง และออกใบเสนอราคา B2B อัตโนมัติ 24 ชั่วโมง",
 };
 
 export default function RootLayout({

@@ -1,6 +1,6 @@
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import DealMeeLandingPage from '@/components/landing/DealMeeLandingPage'
+import LandingPage from '@/components/landing/LandingPage'
 
 export default async function Home() {
   const headersList = await headers()
@@ -11,6 +11,6 @@ export default async function Home() {
     redirect('/dashboard')
   }
 
-  // Otherwise (dealmee.app, www.dealmee.app, localhost, vercel preview), render the marketing landing page
-  return <DealMeeLandingPage />
+  // Otherwise (botify.ai, dealmee.app, localhost, vercel preview), render the marketing landing page
+  return <LandingPage />
 }

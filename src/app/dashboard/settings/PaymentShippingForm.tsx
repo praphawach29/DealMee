@@ -2,7 +2,21 @@
 
 import { useState } from 'react'
 import { updatePaymentShippingSettings } from './actions'
-import { Save, CheckCircle2, AlertCircle, QrCode, Building2, Truck, Banknote, RefreshCw } from 'lucide-react'
+import {
+  Save,
+  CheckCircle2,
+  AlertCircle,
+  QrCode,
+  Building2,
+  Truck,
+  Banknote,
+  RefreshCw,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  Zap,
+} from 'lucide-react'
 
 export interface PaymentShippingShopData {
   id: string
@@ -22,6 +36,15 @@ export interface PaymentShippingShopData {
   cod_enabled?: boolean | null
   cod_fee_type?: string | null
   cod_fee_amount?: number | null
+  features?: {
+    slip_verification?: {
+      enabled?: boolean
+      provider?: string
+      api_key?: string
+      branch_id?: string
+    }
+    [key: string]: any
+  } | null
 }
 
 const THAI_BANKS = [
@@ -50,6 +73,11 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
   const [shippingFeeType, setShippingFeeType] = useState<string>(shop.shipping_fee_type || 'flat')
   const [codEnabled, setCodEnabled] = useState<boolean>(shop.cod_enabled ?? false)
   const [codFeeType, setCodFeeType] = useState<string>(shop.cod_fee_type || 'flat')
+
+  const slipConfig = shop.features?.slip_verification
+  const [slipEnabled, setSlipEnabled] = useState<boolean>(slipConfig?.enabled ?? true)
+  const [slipProvider, setSlipProvider] = useState<string>(slipConfig?.provider || 'easyslip')
+  const [showApiKey, setShowApiKey] = useState(false)
 
   async function handleSubmit(formData: FormData) {
     setLoading(true)
@@ -227,7 +255,245 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
         </div>
       </section>
 
-      {/* Section 3: Advanced Shipping Settings */}
+      {/* Section: Automated Slip Verification API */}
+      <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
+        <div className="flex items-center justify-between border-b border-outline-variant/30 pb-3.5 sm:pb-4 flex-wrap gap-2">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 shrink-0">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">ระบบตรวจสอบสลิปอัตโนมัติ (Slip Verification API)</h2>
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">Auto Check</span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-on-surface-variant">เมื่อลูกค้าส่งรูปสลิปโอนเงินเข้ามาในแชท LINE บอท AI จะตรวจความถูกต้องกับระบบธนาคาร ยืนยันยอดเงิน และเปลี่ยนสถานะออเดอร์เป็น 'ชำระแล้ว' อัตโนมัติ</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 bg-surface-container-low px-3 py-1.5 rounded-xl border border-outline-variant/30">
+            <input
+              type="checkbox"
+              id="slip_verify_enabled"
+              name="slip_verify_enabled"
+              checked={slipEnabled}
+              onChange={(e) => setSlipEnabled(e.target.checked)}
+              className="w-4 h-4 text-emerald-600 rounded border-outline-variant focus:ring-emerald-500 cursor-pointer"
+            />
+            <label htmlFor="slip_verify_enabled" className="text-xs font-semibold text-on-surface cursor-pointer select-none">
+              {slipEnabled ? 'เปิดใช้งานตรวจสลิป' : 'ปิดระบบตรวจสลิป'}
+            </label>
+          </div>
+        </div>
+
+        {slipEnabled && (
+          <div className="space-y-4 pt-1">
+            {/* Provider Selection */}
+            <div className="space-y-2">
+              <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+                เลือกผู้ให้บริการ API ตรวจสอบสลิป (Slip Provider)
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* Thunder Solution */}
+                <div
+                  onClick={() => setSlipProvider('thunder')}
+                  className={`flex flex-col p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    slipProvider === 'thunder'
+                      ? 'border-electric-blue bg-electric-blue/5 shadow-sm ring-1 ring-electric-blue'
+                      : 'border-outline-variant/60 bg-surface hover:bg-surface-container-low'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm text-on-surface">
+                      <Zap className="w-4 h-4 text-amber-500 fill-amber-500 shrink-0" />
+                      <span>Thunder Solution</span>
+                    </div>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">แนะนำ</span>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    เร็ว แรง เสถียร ตรวจ 18 ธนาคาร + TrueMoney (thunder.in.th)
+                  </p>
+                  <input
+                    type="radio"
+                    name="slip_provider"
+                    value="thunder"
+                    checked={slipProvider === 'thunder'}
+                    onChange={() => setSlipProvider('thunder')}
+                    className="sr-only"
+                  />
+                </div>
+
+                {/* EasySlip */}
+                <div
+                  onClick={() => setSlipProvider('easyslip')}
+                  className={`flex flex-col p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    slipProvider === 'easyslip'
+                      ? 'border-electric-blue bg-electric-blue/5 shadow-sm ring-1 ring-electric-blue'
+                      : 'border-outline-variant/60 bg-surface hover:bg-surface-container-low'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm text-on-surface">
+                      <ShieldCheck className="w-4 h-4 text-electric-blue shrink-0" />
+                      <span>EasySlip</span>
+                    </div>
+                    <span className="text-[10px] font-medium text-on-surface-variant">มาตรฐาน</span>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    ระบบตรวจสลิปยอดนิยม รองรับ QR PromptPay และธนาคารชั้นนำ (easyslip.com)
+                  </p>
+                  <input
+                    type="radio"
+                    name="slip_provider"
+                    value="easyslip"
+                    checked={slipProvider === 'easyslip'}
+                    onChange={() => setSlipProvider('easyslip')}
+                    className="sr-only"
+                  />
+                </div>
+
+                {/* SlipOK */}
+                <div
+                  onClick={() => setSlipProvider('slipok')}
+                  className={`flex flex-col p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    slipProvider === 'slipok'
+                      ? 'border-electric-blue bg-electric-blue/5 shadow-sm ring-1 ring-electric-blue'
+                      : 'border-outline-variant/60 bg-surface hover:bg-surface-container-low'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm text-on-surface">
+                      <RefreshCw className="w-4 h-4 text-purple-500 shrink-0" />
+                      <span>SlipOK</span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    ตรวจสลิปผ่าน Branch & Line Integration (slipok.com)
+                  </p>
+                  <input
+                    type="radio"
+                    name="slip_provider"
+                    value="slipok"
+                    checked={slipProvider === 'slipok'}
+                    onChange={() => setSlipProvider('slipok')}
+                    className="sr-only"
+                  />
+                </div>
+
+                {/* Mock / Auto */}
+                <div
+                  onClick={() => setSlipProvider('mock')}
+                  className={`flex flex-col p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    slipProvider === 'mock'
+                      ? 'border-electric-blue bg-electric-blue/5 shadow-sm ring-1 ring-electric-blue'
+                      : 'border-outline-variant/60 bg-surface hover:bg-surface-container-low'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm text-on-surface">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span>โหมดจำลอง (Mock)</span>
+                    </div>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">ฟรี</span>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    อนุมัติทันทีสำหรับทดสอบร้านค้า ไม่ต้องใช้ API Key
+                  </p>
+                  <input
+                    type="radio"
+                    name="slip_provider"
+                    value="mock"
+                    checked={slipProvider === 'mock'}
+                    onChange={() => setSlipProvider('mock')}
+                    className="sr-only"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* API Key Input Field (shown if not mock) */}
+            {slipProvider !== 'mock' && (
+              <div className="space-y-3 p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/30">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between flex-wrap gap-1">
+                    <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+                      API Key ({slipProvider === 'thunder' ? 'Thunder Solution' : slipProvider === 'slipok' ? 'SlipOK' : 'EasySlip'})
+                    </label>
+                    <a
+                      href={
+                        slipProvider === 'thunder'
+                          ? 'https://developer.thunder.in.th/'
+                          : slipProvider === 'slipok'
+                          ? 'https://slipok.com/'
+                          : 'https://developer.easyslip.com/'
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-electric-blue hover:underline flex items-center gap-1 font-medium"
+                    >
+                      <span>ขอ API Key จาก {slipProvider === 'thunder' ? 'thunder.in.th' : slipProvider === 'slipok' ? 'slipok.com' : 'easyslip.com'}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      name="slip_api_key"
+                      type={showApiKey ? 'text' : 'password'}
+                      defaultValue={slipConfig?.api_key || ''}
+                      placeholder={
+                        slipProvider === 'thunder'
+                          ? 'เช่น thd_live_xxxxxxxxxxxxxxxxxxxxxxxx'
+                          : slipProvider === 'slipok'
+                          ? 'ใส่ API Key จาก SlipOK'
+                          : 'เช่น ed17f60a-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+                      }
+                      className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface cursor-pointer p-1"
+                      title={showApiKey ? 'ซ่อน Key' : 'แสดง Key'}
+                    >
+                      {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    {slipConfig?.api_key ? (
+                      <span className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> ใช้ API Key เฉพาะของร้านค้านี้เรียบร้อยแล้ว
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-on-surface-variant flex items-center gap-1">
+                        💡 หากเว้นว่างไว้ ระบบจะใช้ API Key ค่าเริ่มต้นของระบบส่วนกลาง (ถ้ามี) หรือเข้าสู่โหมดจำลองอัตโนมัติ
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* SlipOK Branch ID */}
+                {slipProvider === 'slipok' && (
+                  <div className="space-y-1.5 pt-2 border-t border-outline-variant/20">
+                    <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+                      Branch ID (SlipOK)
+                    </label>
+                    <input
+                      name="slip_branch_id"
+                      type="text"
+                      defaultValue={slipConfig?.branch_id || '1'}
+                      placeholder="เช่น 1 หรือ 2"
+                      className="w-full px-3.5 py-2 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm font-mono"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Section 4: Advanced Shipping Settings */}
       <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
         <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-3.5 sm:pb-4">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-success-green/10 flex items-center justify-center text-success-green shrink-0">

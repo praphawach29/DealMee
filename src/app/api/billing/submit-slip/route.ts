@@ -74,8 +74,8 @@ export async function POST(req: NextRequest) {
     let slipRef: string | null = null
     let easySlipMessage = ''
 
-    const easySlipKey = process.env.EASYSLIP_API_KEY
-    if (easySlipKey) {
+    const hasSlipApiKey = process.env.EASYSLIP_API_KEY || process.env.THUNDER_API_KEY || process.env.SLIPOK_API_KEY
+    if (hasSlipApiKey) {
       const easySlipResult = await verifySlipWithEasySlip(base64, mimeType)
 
       if (easySlipResult.success && easySlipResult.data) {

@@ -132,49 +132,35 @@ export async function verifySlipWithEasySlip(
   }
   message?: string
 }> {
-  const apiKey = process.env.EASYSLIP_API_KEY
-  if (!apiKey) {
-    return {
-      success: false,
-      status: 400,
-      message: 'ไม่ได้ตั้งค่า EASYSLIP_API_KEY ในระบบ',
-    }
-  }
-
   try {
-    const payload = {
-      image: `data:${mimeType};base64,${imageBase64}`,
-    }
-
-    const res = await fetch('https://developer.easyslip.com/api/v1/verify', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    })
-
-    const result = await res.json()
-    if (res.ok && result.status === 200) {
+    const { verifySlip } = await import('@/lib/slip/verifySlip')
+    const result = await verifySlip({ imageBase64, mimeType })
+    if (result.success) {
       return {
         success: true,
         status: 200,
-        data: result.data,
+        data: {
+          transRef: result.transRef,
+          date: result.date,
+          time: result.time,
+          amount: { amount: result.amount || 0 },
+          sender: { displayName: result.senderName },
+          receiver: { displayName: result.receiverName, account: { value: result.receiverAccount || '' } },
+          ref1: result.transRef,
+        },
       }
     }
-
     return {
       success: false,
-      status: result.status || res.status,
-      message: result.message || 'ไม่สามารถตรวจสอบความถูกต้องของสลิปได้',
+      status: result.statusCode || 400,
+      message: result.rawMessage || 'ไม่สามารถตรวจสอบความถูกต้องของสลิปได้',
     }
   } catch (err: any) {
-    console.error('[ManualBilling] EasySlip API error:', err)
+    console.error('[ManualBilling] verifySlip error:', err)
     return {
       success: false,
       status: 500,
-      message: err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ EasySlip',
+      message: err.message || 'เกิดข้อผิดพลาดในการตรวจสอบสลิป',
     }
   }
 }

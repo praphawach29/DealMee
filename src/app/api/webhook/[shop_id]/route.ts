@@ -10,6 +10,7 @@ import { extractGoldenTrajectoryFromOrder } from '@/lib/ai/salesTrajectory'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildLineFlexProductCarousel } from '@/lib/line/flexHelper'
+import { verifySlip } from '@/lib/slip/verifySlip'
 
 const supabase = createAdminClient()
 
@@ -211,10 +212,10 @@ export async function POST(
         if (replyToken && lineToken) {
           await sendLineReply(replyToken, 'ได้รับรูปสลิปแล้วค่ะ 📄 กำลังตรวจสอบความถูกต้อง รอสักครู่นะคะ...', lineToken)
         }
-        // Run EasySlip verification in background (non-blocking)
+        // Run Slip verification and await so serverless execution context does not freeze before completion
         if (lineToken) {
-          verifySlipAndNotify({ messageId, userId, lineToken, shopId: shop_id, shop })
-            .catch(err => console.error('[SlipVerify BG Error]', err))
+          await verifySlipAndNotify({ messageId, userId, lineToken, shopId: shop_id, shop })
+            .catch(err => console.error('[SlipVerify Error]', err))
         }
       }
     }
@@ -405,7 +406,7 @@ async function deliverAgentResult({
   }
 }
 
-// ─── EasySlip Verification (runs non-blocking in background) ─────────────────
+// ─── Slip Verification (supports EasySlip, Thunder Solution, SlipOK, Mock) ────
 
 async function verifySlipAndNotify({
   messageId, userId, lineToken, shopId, shop,
@@ -414,11 +415,9 @@ async function verifySlipAndNotify({
   userId: string
   lineToken: string
   shopId: string
-  shop: Record<string, unknown>
+  shop: Record<string, any>
 }) {
   try {
-    const easySlipKey = process.env.EASYSLIP_API_KEY
-
     // 1. Download image content from LINE
     const imageRes = await fetch(`https://api-data.line.me/v2/bot/message/${messageId}/content`, {
       headers: { Authorization: `Bearer ${lineToken}` },
@@ -433,119 +432,130 @@ async function verifySlipAndNotify({
     const imageBase64 = Buffer.from(imageBuffer).toString('base64')
     const contentType = imageRes.headers.get('content-type') || 'image/jpeg'
 
-    // 2. No API key → mock mode
-    if (!easySlipKey) {
-      console.warn('[SlipVerify] EASYSLIP_API_KEY not set — mock approval')
-      const { data: pendingOrds } = await supabase
+    // 2. Find conversation for this user
+    const { data: conv } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('shop_id', shopId)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    // 3. Find most recent pending order for this customer/shop
+    let pendingOrder: any = null
+    if (conv?.id) {
+      const { data: ords } = await supabase
         .from('orders')
-        .select('id,order_no,product_name,conversation_id,total_amount')
+        .select('*')
         .eq('shop_id', shopId)
-        .eq('payment_status', 'pending')
+        .eq('conversation_id', conv.id)
+        .eq('status', 'pending')
         .order('created_at', { ascending: false })
         .limit(1)
-
-      if (pendingOrds && pendingOrds.length > 0) {
-        await supabase.from('orders')
-          .update({ payment_status: 'paid', slip_url: `LINE-Image:${messageId}` })
-          .eq('id', pendingOrds[0].id)
-
-        await cancelFollowUpTasks({
-          shopId,
-          referenceId: pendingOrds[0].order_no,
-          taskType: 'qr_recovery',
-        })
-
-        await scheduleRepurchaseFollowUp({
-          shopId,
-          userId,
-          orderNumber: pendingOrds[0].order_no,
-          productSummary: pendingOrds[0].product_name,
-          daysDelay: 21,
-        })
-
-        // Extract Golden Trajectory from this winning order
-        extractGoldenTrajectoryFromOrder({
-          shopId,
-          orderId: pendingOrds[0].id,
-          conversationId: (pendingOrds[0] as any).conversation_id,
-          revenue: Number((pendingOrds[0] as any).total_amount) || 0,
-        }).catch((err) => console.error('[SalesTrajectory Error]:', err))
+      if (ords && ords.length > 0) {
+        pendingOrder = ords[0]
       }
-
-      await sendLinePush(userId, '✅ ตรวจสอบสลิปสำเร็จค่ะ! ออเดอร์ของคุณได้รับการยืนยันแล้ว 🎉', lineToken)
-      return
+    }
+    if (!pendingOrder) {
+      const { data: ords } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('shop_id', shopId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+      if (ords && ords.length > 0) {
+        pendingOrder = ords[0]
+      }
     }
 
-    // 3. Call EasySlip API
-    const slipRes = await fetch('https://developer.easyslip.com/api/v1/verify', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${easySlipKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ image: `data:${contentType};base64,${imageBase64}` }),
+    const expectedAmount = pendingOrder ? Number(pendingOrder.total_amount) : undefined
+    const slipConfig = shop?.features?.slip_verification
+
+    // 4. Verify slip via unified engine
+    const verifyResult = await verifySlip({
+      imageBase64,
+      mimeType: contentType,
+      shopSettings: slipConfig,
+      expectedAmount,
     })
-    const slipData = await slipRes.json()
-    console.log('[SlipVerify] EasySlip response:', JSON.stringify(slipData))
 
-    if (slipRes.ok && slipData.status === 200) {
-      const { amount, receiver, date, time, ref1 } = slipData.data ?? {}
-      const amountThai = Number(amount?.amount ?? 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })
+    console.log('[SlipVerify] Verification result:', JSON.stringify(verifyResult))
 
-      // 4. Update most recent pending order for this shop
-      const { data: pendingOrds } = await supabase
-        .from('orders')
-        .select('id,order_no,product_name,conversation_id,total_amount')
-        .eq('shop_id', shopId)
-        .eq('payment_status', 'pending')
-        .order('created_at', { ascending: false })
-        .limit(1)
+    if (verifyResult.success) {
+      const amountVal = Number(verifyResult.amount || expectedAmount || 0)
+      const amountThai = amountVal.toLocaleString('th-TH', { minimumFractionDigits: 2 })
 
-      if (pendingOrds && pendingOrds.length > 0) {
-        await supabase.from('orders')
-          .update({ payment_status: 'paid', slip_url: `LINE-Image:${messageId}` })
-          .eq('id', pendingOrds[0].id)
+      // 5. Update pending order to 'paid'
+      if (pendingOrder) {
+        await supabase
+          .from('orders')
+          .update({
+            status: 'paid',
+            note: (pendingOrder.note ? `${pendingOrder.note}\n` : '') + `[ตรวจสลิปผ่านโดย ${verifyResult.provider}]: ยอด ${amountThai} บ. (LINE-Image:${messageId})`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', pendingOrder.id)
 
         await cancelFollowUpTasks({
           shopId,
-          referenceId: pendingOrds[0].order_no,
+          referenceId: pendingOrder.order_no,
           taskType: 'qr_recovery',
         })
 
         await scheduleRepurchaseFollowUp({
           shopId,
           userId,
-          orderNumber: pendingOrds[0].order_no,
-          productSummary: pendingOrds[0].product_name,
+          orderNumber: pendingOrder.order_no,
+          productSummary: pendingOrder.product_name,
           daysDelay: 21,
         })
 
         // Extract Golden Trajectory from this winning order
         extractGoldenTrajectoryFromOrder({
           shopId,
-          orderId: pendingOrds[0].id,
-          conversationId: (pendingOrds[0] as any).conversation_id,
-          revenue: Number((pendingOrds[0] as any).total_amount) || 0,
+          orderId: pendingOrder.id,
+          conversationId: pendingOrder.conversation_id,
+          revenue: amountVal,
         }).catch((err) => console.error('[SalesTrajectory Error]:', err))
       }
 
-      await sendLinePush(
-        userId,
+      const orderRefText = pendingOrder?.order_no ? `\n📦 ออเดอร์: ${pendingOrder.order_no}` : ''
+      const successMsg =
         `✅ ตรวจสอบสลิปสำเร็จค่ะ!\n` +
         `💰 ยอดโอน: ${amountThai} บาท\n` +
-        `👤 ผู้รับ: ${receiver?.displayName ?? shop.promptpay_name ?? 'ผู้รับเงิน'}\n` +
-        `📅 ${date ?? ''} ${time ?? ''}` +
-        (ref1 ? `\n📋 อ้างอิง: ${ref1}` : '') +
-        `\n\nออเดอร์ยืนยันแล้วค่ะ 🎉 ขอบคุณที่ใช้บริการนะคะ 🙏`,
-        lineToken
-      )
+        `👤 ผู้รับ: ${verifyResult.receiverName || shop.promptpay_name || 'ร้านค้า'}\n` +
+        (verifyResult.date ? `📅 วันที่: ${verifyResult.date} ${verifyResult.time || ''}\n` : '') +
+        (verifyResult.transRef ? `📋 อ้างอิง: ${verifyResult.transRef}\n` : '') +
+        orderRefText +
+        `\n\nออเดอร์ได้รับการยืนยันเรียบร้อยแล้วค่ะ 🎉 ขอบพระคุณที่ใช้บริการนะคะ 🙏`
+
+      await sendLinePush(userId, successMsg, lineToken)
+
+      if (conv?.id) {
+        await supabase.from('chat_messages').insert({
+          conversation_id: conv.id,
+          shop_id: shopId,
+          sender_type: 'bot',
+          sender_name: shop.bot_name || 'น้อง DealMee',
+          message: successMsg,
+        })
+      }
     } else {
-      const reason = slipData.message ?? 'ไม่สามารถอ่านข้อมูลได้'
-      await sendLinePush(
-        userId,
-        `❌ ตรวจสอบสลิปไม่สำเร็จค่ะ (${reason})\n\nกรุณาตรวจสอบ:\n• ถ่ายหน้าจอสลิปให้ชัดเจน ไม่ตัด\n• ต้องเป็นสลิปโอนเงินจริง ไม่ใช่รูปถ่าย\n\nหากยังมีปัญหา แจ้งแอดมินได้เลยค่ะ 🙏`,
-        lineToken
-      )
+      const reason = verifyResult.rawMessage ?? 'ไม่สามารถอ่านข้อมูลสลิปได้'
+      const failMsg =
+        `❌ ตรวจสอบสลิปไม่สำเร็จค่ะ (${reason})\n\nกรุณาตรวจสอบ:\n• ถ่ายหน้าจอสลิปให้ชัดเจน ไม่ตัดขอบหรือ QR Code\n• ต้องเป็นสลิปโอนเงินจริงจากธนาคาร\n• ยอดเงินตรงกับยอดในออเดอร์\n\nหากท่านโอนเงินเรียบร้อยแล้ว สามารถแจ้งแอดมินให้ตรวจสอบได้เลยนะคะ 🙏`
+
+      await sendLinePush(userId, failMsg, lineToken)
+
+      if (conv?.id) {
+        await supabase.from('chat_messages').insert({
+          conversation_id: conv.id,
+          shop_id: shopId,
+          sender_type: 'bot',
+          sender_name: shop.bot_name || 'น้อง DealMee',
+          message: failMsg,
+        })
+      }
     }
   } catch (err) {
     console.error('[SlipVerify Exception]:', err)

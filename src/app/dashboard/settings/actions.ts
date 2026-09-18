@@ -103,6 +103,22 @@ export async function updatePaymentShippingSettings(formData: FormData) {
   const promptpay_qr_enabled = formData.get('promptpay_qr_enabled') === 'true' || formData.get('promptpay_qr_enabled') === 'on'
   const cod_enabled = formData.get('cod_enabled') === 'true' || formData.get('cod_enabled') === 'on'
 
+  const slip_verify_enabled = formData.get('slip_verify_enabled') === 'true' || formData.get('slip_verify_enabled') === 'on'
+  const slip_provider = ((formData.get('slip_provider') as string) || 'easyslip').trim()
+  const slip_api_key = ((formData.get('slip_api_key') as string) || '').trim()
+  const slip_branch_id = ((formData.get('slip_branch_id') as string) || '').trim()
+
+  const currentFeatures = (shop.features && typeof shop.features === 'object') ? shop.features : {}
+  const updatedFeatures = {
+    ...currentFeatures,
+    slip_verification: {
+      enabled: slip_verify_enabled,
+      provider: slip_provider,
+      api_key: slip_api_key,
+      branch_id: slip_branch_id,
+    },
+  }
+
   const updateData = {
     promptpay_number: ((formData.get('promptpay_number') as string) || '').trim(),
     promptpay_name: ((formData.get('promptpay_name') as string) || '').trim(),
@@ -120,6 +136,7 @@ export async function updatePaymentShippingSettings(formData: FormData) {
     cod_enabled,
     cod_fee_type: (formData.get('cod_fee_type') as string) || 'flat',
     cod_fee_amount: Number(formData.get('cod_fee_amount') || 30),
+    features: updatedFeatures,
     updated_at: new Date().toISOString(),
   }
 
