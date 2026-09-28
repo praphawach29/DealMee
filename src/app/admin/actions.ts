@@ -3,7 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 
-const SUPER_ADMIN_EMAIL = 'praphawach@gmail.com'
+import { SUPER_ADMIN_EMAILS } from './layout'
 
 export interface PlanItem {
   id?: string
@@ -26,7 +26,7 @@ export async function verifySuperAdmin() {
     return { isSuperAdmin: false, user: null }
   }
 
-  if (user.email === SUPER_ADMIN_EMAIL) {
+  if (SUPER_ADMIN_EMAILS.includes(user.email || '')) {
     return { isSuperAdmin: true, user }
   }
 

@@ -3,11 +3,12 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
+import { SUPER_ADMIN_EMAILS } from '@/app/admin/layout'
 
 export async function login(formData: FormData) {
   const supabase = await createClient()
 
-  const email = (formData.get('email') as string)?.trim()
+  const email = (formData.get('email') as string)?.trim()?.toLowerCase() || ''
   const password = formData.get('password') as string
 
   // 1. Attempt login with password
@@ -23,7 +24,7 @@ export async function login(formData: FormData) {
         const { error: retryError } = await supabase.auth.signInWithPassword({ email, password })
         if (!retryError) {
           revalidatePath('/', 'layout')
-          if (email === 'praphawach@gmail.com') {
+          if (SUPER_ADMIN_EMAILS.includes(email)) {
             redirect('/admin')
           }
           redirect('/dashboard')
@@ -31,21 +32,20 @@ export async function login(formData: FormData) {
       }
     }
 
-    redirect(`/login?error=${encodeURIComponent('อีเมลหรือรหัสผ่านไม่ถูกต้อง (หากเป็นบัญชีใหม่ รบกวนกดแท็บ "สร้างบัญชีใหม่")')}`)
+    redirect(`/login?error=${encodeURIComponent('อีเมลหรือรหัสผ่านไม่ถูกต้อง (หากลืมรหัสผ่าน สามารถกด "ลืมรหัสผ่าน?" ด้านล่างเพื่อรีเซ็ตได้)')}`)
   }
 
   revalidatePath('/', 'layout')
-  if (email === 'praphawach@gmail.com') {
+  if (SUPER_ADMIN_EMAILS.includes(email)) {
     redirect('/admin')
   }
   redirect('/dashboard')
 }
 
-
 export async function signup(formData: FormData) {
   const supabase = await createClient()
 
-  const email = (formData.get('email') as string)?.trim()
+  const email = (formData.get('email') as string)?.trim()?.toLowerCase() || ''
   const password = formData.get('password') as string
 
   // 1. Try to sign up
@@ -66,5 +66,9 @@ export async function signup(formData: FormData) {
   }
 
   revalidatePath('/', 'layout')
+  if (SUPER_ADMIN_EMAILS.includes(email)) {
+    redirect('/admin')
+  }
   redirect('/onboarding')
 }
+
