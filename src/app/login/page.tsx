@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { login, signup } from './actions'
 import { Button } from '@/components/ui/button'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
@@ -40,6 +40,29 @@ function LoginContent() {
   const [forgotLoading, setForgotLoading] = useState(false)
   const [forgotSuccess, setForgotSuccess] = useState(false)
   const [forgotError, setForgotError] = useState<string | null>(null)
+
+  useEffect(() => {
+    // 1. Detect if URL hash has recovery token from email click
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash
+      if (hash && (hash.includes('type=recovery') || hash.includes('access_token'))) {
+        router.replace('/reset-password' + hash)
+        return
+      }
+    }
+
+    // 2. Listen for Supabase recovery event
+    const supabase = createClient()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        router.replace('/reset-password')
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [router])
 
   const error = localError || urlError
 

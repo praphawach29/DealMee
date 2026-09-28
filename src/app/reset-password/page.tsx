@@ -29,8 +29,16 @@ function ResetPasswordContent() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
 
   useEffect(() => {
+    const supabase = createClient()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        setUserEmail(session.user.email || null)
+        setCheckingAuth(false)
+      }
+    })
+
     async function checkSession() {
-      const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         setUserEmail(user.email || null)
@@ -38,6 +46,10 @@ function ResetPasswordContent() {
       setCheckingAuth(false)
     }
     checkSession()
+
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
