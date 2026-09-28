@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
+import Link from 'next/link'
 import { login, signup } from './actions'
 import { Button } from '@/components/ui/button'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
@@ -403,8 +404,8 @@ function LoginContent() {
             {/* Terms Footer */}
             <p className="text-center text-[11px] text-slate-400 leading-relaxed pt-1">
               การเข้าใช้งานถือว่าคุณยอมรับ{' '}
-              <a href="#" className="text-slate-600 hover:underline font-medium">เงื่อนไขบริการ</a> และ{' '}
-              <a href="#" className="text-slate-600 hover:underline font-medium">นโยบายความเป็นส่วนตัว</a>
+              <Link href="/terms" target="_blank" className="text-slate-600 hover:text-blue-600 hover:underline font-medium">เงื่อนไขบริการ</Link> และ{' '}
+              <Link href="/privacy" target="_blank" className="text-slate-600 hover:text-blue-600 hover:underline font-medium">นโยบายความเป็นส่วนตัว</Link>
             </p>
           </div>
         </div>

@@ -103,12 +103,12 @@ export default function Footer() {
             &copy; {currentYear} DealMee.app (DealMee AI). All rights reserved. ออกแบบสำหรับร้านค้าและธุรกิจไทย
           </div>
           <div className="flex items-center gap-6">
-            <a href="#pricing" className="hover:text-slate-200 transition-colors">
+            <Link href="/terms" className="hover:text-cyan-400 transition-colors">
               เงื่อนไขการให้บริการ
-            </a>
-            <a href="#faq" className="hover:text-slate-200 transition-colors">
+            </Link>
+            <Link href="/privacy" className="hover:text-cyan-400 transition-colors">
               นโยบายความเป็นส่วนตัว
-            </a>
+            </Link>
           </div>
         </div>
       </div>
