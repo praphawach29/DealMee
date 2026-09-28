@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { toggleShopStatus, updateShopPlan, impersonateShop } from '../actions'
+import { Mail, Copy, Check } from 'lucide-react'
 
 interface ShopItem {
   id: string
@@ -11,17 +12,30 @@ interface ShopItem {
   msg_used: number | null
   token_used: number | null
   created_at: string
+  owner_email?: string | null
+  owner_name?: string | null
 }
 
 export default function ShopsManagement({ initialShops }: { initialShops: ShopItem[] }) {
   const [shops, setShops] = useState<ShopItem[]>(initialShops)
   const [searchTerm, setSearchTerm] = useState('')
   const [loadingShopId, setLoadingShopId] = useState<string | null>(null)
+  const [copiedEmailId, setCopiedEmailId] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  const handleCopyEmail = (email: string, shopId: string) => {
+    navigator.clipboard.writeText(email)
+    setCopiedEmailId(shopId)
+    setTimeout(() => {
+      setCopiedEmailId(null)
+    }, 2000)
+  }
 
   const filteredShops = shops.filter((s) =>
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.id.toLowerCase().includes(searchTerm.toLowerCase())
+    s.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (s.owner_email && s.owner_email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (s.owner_name && s.owner_name.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
   const handleToggleStatus = async (shop: ShopItem) => {
@@ -133,9 +147,27 @@ export default function ShopsManagement({ initialShops }: { initialShops: ShopIt
             >
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2 border-b border-outline-variant/20 pb-3">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <h3 className="font-bold text-sm sm:text-base text-on-surface truncate">{shop.name}</h3>
-                    <p className="text-[11px] text-outline font-mono truncate mt-0.5">
+                    <div className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 font-medium mt-1 truncate">
+                      <Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                      <span className="truncate select-all">{shop.owner_email || 'ไม่ระบุอีเมล'}</span>
+                      {shop.owner_email && shop.owner_email !== 'ไม่ระบุอีเมล' && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopyEmail(shop.owner_email!, shop.id)}
+                          className="hover:text-blue-700 p-0.5 rounded cursor-pointer shrink-0"
+                          title="คัดลอกอีเมล"
+                        >
+                          {copiedEmailId === shop.id ? (
+                            <Check className="h-3 w-3 text-emerald-500" />
+                          ) : (
+                            <Copy className="h-3 w-3 text-slate-400" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-outline font-mono truncate mt-0.5 opacity-60">
                       ID: {shop.id}
                     </p>
                   </div>
@@ -222,7 +254,7 @@ export default function ShopsManagement({ initialShops }: { initialShops: ShopIt
           <table className="w-full text-left text-xs sm:text-sm">
             <thead>
               <tr className="border-b border-outline-variant/30 bg-surface-container-low text-on-surface-variant font-label-md">
-                <th className="py-3.5 px-6 font-bold">ชื่อร้านค้า / ID</th>
+                <th className="py-3.5 px-6 font-bold">ชื่อร้านค้า / อีเมลผู้สมัคร</th>
                 <th className="py-3.5 px-4 font-bold">แพ็กเกจปัจจุบัน</th>
                 <th className="py-3.5 px-4 font-bold">ข้อความที่ใช้</th>
                 <th className="py-3.5 px-4 font-bold">สถานะ</th>
@@ -238,8 +270,26 @@ export default function ShopsManagement({ initialShops }: { initialShops: ShopIt
                 return (
                   <tr key={shop.id} className="hover:bg-surface-container-low/50 transition-colors">
                     <td className="py-4 px-6">
-                      <p className="font-bold text-on-surface">{shop.name}</p>
-                      <p className="text-[11px] text-outline font-mono mt-0.5">{shop.id}</p>
+                      <p className="font-bold text-on-surface text-sm sm:text-base">{shop.name}</p>
+                      <div className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 font-medium mt-1 group">
+                        <Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                        <span className="select-all font-mono">{shop.owner_email || 'ไม่ระบุอีเมล'}</span>
+                        {shop.owner_email && shop.owner_email !== 'ไม่ระบุอีเมล' && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopyEmail(shop.owner_email!, shop.id)}
+                            className="opacity-60 group-hover:opacity-100 hover:text-blue-700 transition-opacity p-0.5 rounded cursor-pointer"
+                            title="คัดลอกอีเมล"
+                          >
+                            {copiedEmailId === shop.id ? (
+                              <Check className="h-3.5 w-3.5 text-emerald-500" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600" />
+                            )}
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-outline font-mono mt-0.5 opacity-60">ID: {shop.id}</p>
                     </td>
 
                     <td className="py-4 px-4">
