@@ -44,10 +44,10 @@ export default function AdminOverview({
       {/* Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-on-surface font-headline-md leading-tight">
-          ภาพรวมระบบ
+          ภาพรวมระบบ DealMee AI
         </h1>
         <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5 font-body-md">
-          สถิติภาพรวมร้านค้าทั้งหมด รายได้ประจำเดือน และปริมาณการใช้งานระบบ AI
+          สถิติภาพรวมร้านค้าทั้งหมด รายได้ประจำเดือน และปริมาณการใช้งานระบบ DealMee AI
         </p>
       </div>
 
@@ -142,7 +142,7 @@ export default function AdminOverview({
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">
-              สถานะการทำงานของระบบ
+              สถานะการทำงานของระบบ DealMee AI
             </h2>
             <p className="text-[11px] sm:text-xs text-on-surface-variant">
               ตรวจสอบการเชื่อมต่อบริการคลาวด์และ API Gateway
@@ -174,7 +174,7 @@ export default function AdminOverview({
           <div className="flex items-center justify-between p-3.5 rounded-xl border border-outline-variant/40 bg-merchant-bg">
             <div className="flex items-center gap-3">
               <span className="w-2.5 h-2.5 rounded-full bg-success-green animate-pulse"></span>
-              <span className="text-xs sm:text-sm font-bold text-on-surface">Gemini AI Gateway</span>
+              <span className="text-xs sm:text-sm font-bold text-on-surface">DealMee / Gemini AI Gateway</span>
             </div>
             <span className="text-[11px] font-bold text-success-green bg-success-green/10 px-2.5 py-1 rounded-full">
               ปกติ (Active)

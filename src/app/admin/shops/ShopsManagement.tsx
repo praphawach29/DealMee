@@ -93,10 +93,10 @@ export default function ShopsManagement({ initialShops }: { initialShops: ShopIt
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-on-surface font-headline-md leading-tight">
-            จัดการร้านค้าสมาชิก
+            จัดการร้านค้าสมาชิก DealMee AI
           </h1>
           <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5 font-body-md">
-            ตรวจสอบรายชื่อร้านค้า ระงับ/เปิดใช้งาน เปลี่ยนแพ็กเกจ หรือสวมบทบาทเข้าสู่ระบบร้านค้า
+            ตรวจสอบรายชื่อร้านค้า ระงับ/เปิดใช้งาน เปลี่ยนแพ็กเกจ หรือสวมบทบาทเข้าสู่ระบบร้านค้า DealMee
           </p>
         </div>
 

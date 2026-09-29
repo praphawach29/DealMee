@@ -25,10 +25,10 @@ export default function MarginManagement({ report }: { report: MarginReport }) {
     <div className="space-y-5 sm:space-y-6 p-4 sm:p-6">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-on-surface font-headline-md leading-tight">
-          Margin Dashboard
+          DealMee Margin Dashboard
         </h1>
         <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5 font-body-md">
-          ต้นทุน AI ประมาณการเทียบกับรายได้แพ็กเกจ — เดือน {report.period}
+          ต้นทุน AI ประมาณการเทียบกับรายได้แพ็กเกจ DealMee AI — เดือน {report.period}
         </p>
         <p className="text-[11px] text-outline mt-1">
           หมายเหตุ: ไม่มีข้อมูลย้อนหลังก่อนวันที่เริ่มเก็บ ai_provider_usage และเป็นตัวเลขประมาณการจากราคาต่อ token ที่ตั้งไว้ใน src/lib/billing/aiPricing.ts (ไม่ใช่ invoice จริงจาก provider)

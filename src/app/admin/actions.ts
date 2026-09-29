@@ -125,9 +125,9 @@ export async function getPlans(): Promise<PlanItem[]> {
       price: 0,
       messages: 500,
       tokens: 1000000,
-      description: 'สำหรับร้านค้าทดลองใช้งานบอท AI เบื้องต้น 14 วัน',
+      description: 'สำหรับร้านค้าทดลองใช้งาน DealMee AI เบื้องต้น 14 วัน',
       badge_color: 'bg-surface-container-high text-on-surface',
-      features: ['ตอบแชทบอท LINE OA', 'คลังความรู้ FAQ 10 ข้อ', 'ระบบแชทสด'],
+      features: ['ตอบแชท DealMee AI บน LINE OA', 'คลังความรู้ FAQ 10 ข้อ', 'ระบบแชทสด'],
     },
     {
       key: 'starter',
@@ -137,7 +137,7 @@ export async function getPlans(): Promise<PlanItem[]> {
       tokens: 3000000,
       description: 'สำหรับร้านค้าขนาดเล็กที่เน้นปิดการขายใน LINE OA',
       badge_color: 'bg-electric-blue/10 text-electric-blue border border-electric-blue/20',
-      features: ['ตอบแชทบอท LINE OA', 'คลังความรู้ไม่จำกัด', 'ระบบจัดการสินค้า 50 รายการ', 'เช็คสลิปโอนเงินอัตโนมัติ'],
+      features: ['ตอบแชท DealMee AI บน LINE OA', 'คลังความรู้ไม่จำกัด', 'ระบบจัดการสินค้า 50 รายการ', 'เช็คสลิปโอนเงินอัตโนมัติ'],
     },
     {
       key: 'pro',

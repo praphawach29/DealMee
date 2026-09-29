@@ -68,9 +68,22 @@ export async function getPlatformBillingSettings(): Promise<PlatformBillingSetti
       return DEFAULT_PLATFORM_SETTINGS
     }
 
+    let accountName = data.account_name || DEFAULT_PLATFORM_SETTINGS.account_name
+    let companyEmail = data.company_email || DEFAULT_PLATFORM_SETTINGS.company_email
+
+    // Ensure legacy Botify references are migrated to DealMee
+    if (accountName && /botify/i.test(accountName)) {
+      accountName = 'DealMee Co., Ltd.'
+      admin.from('platform_billing_settings').update({ account_name: accountName }).eq('id', data.id).then()
+    }
+    if (companyEmail && /botify/i.test(companyEmail)) {
+      companyEmail = 'billing@dealmee.app'
+      admin.from('platform_billing_settings').update({ company_email: companyEmail }).eq('id', data.id).then()
+    }
+
     return {
       id: data.id,
-      account_name: data.account_name || DEFAULT_PLATFORM_SETTINGS.account_name,
+      account_name: accountName,
       promptpay_id: data.promptpay_id || DEFAULT_PLATFORM_SETTINGS.promptpay_id,
       bank_name: data.bank_name || DEFAULT_PLATFORM_SETTINGS.bank_name,
       bank_account_number: data.bank_account_number || DEFAULT_PLATFORM_SETTINGS.bank_account_number,
@@ -78,7 +91,7 @@ export async function getPlatformBillingSettings(): Promise<PlatformBillingSetti
       payee_tax_id: data.payee_tax_id || DEFAULT_PLATFORM_SETTINGS.payee_tax_id,
       company_address: data.company_address || DEFAULT_PLATFORM_SETTINGS.company_address,
       company_phone: data.company_phone || DEFAULT_PLATFORM_SETTINGS.company_phone,
-      company_email: data.company_email || DEFAULT_PLATFORM_SETTINGS.company_email,
+      company_email: companyEmail,
       updated_at: data.updated_at,
     }
   } catch (err) {

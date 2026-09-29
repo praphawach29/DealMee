@@ -11,6 +11,6 @@ export default async function Home() {
     redirect('/dashboard')
   }
 
-  // Otherwise (botify.ai, dealmee.app, localhost, vercel preview), render the marketing landing page
+  // Otherwise (dealmee.app, localhost, vercel preview), render the marketing landing page
   return <LandingPage />
 }

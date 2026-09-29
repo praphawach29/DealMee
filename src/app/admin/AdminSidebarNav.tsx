@@ -9,6 +9,7 @@ import {
   Receipt,
   TrendingUp,
   History,
+  Sparkles,
 } from 'lucide-react'
 
 interface AdminSidebarNavProps {
@@ -46,6 +47,11 @@ export default function AdminSidebarNav({ onNavClick }: AdminSidebarNavProps) {
       icon: TrendingUp,
     },
     {
+      label: 'AI Evaluation & CSAT',
+      href: '/admin/evaluation',
+      icon: Sparkles,
+    },
+    {
       label: 'ประวัติระบบ',
       href: '/admin/logs',
       icon: History,
@@ -62,7 +68,7 @@ export default function AdminSidebarNav({ onNavClick }: AdminSidebarNavProps) {
   return (
     <nav className="flex-1 px-3 space-y-1 overflow-y-auto font-label-md py-3">
       <div className="px-3 pb-2 text-[10px] font-bold text-amber-500 uppercase tracking-widest">
-        ส่วนควบคุม Super Admin
+        DealMee AI Super Admin
       </div>
 
       {navItems.map((item) => {

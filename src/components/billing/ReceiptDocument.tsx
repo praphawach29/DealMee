@@ -99,8 +99,8 @@ export default function ReceiptDocument({
         <div className="flex flex-col sm:flex-row justify-between items-start gap-6 border-b border-slate-200 pb-6">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm">
-                B
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center font-black text-sm shadow-xs">
+                D
               </div>
               <h1 className="text-xl font-bold tracking-tight text-slate-900">
                 {platform.account_name}

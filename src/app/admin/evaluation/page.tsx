@@ -9,10 +9,10 @@ export default async function EvaluationPage() {
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          AI Evaluation & CSAT Dashboard
+          DealMee AI Evaluation & CSAT Dashboard
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          สรุปอัตราการปิดการขาย (Conversion Rate), ความพึงพอใจลูกค้า (CSAT) และต้นทุน AI ต่อบทสนทนา
+          สรุปอัตราการปิดการขาย (Conversion Rate), ความพึงพอใจลูกค้า (CSAT) และต้นทุน DealMee AI ต่อบทสนทนา
         </p>
       </div>
 

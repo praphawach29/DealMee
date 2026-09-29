@@ -179,7 +179,7 @@ export default function PaymentsManager({
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-              รายการชำระเงิน & ใบเสร็จ
+              รายการชำระเงิน & ใบเสร็จ DealMee AI
             </h1>
             {pendingCount > 0 && (
               <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-xs animate-pulse">
@@ -188,7 +188,7 @@ export default function PaymentsManager({
             )}
           </div>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            ตรวจสอบสลิปการโอนเงิน อนุมัติแพ็กเกจ SaaS และออกใบเสร็จรับเงินตามเกณฑ์สรรพากร
+            ตรวจสอบสลิปการโอนเงิน อนุมัติแพ็กเกจ DealMee AI และออกใบเสร็จรับเงินตามเกณฑ์สรรพากร
           </p>
         </div>
 
@@ -287,10 +287,10 @@ export default function PaymentsManager({
               </div>
               <div>
                 <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">
-                  ข้อมูลการรับชำระเงินและออกใบเสร็จ (Platform Billing Settings)
+                  ข้อมูลการรับชำระเงินและออกใบเสร็จ (DealMee Billing Settings)
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  ข้อมูลนี้จะแสดงบน QR Code และหัวเอกสารใบเสร็จรับเงินให้กับลูกค้า
+                  ข้อมูลนี้จะแสดงบน QR Code และหัวเอกสารใบเสร็จรับเงิน DealMee ให้กับลูกค้า
                 </p>
               </div>
             </div>

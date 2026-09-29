@@ -68,10 +68,10 @@ export default function PlansManagement({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-on-surface font-headline-md leading-tight">
-            แพ็กเกจและราคาค่าบริการ
+            แพ็กเกจและราคา DealMee AI
           </h1>
           <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5 font-body-md">
-            จัดการรายละเอียดแพ็กเกจ ปรับเปลี่ยนราคา โควต้าข้อความ และคุณสมบัติต่างๆ
+            จัดการรายละเอียดแพ็กเกจ ปรับเปลี่ยนราคา โควต้าข้อความ และคุณสมบัติต่างๆ ของ DealMee AI
           </p>
         </div>
       </div>

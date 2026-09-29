@@ -1,9 +1,15 @@
+import type { Metadata } from 'next'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import AdminClientLayout from './AdminClientLayout'
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Lock, ShieldCheck } from 'lucide-react'
+
+export const metadata: Metadata = {
+  title: 'DealMee AI - ส่วนควบคุม Super Admin',
+  description: 'พอร์ทัลจัดการระบบ DealMee AI Super Admin',
+}
 
 export const SUPER_ADMIN_EMAILS = [
   'praphawach@gmail.com',

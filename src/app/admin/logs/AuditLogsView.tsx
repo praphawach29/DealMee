@@ -50,10 +50,10 @@ export default function AuditLogsView() {
       {/* Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-on-surface font-headline-md leading-tight">
-          ประวัติการทำงานของระบบ
+          ประวัติการทำงานของระบบ DealMee AI
         </h1>
         <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5 font-body-md">
-          บันทึกกิจกรรมสำคัญ การลงทะเบียน และการเปลี่ยนแปลงการตั้งค่าในระดับแพลตฟอร์ม
+          บันทึกกิจกรรมสำคัญ การลงทะเบียน และการเปลี่ยนแปลงการตั้งค่าในระดับแพลตฟอร์ม DealMee AI
         </p>
       </div>
 
