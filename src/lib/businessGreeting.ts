@@ -116,7 +116,8 @@ export function getGreetingProfile(shop: ShopGreetingInfo | null, templates: Gre
 }
 
 export function buildAutoGreeting(shop: ShopGreetingInfo | null, templates: GreetingTemplateSummary[] = []) {
-  const botName = shop?.bot_name || 'น้อง DealMee'
+  const rawBotName = shop?.bot_name
+  const botName = (rawBotName && !/botify/i.test(rawBotName)) ? rawBotName : 'น้อง DealMee'
   const shopName = shop?.name || 'ร้านของเรา'
   const profile = getGreetingProfile(shop, templates)
   // Deduplicated: a restaurant commonly has one service row per zone, all

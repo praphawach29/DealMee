@@ -5,7 +5,7 @@ export const scenarios: Scenario[] = [
     key: 'search',
     label: '🔍 ค้นหาสินค้า & สต็อก',
     subtitle: 'AI ตรวจสอบแคตตาล็อกและสต็อกสินค้าจากฐานข้อมูลแบบ Real-time พร้อมส่ง LINE Flex Carousel',
-    botName: 'น้องบอทติฟาย — TechShop',
+    botName: 'น้อง DealMee — TechShop',
     botEmoji: '🤖',
     messages: [
       {
@@ -46,7 +46,7 @@ export const scenarios: Scenario[] = [
     key: 'order',
     label: '🛒 สั่งซื้อ & คิดค่าส่ง',
     subtitle: 'AI ดึงโปรโมชั่น คำนวณค่าส่งตามพื้นที่จริง (กทม./ตจว.) และออกเลขออเดอร์พร้อมช่องทางชำระ',
-    botName: 'น้องบอทติฟาย — TechShop',
+    botName: 'น้อง DealMee — TechShop',
     botEmoji: '🛍️',
     messages: [
       {
@@ -90,7 +90,7 @@ export const scenarios: Scenario[] = [
     key: 'slip',
     label: '🧾 ตรวจสลิปอัตโนมัติ 100%',
     subtitle: 'ลูกค้าส่งรูปสลิปผ่าน LINE → ระบบยิงตรวจสอบความถูกต้องกับธนาคารอัตโนมัติ 100%',
-    botName: 'น้องบอทติฟาย — TechShop',
+    botName: 'น้อง DealMee — TechShop',
     botEmoji: '💳',
     messages: [
       {
@@ -116,7 +116,7 @@ export const scenarios: Scenario[] = [
     key: 'quotation',
     label: '📄 ออกใบเสนอราคา B2B',
     subtitle: 'รองรับลูกค้าธุรกิจ ออกเอกสาร PDF คำนวณ VAT 7% ส่งเป็น LINE Flex Card ทันที (แผน Elite)',
-    botName: 'น้องบอทติฟาย — B2B Pro',
+    botName: 'น้อง DealMee — B2B Pro',
     botEmoji: '🏢',
     messages: [
       {
@@ -158,7 +158,7 @@ export const scenarios: Scenario[] = [
     key: 'vip',
     label: '💎 Customer Memory & Upsell',
     subtitle: 'จดจำโปรไฟล์ลูกค้าเก่า ข้อมูลความชอบ สินค้าที่เคยสั่ง และแนะนำสินค้าเข้าคู่ได้อย่างแนบเนียน',
-    botName: 'น้องบอทติฟาย — Skincare',
+    botName: 'น้อง DealMee — Skincare',
     botEmoji: '✨',
     messages: [
       {
@@ -201,7 +201,7 @@ export const scenarios: Scenario[] = [
     key: 'handoff',
     label: '🆘 ส่งต่อแอดมินคนจริง',
     subtitle: 'ตรวจจับคำถามซับซ้อนหรือเคสร้องเรียน สลับโหมดเป็น Human ทันที พร้อมหยุด AI ชั่วคราว',
-    botName: 'น้องบอทติฟาย — Customer Care',
+    botName: 'น้อง DealMee — Customer Care',
     botEmoji: '🛎️',
     messages: [
       {

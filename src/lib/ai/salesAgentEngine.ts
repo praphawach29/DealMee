@@ -1263,7 +1263,8 @@ async function preparePlanningState({
   // instead of every message); Gemini/OpenAI keep receiving them combined
   // since Gemini's caching is automatic regardless of structure and OpenAI
   // isn't currently reachable by the routing below.
-  const staticSystemPrompt = `คุณคือ "${shop.bot_name || 'น้อง DealMee'}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
+  const activeBotName = (shop.bot_name && !/botify/i.test(shop.bot_name)) ? shop.bot_name : 'น้อง DealMee'
+  const staticSystemPrompt = `คุณคือ "${activeBotName}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
 บุคลิกภาพ: ${shop.personality || 'สุภาพ เรียบร้อย มืออาชีพ เป็นมิตรและมีไหวพริบในการขายสูง'}
 คำอธิบายร้าน: ${shop.description || 'ร้านค้าออนไลน์'}
 

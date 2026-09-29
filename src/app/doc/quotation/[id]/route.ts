@@ -54,7 +54,7 @@ export async function GET(
       day: 'numeric',
     })
 
-    const initialLetter = companyName.trim().charAt(0) || 'B'
+    const initialLetter = companyName.trim().charAt(0) || 'D'
 
     const html = `<!DOCTYPE html>
 <html lang="th">

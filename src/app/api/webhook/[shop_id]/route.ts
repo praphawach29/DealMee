@@ -255,7 +255,7 @@ async function deliverAgentResult({
       conversation_id: conv.id,
       shop_id: shopId,
       sender_type: 'bot',
-      sender_name: shop.bot_name || 'น้อง DealMee',
+      sender_name: (shop.bot_name && !/botify/i.test(shop.bot_name)) ? shop.bot_name : 'น้อง DealMee',
       message: aiReplyText,
     })
   }
@@ -536,7 +536,7 @@ async function verifySlipAndNotify({
           conversation_id: conv.id,
           shop_id: shopId,
           sender_type: 'bot',
-          sender_name: shop.bot_name || 'น้อง DealMee',
+          sender_name: (shop.bot_name && !/botify/i.test(shop.bot_name)) ? shop.bot_name : 'น้อง DealMee',
           message: successMsg,
         })
       }
@@ -552,7 +552,7 @@ async function verifySlipAndNotify({
           conversation_id: conv.id,
           shop_id: shopId,
           sender_type: 'bot',
-          sender_name: shop.bot_name || 'น้อง DealMee',
+          sender_name: (shop.bot_name && !/botify/i.test(shop.bot_name)) ? shop.bot_name : 'น้อง DealMee',
           message: failMsg,
         })
       }

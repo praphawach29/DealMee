@@ -10,7 +10,13 @@ export async function getOrCreateShopForUser(supabase: SupabaseClient, user: { i
     .eq('user_id', user.id)
     .maybeSingle()
 
-  if (shop) return shop
+  if (shop) {
+    if (shop.bot_name && /botify/i.test(shop.bot_name)) {
+      shop.bot_name = 'น้อง DealMee'
+      supabase.from('shops').update({ bot_name: 'น้อง DealMee' }).eq('id', shop.id).then()
+    }
+    return shop
+  }
 
   // 2. Try to find workspace_id from users table if set
   const { data: profile } = await supabase
@@ -26,7 +32,13 @@ export async function getOrCreateShopForUser(supabase: SupabaseClient, user: { i
       .eq('id', profile.workspace_id)
       .maybeSingle()
 
-    if (shopByWorkspace) return shopByWorkspace
+    if (shopByWorkspace) {
+      if (shopByWorkspace.bot_name && /botify/i.test(shopByWorkspace.bot_name)) {
+        shopByWorkspace.bot_name = 'น้อง DealMee'
+        supabase.from('shops').update({ bot_name: 'น้อง DealMee' }).eq('id', shopByWorkspace.id).then()
+      }
+      return shopByWorkspace
+    }
   }
 
   // 3. Auto-create shop for new merchant user
@@ -54,5 +66,12 @@ export async function getOrCreateShopForUser(supabase: SupabaseClient, user: { i
 
   // 4. Fallback to any existing shop
   const { data: fallbackShop } = await supabase.from('shops').select('*').limit(1).single()
-  return fallbackShop || null
+  if (fallbackShop) {
+    if (fallbackShop.bot_name && /botify/i.test(fallbackShop.bot_name)) {
+      fallbackShop.bot_name = 'น้อง DealMee'
+      supabase.from('shops').update({ bot_name: 'น้อง DealMee' }).eq('id', fallbackShop.id).then()
+    }
+    return fallbackShop
+  }
+  return null
 }

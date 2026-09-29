@@ -106,7 +106,7 @@ export default function CompanySettingsForm({ shop }: { shop: ShopData }) {
               type="text"
               name="company_name"
               defaultValue={shop.company_name || shop.name || ''}
-              placeholder="เช่น บริษัท บอทิฟาย จำกัด (สำนักงานใหญ่)"
+              placeholder="เช่น บริษัท ดีลมี เอไอ จำกัด (สำนักงานใหญ่)"
               className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
             />
           </div>
