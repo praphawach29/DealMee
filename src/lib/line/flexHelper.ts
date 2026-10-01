@@ -193,7 +193,8 @@ export function buildLineFlexQuotationMessage(data: QuotationFlexData) {
   const items = data.items || []
   const formattedTotal = Number(data.totalAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const formattedSubtotal = Number(data.subtotal || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const wordUrl = data.wordUrl || `${data.docUrl.replace('/doc/quotation/', '/api/doc/')}/download?format=docx`
+  const rawWordUrl = data.wordUrl || `${data.docUrl.replace('/doc/quotation/', '/api/doc/')}/download?format=docx`
+  const wordUrl = rawWordUrl.includes('?') ? `${rawWordUrl}&openExternalBrowser=1` : `${rawWordUrl}?openExternalBrowser=1`
 
   const itemRows: any[] = items.slice(0, 5).map((it) => ({
     type: 'box',
@@ -450,7 +451,8 @@ export interface OfficialLetterFlexData {
  * Builds a professional LINE Flex Message card for Official Thai Government Letters.
  */
 export function buildLineFlexOfficialLetterMessage(data: OfficialLetterFlexData) {
-  const wordUrl = data.wordUrl || `${data.docUrl.replace('/doc/official/', '/api/doc/')}/download?format=docx`
+  const rawWordUrl = data.wordUrl || `${data.docUrl.replace('/doc/official/', '/api/doc/')}/download?format=docx`
+  const wordUrl = rawWordUrl.includes('?') ? `${rawWordUrl}&openExternalBrowser=1` : `${rawWordUrl}?openExternalBrowser=1`
 
   return {
     type: 'flex',
