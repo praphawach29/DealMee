@@ -1054,10 +1054,24 @@ async function preparePlanningState({
 
   const db = supabaseClient || supabase
 
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
-  const claudeKey = process.env.CLAUDE_API_KEY || process.env.CLAUDE_KEY || process.env.NEXT_PUBLIC_CLAUDE_API_KEY || ''
-  const openAiKey = process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY || ''
-  const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+  const geminiKey =
+    (shop?.custom_ai_provider === 'gemini' || shop?.ai_provider === 'gemini' ? (shop.custom_ai_key || shop.ai_key) : '') ||
+    process.env.GEMINI_API_KEY ||
+    process.env.GEMINI_KEY ||
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+    ''
+  const claudeKey =
+    (shop?.custom_ai_provider === 'claude' || shop?.ai_provider === 'claude' ? (shop.custom_ai_key || shop.ai_key) : '') ||
+    process.env.CLAUDE_API_KEY ||
+    process.env.CLAUDE_KEY ||
+    process.env.NEXT_PUBLIC_CLAUDE_API_KEY ||
+    ''
+  const openAiKey =
+    (shop?.custom_ai_provider === 'openai' || shop?.ai_provider === 'openai' ? (shop.custom_ai_key || shop.ai_key) : '') ||
+    process.env.OPENAI_API_KEY ||
+    process.env.NEXT_PUBLIC_OPENAI_API_KEY ||
+    ''
+  const modelName = shop.custom_ai_model || shop.ai_model || process.env.GEMINI_MODEL || 'gemini-2.0-flash'
 
   // 1. Knowledge Base — inlined up to a character budget, with the rest
   // reachable through search_knowledge_base. Every entry used to be inlined
