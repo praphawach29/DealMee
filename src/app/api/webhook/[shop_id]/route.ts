@@ -281,14 +281,27 @@ async function deliverAgentResult({
     )
   }
 
-  // Send LINE Flex Product Carousel if products were searched/recommended OR mentioned
+  // Send LINE Flex Product Carousel if products were searched/recommended OR specifically requested
   let flexProducts = agentResult.productsData || []
 
-  if (flexProducts.length === 0 && lineToken) {
-    const combinedText = `${userText || ''} ${aiReplyText || ''}`.toLowerCase()
-    const isProductIntent = /กางเกง|เสื้อ|กระเป๋า|รองเท้า|หมวก|เคส|ผ้าพันคอ|กระบอกน้ำ|สินค้า|ดู|ชม|รูป|ราคา|รายละเอียด/i.test(combinedText)
+  // Check if current turn is related to quotation or official documents
+  const isDocOrQuotation =
+    /(ใบเสนอราคา|เสนอราคา|quotation|หนังสือราชการ|บันทึกข้อความ|เอกสารทางการ)/i.test(userText || '') ||
+    agentResult.toolCallsExecuted.some(
+      (t) => t.name === 'create_quotation' || t.name === 'create_official_letter'
+    )
 
-    if (isProductIntent) {
+  if (isDocOrQuotation) {
+    // When requesting a quotation or official letter, never attach unrelated product carousel cards
+    flexProducts = []
+  } else if (flexProducts.length === 0 && lineToken) {
+    const rawUserQuery = (userText || '').toLowerCase().trim()
+    // Explicit product inquiry keywords like "มีเสื้อยืดไหม", "ขอดูเสื้อ", "มีสินค้าอะไรบ้าง"
+    const isExplicitProductQuery =
+      /(มี|ขอ|ดู|ค้นหา|แนะนำ|ซื้อ|สั่ง|ขาย)\s*(เสื้อ|กางเกง|กระเป๋า|รองเท้า|หมวก|เคส|ผ้าพันคอ|กระบอกน้ำ|สินค้า|แคตตาล็อก)/i.test(rawUserQuery) ||
+      /(มี.*ไหม|มี.*มั้ย|ขอดู.*หน่อย|ราคาเท่าไหร่|มีแบบไหนบ้าง)/i.test(rawUserQuery)
+
+    if (isExplicitProductQuery) {
       const { data: shopProducts } = await supabase
         .from('products')
         .select('id, name, price, stock, category, description, image_url')
@@ -300,12 +313,17 @@ async function deliverAgentResult({
           const pName = (p.name || '').toLowerCase()
           const pCat = (p.category || '').toLowerCase()
           return (
-            combinedText.includes(pName) ||
-            combinedText.includes(pCat) ||
-            pName.split(' ').some((w: string) => w.length >= 2 && combinedText.includes(w))
+            rawUserQuery.includes(pName) ||
+            (pCat && rawUserQuery.includes(pCat)) ||
+            pName.split(' ').some((w: string) => w.length >= 2 && rawUserQuery.includes(w))
           )
         })
-        flexProducts = matched.length > 0 ? matched : shopProducts.slice(0, 5)
+
+        if (matched.length > 0) {
+          flexProducts = matched
+        } else if (/(สินค้าทั้งหมด|มีอะไรบ้าง|มีอะไรขายบ้าง|ขอดูสินค้า|แนะนำสินค้า)/i.test(rawUserQuery)) {
+          flexProducts = shopProducts.slice(0, 5)
+        }
       }
     }
   }

@@ -119,10 +119,11 @@ export function determineNextSalesStage({
   }
 
   // 3. Closing signals: Payment QR requested, checkout initiated, quotation issued
-  const hasOrderIntentWords = /(เอาเลย|เอาค่ะ|เอาครับ|สั่งเลย|สั่งซื้อ|พร้อมโอน|ขอเลขบัญชี|ขอคิวอาร์|ขอ qr|จ่ายเงิน|เก็บปลายทาง)/.test(text)
+  const hasOrderIntentWords = /(เอาเลย|เอาค่ะ|เอาครับ|สั่งเลย|สั่งซื้อ|พร้อมโอน|ขอเลขบัญชี|ขอคิวอาร์|ขอ qr|จ่ายเงิน|เก็บปลายทาง|ใบเสนอราคา|เสนอราคา|quotation)/.test(text)
   if (
     executedToolNames.includes('send_payment_qr') ||
     executedToolNames.includes('create_quotation') ||
+    executedToolNames.includes('create_official_letter') ||
     hasPendingOrder ||
     hasOrderIntentWords
   ) {
