@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
+import { SUPER_ADMIN_EMAILS } from '@/app/admin/layout'
 import DashboardClientLayout from './DashboardClientLayout'
 
 export default async function DashboardLayout({
@@ -23,7 +24,7 @@ export default async function DashboardLayout({
 
   const bizType = shop?.business_type || 'retail'
   const features = (shop?.features as Record<string, boolean>) || {}
-  const isSuperAdmin = user.email === 'praphawach@gmail.com'
+  const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(user.email || '')
 
   return (
     <DashboardClientLayout bizType={bizType} features={features} userEmail={user.email || ''} isSuperAdmin={isSuperAdmin}>
