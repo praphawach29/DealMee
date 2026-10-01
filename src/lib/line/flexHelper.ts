@@ -182,15 +182,18 @@ export interface QuotationFlexData {
   vatAmount?: number
   totalAmount: number
   docUrl: string
+  wordUrl?: string
+  excelUrl?: string
 }
 
 /**
- * Builds a professional LINE Flex Message card for Quotations with detailed items and a direct view/print button.
+ * Builds a professional LINE Flex Message card for Quotations with detailed items and direct view/print/download buttons.
  */
 export function buildLineFlexQuotationMessage(data: QuotationFlexData) {
   const items = data.items || []
   const formattedTotal = Number(data.totalAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const formattedSubtotal = Number(data.subtotal || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const wordUrl = data.wordUrl || `${data.docUrl.replace('/doc/quotation/', '/api/doc/')}/download?format=docx`
 
   const itemRows: any[] = items.slice(0, 5).map((it) => ({
     type: 'box',
@@ -393,7 +396,7 @@ export function buildLineFlexQuotationMessage(data: QuotationFlexData) {
         type: 'box',
         layout: 'vertical',
         paddingAll: 'lg',
-        spacing: 'xs',
+        spacing: 'sm',
         contents: [
           {
             type: 'button',
@@ -407,8 +410,19 @@ export function buildLineFlexQuotationMessage(data: QuotationFlexData) {
             },
           },
           {
+            type: 'button',
+            style: 'secondary',
+            color: '#F1F5F9',
+            height: 'sm',
+            action: {
+              type: 'uri',
+              label: '📥 ดาวน์โหลด Word (.docx)',
+              uri: wordUrl,
+            },
+          },
+          {
             type: 'text',
-            text: 'แตะเพื่อเปิดดูหน้า A4 ฉบับเต็มและพิมพ์ PDF',
+            text: 'สร้างโดย OfficeCLI เอกสาร A4 ถูกต้องตามมาตรฐาน',
             size: 'xxs',
             color: '#94A3B8',
             align: 'center',
@@ -419,3 +433,135 @@ export function buildLineFlexQuotationMessage(data: QuotationFlexData) {
     },
   }
 }
+
+export interface OfficialLetterFlexData {
+  shopName: string
+  companyName?: string
+  docNumber: string
+  subject: string
+  recipient: string
+  department: string
+  dateStr: string
+  docUrl: string
+  wordUrl?: string
+}
+
+/**
+ * Builds a professional LINE Flex Message card for Official Thai Government Letters.
+ */
+export function buildLineFlexOfficialLetterMessage(data: OfficialLetterFlexData) {
+  const wordUrl = data.wordUrl || `${data.docUrl.replace('/doc/official/', '/api/doc/')}/download?format=docx`
+
+  return {
+    type: 'flex',
+    altText: `📜 หนังสือราชการ: ${data.subject} (${data.docNumber})`,
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#8B0000',
+        paddingAll: 'xl',
+        paddingBottom: 'lg',
+        contents: [
+          {
+            type: 'text',
+            text: 'ตราครุฑ • หนังสือราชการภายนอก',
+            color: '#FEF08A',
+            weight: 'bold',
+            size: 'xs',
+          },
+          {
+            type: 'text',
+            text: data.docNumber,
+            color: '#FFFFFF',
+            weight: 'bold',
+            size: 'md',
+            margin: 'xs',
+          },
+          {
+            type: 'text',
+            text: data.department || data.companyName || data.shopName,
+            color: '#FEE2E2',
+            size: 'xs',
+            margin: 'xs',
+          },
+        ],
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: 'xl',
+        spacing: 'md',
+        contents: [
+          {
+            type: 'box',
+            layout: 'vertical',
+            spacing: 'xs',
+            contents: [
+              { type: 'text', text: 'เรื่อง:', size: 'xxs', color: '#94A3B8', weight: 'bold' },
+              { type: 'text', text: data.subject, size: 'sm', weight: 'bold', color: '#1E293B', wrap: true },
+            ],
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            spacing: 'xs',
+            contents: [
+              { type: 'text', text: 'เรียน:', size: 'xxs', color: '#94A3B8', weight: 'bold' },
+              { type: 'text', text: data.recipient, size: 'sm', color: '#334155', wrap: true },
+            ],
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'วันที่ออกหนังสือ', size: 'xs', color: '#64748B' },
+              { type: 'text', text: data.dateStr, size: 'xs', color: '#1E293B', align: 'end', weight: 'bold' },
+            ],
+          },
+        ],
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: 'lg',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'button',
+            style: 'primary',
+            color: '#8B0000',
+            height: 'sm',
+            action: {
+              type: 'uri',
+              label: '📄 เปิดดูหนังสือราชการ (A4)',
+              uri: data.docUrl,
+            },
+          },
+          {
+            type: 'button',
+            style: 'secondary',
+            color: '#F1F5F9',
+            height: 'sm',
+            action: {
+              type: 'uri',
+              label: '📥 ดาวน์โหลด Word (.docx)',
+              uri: wordUrl,
+            },
+          },
+          {
+            type: 'text',
+            text: 'จัดฟอร์แมตตามระเบียบสารบรรณ 100% ด้วย OfficeCLI',
+            size: 'xxs',
+            color: '#94A3B8',
+            align: 'center',
+            margin: 'xs',
+          },
+        ],
+      },
+    },
+  }
+}
+

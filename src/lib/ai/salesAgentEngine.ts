@@ -104,6 +104,7 @@ export type AgentToolName =
   | 'search_knowledge_base'
   | 'get_active_promotions'
   | 'create_quotation'
+  | 'create_official_letter'
   | 'request_human_agent'
   | 'transfer_to_agent'
   | 'schedule_followup'
@@ -317,6 +318,26 @@ const MASTER_TOOLS = [
         },
       },
       required: ['customer_name', 'items'],
+    },
+  },
+  {
+    name: 'create_official_letter',
+    description: 'ร่างและสร้างหนังสือราชการภายนอก (ตามระเบียบงานสารบรรณ) มีตราครุฑ พร้อมออกลิงก์ดู A4 และดาวน์โหลดไฟล์ Word (.docx) สำเร็จรูป',
+    parameters: {
+      type: 'object',
+      properties: {
+        subject: { type: 'string', description: 'เรื่องของหนังสือราชการ เช่น ขอความอนุเคราะห์วิทยากรบรรยาย' },
+        recipient: { type: 'string', description: 'เรียน (ตำแหน่งหรือชื่อผู้รับหนังสือ เช่น อธิบดีกรมส่งเสริมการเกษตร)' },
+        department: { type: 'string', description: 'ชื่อส่วนราชการ/หน่วยงานเจ้าของหนังสือ (ถ้ามี)' },
+        body_facts: { type: 'string', description: 'ภาคเหตุ (ด้วย... หรือ ตามที่...)' },
+        body_purpose: { type: 'string', description: 'ภาคประสงค์หรือข้อพิจารณา (ในการนี้...)' },
+        body_conclusion: { type: 'string', description: 'ภาคสรุป (จึงเรียนมาเพื่อโปรดพิจารณา...)' },
+        signatory_name: { type: 'string', description: 'ชื่อผู้ลงนาม เช่น (นายสมชาย ใจดี)' },
+        signatory_position: { type: 'string', description: 'ตำแหน่งผู้ลงนาม เช่น ผู้อำนวยการสำนักบริหารกลาง' },
+        reference_to: { type: 'string', description: 'อ้างถึง (ถ้ามี)' },
+        enclosures: { type: 'string', description: 'สิ่งที่ส่งมาด้วย (ถ้ามี)' },
+      },
+      required: ['subject', 'recipient', 'body_facts'],
     },
   },
 
@@ -743,7 +764,7 @@ const SALES_TOOL_NAMES: AgentToolName[] = [
   'search_products', 'check_stock', 'get_product_image',
   'get_upsell_products', 'get_crosssell_products', 'recommend_product_match', 'upsell_suggestion',
   'get_active_promotions', 'apply_custom_discount', 'calculate_installment',
-  'calculate_shipping', 'take_order', 'create_quotation', 'send_payment_qr',
+  'calculate_shipping', 'take_order', 'create_quotation', 'create_official_letter', 'send_payment_qr',
   'get_payment_slip_status', 'send_invoice',
   'save_lead', 'update_customer_note', 'add_customer_tag', 'get_customer_history', 'check_loyalty_points',
   'schedule_followup', 'request_human_agent', 'transfer_to_agent',
@@ -763,10 +784,8 @@ const SUPPORT_TOOL_NAMES: AgentToolName[] = [
 
 const GENERAL_TOOL_NAMES: AgentToolName[] = [
   'search_knowledge_base', 'request_human_agent', 'transfer_to_agent', 'get_shop_info',
-  // Product lookup tools — ordinary "what do you have / is this in stock"
-  // questions rarely contain negotiation keywords, so without these here the
-  // bot could never actually query real product data for the common case.
-  'search_products', 'check_stock', 'get_active_promotions',
+  // Product & document lookup tools
+  'search_products', 'check_stock', 'get_active_promotions', 'create_quotation', 'create_official_letter',
 ]
 
 function filterTools(names: AgentToolName[]) {
@@ -803,6 +822,7 @@ const ORDER_INTENT_KEYWORDS = [
   'เอาเลย', 'เอาค่ะ', 'เอาครับ', 'เอาตัวนี้', 'เอาชิ้นนี้', 'รับตัวนี้', 'รับค่ะ', 'รับครับ',
   'ซื้อเลย', 'สั่งเลย', 'สั่งซื้อ', 'สั่งค่ะ', 'สั่งครับ', 'จัดมา', 'จองไว้', 'โอนเลย',
   'พร้อมโอน', 'พร้อมจ่าย', 'ชำระเงิน', 'เก็บปลายทาง', 'cod', 'checkout', 'buy now', 'order now',
+  'ใบเสนอราคา', 'ขอใบเสนอราคา', 'ออกใบเสนอราคา', 'quotation', 'หนังสือราชการ', 'บันทึกข้อความ', 'ร่างหนังสือราชการ',
 ]
 
 function hasOrderIntent(text: string): boolean {
@@ -1321,8 +1341,9 @@ async function preparePlanningState({
 7. [Product Bundling & Upsell Synergy]
 - เมื่อลูกค้าสนใจสินค้าชิ้นใดชิ้นหนึ่ง ให้เสนอสินค้าที่ใช้คู่กันแล้วผลลัพธ์ดียิ่งขึ้น (Product Match) หรือข้อเสนอแบบจัดเซตที่คุ้มค่ากว่าเสมอ
 
-8. [Quotation Request]
-- หากลูกค้าขอดูใบเสนอราคา ใบแจ้งหนี้ หรือขอเอกสารราคาเป็นทางการ ให้เรียกใช้เครื่องมือ "create_quotation" ทันที เพื่อออกลิงก์เอกสาร PDF ให้ลูกค้า
+8. [Quotation & Document Request]
+- หากลูกค้าขอดูใบเสนอราคา ใบแจ้งหนี้ หรือขอเอกสารราคาเป็นทางการ ให้เรียกใช้เครื่องมือ "create_quotation" ทันที เพื่อออกลิงก์ใบเสนอราคาและการ์ด LINE Flex Card พร้อมปุ่มเปิดดู A4 (PDF) และดาวน์โหลด Word (.docx) / Excel (.xlsx) ที่สร้างด้วย OfficeCLI
+- หากลูกค้าหรือผู้ใช้ขอให้ออกหนังสือราชการ บันทึกข้อความ หรือหนังสือขอความอนุเคราะห์ ให้เรียกใช้เครื่องมือ "create_official_letter" ทันที เพื่อร่างหนังสือราชการภายนอกตามระเบียบงานสารบรรณ พร้อมตราครุฑ ลิงก์ดู A4 และปุ่มดาวน์โหลดไฟล์ Word (.docx) ที่นำไปแก้ไขต่อได้ทันที
 
 [Store Manager Operating Mode]
 คุณไม่ใช่แค่บอทตอบคำถาม แต่เป็นผู้จัดการร้าน AI ที่ถือสมุดงานของร้านไว้เอง ต้องคิด วางแผน และลงมือด้วยเครื่องมือที่มี โดยยังอยู่ในกรอบข้อมูลจริงของร้าน

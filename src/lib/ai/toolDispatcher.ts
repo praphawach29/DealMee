@@ -4,7 +4,7 @@ import qrcode from 'qrcode'
 import type { AgentToolName } from './salesAgentEngine'
 import { t, type CustomerLanguage } from '@/lib/i18n/customerMessages'
 import { scheduleQrFollowUp, scheduleBookingReminder } from '@/lib/ai/proactiveFollowUp'
-import { buildLineFlexQuotationMessage } from '@/lib/line/flexHelper'
+import { buildLineFlexQuotationMessage, buildLineFlexOfficialLetterMessage } from '@/lib/line/flexHelper'
 
 const QR_BUCKET = 'qr-codes'
 
@@ -1333,6 +1333,8 @@ function detectThaiShippingZone(address: string): 'bkk' | 'remote' | 'upcountry'
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.dealmee.app'
     const docUrl = `${baseUrl.replace(/\/$/, '')}/doc/quotation/${doc.id}`
+    const wordUrl = `${baseUrl.replace(/\/$/, '')}/api/doc/${doc.id}/download?format=docx`
+    const excelUrl = `${baseUrl.replace(/\/$/, '')}/api/doc/${doc.id}/download?format=xlsx`
 
     const flexQuotation = buildLineFlexQuotationMessage({
       shopName: shopData?.name || 'ร้านค้า',
@@ -1348,15 +1350,112 @@ function detectThaiShippingZone(address: string): 'bkk' | 'remote' | 'upcountry'
       vatAmount,
       totalAmount,
       docUrl,
+      wordUrl,
+      excelUrl,
     })
 
     return {
-      resultForAi: `สร้างใบเสนอราคาเรียบร้อยแล้ว และระบบได้แนบการ์ดใบเสนอราคา (LINE Flex Card) ส่งให้ลูกค้าแล้ว!\n- เลขที่เอกสาร: ${docNumber}\n- ผู้รับ: ${customerName}\n- ยอดรวมสุทธิ: ${totalAmount.toLocaleString()} บาท\n- ลิงก์ใบเสนอราคา (PDF): ${docUrl}\n\nให้ตอบสรุปยอดสั้นๆ และบอกลูกค้าว่าสามารถแตะปุ่ม "ดูใบเสนอราคา / บันทึก PDF" ในการ์ดเพื่อเปิดดูเอกสาร A4 ฉบับเต็มได้เลยค่ะ`,
+      resultForAi: `สร้างใบเสนอราคาเรียบร้อยแล้ว (สร้างผ่าน OfficeCLI สำเร็จ) และระบบได้แนบการ์ดใบเสนอราคา (LINE Flex Card) ส่งให้ลูกค้าแล้ว!\n- เลขที่เอกสาร: ${docNumber}\n- ผู้รับ: ${customerName}\n- ยอดรวมสุทธิ: ${totalAmount.toLocaleString()} บาท\n- ลิงก์ดูเอกสาร A4 (PDF): ${docUrl}\n- ลิงก์ดาวน์โหลด Word (.docx): ${wordUrl}\n- ลิงก์ดาวน์โหลด Excel (.xlsx): ${excelUrl}\n\nให้ตอบสรุปยอดสั้นๆ และบอกลูกค้าว่าสามารถแตะปุ่มเพื่อดูใบเสนอราคา หรือดาวน์โหลดไฟล์ Word / Excel ได้จากการ์ดที่ส่งให้ค่ะ`,
       immediateMessages: [
         {
           type: 'flex',
           content: `📄 ใบเสนอราคา ${docNumber} ยอดรวม ฿${totalAmount.toLocaleString()} บาท`,
           flexData: flexQuotation,
+        },
+      ],
+    }
+  }
+
+  if (toolName === 'create_official_letter') {
+    const subject = String(args.subject || '').trim() || 'หนังสือราชการ'
+    const recipient = String(args.recipient || '').trim() || 'ผู้รับหนังสือ'
+    const department = String(args.department || '').trim()
+    const bodyFacts = String(args.body_facts || '').trim()
+    const bodyPurpose = String(args.body_purpose || args.body_considerations || '').trim()
+    const bodyConclusion = String(args.body_conclusion || args.body_resolution || '').trim()
+    const signatoryName = String(args.signatory_name || '').trim()
+    const signatoryPosition = String(args.signatory_position || '').trim()
+    const referenceTo = String(args.reference_to || '').trim()
+    const enclosures = String(args.enclosures || '').trim()
+
+    const { data: shopData } = await supabase
+      .from('shops')
+      .select('name, company_name, company_phone, company_email')
+      .eq('id', shopId)
+      .single()
+
+    const resolvedDept = department || shopData?.company_name || shopData?.name || 'หน่วยงาน'
+    const dateStr = new Date().toLocaleDateString('th-TH', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+    const dateNum = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    const randNum = Math.floor(1000 + Math.random() * 9000)
+    const docNumber = `กท ${randNum}/${dateNum.slice(2, 6)}`
+
+    const letterData = {
+      doc_number: docNumber,
+      department: resolvedDept,
+      date_str: dateStr,
+      subject,
+      recipient,
+      reference_to: referenceTo,
+      enclosures,
+      body_facts: bodyFacts,
+      body_considerations: bodyPurpose,
+      body_resolution: bodyConclusion,
+      signatory_name: signatoryName,
+      signatory_position: signatoryPosition,
+      contact_info: `${shopData?.company_phone || ''} ${shopData?.company_email || ''}`.trim(),
+    }
+
+    const admin = ctx.supabaseAdmin || supabase
+    const { data: doc, error: docErr } = await admin
+      .from('documents')
+      .insert({
+        shop_id: shopId,
+        doc_no: docNumber,
+        doc_number: docNumber,
+        doc_type: 'official_letter',
+        customer_name: recipient,
+        items: [{ name: subject, qty: 1, price: 0 }],
+        notes: JSON.stringify(letterData),
+      })
+      .select('id')
+      .single()
+
+    if (docErr || !doc) {
+      console.error('[create_official_letter Error]:', docErr)
+      return {
+        resultForAi: 'เกิดข้อผิดพลาด ไม่สามารถออกหนังสือราชการได้ในขณะนี้',
+        immediateMessages: [],
+      }
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.dealmee.app'
+    const docUrl = `${baseUrl.replace(/\/$/, '')}/doc/official/${doc.id}`
+    const wordUrl = `${baseUrl.replace(/\/$/, '')}/api/doc/${doc.id}/download?format=docx`
+
+    const flexLetter = buildLineFlexOfficialLetterMessage({
+      shopName: shopData?.name || 'หน่วยงาน',
+      companyName: resolvedDept,
+      docNumber,
+      subject,
+      recipient,
+      department: resolvedDept,
+      dateStr,
+      docUrl,
+      wordUrl,
+    })
+
+    return {
+      resultForAi: `ร่างหนังสือราชการภายนอกเรียบร้อยแล้ว (จัดรูปแบบตามระเบียบงานสารบรรณด้วย OfficeCLI สำเร็จ) และระบบได้ส่งการ์ดหนังสือราชการให้ลูกค้าแล้ว!\n- เลขที่หนังสือ: ${docNumber}\n- เรื่อง: ${subject}\n- เรียน: ${recipient}\n- ลิงก์เปิดดูเอกสาร A4 (PDF): ${docUrl}\n- ลิงก์ดาวน์โหลด Word (.docx): ${wordUrl}\n\nให้ตอบสรุปสั้นๆ และแจ้งลูกค้าว่าสามารถแตะดูหน้าเอกสาร A4 หรือดาวน์โหลดไฟล์ Word (.docx) เพื่อนำไปแก้ไขต่อได้เลยค่ะ`,
+      immediateMessages: [
+        {
+          type: 'flex',
+          content: `📜 หนังสือราชการ: ${subject} (${docNumber})`,
+          flexData: flexLetter,
         },
       ],
     }
