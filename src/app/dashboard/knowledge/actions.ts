@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { extractFromUrl, extractFromPdf, extractFromCsv, extractUniversalDocument, type ExtractedSource } from '@/lib/knowledge/extract'
-import { toKnowledgeEntries, csvToEntriesDirect, type KnowledgeEntry } from '@/lib/knowledge/ingest'
+import { toKnowledgeEntries, csvToEntriesDirect, markdownToEntriesDirect, type KnowledgeEntry } from '@/lib/knowledge/ingest'
 
 /** Roughly the ceiling on what a shop owner might reasonably upload; larger files are almost always the wrong document. */
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
@@ -146,6 +146,13 @@ export async function importKnowledgeFromFile(formData: FormData) {
       const direct = csvToEntriesDirect(await file.text())
       if (direct && direct.length > 0) {
         return await saveImportedEntries(supabase, resolved.shop.id, direct, 'csv', file.name)
+      }
+    }
+
+    if (lowerName.endsWith('.md') || lowerName.endsWith('.markdown')) {
+      const direct = markdownToEntriesDirect(await file.text())
+      if (direct && direct.length > 0) {
+        return await saveImportedEntries(supabase, resolved.shop.id, direct, 'markdown', file.name)
       }
     }
 

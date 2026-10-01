@@ -66,16 +66,80 @@ export function csvToEntriesDirect(content: string): KnowledgeEntry[] | null {
 }
 
 /**
- * Turns raw source text into Q&A entries the sales agent can quote. Uses
- * Gemini directly rather than the agent engine: this is a one-off
- * document-processing call with no tools, conversation or planning involved,
- * and routing it through the planning loop would only add machinery.
+ * Parses markdown files directly using headings (##, ###) and sections.
+ * Fast, 100% faithful to the source text, preserves tables, and needs no AI model.
+ */
+export function markdownToEntriesDirect(content: string): KnowledgeEntry[] | null {
+  if (!content || content.trim().length === 0) return null
+
+  const lines = content.split(/\r?\n/)
+  const entries: KnowledgeEntry[] = []
+  let currentTitle = ''
+  let currentBody: string[] = []
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^#{1,4}\s+(.+)$/)
+    if (headingMatch) {
+      if (currentTitle && currentBody.join('\n').trim().length >= 10) {
+        entries.push({
+          title: currentTitle.trim(),
+          content: currentBody.join('\n').trim(),
+        })
+      }
+      currentTitle = headingMatch[1].trim()
+      currentBody = []
+    } else {
+      currentBody.push(line)
+    }
+  }
+
+  if (currentTitle && currentBody.join('\n').trim().length >= 10) {
+    entries.push({
+      title: currentTitle.trim(),
+      content: currentBody.join('\n').trim(),
+    })
+  }
+
+  if (entries.length > 0) {
+    return entries.slice(0, MAX_ENTRIES_PER_IMPORT)
+  }
+
+  return null
+}
+
+function fallbackTextChunking(text: string): KnowledgeEntry[] {
+  const chunks = text
+    .split(/\n{2,}/)
+    .map((c) => c.trim())
+    .filter((c) => c.length >= 15)
+
+  const entries: KnowledgeEntry[] = []
+  for (let i = 0; i < Math.min(chunks.length, MAX_ENTRIES_PER_IMPORT); i++) {
+    const lines = chunks[i].split('\n').filter(Boolean)
+    const rawTitle = lines[0].replace(/^[#*\-•\d.]+\s*/, '').trim()
+    const title = rawTitle.length > 5 ? rawTitle.slice(0, 80) : `ข้อมูลส่วนที่ ${i + 1}`
+    entries.push({
+      title,
+      content: chunks[i],
+    })
+  }
+  return entries
+}
+
+/**
+ * Turns raw source text into Q&A entries the sales agent can quote.
+ * Uses Gemini or Claude with graceful fallback to heuristic chunking.
  */
 export async function toKnowledgeEntries(text: string, shopName: string): Promise<KnowledgeEntry[]> {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
-  if (!apiKey) throw new Error('ยังไม่ได้ตั้งค่า GEMINI_API_KEY จึงแปลงข้อมูลอัตโนมัติไม่ได้')
+  // If the text has markdown headings, parse directly first
+  const directMd = markdownToEntriesDirect(text)
+  if (directMd && directMd.length >= 2) {
+    return directMd
+  }
 
-  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
+  const claudeKey = process.env.CLAUDE_API_KEY || process.env.CLAUDE_KEY || process.env.NEXT_PUBLIC_CLAUDE_API_KEY || ''
+
   const prompt = `คุณคือผู้ช่วยจัดระเบียบข้อมูลของร้าน "${shopName}"
 
 ด้านล่างคือข้อความดิบที่ดึงมาจากเว็บไซต์หรือเอกสารของร้าน
@@ -94,42 +158,80 @@ export async function toKnowledgeEntries(text: string, shopName: string): Promis
 ${text}
 """`
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 8192, responseMimeType: 'application/json' },
-      }),
+  // 1. Try Gemini if configured
+  if (geminiKey) {
+    const modelsToTry = [
+      process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-2.5-flash',
+    ]
+
+    for (const model of modelsToTry) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: 'user', parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.2, maxOutputTokens: 8192, responseMimeType: 'application/json' },
+            }),
+          }
+        )
+
+        if (response.ok) {
+          const data = await response.json()
+          const raw = (data.candidates?.[0]?.content?.parts || [])
+            .map((part: { text?: string }) => part.text || '')
+            .join('')
+
+          if (raw.trim()) {
+            const entries = normaliseEntries(parseJsonLoosely(raw))
+            if (entries.length > 0) return entries
+          }
+        }
+      } catch (err) {
+        console.warn(`[Knowledge Import] Gemini model ${model} failed, trying fallback:`, err)
+      }
     }
-  )
-
-  if (!response.ok) {
-    const body = await response.text()
-    console.error('[Knowledge Import] Gemini error:', body.slice(0, 500))
-    throw new Error('แปลงข้อมูลอัตโนมัติไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
   }
 
-  const data = await response.json()
-  const raw = (data.candidates?.[0]?.content?.parts || [])
-    .map((part: { text?: string }) => part.text || '')
-    .join('')
+  // 2. Try Claude if available
+  if (claudeKey) {
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': claudeKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-3-5-haiku-20241022',
+          max_tokens: 4096,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      })
 
-  if (!raw.trim()) throw new Error('ไม่สามารถสกัดข้อมูลจากเนื้อหานี้ได้')
-
-  let entries: KnowledgeEntry[]
-  try {
-    entries = normaliseEntries(parseJsonLoosely(raw))
-  } catch {
-    console.error('[Knowledge Import] Unparseable model output:', raw.slice(0, 500))
-    throw new Error('แปลงข้อมูลอัตโนมัติไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
+      if (response.ok) {
+        const data = await response.json()
+        const raw = data.content?.[0]?.text || ''
+        if (raw.trim()) {
+          const entries = normaliseEntries(parseJsonLoosely(raw))
+          if (entries.length > 0) return entries
+        }
+      }
+    } catch (err) {
+      console.warn('[Knowledge Import] Claude fallback failed:', err)
+    }
   }
 
-  if (entries.length === 0) {
-    throw new Error('ไม่พบข้อมูลที่นำมาทำเป็นคำถาม-คำตอบได้ ลองใช้หน้าเว็บหรือไฟล์ที่มีรายละเอียดร้านมากกว่านี้')
+  // 3. Last-resort graceful fallback: direct chunking
+  const fallback = fallbackTextChunking(text)
+  if (fallback.length > 0) {
+    return fallback
   }
 
-  return entries
+  throw new Error('ไม่สามารถสกัดข้อมูลจากเอกสารนี้ได้ กรุณาตรวจสอบเนื้อหาในไฟล์')
 }
