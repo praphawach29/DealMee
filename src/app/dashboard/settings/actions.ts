@@ -324,6 +324,7 @@ export async function testPlaygroundChat(
       conversationId,
       conversationHistory,
       supabaseClient: supabase,
+      isPlayground: true,
     })
 
     let result

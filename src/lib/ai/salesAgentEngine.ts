@@ -46,6 +46,7 @@ export interface SalesAgentRequest {
    * conversation with no memory of what was just said.
    */
   conversationHistory?: { sender: 'user' | 'bot'; text: string }[]
+  isPlayground?: boolean
   /**
    * Overrides tool execution — defaults to the real executeTool() (writes to
    * the database, sends real LINE messages via the returned
@@ -212,6 +213,8 @@ export interface PlanningState {
   toolCallsExecuted: AgentToolCall[]
   scheduledMessages: { delayMs: number; message: CustomerMessage }[]
   productsData?: any[]
+  lastProviderError?: string
+  isPlayground?: boolean
 }
 
 export type PlanningStart =
@@ -1039,6 +1042,7 @@ async function preparePlanningState({
   conversationHistory,
   toolExecutor,
   supabaseClient,
+  isPlayground,
 }: SalesAgentRequest): Promise<
   { quotaExceeded: true; language: CustomerLanguage } | { quotaExceeded: false; state: PlanningState }
 > {
@@ -1050,7 +1054,7 @@ async function preparePlanningState({
 
   const db = supabaseClient || supabase
 
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
   const claudeKey = process.env.CLAUDE_API_KEY || process.env.CLAUDE_KEY || process.env.NEXT_PUBLIC_CLAUDE_API_KEY || ''
   const openAiKey = process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY || ''
   const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
@@ -1065,7 +1069,7 @@ async function preparePlanningState({
     .from('knowledge_base')
     .select('title, content')
     .eq('shop_id', shop.id)
-    .eq('status', 'active')
+    .or('status.eq.active,status.is.null')
     .order('created_at', { ascending: true })
     .limit(KNOWLEDGE_INLINE_MAX_ITEMS)
 
@@ -1432,21 +1436,41 @@ ${historyContext}`
       immediateMessages: [],
       toolCallsExecuted: [],
       scheduledMessages: [],
+      isPlayground: isPlayground || false,
     },
   }
 }
 
 async function callCurrentStep(state: PlanningState): Promise<ProviderStepResult | null> {
   const { routing, staticSystemPrompt, dynamicSystemPrompt, systemInstruction, turns, claudeKey, openAiKey, geminiKey, modelName } = state
+
+  // 1. Primary provider based on routing classification
   if (routing.targetProvider === 'claude' && claudeKey) {
-    const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, turns, claudeKey, routing.toolSet)
+    const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, turns, claudeKey, routing.toolSet, state)
     if (result) return result
   } else if (routing.targetProvider === 'openai' && openAiKey) {
-    const result = await callOpenAiApi(systemInstruction, turns, openAiKey, routing.toolSet)
+    const result = await callOpenAiApi(systemInstruction, turns, openAiKey, routing.toolSet, state)
+    if (result) return result
+  } else if (geminiKey) {
+    const result = await callGeminiApi(systemInstruction, turns, modelName, geminiKey, routing.toolSet, state)
     if (result) return result
   }
-  if (!geminiKey) return null
-  return callGeminiApi(systemInstruction, turns, modelName, geminiKey, routing.toolSet)
+
+  // 2. Graceful Fallbacks: If primary provider is unavailable or failed, try other configured providers
+  if (geminiKey && routing.targetProvider !== 'gemini') {
+    const result = await callGeminiApi(systemInstruction, turns, modelName, geminiKey, routing.toolSet, state)
+    if (result) return result
+  }
+  if (claudeKey && routing.targetProvider !== 'claude') {
+    const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, turns, claudeKey, routing.toolSet, state)
+    if (result) return result
+  }
+  if (openAiKey && routing.targetProvider !== 'openai') {
+    const result = await callOpenAiApi(systemInstruction, turns, openAiKey, routing.toolSet, state)
+    if (result) return result
+  }
+
+  return null
 }
 
 /**
@@ -1460,11 +1484,15 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
   const response = await callCurrentStep(state)
 
   if (!response) {
-    // All configured providers failed this step — same fallback text as
-    // the old single-shot path used when every provider call returned null.
-    const finalText = state.step === 0
-      ? (state.geminiKey ? `สวัสดีค่ะ ยินดีต้อนรับสู่ร้าน "${state.shop.name}" มีอะไรให้ช่วยแนะนำไหมคะ?` : (state.shop.greeting_message || 'สวัสดีค่ะ มีอะไรให้ช่วยไหมคะ?'))
-      : t('systemBusy', state.language)
+    // All configured providers failed this step
+    const hasAnyKey = !!(state.geminiKey || state.claudeKey || state.openAiKey)
+    const errDetail = state.lastProviderError || (!hasAnyKey ? 'ยังไม่ได้ตั้งค่า API Key ของ AI ในระบบ (กรุณาตั้งค่า GEMINI_API_KEY)' : 'AI Provider ขัดข้องชั่วคราว')
+
+    console.error(`[DealMee Planning Loop] All providers failed for shop "${state.shop.name}":`, errDetail)
+
+    const finalText = (state.isPlayground || state.step > 0)
+      ? `ขออภัยค่ะ ระบบ AI ไม่สามารถตอบกลับได้ในขณะนี้ (${errDetail})`
+      : (state.shop.greeting_message || `สวัสดีค่ะ ยินดีต้อนรับสู่ร้าน "${state.shop.name}" มีอะไรให้ช่วยแนะนำไหมคะ?`)
     return { done: true, finalText }
   }
 
@@ -1712,100 +1740,117 @@ async function callGeminiApi(
   turns: PlanningTurn[],
   modelName: string,
   apiKey: string,
-  toolSet: typeof MASTER_TOOLS
+  toolSet: typeof MASTER_TOOLS,
+  state?: PlanningState
 ): Promise<ProviderStepResult | null> {
-  try {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemInstruction }] },
-        contents: buildGeminiContents(turns),
-        tools: toGeminiTools(toolSet),
-        generationConfig: {
-          temperature: 0.7,
-          // Gemini 3.x reasons before answering and those thinking tokens are
-          // billed against maxOutputTokens too. At the old 1024 the model
-          // could spend nearly the whole budget thinking and get cut off
-          // mid-sentence (seen live: a booking summary that stopped at "- **"
-          // and never reached its book_appointment call).
-          maxOutputTokens: MAX_OUTPUT_TOKENS,
-        },
-      }),
-    })
+  const candidateModels = Array.from(
+    new Set([modelName, 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash'].filter(Boolean))
+  )
 
-    if (!response.ok) {
-      const errBody = await response.text()
-      console.error(`[Gemini Error] ${response.status} model=${modelName}:`, errBody.slice(0, 500))
-      return null
-    }
+  for (const model of candidateModels) {
+    try {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemInstruction }] },
+          contents: buildGeminiContents(turns),
+          tools: toGeminiTools(toolSet),
+          generationConfig: {
+            temperature: 0.7,
+            // Gemini 3.x reasons before answering and those thinking tokens are
+            // billed against maxOutputTokens too.
+            maxOutputTokens: MAX_OUTPUT_TOKENS,
+          },
+        }),
+      })
 
-    const data = await response.json()
-    const candidate = data.candidates?.[0]
-    const parts: any[] = candidate?.content?.parts || []
-    const truncated = candidate?.finishReason === 'MAX_TOKENS'
-
-    let replyText = ''
-    let toolCall: IdentifiedToolCall | undefined
-
-    // Gemini thinking signatures are part-level metadata. Depending on the
-    // REST/SDK surface they can be exposed as thoughtSignature or
-    // thought_signature, and in some responses they appear on the part before
-    // the functionCall. Capture either spelling and echo it back unchanged.
-    let pendingThoughtSig: string | undefined
-
-    for (const part of parts) {
-      const partThoughtSignature = part.thoughtSignature || part.thought_signature
-      if (partThoughtSignature) {
-        pendingThoughtSig = partThoughtSignature
+      if (!response.ok) {
+        const errBody = await response.text()
+        console.error(`[Gemini Error] ${response.status} model=${model}:`, errBody.slice(0, 500))
+        if (state) {
+          state.lastProviderError = `Gemini (${model}) ${response.status}: ${errBody.slice(0, 150)}`
+        }
+        if (response.status === 404 || response.status === 400) {
+          continue
+        }
+        return null
       }
 
-      // Skip thought content but capture its signature
-      if (part.thought) {
+      const data = await response.json()
+      const candidate = data.candidates?.[0]
+      const parts: any[] = candidate?.content?.parts || []
+      const truncated = candidate?.finishReason === 'MAX_TOKENS'
+
+      let replyText = ''
+      let toolCall: IdentifiedToolCall | undefined
+
+      // Gemini thinking signatures are part-level metadata. Depending on the
+      // REST/SDK surface they can be exposed as thoughtSignature or
+      // thought_signature, and in some responses they appear on the part before
+      // the functionCall. Capture either spelling and echo it back unchanged.
+      let pendingThoughtSig: string | undefined
+
+      for (const part of parts) {
+        const partThoughtSignature = part.thoughtSignature || part.thought_signature
+        if (partThoughtSignature) {
+          pendingThoughtSig = partThoughtSignature
+        }
+
+        // Skip thought content but capture its signature
+        if (part.thought) {
+          continue
+        }
+        if (part.text) replyText += part.text
+        if (part.functionCall) {
+          toolCall = {
+            name: part.functionCall.name as AgentToolName,
+            args: part.functionCall.args || {},
+            id: part.functionCall.id,
+            // thought_signature can be on the functionCall part itself or
+            // from a preceding thought part — accept either.
+            thoughtSignature:
+              partThoughtSignature ||
+              part.functionCall.thoughtSignature ||
+              part.functionCall.thought_signature ||
+              pendingThoughtSig,
+          }
+        }
+      }
+
+      if (!replyText && !toolCall) {
+        if (state) state.lastProviderError = `Gemini (${model}): ตอบกลับเป็นข้อความว่าง`
         continue
       }
-      if (part.text) replyText += part.text
-      if (part.functionCall) {
-        toolCall = {
-          name: part.functionCall.name as AgentToolName,
-          args: part.functionCall.args || {},
-          id: part.functionCall.id,
-          // thought_signature can be on the functionCall part itself or
-          // from a preceding thought part — accept either.
-          thoughtSignature:
-            partThoughtSignature ||
-            part.functionCall.thoughtSignature ||
-            part.functionCall.thought_signature ||
-            pendingThoughtSig,
-        }
+
+      const usageMeta = data.usageMetadata
+      const usage: AgentUsage | undefined = usageMeta
+        ? {
+            promptTokens: usageMeta.promptTokenCount || 0,
+            completionTokens: usageMeta.candidatesTokenCount || 0,
+            totalTokens: usageMeta.totalTokenCount || 0,
+            provider: 'gemini',
+            cacheReadTokens: usageMeta.cachedContentTokenCount || 0,
+          }
+        : undefined
+
+      if (truncated) {
+        console.warn(
+          `[Gemini] Response hit MAX_TOKENS (thinking ${usageMeta?.thoughtsTokenCount ?? '?'} + output ${usageMeta?.candidatesTokenCount ?? '?'} of ${MAX_OUTPUT_TOKENS}) — reply was cut off mid-sentence.`
+        )
+      }
+
+      return { text: replyText.trim(), toolCall, usage, truncated }
+    } catch (err: any) {
+      console.error(`[Gemini Exception] model=${model}:`, err)
+      if (state) {
+        state.lastProviderError = `Gemini (${model}) exception: ${err?.message || String(err)}`
       }
     }
-
-    if (!replyText && !toolCall) return null
-
-    const usageMeta = data.usageMetadata
-    const usage: AgentUsage | undefined = usageMeta
-      ? {
-          promptTokens: usageMeta.promptTokenCount || 0,
-          completionTokens: usageMeta.candidatesTokenCount || 0,
-          totalTokens: usageMeta.totalTokenCount || 0,
-          provider: 'gemini',
-          cacheReadTokens: usageMeta.cachedContentTokenCount || 0,
-        }
-      : undefined
-
-    if (truncated) {
-      console.warn(
-        `[Gemini] Response hit MAX_TOKENS (thinking ${usageMeta?.thoughtsTokenCount ?? '?'} + output ${usageMeta?.candidatesTokenCount ?? '?'} of ${MAX_OUTPUT_TOKENS}) — reply was cut off mid-sentence.`
-      )
-    }
-
-    return { text: replyText.trim(), toolCall, usage, truncated }
-  } catch (err) {
-    console.error('[Gemini Exception]:', err)
-    return null
   }
+
+  return null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1846,80 +1891,108 @@ async function callClaudeApi(
   dynamicSystemPrompt: string,
   turns: PlanningTurn[],
   apiKey: string,
-  toolSet: typeof MASTER_TOOLS
+  toolSet: typeof MASTER_TOOLS,
+  state?: PlanningState
 ): Promise<ProviderStepResult | null> {
-  try {
-    // Prompt caching: the static block (bot identity, knowledge base,
-    // products, payment info — stable per shop) is tagged cache_control so
-    // Claude only bills full price for it once per 5-minute/1-hour window;
-    // the dynamic block (customer profile, chat history) is never cached
-    // since it changes per customer/message. Below Claude's 1024-token
-    // cacheable minimum this just silently doesn't activate — no error.
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-5',
-        max_tokens: MAX_OUTPUT_TOKENS,
-        system: [
-          { type: 'text', text: staticSystemPrompt, cache_control: { type: 'ephemeral' } },
-          { type: 'text', text: dynamicSystemPrompt },
-        ],
-        tools: toClaudeTools(toolSet),
-        messages: buildClaudeMessages(turns),
-      }),
-    })
+  const candidateModels = Array.from(
+    new Set(
+      [
+        process.env.CLAUDE_MODEL,
+        'claude-3-5-sonnet-20241022',
+        'claude-3-5-haiku-20241022',
+        'claude-3-haiku-20240307',
+      ].filter(Boolean)
+    )
+  ) as string[]
 
-    if (!response.ok) {
-      console.error('[Claude Error]:', await response.text())
-      return null
-    }
+  for (const model of candidateModels) {
+    try {
+      // Prompt caching: the static block (bot identity, knowledge base,
+      // products, payment info — stable per shop) is tagged cache_control so
+      // Claude only bills full price for it once per 5-minute/1-hour window;
+      // the dynamic block (customer profile, chat history) is never cached
+      // since it changes per customer/message. Below Claude's 1024-token
+      // cacheable minimum this just silently doesn't activate — no error.
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: MAX_OUTPUT_TOKENS,
+          system: [
+            { type: 'text', text: staticSystemPrompt, cache_control: { type: 'ephemeral' } },
+            { type: 'text', text: dynamicSystemPrompt },
+          ],
+          tools: toClaudeTools(toolSet),
+          messages: buildClaudeMessages(turns),
+        }),
+      })
 
-    const data = await response.json()
-    const blocks: any[] = data.content || []
+      if (!response.ok) {
+        const errText = await response.text()
+        console.error(`[Claude Error] ${response.status} model=${model}:`, errText.slice(0, 500))
+        if (state) {
+          state.lastProviderError = `Claude (${model}) ${response.status}: ${errText.slice(0, 150)}`
+        }
+        if (response.status === 404 || (response.status === 400 && errText.includes('not_found_error'))) {
+          continue
+        }
+        return null
+      }
 
-    let replyText = ''
-    let toolCall: IdentifiedToolCall | undefined
+      const data = await response.json()
+      const blocks: any[] = data.content || []
 
-    for (const block of blocks) {
-      if (block.type === 'text') replyText += block.text
-      if (block.type === 'tool_use') {
-        toolCall = { name: block.name as AgentToolName, args: block.input || {}, id: block.id }
+      let replyText = ''
+      let toolCall: IdentifiedToolCall | undefined
+
+      for (const block of blocks) {
+        if (block.type === 'text') replyText += block.text
+        if (block.type === 'tool_use') {
+          toolCall = { name: block.name as AgentToolName, args: block.input || {}, id: block.id }
+        }
+      }
+
+      if (!replyText && !toolCall) {
+        if (state) state.lastProviderError = `Claude (${model}): ตอบกลับเป็นข้อความว่าง`
+        continue
+      }
+
+      const usageData = data.usage
+      const usage: AgentUsage | undefined = usageData
+        ? {
+            promptTokens: usageData.input_tokens || 0,
+            completionTokens: usageData.output_tokens || 0,
+            totalTokens:
+              (usageData.input_tokens || 0) +
+              (usageData.output_tokens || 0) +
+              (usageData.cache_creation_input_tokens || 0) +
+              (usageData.cache_read_input_tokens || 0),
+            provider: 'claude',
+            cacheReadTokens: usageData.cache_read_input_tokens || 0,
+            cacheWriteTokens: usageData.cache_creation_input_tokens || 0,
+          }
+        : undefined
+
+      const truncated = data.stop_reason === 'max_tokens'
+      if (truncated) {
+        console.warn(`[Claude] Response hit max_tokens (${MAX_OUTPUT_TOKENS}) — reply was cut off mid-sentence.`)
+      }
+
+      return { text: replyText.trim(), toolCall, usage, truncated }
+    } catch (err: any) {
+      console.error(`[Claude Exception] model=${model}:`, err)
+      if (state) {
+        state.lastProviderError = `Claude (${model}) exception: ${err?.message || String(err)}`
       }
     }
-
-    if (!replyText && !toolCall) return null
-
-    const usageData = data.usage
-    const usage: AgentUsage | undefined = usageData
-      ? {
-          promptTokens: usageData.input_tokens || 0,
-          completionTokens: usageData.output_tokens || 0,
-          totalTokens:
-            (usageData.input_tokens || 0) +
-            (usageData.output_tokens || 0) +
-            (usageData.cache_creation_input_tokens || 0) +
-            (usageData.cache_read_input_tokens || 0),
-          provider: 'claude',
-          cacheReadTokens: usageData.cache_read_input_tokens || 0,
-          cacheWriteTokens: usageData.cache_creation_input_tokens || 0,
-        }
-      : undefined
-
-    const truncated = data.stop_reason === 'max_tokens'
-    if (truncated) {
-      console.warn(`[Claude] Response hit max_tokens (${MAX_OUTPUT_TOKENS}) — reply was cut off mid-sentence.`)
-    }
-
-    return { text: replyText.trim(), toolCall, usage, truncated }
-  } catch (err) {
-    console.error('[Claude Exception]:', err)
-    return null
   }
+
+  return null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1953,71 +2026,99 @@ async function callOpenAiApi(
   systemInstruction: string,
   turns: PlanningTurn[],
   apiKey: string,
-  toolSet: typeof MASTER_TOOLS
+  toolSet: typeof MASTER_TOOLS,
+  state?: PlanningState
 ): Promise<ProviderStepResult | null> {
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || 'gpt-5.6-luna',
-        messages: buildOpenAiMessages(systemInstruction, turns),
-        tools: toOpenAITools(toolSet),
-        tool_choice: 'auto',
-        max_tokens: MAX_OUTPUT_TOKENS,
-      }),
-    })
+  const candidateModels = Array.from(
+    new Set(
+      [
+        process.env.OPENAI_MODEL,
+        'gpt-4o-mini',
+        'gpt-4o',
+        'gpt-3.5-turbo',
+      ].filter(Boolean)
+    )
+  ) as string[]
 
-    if (!response.ok) {
-      console.error('[OpenAI Error]:', await response.text())
-      return null
-    }
+  for (const model of candidateModels) {
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: buildOpenAiMessages(systemInstruction, turns),
+          tools: toOpenAITools(toolSet),
+          tool_choice: 'auto',
+          max_tokens: MAX_OUTPUT_TOKENS,
+        }),
+      })
 
-    const data = await response.json()
-    const message = data.choices?.[0]?.message
-    if (!message) return null
+      if (!response.ok) {
+        const errText = await response.text()
+        console.error(`[OpenAI Error] ${response.status} model=${model}:`, errText.slice(0, 500))
+        if (state) {
+          state.lastProviderError = `OpenAI (${model}) ${response.status}: ${errText.slice(0, 150)}`
+        }
+        if (response.status === 404 || response.status === 400) {
+          continue
+        }
+        return null
+      }
 
-    const replyText = message.content || ''
-    let toolCall: IdentifiedToolCall | undefined
+      const data = await response.json()
+      const message = data.choices?.[0]?.message
+      if (!message) continue
 
-    if (message.tool_calls?.length > 0) {
-      const tc = message.tool_calls[0]
-      if (tc.function?.name) {
-        try {
-          toolCall = {
-            name: tc.function.name as AgentToolName,
-            args: JSON.parse(tc.function.arguments || '{}'),
-            id: tc.id,
+      const replyText = message.content || ''
+      let toolCall: IdentifiedToolCall | undefined
+
+      if (message.tool_calls?.length > 0) {
+        const tc = message.tool_calls[0]
+        if (tc.function?.name) {
+          try {
+            toolCall = {
+              name: tc.function.name as AgentToolName,
+              args: JSON.parse(tc.function.arguments || '{}'),
+              id: tc.id,
+            }
+          } catch {
+            console.error('[OpenAI] tool_call parse error')
           }
-        } catch {
-          console.error('[OpenAI] tool_call parse error')
         }
       }
+
+      if (!replyText && !toolCall) {
+        if (state) state.lastProviderError = `OpenAI (${model}): ตอบกลับเป็นข้อความว่าง`
+        continue
+      }
+
+      const usageData = data.usage
+      const usage: AgentUsage | undefined = usageData
+        ? {
+            promptTokens: usageData.prompt_tokens || 0,
+            completionTokens: usageData.completion_tokens || 0,
+            totalTokens: usageData.total_tokens || 0,
+            provider: 'openai',
+          }
+        : undefined
+
+      const truncated = data.choices?.[0]?.finish_reason === 'length'
+      if (truncated) {
+        console.warn(`[OpenAI] Response hit max_tokens (${MAX_OUTPUT_TOKENS}) — reply was cut off mid-sentence.`)
+      }
+
+      return { text: replyText.trim(), toolCall, usage, truncated }
+    } catch (err: any) {
+      console.error(`[OpenAI Exception] model=${model}:`, err)
+      if (state) {
+        state.lastProviderError = `OpenAI (${model}) exception: ${err?.message || String(err)}`
+      }
     }
-
-    if (!replyText && !toolCall) return null
-
-    const usageData = data.usage
-    const usage: AgentUsage | undefined = usageData
-      ? {
-          promptTokens: usageData.prompt_tokens || 0,
-          completionTokens: usageData.completion_tokens || 0,
-          totalTokens: usageData.total_tokens || 0,
-          provider: 'openai',
-        }
-      : undefined
-
-    const truncated = data.choices?.[0]?.finish_reason === 'length'
-    if (truncated) {
-      console.warn(`[OpenAI] Response hit max_tokens (${MAX_OUTPUT_TOKENS}) — reply was cut off mid-sentence.`)
-    }
-
-    return { text: replyText.trim(), toolCall, usage, truncated }
-  } catch (err) {
-    console.error('[OpenAI Exception]:', err)
-    return null
   }
+
+  return null
 }
