@@ -2047,9 +2047,10 @@ async function callOpenAiApi(
     new Set(
       [
         process.env.OPENAI_MODEL,
+        'gpt-6-luna',
+        'gpt-6.1-sol',
         'gpt-4o-mini',
         'gpt-4o',
-        'gpt-3.5-turbo',
       ].filter(Boolean)
     )
   ) as string[]
