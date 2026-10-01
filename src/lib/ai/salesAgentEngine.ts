@@ -1071,7 +1071,7 @@ async function preparePlanningState({
     process.env.OPENAI_API_KEY ||
     process.env.NEXT_PUBLIC_OPENAI_API_KEY ||
     ''
-  const modelName = shop.custom_ai_model || shop.ai_model || process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+  const modelName = shop.custom_ai_model || shop.ai_model || process.env.GEMINI_MODEL || 'gemini-3.8-flash'
 
   // 1. Knowledge Base — inlined up to a character budget, with the rest
   // reachable through search_knowledge_base. Every entry used to be inlined
@@ -1758,7 +1758,15 @@ async function callGeminiApi(
   state?: PlanningState
 ): Promise<ProviderStepResult | null> {
   const candidateModels = Array.from(
-    new Set([modelName, 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash'].filter(Boolean))
+    new Set([
+      modelName,
+      'gemini-3.8-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-3.1-flash-lite',
+      'gemini-3.5-flash',
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+    ].filter(Boolean))
   )
 
   for (const model of candidateModels) {
