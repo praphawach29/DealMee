@@ -163,6 +163,18 @@ export async function extractFromCsv(file: File): Promise<ExtractedSource> {
  * Preserves tables and markdown structure for maximum RAG accuracy.
  */
 export async function extractUniversalDocument(file: File): Promise<ExtractedSource> {
+  const ext = file.name.toLowerCase()
+  if (ext.endsWith('.md') || ext.endsWith('.markdown') || ext.endsWith('.txt')) {
+    const rawText = await file.text()
+    if (rawText.trim().length >= 10) {
+      return {
+        text: truncate(rawText.trim()),
+        label: file.name,
+      }
+    }
+    throw new Error('ไฟล์ข้อความว่างเปล่าหรือไม่พบเนื้อหา')
+  }
+
   try {
     const { parseDocumentWithMarkItDown } = await import('@/lib/documentProcessor')
     const buffer = await file.arrayBuffer()
@@ -179,7 +191,6 @@ export async function extractUniversalDocument(file: File): Promise<ExtractedSou
   }
 
   // Graceful fallbacks if MarkItDown is unavailable or couldn't parse
-  const ext = file.name.toLowerCase()
   if (ext.endsWith('.pdf')) {
     return await extractFromPdf(file)
   }

@@ -123,9 +123,9 @@ export async function importKnowledgeFromFile(formData: FormData) {
   if (file.size > MAX_UPLOAD_BYTES) return { error: 'ไฟล์ใหญ่เกิน 15 MB กรุณาแบ่งไฟล์ให้เล็กลง' }
 
   const lowerName = file.name.toLowerCase()
-  const isSupported = /\.(pdf|docx?|xlsx?|pptx?|csv|png|jpe?g|webp)$/i.test(lowerName)
+  const isSupported = /\.(pdf|docx?|xlsx?|pptx?|csv|png|jpe?g|webp|md|markdown|txt)$/i.test(lowerName)
   if (!isSupported) {
-    return { error: 'รองรับไฟล์ PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx), CSV และรูปภาพ เท่านั้น' }
+    return { error: 'รองรับไฟล์ PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx), CSV, Markdown (.md, .txt) และรูปภาพ เท่านั้น' }
   }
 
   let sourceTag = 'document'
@@ -134,6 +134,8 @@ export async function importKnowledgeFromFile(formData: FormData) {
   else if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) sourceTag = 'xlsx'
   else if (lowerName.endsWith('.pptx') || lowerName.endsWith('.ppt')) sourceTag = 'pptx'
   else if (lowerName.endsWith('.csv')) sourceTag = 'csv'
+  else if (lowerName.endsWith('.md') || lowerName.endsWith('.markdown')) sourceTag = 'markdown'
+  else if (lowerName.endsWith('.txt')) sourceTag = 'text'
   else if (/\.(png|jpe?g|webp)$/i.test(lowerName)) sourceTag = 'image'
 
   try {

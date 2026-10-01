@@ -412,7 +412,7 @@ export default function KnowledgeManager({
                 type="file"
                 name="file"
                 ref={fileInputRef}
-                accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.csv,.png,.jpg,.jpeg,.webp"
+                accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.csv,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp"
                 disabled={importing}
                 onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
                 className="hidden"
@@ -443,6 +443,9 @@ export default function KnowledgeManager({
                     </span>
                     <span className="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300">
                       Excel (.xlsx, .csv)
+                    </span>
+                    <span className="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-950/40 dark:text-teal-300">
+                      Markdown (.md, .txt)
                     </span>
                     <span className="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300">
                       PowerPoint (.pptx)
