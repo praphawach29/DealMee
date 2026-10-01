@@ -64,6 +64,7 @@ export async function GET(
   <title>ใบเสนอราคา Quotation - ${doc.doc_number || doc.doc_no || 'QT'}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     body { font-family: 'Sarabun', sans-serif; }
     @media print {
@@ -82,7 +83,18 @@ export async function GET(
     }
   </style>
 </head>
-<body class="bg-slate-100/80 min-h-screen py-4 sm:py-10 text-gray-800 antialiased">
+  <!-- Top LINE Notice Banner (Shown when opened in LINE) -->
+  <div id="lineTopBanner" class="max-w-4xl mx-auto px-3 sm:px-4 mb-2 hidden no-print">
+    <div class="bg-amber-50 border border-amber-200/90 rounded-xl p-3 flex items-center justify-between gap-3 text-xs text-amber-900 shadow-xs">
+      <div class="flex items-center gap-2">
+        <span class="text-base">💡</span>
+        <span>เปิดผ่าน LINE: หากต้องการบันทึก PDF หรือ Word แนะนำให้เปิดในเบราว์เซอร์เครื่องค่ะ</span>
+      </div>
+      <a href="/doc/quotation/${id}?openExternalBrowser=1" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg shrink-0 no-underline text-[11px] shadow-xs active:scale-95 transition">
+        เปิดใน Chrome
+      </a>
+    </div>
+  </div>
 
   <!-- Top Action Controls Bar -->
   <div class="max-w-4xl mx-auto px-3 sm:px-4 mb-3 sm:mb-5 no-print">
@@ -347,38 +359,54 @@ export async function GET(
     </div>
   </div>
 
-  <!-- Modal for LINE In-App Browser Guidance (Solves Issue 3) -->
+  <!-- Modal for PDF & Print Options (Solves Issue 3 everywhere) -->
   <div id="linePrintModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 hidden no-print">
     <div class="bg-white rounded-2xl max-w-sm w-full p-5 sm:p-6 shadow-2xl border border-slate-100 space-y-4">
       <div class="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
       </div>
       
       <div class="text-center space-y-1">
-        <h3 class="text-base sm:text-lg font-bold text-slate-900">พิมพ์หรือบันทึกเป็น PDF</h3>
+        <h3 class="text-base sm:text-lg font-bold text-slate-900">บันทึกหรือพิมพ์ใบเสนอราคา</h3>
         <p class="text-xs text-slate-500 leading-relaxed">
-          เบราว์เซอร์ของ LINE ไม่อนุญาตให้สั่งพิมพ์โดยตรง กรุณาเลือกวิธีที่สะดวกดังนี้ค่ะ:
+          เลือกวิธีที่สะดวกสำหรับอุปกรณ์ของคุณได้เลยค่ะ:
         </p>
       </div>
 
       <div class="space-y-2 pt-1">
-        <button onclick="openInExternalBrowser()" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-          เปิดในเบราว์เซอร์เครื่อง (บันทึก PDF ทันที)
+        <!-- Direct External Browser Option for LINE users -->
+        <div id="lineOpenExternalBox" class="hidden">
+          <a href="/doc/quotation/${id}?openExternalBrowser=1&autoDownloadPdf=1" target="_blank" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer no-underline active:scale-95 text-center mb-1">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+            <span>🌐 เปิดใน Chrome เพื่อบันทึก PDF ทันที</span>
+          </a>
+        </div>
+
+        <!-- Direct PDF Download (Works in Chrome, Safari, etc.) -->
+        <button id="btnSavePdf" onclick="downloadPdfFile()" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 text-center">
+          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+          <span id="btnSavePdfText">📥 บันทึกเป็นไฟล์ PDF (A4) ลงเครื่องทันที</span>
         </button>
 
-        <a href="/api/doc/${id}/download?format=docx&openExternalBrowser=1" download class="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer no-underline active:scale-95">
-          <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-          ดาวน์โหลดไฟล์ Word (.docx) แทน
+        <!-- Native Print for PC / Android system -->
+        <button onclick="triggerPrint()" class="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 text-center">
+          <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+          <span>🖨️ สั่งพิมพ์ออกกระดาษ (Print)</span>
+        </button>
+
+        <!-- Word Download Option -->
+        <a href="/api/doc/${id}/download?format=docx&openExternalBrowser=1" download class="w-full py-2 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer no-underline active:scale-95 text-center">
+          <svg class="w-4 h-4 text-indigo-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+          <span>ดาวน์โหลดไฟล์ Word (.docx)</span>
         </a>
       </div>
 
       <div class="p-3 bg-amber-50 rounded-xl border border-amber-200/70 text-[11px] text-amber-800 space-y-1">
         <p class="font-bold flex items-center gap-1 text-amber-900">
-          <span>💡 หรือทำด้วยตนเอง:</span>
+          <span>💡 เคล็ดลับเพิ่มเติม:</span>
         </p>
         <p class="text-amber-700 leading-normal">
-          แตะจุด 3 จุด (⋮ หรือ ⋯) ที่มุมบนขวาของ LINE แล้วเลือก <b>"เปิดด้วยเบราว์เซอร์อื่น"</b> เพื่อพิมพ์หรือเซฟ PDF
+          บน Android Chrome สามารถแตะจุด 3 จุด (⋮) มุมขวาบน &gt; <b>แชร์ (Share)</b> &gt; <b>พิมพ์ (Print)</b> เพื่อบันทึกเป็น PDF ผ่านระบบ Android ได้เช่นกันค่ะ
         </p>
       </div>
 
@@ -393,38 +421,92 @@ export async function GET(
       return /Line\//i.test(navigator.userAgent);
     }
 
-    function openInExternalBrowser() {
-      const url = new URL(window.location.href);
-      url.searchParams.set('openExternalBrowser', '1');
-      url.searchParams.set('autoPrint', '1');
-      window.location.href = url.toString();
-    }
-
     function handlePrintOrPdf() {
       if (isLineApp()) {
-        document.getElementById('linePrintModal').classList.remove('hidden');
-        return;
+        const box = document.getElementById('lineOpenExternalBox');
+        if (box) box.classList.remove('hidden');
       }
-      try {
-        window.print();
-      } catch (err) {
-        document.getElementById('linePrintModal').classList.remove('hidden');
-      }
+      document.getElementById('linePrintModal').classList.remove('hidden');
     }
 
     function closeLineModal() {
       document.getElementById('linePrintModal').classList.add('hidden');
     }
 
-    // Auto print if opened from external browser with autoPrint=1
+    function triggerPrint() {
+      try {
+        window.print();
+      } catch (err) {
+        alert('อุปกรณ์ไม่รองรับการสั่งพิมพ์โดยตรง กรุณากดปุ่ม "บันทึกเป็นไฟล์ PDF ลงเครื่อง" ด้านบนแทนค่ะ');
+      }
+    }
+
+    async function downloadPdfFile() {
+      if (typeof html2pdf === 'undefined') {
+        alert('ระบบกำลังโหลดตัวแปลง PDF กรุณารอสักครู่แล้วกดใหม่อีกครั้งค่ะ');
+        return;
+      }
+
+      const btn = document.getElementById('btnSavePdf');
+      const btnText = document.getElementById('btnSavePdfText');
+      const oldText = btnText ? btnText.innerText : '';
+      if (btnText) btnText.innerText = '⏳ กำลังสร้างไฟล์ PDF A4...';
+      if (btn) btn.disabled = true;
+
+      const paper = document.querySelector('.paper-container');
+      const mobileItems = document.querySelector('.mobile-items');
+      const desktopTable = document.querySelector('.desktop-table');
+
+      // Temporarily format as clean A4 standard width (794px = 210mm at 96dpi)
+      const origWidth = paper ? paper.style.width : '';
+      const origMaxWidth = paper ? paper.style.maxWidth : '';
+      if (paper) {
+        paper.style.width = '794px';
+        paper.style.maxWidth = '794px';
+      }
+      if (mobileItems) mobileItems.style.display = 'none';
+      if (desktopTable) desktopTable.style.display = 'block';
+
+      try {
+        const safeDocNo = '${(doc.doc_number || doc.doc_no || 'QT').replace(/[/\\\\?%*:|"<>]/g, '_')}';
+        const opt = {
+          margin: [8, 8, 8, 8],
+          filename: 'ใบเสนอราคา_' + safeDocNo + '.pdf',
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollY: 0 },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+        await html2pdf().set(opt).from(paper).save();
+        closeLineModal();
+      } catch (err) {
+        console.error('PDF error:', err);
+        alert('เกิดข้อผิดพลาดในการสร้าง PDF กรุณาลองใช้ฟังก์ชันพิมพ์ หรือดาวน์โหลดเป็นไฟล์ Word แทนค่ะ');
+      } finally {
+        if (paper) {
+          paper.style.width = origWidth;
+          paper.style.maxWidth = origMaxWidth;
+        }
+        if (mobileItems) mobileItems.style.display = '';
+        if (desktopTable) desktopTable.style.display = '';
+        if (btnText) btnText.innerText = oldText;
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    // Auto-detect LINE & handle auto-actions
     window.addEventListener('DOMContentLoaded', () => {
+      if (isLineApp()) {
+        const banner = document.getElementById('lineTopBanner');
+        if (banner) banner.classList.remove('hidden');
+        const box = document.getElementById('lineOpenExternalBox');
+        if (box) box.classList.remove('hidden');
+      }
+
       const params = new URLSearchParams(window.location.search);
-      if (params.get('autoPrint') === '1' && !isLineApp()) {
+      if (params.get('autoDownloadPdf') === '1') {
         setTimeout(() => {
-          try {
-            window.print();
-          } catch(e) {}
-        }, 600);
+          downloadPdfFile();
+        }, 800);
       }
     });
   </script>

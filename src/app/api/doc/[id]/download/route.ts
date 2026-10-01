@@ -76,14 +76,17 @@ export async function GET(
     }
 
     const encodedFilename = encodeURIComponent(filename)
+    const asciiFallback = doc.doc_type === 'quotation'
+      ? (format === 'xlsx' || format === 'excel' ? 'quotation.xlsx' : 'quotation.docx')
+      : 'document.docx'
 
-    return new Response(fileBuffer as any, {
+    return new Response(new Uint8Array(fileBuffer), {
       status: 200,
       headers: {
         'Content-Type': mimeType,
-        'Content-Disposition': `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`,
+        'Content-Disposition': `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodedFilename}`,
         'Content-Length': String(fileBuffer.length),
-        'Cache-Control': 'public, max-age=60',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
       },
     })
   } catch (err: any) {
