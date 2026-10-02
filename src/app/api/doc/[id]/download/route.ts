@@ -75,10 +75,12 @@ export async function GET(
       filename = `เอกสาร_${docNo}.docx`
     }
 
-    const encodedFilename = encodeURIComponent(filename)
+    const safeDocNo = String(docNo).replace(/[^a-zA-Z0-9_-]/g, '_')
+    const ext = (format === 'xlsx' || format === 'excel') ? 'xlsx' : 'docx'
     const asciiFallback = doc.doc_type === 'quotation'
-      ? (format === 'xlsx' || format === 'excel' ? 'quotation.xlsx' : 'quotation.docx')
-      : 'document.docx'
+      ? `Quotation_${safeDocNo}.${ext}`
+      : `Document_${safeDocNo}.${ext}`
+    const encodedFilename = encodeURIComponent(filename)
 
     return new Response(new Uint8Array(fileBuffer), {
       status: 200,

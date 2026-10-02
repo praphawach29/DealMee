@@ -290,11 +290,11 @@ export async function GET(
       </div>
 
       <div class="grid grid-cols-3 gap-2 w-full sm:w-auto">
-        <a href="/api/doc/${id}/download?format=docx&openExternalBrowser=1" download class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl border border-indigo-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
+        <a href="/api/doc/${id}/download?format=docx" download="Quotation_${safeDocNo}.docx" onclick="handleDocDownload(event, 'docx')" class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl border border-indigo-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
           <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
           Word
         </a>
-        <a href="/api/doc/${id}/download?format=xlsx&openExternalBrowser=1" download class="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl border border-emerald-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
+        <a href="/api/doc/${id}/download?format=xlsx" download="Quotation_${safeDocNo}.xlsx" onclick="handleDocDownload(event, 'xlsx')" class="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl border border-emerald-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
           <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
           Excel
         </a>
@@ -662,11 +662,28 @@ export async function GET(
           <span>🖨️ สั่งพิมพ์ออกกระดาษ (Print)</span>
         </button>
 
-        <!-- Word Download Option -->
-        <a href="/api/doc/${id}/download?format=docx&openExternalBrowser=1" download class="w-full py-2 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer no-underline active:scale-95 text-center">
-          <svg class="w-4 h-4 text-indigo-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-          <span>ดาวน์โหลดไฟล์ Word (.docx)</span>
-        </a>
+        <!-- Word & Excel Options Grid -->
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <div class="flex flex-col gap-1">
+            <a href="/api/doc/${id}/download?format=docx" download="Quotation_${safeDocNo}.docx" class="py-2.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-1.5 no-underline active:scale-95 text-center border border-indigo-200/60 shadow-xs">
+              <svg class="w-3.5 h-3.5 text-indigo-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+              <span>โหลด Word</span>
+            </a>
+            <a href="https://docs.google.com/viewer?url=https%3A%2F%2Fapp.dealmee.app%2Fapi%2Fdoc%2F${id}%2Fdownload%3Fformat%3Ddocx" target="_blank" class="text-[11px] text-indigo-600 hover:text-indigo-800 text-center py-1 no-underline flex items-center justify-center gap-1 font-medium">
+              <span>👁️ ดู Word ออนไลน์</span>
+            </a>
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <a href="/api/doc/${id}/download?format=xlsx" download="Quotation_${safeDocNo}.xlsx" class="py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-1.5 no-underline active:scale-95 text-center border border-emerald-200/60 shadow-xs">
+              <svg class="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+              <span>โหลด Excel</span>
+            </a>
+            <a href="https://docs.google.com/viewer?url=https%3A%2F%2Fapp.dealmee.app%2Fapi%2Fdoc%2F${id}%2Fdownload%3Fformat%3Dxlsx" target="_blank" class="text-[11px] text-emerald-600 hover:text-emerald-800 text-center py-1 no-underline flex items-center justify-center gap-1 font-medium">
+              <span>👁️ ดู Excel ออนไลน์</span>
+            </a>
+          </div>
+        </div>
       </div>
 
       <div class="p-3 bg-amber-50 rounded-xl border border-amber-200/70 text-[11px] text-amber-800 space-y-1">
@@ -674,7 +691,7 @@ export async function GET(
           <span>💡 เคล็ดลับเพิ่มเติม:</span>
         </p>
         <p class="text-amber-700 leading-normal">
-          บน Android Chrome สามารถแตะจุด 3 จุด (⋮) มุมขวาบน &gt; <b>แชร์ (Share)</b> &gt; <b>พิมพ์ (Print)</b> เพื่อบันทึกเป็น PDF ผ่านระบบ Android ได้เช่นกันค่ะ
+          หากเปิดผ่าน LINE แนะนำให้แตะ "เปิดใน Chrome" ด้านบนเพื่อดาวน์โหลด หรือแตะ "ดูออนไลน์" เพื่อเปิดดูได้ทันทีโดยไม่ต้องติดตั้งแอป Office ค่ะ
         </p>
       </div>
 
@@ -687,6 +704,16 @@ export async function GET(
   <script>
     function isLineApp() {
       return navigator.userAgent.toLowerCase().includes('line');
+    }
+
+    function handleDocDownload(event, format) {
+      if (isLineApp()) {
+        event.preventDefault();
+        const box = document.getElementById('lineOpenExternalBox');
+        if (box) box.classList.remove('hidden');
+        document.getElementById('linePrintModal').classList.remove('hidden');
+        return;
+      }
     }
 
     function handlePrintOrPdf() {

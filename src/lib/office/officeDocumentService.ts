@@ -205,16 +205,16 @@ export async function generateQuotationDocxWithJs(
           new Paragraph({
             children: [
               new TextRun({ text: companyName, bold: true, size: 24 }),
-              new TextRun({ text: `\nที่อยู่: ${address}`, size: 20 }),
-              new TextRun({ text: `\nเลขประจำตัวผู้เสียภาษี: ${taxId} | โทรศัพท์: ${phone} | อีเมล: ${email}`, size: 20 }),
+              new TextRun({ text: `ที่อยู่: ${address}`, size: 20, break: 1 }),
+              new TextRun({ text: `เลขประจำตัวผู้เสียภาษี: ${taxId} | โทรศัพท์: ${phone} | อีเมล: ${email}`, size: 20, break: 1 }),
             ],
             spacing: { after: 200 },
           }),
           new Paragraph({
             children: [
               new TextRun({ text: `เรียน (เสนอราคาถึง): ${customerName}`, bold: true, size: 22 }),
-              new TextRun({ text: `\nเบอร์โทรศัพท์: ${customerPhone} | ที่อยู่: ${customerAddress}`, size: 20 }),
-              new TextRun({ text: `\nเลขที่เอกสาร: ${doc.doc_number || doc.doc_no || '-'} | วันที่ออกเอกสาร: ${issueDate}`, size: 20 }),
+              new TextRun({ text: `เบอร์โทรศัพท์: ${customerPhone} | ที่อยู่: ${customerAddress}`, size: 20, break: 1 }),
+              new TextRun({ text: `เลขที่เอกสาร: ${doc.doc_number || doc.doc_no || '-'} | วันที่ออกเอกสาร: ${issueDate}`, size: 20, break: 1 }),
             ],
             spacing: { after: 250 },
           }),
@@ -224,10 +224,10 @@ export async function generateQuotationDocxWithJs(
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: `\nยอดรวมก่อนภาษี (Subtotal): ${subtotal} บาท`, bold: true, size: 22 }),
-              ...(Number(doc.discount_amount || 0) > 0 ? [new TextRun({ text: `\nส่วนลด (Discount): -${discount} บาท`, size: 20, color: 'DC2626' })] : []),
-              ...(Number(doc.vat_amount || 0) > 0 ? [new TextRun({ text: `\nภาษีมูลค่าเพิ่ม VAT 7%: ${vat} บาท`, size: 20 })] : []),
-              new TextRun({ text: `\nยอดสุทธิทั้งสิ้น (Grand Total): ${total} บาท\n`, bold: true, size: 26, color: '1E40AF' }),
+              new TextRun({ text: `ยอดรวมก่อนภาษี (Subtotal): ${subtotal} บาท`, bold: true, size: 22 }),
+              ...(Number(doc.discount_amount || 0) > 0 ? [new TextRun({ text: `ส่วนลด (Discount): -${discount} บาท`, size: 20, color: 'DC2626', break: 1 })] : []),
+              ...(Number(doc.vat_amount || 0) > 0 ? [new TextRun({ text: `ภาษีมูลค่าเพิ่ม VAT 7%: ${vat} บาท`, size: 20, break: 1 })] : []),
+              new TextRun({ text: `ยอดสุทธิทั้งสิ้น (Grand Total): ${total} บาท`, bold: true, size: 26, color: '1E40AF', break: 1 }),
             ],
             alignment: AlignmentType.RIGHT,
             spacing: { before: 200, after: 200 },
@@ -235,20 +235,26 @@ export async function generateQuotationDocxWithJs(
           ...(shop.bank_account_number || shop.promptpay_id ? [
             new Paragraph({
               children: [
-                new TextRun({ text: 'ข้อมูลการชำระเงิน:\n', bold: true, size: 20 }),
-                new TextRun({ text: `ธนาคาร: ${shop.bank_name || '-'} เลขที่บัญชี: ${shop.bank_account_number || '-'} ชื่อบัญชี: ${shop.bank_account_name || companyName}\n`, size: 20 }),
-                ...(shop.promptpay_id ? [new TextRun({ text: `พร้อมเพย์: ${shop.promptpay_id}\n`, size: 20 })] : []),
+                new TextRun({ text: 'ข้อมูลการชำระเงิน:', bold: true, size: 20 }),
+                new TextRun({ text: `ธนาคาร: ${shop.bank_name || '-'} เลขที่บัญชี: ${shop.bank_account_number || '-'} ชื่อบัญชี: ${shop.bank_account_name || companyName}`, size: 20, break: 1 }),
+                ...(shop.promptpay_id ? [new TextRun({ text: `พร้อมเพย์: ${shop.promptpay_id}`, size: 20, break: 1 })] : []),
               ],
               spacing: { after: 250 },
             }),
           ] : []),
           new Paragraph({
             children: [
-              new TextRun({ text: `เงื่อนไขการชำระเงิน: ${doc.notes || 'กำหนดยืนราคา 30 วันนับจากวันที่ออกเอกสาร'}\n\n\n`, size: 18 }),
+              new TextRun({ text: `เงื่อนไขการชำระเงิน: ${doc.notes || 'กำหนดยืนราคา 30 วันนับจากวันที่ออกเอกสาร'}`, size: 18 }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 200, after: 300 },
+          }),
+          new Paragraph({
+            children: [
               new TextRun({ text: 'ลงชื่อ ............................................. ผู้เสนอราคา                   ลงชื่อ ............................................. ผู้สั่งซื้อ/อนุมัติ', size: 20 }),
             ],
             alignment: AlignmentType.CENTER,
-            spacing: { before: 300 },
+            spacing: { before: 200 },
           }),
         ],
       },
@@ -267,55 +273,125 @@ export async function generateQuotationXlsxWithJs(
 ): Promise<Buffer> {
   const companyName = shop.company_name || shop.name || 'บริษัท / ร้านค้า'
   const customerName = doc.customer_name || 'ลูกค้าผู้มีอุปการคุณ'
+  const docNo = doc.doc_number || doc.doc_no || '-'
+  const issueDate = new Date(doc.created_at || Date.now()).toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
 
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'DealMee AI'
-  const sheet = workbook.addWorksheet('ใบเสนอราคา')
+  const sheet = workbook.addWorksheet('ใบเสนอราคา', {
+    views: [{ showGridLines: true }]
+  })
 
   sheet.columns = [
-    { header: 'ลำดับ', key: 'idx', width: 8 },
-    { header: 'รายการสินค้า / บริการ', key: 'name', width: 38 },
-    { header: 'หน่วย', key: 'unit', width: 12 },
-    { header: 'จำนวน', key: 'qty', width: 10 },
-    { header: 'ราคา/หน่วย (บาท)', key: 'price', width: 18 },
-    { header: 'จำนวนเงิน (บาท)', key: 'total', width: 20 },
+    { key: 'col1', width: 8 },
+    { key: 'col2', width: 40 },
+    { key: 'col3', width: 14 },
+    { key: 'col4', width: 12 },
+    { key: 'col5', width: 18 },
+    { key: 'col6', width: 22 },
   ]
 
-  sheet.spliceRows(1, 0,
-    [`ใบเสนอราคา (QUOTATION) - ${doc.doc_number || doc.doc_no || ''}`],
-    [`ผู้เสนอราคา: ${companyName}`],
-    [`ลูกค้า: ${customerName} | เบอร์โทร: ${doc.customer_phone || '-'}`],
-    [`วันที่ออกเอกสาร: ${new Date(doc.created_at || Date.now()).toLocaleDateString('th-TH')}`],
-    []
-  )
+  // Header Title
+  const titleRow = sheet.addRow([`ใบเสนอราคา (QUOTATION) - ${docNo}`])
+  titleRow.height = 30
+  sheet.getCell('A1').font = { size: 16, bold: true, color: { argb: '1E3A8A' } }
+  sheet.getCell('A1').alignment = { vertical: 'middle' }
+  sheet.mergeCells('A1:F1')
+
+  // Business & Customer Details
+  sheet.addRow([`ผู้เสนอราคา: ${companyName}`, '', '', `เลขที่เอกสาร: ${docNo}`])
+  sheet.addRow([`ที่อยู่: ${shop.company_address || '-'}`, '', '', `วันที่ออกเอกสาร: ${issueDate}`])
+  sheet.addRow([`ลูกค้า: ${customerName} | โทร: ${doc.customer_phone || '-'}`, '', '', `กำหนดยืนราคา: 30 วัน`])
+  sheet.addRow([])
+
+  // Items Table Header
+  const headerRow = sheet.addRow(['#', 'รายการสินค้า / บริการ', 'หน่วย', 'จำนวน', 'ราคา/หน่วย (บาท)', 'จำนวนเงิน (บาท)'])
+  headerRow.height = 24
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: 'FFFFFF' }, size: 11 }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1E293B' } }
+    cell.alignment = { vertical: 'middle', horizontal: 'center' }
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'CBD5E1' } },
+      bottom: { style: 'thin', color: { argb: 'CBD5E1' } },
+      left: { style: 'thin', color: { argb: 'CBD5E1' } },
+      right: { style: 'thin', color: { argb: 'CBD5E1' } },
+    }
+  })
 
   const items = Array.isArray(doc.items) && doc.items.length > 0 ? doc.items : []
   items.forEach((item, idx) => {
     const qty = Number(item.qty || 1)
     const price = Number(item.price || 0)
-    sheet.addRow([
+    const lineTotal = qty * price
+    const row = sheet.addRow([
       idx + 1,
       item.name || 'สินค้า',
       item.unit || 'ชิ้น',
       qty,
       price,
-      qty * price,
+      lineTotal,
     ])
+    row.height = 22
+    row.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' }
+    row.getCell(2).alignment = { vertical: 'middle', horizontal: 'left' }
+    row.getCell(3).alignment = { vertical: 'middle', horizontal: 'center' }
+    row.getCell(4).alignment = { vertical: 'middle', horizontal: 'center' }
+    row.getCell(5).alignment = { vertical: 'middle', horizontal: 'right' }
+    row.getCell(6).alignment = { vertical: 'middle', horizontal: 'right' }
+
+    row.getCell(4).numFmt = '#,##0'
+    row.getCell(5).numFmt = '#,##0.00'
+    row.getCell(6).numFmt = '#,##0.00'
+
+    row.eachCell((cell) => {
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'E2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'E2E8F0' } },
+        left: { style: 'thin', color: { argb: 'E2E8F0' } },
+        right: { style: 'thin', color: { argb: 'E2E8F0' } },
+      }
+    })
   })
 
+  // Summary Rows
   sheet.addRow([])
-  sheet.addRow(['', '', '', '', 'ยอดรวมก่อนภาษี:', Number(doc.subtotal || 0)])
+  const addSummaryRow = (label: string, val: number, isGrandTotal = false) => {
+    const sRow = sheet.addRow(['', '', '', '', label, val])
+    sRow.height = isGrandTotal ? 24 : 20
+    sRow.getCell(5).font = { bold: isGrandTotal, size: isGrandTotal ? 12 : 10, color: { argb: isGrandTotal ? '1E3A8A' : '0F172A' } }
+    sRow.getCell(6).font = { bold: isGrandTotal, size: isGrandTotal ? 12 : 10, color: { argb: isGrandTotal ? '1E3A8A' : '0F172A' } }
+    sRow.getCell(5).alignment = { vertical: 'middle', horizontal: 'right' }
+    sRow.getCell(6).alignment = { vertical: 'middle', horizontal: 'right' }
+    sRow.getCell(6).numFmt = '#,##0.00'
+    if (isGrandTotal) {
+      sRow.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'EFF6FF' } }
+      sRow.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'EFF6FF' } }
+    }
+  }
+
+  addSummaryRow('ยอดรวมก่อนภาษี:', Number(doc.subtotal || 0))
   if (Number(doc.discount_amount || 0) > 0) {
-    sheet.addRow(['', '', '', '', 'ส่วนลด:', -Number(doc.discount_amount || 0)])
+    addSummaryRow('ส่วนลด:', -Number(doc.discount_amount || 0))
   }
   if (Number(doc.vat_amount || 0) > 0) {
-    sheet.addRow(['', '', '', '', 'ภาษีมูลค่าเพิ่ม 7%:', Number(doc.vat_amount || 0)])
+    addSummaryRow('ภาษีมูลค่าเพิ่ม 7%:', Number(doc.vat_amount || 0))
   }
-  sheet.addRow(['', '', '', '', 'ยอดสุทธิทั้งสิ้น:', Number(doc.total_amount || 0)])
+  addSummaryRow('ยอดสุทธิทั้งสิ้น (บาท):', Number(doc.total_amount || 0), true)
 
-  if (shop.bank_account_number) {
+  if (shop.bank_account_number || shop.promptpay_id) {
     sheet.addRow([])
-    sheet.addRow([`การชำระเงิน: ธนาคาร ${shop.bank_name || ''} เลขที่บัญชี ${shop.bank_account_number} (${shop.bank_account_name || companyName})`])
+    const bankText = `การชำระเงิน: ธนาคาร ${shop.bank_name || '-'} เลขที่บัญชี ${shop.bank_account_number || '-'} ชื่อบัญชี ${shop.bank_account_name || companyName}`
+    const bRow = sheet.addRow([bankText])
+    bRow.getCell(1).font = { size: 10, italic: true, color: { argb: '475569' } }
+    if (shop.promptpay_id) {
+      const pRow = sheet.addRow([`พร้อมเพย์: ${shop.promptpay_id}`])
+      pRow.getCell(1).font = { size: 10, italic: true, color: { argb: '475569' } }
+    }
   }
 
   const arrayBuffer = await workbook.xlsx.writeBuffer()
@@ -406,7 +482,7 @@ export async function generateOfficialLetterDocxWithJs(
           new Paragraph({
             children: [
               new TextRun({ text: 'ตราครุฑ', bold: true, size: 28, color: '991B1B' }),
-              new TextRun({ text: '\n(หนังสือราชการภายนอก)', bold: true, size: 24 }),
+              new TextRun({ text: '(หนังสือราชการภายนอก)', bold: true, size: 24, break: 1 }),
             ],
             alignment: AlignmentType.CENTER,
             spacing: { after: 300 },
@@ -418,7 +494,8 @@ export async function generateOfficialLetterDocxWithJs(
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: `${department}\n${shop.company_address || ''}`, bold: true }),
+              new TextRun({ text: department, bold: true }),
+              ...(shop.company_address ? [new TextRun({ text: shop.company_address, bold: true, break: 1 })] : []),
             ],
             alignment: AlignmentType.RIGHT,
           }),
@@ -429,10 +506,10 @@ export async function generateOfficialLetterDocxWithJs(
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: `เรื่อง    ${subject}\n`, bold: true }),
-              new TextRun({ text: `เรียน    ${recipient}\n`, bold: true }),
-              ...(referenceTo ? [new TextRun({ text: `อ้างถึง   ${referenceTo}\n` })] : []),
-              ...(enclosures ? [new TextRun({ text: `สิ่งที่ส่งมาด้วย   ${enclosures}\n` })] : []),
+              new TextRun({ text: `เรื่อง    ${subject}`, bold: true }),
+              new TextRun({ text: `เรียน    ${recipient}`, bold: true, break: 1 }),
+              ...(referenceTo ? [new TextRun({ text: `อ้างถึง   ${referenceTo}`, break: 1 })] : []),
+              ...(enclosures ? [new TextRun({ text: `สิ่งที่ส่งมาด้วย   ${enclosures}`, break: 1 })] : []),
             ],
             spacing: { after: 200 },
           }),
@@ -456,16 +533,18 @@ export async function generateOfficialLetterDocxWithJs(
           ] : []),
           new Paragraph({
             children: [
-              new TextRun({ text: 'ขอแสดงความนับถือ\n\n\n' }),
-              new TextRun({ text: `${signatoryName}\n`, bold: true }),
-              new TextRun({ text: signatoryPosition }),
+              new TextRun({ text: 'ขอแสดงความนับถือ' }),
+              new TextRun({ text: signatoryName, bold: true, break: 2 }),
+              new TextRun({ text: signatoryPosition, break: 1 }),
             ],
             alignment: AlignmentType.RIGHT,
             spacing: { after: 300 },
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: `------------------------------------------------------------\n${department}\nติดต่อ: ${contactInfo}`, size: 18, color: '64748B' }),
+              new TextRun({ text: '------------------------------------------------------------', size: 18, color: '64748B' }),
+              new TextRun({ text: department, size: 18, color: '64748B', break: 1 }),
+              new TextRun({ text: `ติดต่อ: ${contactInfo}`, size: 18, color: '64748B', break: 1 }),
             ],
           }),
         ],
