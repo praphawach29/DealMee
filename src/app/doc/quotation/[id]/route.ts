@@ -489,9 +489,17 @@ export async function GET(
       </div>
 
       <div class="flex flex-col justify-between items-start sm:items-end gap-2 shrink-0">
-        <span class="inline-flex items-center px-3 py-1 bg-amber-50 text-amber-800 text-xs font-bold rounded-full border border-amber-200/70 shadow-2xs">
-          ● รออนุมัติการสั่งซื้อ (Pending)
-        </span>
+        ${isAccepted ? `
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-full border border-emerald-200 shadow-2xs">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            ✓ อนุมัติสั่งซื้อแล้ว (Accepted)
+          </span>
+        ` : `
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 text-xs font-bold rounded-full border border-amber-200/70 shadow-2xs">
+            <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+            ● รออนุมัติการสั่งซื้อ (Pending)
+          </span>
+        `}
         <div class="text-[11px] text-slate-400 text-left sm:text-right">
           <span>ผู้ออกเอกสาร: <strong class="text-slate-600 font-medium">${companyName}</strong></span>
         </div>

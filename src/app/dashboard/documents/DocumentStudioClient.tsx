@@ -37,6 +37,8 @@ interface DocumentItem {
   customer_name: string | null
   total_amount: number | null
   created_at: string
+  updated_at?: string | null
+  status?: string | null
   items?: any
   notes?: string | null
 }
@@ -76,6 +78,7 @@ export default function DocumentStudioClient({
   const [activeTab, setActiveTab] = useState<TabType>('quotations')
   const [documents, setDocuments] = useState<DocumentItem[]>(initialDocuments)
   const [searchQuery, setSearchQuery] = useState('')
+  const [docStatusFilter, setDocStatusFilter] = useState<'all' | 'accepted' | 'pending'>('all')
 
   // ── Quotation State ──
   const [showPreviewModal, setShowPreviewModal] = useState(false)
@@ -280,13 +283,22 @@ export default function DocumentStudioClient({
     )
   }
 
+  const acceptedCount = documents.filter((d) => d.status === 'accepted' || (typeof d.notes === 'string' && d.notes.includes('[STATUS:ACCEPTED'))).length
+  const pendingCount = documents.filter((d) => d.doc_type === 'quotation' && d.status !== 'accepted' && !(typeof d.notes === 'string' && d.notes.includes('[STATUS:ACCEPTED'))).length
+
   const filteredDocs = documents.filter((d) => {
     const q = searchQuery.toLowerCase()
-    return (
+    const matchesSearch =
       d.doc_number?.toLowerCase().includes(q) ||
       d.customer_name?.toLowerCase().includes(q) ||
       d.doc_type?.toLowerCase().includes(q)
-    )
+
+    if (!matchesSearch) return false
+
+    const isAccepted = d.status === 'accepted' || (typeof d.notes === 'string' && d.notes.includes('[STATUS:ACCEPTED'))
+    if (docStatusFilter === 'accepted') return isAccepted
+    if (docStatusFilter === 'pending') return d.doc_type === 'quotation' && !isAccepted
+    return true
   })
 
   return (
@@ -954,27 +966,68 @@ export default function DocumentStudioClient({
       {/* ── TAB 3: ARCHIVE & DOCUMENTS LIST ─────────────────────────────────────── */}
       {activeTab === 'archive' && (
         <div className="bg-surface rounded-2xl border border-outline-variant/60 p-6 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-bold text-on-surface flex items-center gap-2">
                 <FileText className="w-5 h-5 text-sky-500" />
                 คลังเอกสารและประวัติใบเสนอราคา ({filteredDocs.length} ฉบับ)
               </h2>
               <p className="text-xs text-on-surface-variant mt-0.5">
-                ดูตัวอย่าง คัดลอกลิงก์ส่งลูกค้าใน LINE หรือพิมพ์เอกสารทางการ
+                ดูตัวอย่าง คัดลอกลิงก์ส่งลูกค้าใน LINE ติดตามสถานะการอนุมัติ หรือพิมพ์เอกสารทางการ
               </p>
             </div>
 
-            {/* Search */}
-            <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-on-surface-variant absolute left-3 top-2.5" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ค้นหาเลขที่, ชื่อลูกค้า..."
-                className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-outline-variant bg-surface text-xs text-on-surface focus:outline-electric-blue"
-              />
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Filter Tabs */}
+              <div className="flex items-center bg-surface-container-high/60 p-1 rounded-xl border border-outline-variant/50">
+                <button
+                  type="button"
+                  onClick={() => setDocStatusFilter('all')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    docStatusFilter === 'all'
+                      ? 'bg-surface text-on-surface shadow-xs'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
+                >
+                  ทั้งหมด ({documents.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocStatusFilter('accepted')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                    docStatusFilter === 'accepted'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-emerald-700 hover:bg-emerald-50'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${docStatusFilter === 'accepted' ? 'bg-white' : 'bg-emerald-500'}`}></span>
+                  อนุมัติแล้ว ({acceptedCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocStatusFilter('pending')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                    docStatusFilter === 'pending'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'text-amber-700 hover:bg-amber-50'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${docStatusFilter === 'pending' ? 'bg-white' : 'bg-amber-500'}`}></span>
+                  รออนุมัติ ({pendingCount})
+                </button>
+              </div>
+
+              {/* Search */}
+              <div className="relative w-full sm:w-56">
+                <Search className="w-4 h-4 text-on-surface-variant absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="ค้นหาเลขที่, ชื่อลูกค้า..."
+                  className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-outline-variant bg-surface text-xs text-on-surface focus:outline-electric-blue"
+                />
+              </div>
             </div>
           </div>
 
@@ -993,6 +1046,7 @@ export default function DocumentStudioClient({
                   <tr>
                     <th className="py-2.5 px-3">เลขที่เอกสาร</th>
                     <th className="py-2.5 px-3">ประเภท</th>
+                    <th className="py-2.5 px-3">สถานะ</th>
                     <th className="py-2.5 px-3">ลูกค้า / ผู้รับ</th>
                     <th className="py-2.5 px-3 text-right">ยอดเงิน</th>
                     <th className="py-2.5 px-3">วันที่สร้าง</th>
@@ -1003,6 +1057,7 @@ export default function DocumentStudioClient({
                   {filteredDocs.map((doc) => {
                     const isQuotation = doc.doc_type === 'quotation'
                     const docUrl = isQuotation ? `/doc/quotation/${doc.id}` : `/doc/official/${doc.id}`
+                    const isAccepted = doc.status === 'accepted' || (typeof doc.notes === 'string' && doc.notes.includes('[STATUS:ACCEPTED'))
 
                     return (
                       <tr key={doc.id} className="hover:bg-surface-container-high/20 transition">
@@ -1019,6 +1074,23 @@ export default function DocumentStudioClient({
                           >
                             {isQuotation ? 'ใบเสนอราคา (Quotation)' : 'หนังสือราชการ (Official)'}
                           </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          {isQuotation ? (
+                            isAccepted ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                อนุมัติแล้ว
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                รออนุมัติ
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-on-surface-variant text-xs">-</span>
+                          )}
                         </td>
                         <td className="py-3 px-3 text-on-surface font-medium">
                           {doc.customer_name || '-'}
