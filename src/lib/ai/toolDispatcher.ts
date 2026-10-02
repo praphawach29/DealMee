@@ -531,6 +531,26 @@ export async function executeTool(
     // Pushed verbatim rather than left to the model: this block carries the
     // order total and the shop's account number, and a reworded digit here
     // sends the customer's money somewhere it shouldn't go.
+    // Push LINE notification to shop admin if admin_notify is enabled
+    if (shop?.line_token && shop?.features?.admin_notify !== false) {
+      const targetAdmin = shop.admin_line_user_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
+      if (targetAdmin) {
+        const orderTotal = Number(args.total_price || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })
+        const adminMsg = `🛒 มีออเดอร์ใหม่เข้ามา!\nเลขที่: ${orderNo}\nลูกค้า: ${args.name || 'ลูกค้า'}\nสินค้า: ${args.product} x${args.qty || 1}\nยอดรวม: ฿${orderTotal} บาท`
+        fetch('https://api.line.me/v2/bot/message/push', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${shop.line_token}`,
+          },
+          body: JSON.stringify({
+            to: targetAdmin,
+            messages: [{ type: 'text', text: adminMsg }],
+          }),
+        }).catch((e) => console.warn('[Admin Order Notify Error]:', e))
+      }
+    }
+
     const confirmMsg = formatOrderCloseSummary(shop, args, orderNo, lang)
     return {
       resultForAi: `สร้างออเดอร์สำเร็จแล้วจริง เลขที่ออเดอร์: ${orderNo} และส่งสรุปออเดอร์พร้อมข้อมูลชำระเงินให้ลูกค้าไปแล้วครบถ้วน ห้ามพิมพ์สรุปหรือเลขบัญชีซ้ำ ให้ตอบสั้นๆ เช่น ขอบคุณ ย้ำเลขที่ออเดอร์ และชวนส่งสลิปกลับมา`,
@@ -540,6 +560,25 @@ export async function executeTool(
 
   if (toolName === 'request_human_agent') {
     await supabase.from('conversations').update({ status: 'human' }).eq('id', conversationId)
+
+    if (shop?.line_token && shop?.features?.admin_notify !== false) {
+      const targetAdmin = shop.admin_line_user_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
+      if (targetAdmin) {
+        const notifyText = `🔔 มีลูกค้าขอยื่นคุยกับแอดมินคนจริง!\nเหตุผล: ${args.reason || 'ต้องการคุยกับคน'}\nกรุณาเข้ากล่องข้อความเพื่อดูแลลูกค้าค่ะ`
+        fetch('https://api.line.me/v2/bot/message/push', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${shop.line_token}`,
+          },
+          body: JSON.stringify({
+            to: targetAdmin,
+            messages: [{ type: 'text', text: notifyText }],
+          }),
+        }).catch((e) => console.warn('[Admin Handover Notify Error]:', e))
+      }
+    }
+
     return { resultForAi: 'เรียกแอดมินให้เข้ามาดูแลแล้ว ให้บอกลูกค้าว่ากำลังตามแอดมินให้และรอสักครู่', immediateMessages: [] }
   }
 

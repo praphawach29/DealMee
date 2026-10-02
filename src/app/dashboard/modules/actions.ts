@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { revalidatePath } from 'next/cache'
 
 export async function updateShopFeatures(features: Record<string, boolean>) {
@@ -11,28 +12,29 @@ export async function updateShopFeatures(features: Record<string, boolean>) {
     return { error: 'กรุณาเข้าสู่ระบบอีกครั้ง' }
   }
 
-  const { data: profile } = await supabase
-    .from('users')
-    .select('workspace_id')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.workspace_id) {
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop?.id) {
     return { error: 'ไม่พบข้อมูลร้านค้า' }
+  }
+
+  const mergedFeatures = {
+    ...((shop.features as Record<string, any>) || {}),
+    ...features,
   }
 
   const { error } = await supabase
     .from('shops')
     .update({
-      features,
+      features: mergedFeatures,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', profile.workspace_id)
+    .eq('id', shop.id)
 
   if (error) {
     return { error: `บันทึกสวิตช์ไม่สำเร็จ: ${error.message}` }
   }
 
+  revalidatePath('/dashboard', 'layout')
   revalidatePath('/dashboard/modules')
   return { success: 'บันทึกการเปิด-ปิดเครื่องมือเรียบร้อยแล้ว!' }
 }

@@ -62,7 +62,7 @@ export async function POST(
         .eq('id', doc.shop_id)
         .single()
 
-      if (shop?.line_token) {
+      if (shop?.line_token && shop?.features?.admin_notify !== false) {
         // Resolve target LINE User ID:
         // Priority 1: shop.admin_line_user_id or features.admin_line_user_id
         let targetLineUserId =

@@ -209,13 +209,20 @@ export async function POST(
         const messageId = event.message.id
         console.log(`[Webhook] Received image ${messageId} from ${userId}`)
 
-        if (replyToken && lineToken) {
-          await sendLineReply(replyToken, 'ได้รับรูปสลิปแล้วค่ะ 📄 กำลังตรวจสอบความถูกต้อง รอสักครู่นะคะ...', lineToken)
-        }
-        // Run Slip verification and await so serverless execution context does not freeze before completion
-        if (lineToken) {
-          await verifySlipAndNotify({ messageId, userId, lineToken, shopId: shop_id, shop })
-            .catch(err => console.error('[SlipVerify Error]', err))
+        const isSlipVerifyActive = features.slip_verify !== false
+        if (isSlipVerifyActive) {
+          if (replyToken && lineToken) {
+            await sendLineReply(replyToken, 'ได้รับรูปสลิปแล้วค่ะ 📄 กำลังตรวจสอบความถูกต้อง รอสักครู่นะคะ...', lineToken)
+          }
+          // Run Slip verification and await so serverless execution context does not freeze before completion
+          if (lineToken) {
+            await verifySlipAndNotify({ messageId, userId, lineToken, shopId: shop_id, shop })
+              .catch(err => console.error('[SlipVerify Error]', err))
+          }
+        } else {
+          if (replyToken && lineToken) {
+            await sendLineReply(replyToken, 'ได้รับรูปภาพเรียบร้อยแล้วค่ะ แอดมินจะเข้ามาตรวจสอบให้นะคะ 😊', lineToken)
+          }
         }
       }
     }
@@ -249,6 +256,7 @@ async function deliverAgentResult({
   useReplyForText: boolean
 }) {
   const aiReplyText = agentResult.text || ''
+  const features = (shop.features as Record<string, any>) || {}
 
   if (aiReplyText) {
     await supabase.from('chat_messages').insert({
@@ -291,8 +299,8 @@ async function deliverAgentResult({
       (t) => t.name === 'create_quotation' || t.name === 'create_official_letter'
     )
 
-  if (isDocOrQuotation) {
-    // When requesting a quotation or official letter, never attach unrelated product carousel cards
+  if (features.product_recommend === false || isDocOrQuotation) {
+    // When product recommendation is disabled or requesting quotation/official docs, don't send product cards
     flexProducts = []
   } else if (flexProducts.length === 0 && lineToken) {
     const rawUserQuery = (userText || '').toLowerCase().trim()

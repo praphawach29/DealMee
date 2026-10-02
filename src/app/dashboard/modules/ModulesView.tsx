@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { updateShopFeatures } from './actions'
 
 interface ModulesViewProps {
@@ -9,6 +10,7 @@ interface ModulesViewProps {
 }
 
 export default function ModulesView({ initialFeatures, bizType = 'retail' }: ModulesViewProps) {
+  const router = useRouter()
   const isBookingDefault = bizType === 'booking' || bizType === 'service'
   const [featureState, setFeatureState] = useState<Record<string, boolean>>({
     auto_reply: initialFeatures?.auto_reply ?? true,
@@ -72,7 +74,6 @@ export default function ModulesView({ initialFeatures, bizType = 'retail' }: Mod
     const nextState = {
       ...featureState,
       [id]: nextVal,
-      ...(id === 'booking_system' ? { enable_retail_booking: nextVal } : {}),
     }
 
     setFeatureState(nextState)
@@ -87,6 +88,7 @@ export default function ModulesView({ initialFeatures, bizType = 'retail' }: Mod
     } else {
       setToastMessage('บันทึกสถานะสวิตช์ลงฐานข้อมูล Supabase เรียบร้อยแล้ว!')
       setTimeout(() => setToastMessage(null), 3000)
+      router.refresh()
     }
   }
 

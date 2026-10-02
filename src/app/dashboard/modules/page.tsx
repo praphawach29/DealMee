@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
+import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import ModulesView from './ModulesView'
 
 export default async function ModulesPage() {
@@ -11,21 +12,10 @@ export default async function ModulesPage() {
     redirect('/login')
   }
 
-  const { data: profile } = await supabase
-    .from('users')
-    .select('workspace_id')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.workspace_id) {
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop) {
     redirect('/onboarding')
   }
-
-  const { data: shop } = await supabase
-    .from('shops')
-    .select('features, business_type')
-    .eq('id', profile.workspace_id)
-    .single()
 
   const initialFeatures = (shop?.features as Record<string, boolean>) || {}
   const bizType = shop?.business_type || 'retail'
