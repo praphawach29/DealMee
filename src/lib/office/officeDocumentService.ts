@@ -13,6 +13,9 @@ import {
   TableCell,
   AlignmentType,
   WidthType,
+  BorderStyle,
+  ShadingType,
+  ImageRun,
 } from 'docx'
 import ExcelJS from 'exceljs'
 
@@ -99,10 +102,56 @@ export interface ShopProfileData {
   bank_account_number?: string
   bank_account_name?: string
   promptpay_id?: string
+  logo_buffer?: Buffer
+}
+
+// Helper: Convert total number to Thai Baht text
+function formatThaiBahtText(num: number): string {
+  if (isNaN(num) || num === 0) return 'ศูนย์บาทถ้วน'
+  const fixed = Number(num).toFixed(2)
+  const numbers = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า']
+  const units = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน']
+  const [baht, satang] = fixed.split('.')
+
+  function readGroup(str: string): string {
+    let result = ''
+    const len = str.length
+    for (let i = 0; i < len; i++) {
+      const digit = Number(str[i])
+      if (digit === 0) continue
+      const pos = len - 1 - i
+      if (pos === 0 && digit === 1 && len > 1 && str[len - 2] !== '0') {
+        result += 'เอ็ด'
+      } else if (pos === 1 && digit === 1) {
+        result += 'สิบ'
+      } else if (pos === 1 && digit === 2) {
+        result += 'ยี่สิบ'
+      } else {
+        result += numbers[digit] + units[pos]
+      }
+    }
+    return result
+  }
+
+  let text = ''
+  if (baht.length > 6) {
+    const millions = baht.slice(0, baht.length - 6)
+    const rest = baht.slice(baht.length - 6)
+    text += readGroup(millions) + 'ล้าน' + readGroup(rest) + 'บาท'
+  } else {
+    text += readGroup(baht) + 'บาท'
+  }
+
+  if (satang === '00') {
+    text += 'ถ้วน'
+  } else {
+    text += readGroup(satang) + 'สตางค์'
+  }
+  return text
 }
 
 /**
- * Generates a Word (.docx) Quotation using pure JavaScript (docx library) as reliable fallback.
+ * Generates a Word (.docx) Quotation using pure JavaScript (docx library) with rich brand design matching web/PDF.
  */
 export async function generateQuotationDocxWithJs(
   doc: QuotationDocData,
@@ -114,6 +163,7 @@ export async function generateQuotationDocxWithJs(
   const phone = shop.company_phone || '-'
   const email = shop.company_email || '-'
 
+  const docNo = doc.doc_number || doc.doc_no || 'QT'
   const issueDate = new Date(doc.created_at || Date.now()).toLocaleDateString('th-TH', {
     year: 'numeric',
     month: 'long',
@@ -122,38 +172,237 @@ export async function generateQuotationDocxWithJs(
 
   const customerName = doc.customer_name || 'ลูกค้าผู้มีอุปการคุณ'
   const customerPhone = doc.customer_phone || '-'
-  const customerAddress = doc.customer_address || '-'
 
-  const subtotal = Number(doc.subtotal || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const discount = Number(doc.discount_amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const vat = Number(doc.vat_amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const total = Number(doc.total_amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const subtotal = Number(doc.subtotal || 0)
+  const discount = Number(doc.discount_amount || 0)
+  const vat = Number(doc.vat_amount || 0)
+  const total = Number(doc.total_amount || 0)
+
+  let logoRun: ImageRun | undefined
+  if (shop.logo_buffer && shop.logo_buffer.length > 0) {
+    const isPng = shop.logo_buffer[0] === 0x89 && shop.logo_buffer[1] === 0x50
+    logoRun = new ImageRun({
+      data: shop.logo_buffer,
+      transformation: { width: 55, height: 55 },
+      type: isPng ? 'png' : 'jpg',
+    })
+  }
+
+  const borderNone = {
+    top: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+    bottom: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+    left: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+    right: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
+  }
+
+  const lightCardBorder = {
+    top: { style: BorderStyle.SINGLE, size: 6, color: 'E2E8F0' },
+    bottom: { style: BorderStyle.SINGLE, size: 6, color: 'E2E8F0' },
+    left: { style: BorderStyle.SINGLE, size: 6, color: 'E2E8F0' },
+    right: { style: BorderStyle.SINGLE, size: 6, color: 'E2E8F0' },
+  }
+
+  // 1. Header Section: Logo + Company Info (Left) & Quotation Title + Meta (Right)
+  const headerTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: borderNone,
+    rows: [
+      new TableRow({
+        children: [
+          // Left: Logo + Shop Details
+          new TableCell({
+            width: { size: 58, type: WidthType.PERCENTAGE },
+            borders: borderNone,
+            children: [
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                borders: borderNone,
+                rows: [
+                  new TableRow({
+                    children: [
+                      ...(logoRun ? [
+                        new TableCell({
+                          width: { size: 22, type: WidthType.PERCENTAGE },
+                          borders: borderNone,
+                          children: [new Paragraph({ children: [logoRun] })],
+                        })
+                      ] : []),
+                      new TableCell({
+                        width: { size: logoRun ? 78 : 100, type: WidthType.PERCENTAGE },
+                        borders: borderNone,
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({ text: companyName, bold: true, size: 26, color: '0F172A', font: 'Sarabun' }),
+                              new TextRun({ text: '  ผู้ให้บริการ', size: 18, color: '2563EB', bold: true, font: 'Sarabun' }),
+                            ],
+                            spacing: { after: 60 },
+                          }),
+                          new Paragraph({
+                            children: [
+                              new TextRun({ text: address, size: 18, color: '475569', font: 'Sarabun' }),
+                              new TextRun({ text: `โทร: ${phone}`, size: 18, color: '2563EB', bold: true, break: 1, font: 'Sarabun' }),
+                            ],
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }),
+          // Right: Title & Document Metadata
+          new TableCell({
+            width: { size: 42, type: WidthType.PERCENTAGE },
+            borders: borderNone,
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: 'ใบเสนอราคา', bold: true, size: 38, color: '2563EB', font: 'Sarabun' }),
+                  new TextRun({ text: 'QUOTATION', bold: true, size: 18, color: '64748B', break: 1, font: 'Sarabun' }),
+                ],
+                alignment: AlignmentType.RIGHT,
+                spacing: { after: 100 },
+              }),
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                borders: borderNone,
+                rows: [
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        width: { size: 50, type: WidthType.PERCENTAGE },
+                        borders: borderNone,
+                        children: [new Paragraph({ children: [new TextRun({ text: 'เลขที่เอกสาร:', size: 18, color: '64748B', font: 'Sarabun' })], alignment: AlignmentType.RIGHT })],
+                      }),
+                      new TableCell({
+                        width: { size: 50, type: WidthType.PERCENTAGE },
+                        borders: borderNone,
+                        children: [new Paragraph({ children: [new TextRun({ text: docNo, bold: true, size: 18, color: '1E40AF', font: 'Sarabun' })], alignment: AlignmentType.RIGHT })],
+                      }),
+                    ],
+                  }),
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        borders: borderNone,
+                        children: [new Paragraph({ children: [new TextRun({ text: 'วันที่ออกเอกสาร:', size: 18, color: '64748B', font: 'Sarabun' })], alignment: AlignmentType.RIGHT })],
+                      }),
+                      new TableCell({
+                        borders: borderNone,
+                        children: [new Paragraph({ children: [new TextRun({ text: issueDate, size: 18, color: '0F172A', font: 'Sarabun' })], alignment: AlignmentType.RIGHT })],
+                      }),
+                    ],
+                  }),
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        borders: borderNone,
+                        children: [new Paragraph({ children: [new TextRun({ text: 'กำหนดยืนราคา:', size: 18, color: '64748B', font: 'Sarabun' })], alignment: AlignmentType.RIGHT })],
+                      }),
+                      new TableCell({
+                        borders: borderNone,
+                        children: [new Paragraph({ children: [new TextRun({ text: '30 วัน', bold: true, size: 18, color: '059669', font: 'Sarabun' })], alignment: AlignmentType.RIGHT })],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  })
+
+  // 2. Customer Card Table
+  const customerCard = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: lightCardBorder,
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 65, type: WidthType.PERCENTAGE },
+            shading: { type: ShadingType.CLEAR, fill: 'F8FAFC' },
+            borders: lightCardBorder,
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: 'ลูกค้าผู้รับการเสนอราคา / CUSTOMER', bold: true, size: 17, color: '2563EB', font: 'Sarabun' }),
+                  new TextRun({ text: customerName, bold: true, size: 24, color: '0F172A', break: 1, font: 'Sarabun' }),
+                  new TextRun({ text: `เบอร์โทรศัพท์: ${customerPhone}`, size: 18, color: '475569', break: 1, font: 'Sarabun' }),
+                ],
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 35, type: WidthType.PERCENTAGE },
+            shading: { type: ShadingType.CLEAR, fill: 'F8FAFC' },
+            borders: lightCardBorder,
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: '● รออนุมัติการสั่งซื้อ (Pending)', bold: true, size: 18, color: 'D97706', font: 'Sarabun' }),
+                ],
+                alignment: AlignmentType.RIGHT,
+              }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  })
+
+  // 3. Products Table with Brand Slate Header & Single-line column titles
+  const tableBorder = {
+    top: { style: BorderStyle.SINGLE, size: 6, color: 'CBD5E1' },
+    bottom: { style: BorderStyle.SINGLE, size: 6, color: 'CBD5E1' },
+    left: { style: BorderStyle.SINGLE, size: 6, color: 'CBD5E1' },
+    right: { style: BorderStyle.SINGLE, size: 6, color: 'CBD5E1' },
+  }
 
   const items = Array.isArray(doc.items) && doc.items.length > 0 ? doc.items : []
-
-  const tableRows: TableRow[] = [
+  const itemTableRows = [
     new TableRow({
       tableHeader: true,
       children: [
         new TableCell({
           width: { size: 8, type: WidthType.PERCENTAGE },
-          children: [new Paragraph({ children: [new TextRun({ text: '#', bold: true })], alignment: AlignmentType.CENTER })],
+          shading: { type: ShadingType.CLEAR, fill: '1E293B' },
+          borders: tableBorder,
+          children: [new Paragraph({ children: [new TextRun({ text: '#', bold: true, color: 'FFFFFF', size: 19, font: 'Sarabun' })], alignment: AlignmentType.CENTER })],
         }),
         new TableCell({
           width: { size: 44, type: WidthType.PERCENTAGE },
-          children: [new Paragraph({ children: [new TextRun({ text: 'รายการสินค้า / บริการ', bold: true })] })],
+          shading: { type: ShadingType.CLEAR, fill: '1E293B' },
+          borders: tableBorder,
+          children: [new Paragraph({ children: [new TextRun({ text: 'รายการสินค้า', bold: true, color: 'FFFFFF', size: 19, font: 'Sarabun' })] })],
         }),
         new TableCell({
-          width: { size: 14, type: WidthType.PERCENTAGE },
-          children: [new Paragraph({ children: [new TextRun({ text: 'จำนวน', bold: true })], alignment: AlignmentType.CENTER })],
+          width: { size: 12, type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.CLEAR, fill: '1E293B' },
+          borders: tableBorder,
+          children: [new Paragraph({ children: [new TextRun({ text: 'จำนวน', bold: true, color: 'FFFFFF', size: 19, font: 'Sarabun' })], alignment: AlignmentType.CENTER })],
         }),
         new TableCell({
-          width: { size: 17, type: WidthType.PERCENTAGE },
-          children: [new Paragraph({ children: [new TextRun({ text: 'ราคา/หน่วย (บาท)', bold: true })], alignment: AlignmentType.RIGHT })],
+          width: { size: 12, type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.CLEAR, fill: '1E293B' },
+          borders: tableBorder,
+          children: [new Paragraph({ children: [new TextRun({ text: 'หน่วย', bold: true, color: 'FFFFFF', size: 19, font: 'Sarabun' })], alignment: AlignmentType.CENTER })],
         }),
         new TableCell({
-          width: { size: 17, type: WidthType.PERCENTAGE },
-          children: [new Paragraph({ children: [new TextRun({ text: 'จำนวนเงิน (บาท)', bold: true })], alignment: AlignmentType.RIGHT })],
+          width: { size: 12, type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.CLEAR, fill: '1E293B' },
+          borders: tableBorder,
+          children: [new Paragraph({ children: [new TextRun({ text: 'ราคา/หน่วย', bold: true, color: 'FFFFFF', size: 19, font: 'Sarabun' })], alignment: AlignmentType.RIGHT })],
+        }),
+        new TableCell({
+          width: { size: 12, type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.CLEAR, fill: '1E293B' },
+          borders: tableBorder,
+          children: [new Paragraph({ children: [new TextRun({ text: 'จำนวนเงิน (บาท)', bold: true, color: 'FFFFFF', size: 19, font: 'Sarabun' })], alignment: AlignmentType.RIGHT })],
         }),
       ],
     }),
@@ -163,99 +412,208 @@ export async function generateQuotationDocxWithJs(
     const qty = Number(item.qty || 1)
     const price = Number(item.price || 0)
     const lineTotal = qty * price
-    tableRows.push(
+    const isEven = idx % 2 === 1
+    const rowFill = isEven ? 'F8FAFC' : 'FFFFFF'
+
+    itemTableRows.push(
       new TableRow({
         children: [
           new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: String(idx + 1) })], alignment: AlignmentType.CENTER })],
+            borders: tableBorder,
+            shading: { type: ShadingType.CLEAR, fill: rowFill },
+            children: [new Paragraph({ children: [new TextRun({ text: String(idx + 1), size: 19, color: '475569', font: 'Sarabun' })], alignment: AlignmentType.CENTER })],
           }),
           new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: item.name || 'สินค้า' })] })],
+            borders: tableBorder,
+            shading: { type: ShadingType.CLEAR, fill: rowFill },
+            children: [new Paragraph({ children: [new TextRun({ text: item.name || 'สินค้า', size: 19, bold: true, color: '0F172A', font: 'Sarabun' })] })],
           }),
           new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: `${qty} ${item.unit || 'ชิ้น'}` })], alignment: AlignmentType.CENTER })],
+            borders: tableBorder,
+            shading: { type: ShadingType.CLEAR, fill: rowFill },
+            children: [new Paragraph({ children: [new TextRun({ text: String(qty), size: 19, color: '0F172A', font: 'Sarabun' })], alignment: AlignmentType.CENTER })],
           }),
           new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: price.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })], alignment: AlignmentType.RIGHT })],
+            borders: tableBorder,
+            shading: { type: ShadingType.CLEAR, fill: rowFill },
+            children: [new Paragraph({ children: [new TextRun({ text: item.unit || 'ชิ้น', size: 19, color: '475569', font: 'Sarabun' })], alignment: AlignmentType.CENTER })],
           }),
           new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: lineTotal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })], alignment: AlignmentType.RIGHT })],
+            borders: tableBorder,
+            shading: { type: ShadingType.CLEAR, fill: rowFill },
+            children: [new Paragraph({ children: [new TextRun({ text: price.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), size: 19, color: '0F172A', font: 'Sarabun' })], alignment: AlignmentType.RIGHT })],
+          }),
+          new TableCell({
+            borders: tableBorder,
+            shading: { type: ShadingType.CLEAR, fill: rowFill },
+            children: [new Paragraph({ children: [new TextRun({ text: lineTotal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), bold: true, size: 19, color: '0F172A', font: 'Sarabun' })], alignment: AlignmentType.RIGHT })],
           }),
         ],
       })
     )
   })
 
+  const itemsTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: tableBorder,
+    rows: itemTableRows,
+  })
+
+  // 4. Bottom 2-Column Section: Payment Card (Left) & Totals / Blue Grand Total Box (Right)
+  const bottomSectionTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: borderNone,
+    rows: [
+      new TableRow({
+        children: [
+          // Left: Payment Box
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            borders: borderNone,
+            children: [
+              ...(shop.bank_account_number || shop.promptpay_id ? [
+                new Table({
+                  width: { size: 96, type: WidthType.PERCENTAGE },
+                  borders: lightCardBorder,
+                  rows: [
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          borders: lightCardBorder,
+                          shading: { type: ShadingType.CLEAR, fill: 'F8FAFC' },
+                          children: [
+                            new Paragraph({
+                              children: [
+                                new TextRun({ text: '💳 ช่องทางการชำระเงิน (Payment Details)', bold: true, size: 19, color: '1E40AF', font: 'Sarabun' }),
+                                new TextRun({ text: `ธนาคาร: ${shop.bank_name || '-'}`, size: 18, color: '0F172A', break: 1, font: 'Sarabun' }),
+                                new TextRun({ text: `เลขที่บัญชี: ${shop.bank_account_number || '-'}`, bold: true, size: 20, color: '1E40AF', break: 1, font: 'Sarabun' }),
+                                new TextRun({ text: `ชื่อบัญชี: ${shop.bank_account_name || companyName}`, size: 18, color: '475569', break: 1, font: 'Sarabun' }),
+                                ...(shop.promptpay_id ? [new TextRun({ text: `PromptPay: ${shop.promptpay_id}`, bold: true, size: 19, color: '0F172A', break: 1, font: 'Sarabun' })] : []),
+                              ],
+                            }),
+                          ],
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ] : []),
+            ],
+          }),
+          // Right: Summary & Blue Grand Total Box
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            borders: borderNone,
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: `ยอดรวมก่อนภาษี (Subtotal):  ${subtotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท`, size: 19, color: '475569', font: 'Sarabun' }),
+                  ...(discount > 0 ? [new TextRun({ text: `ส่วนลด (Discount):  -${discount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท`, size: 19, color: 'DC2626', break: 1, font: 'Sarabun' })] : []),
+                  ...(vat > 0 ? [new TextRun({ text: `ภาษีมูลค่าเพิ่ม VAT 7%:  ${vat.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท`, size: 19, color: '475569', break: 1, font: 'Sarabun' })] : []),
+                ],
+                alignment: AlignmentType.RIGHT,
+                spacing: { after: 100 },
+              }),
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                borders: lightCardBorder,
+                rows: [
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        borders: lightCardBorder,
+                        shading: { type: ShadingType.CLEAR, fill: '2563EB' },
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({ text: 'ยอดสุทธิทั้งสิ้น (Grand Total):  ', bold: true, size: 20, color: 'FFFFFF', font: 'Sarabun' }),
+                              new TextRun({ text: `฿${total.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`, bold: true, size: 28, color: 'FFFFFF', font: 'Sarabun' }),
+                            ],
+                            alignment: AlignmentType.CENTER,
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: `( ${formatThaiBahtText(total)} )`, size: 17, color: '64748B', italics: true, font: 'Sarabun' }),
+                ],
+                alignment: AlignmentType.RIGHT,
+                spacing: { before: 80 },
+              }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  })
+
+  // 5. Signatures Section
+  const signatureTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: borderNone,
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            borders: borderNone,
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: 'ลงชื่อ ................................................................', size: 18, color: '64748B', font: 'Sarabun' }),
+                  new TextRun({ text: `( ${companyName} )`, bold: true, size: 18, color: '0F172A', break: 1, font: 'Sarabun' }),
+                  new TextRun({ text: 'ผู้เสนอราคา', size: 17, color: '64748B', break: 1, font: 'Sarabun' }),
+                ],
+                alignment: AlignmentType.CENTER,
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            borders: borderNone,
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: 'ลงชื่อ ................................................................', size: 18, color: '64748B', font: 'Sarabun' }),
+                  new TextRun({ text: `( ${customerName} )`, bold: true, size: 18, color: '0F172A', break: 1, font: 'Sarabun' }),
+                  new TextRun({ text: 'ผู้สั่งซื้อ / ผู้อนุมัติ', size: 17, color: '64748B', break: 1, font: 'Sarabun' }),
+                ],
+                alignment: AlignmentType.CENTER,
+              }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  })
+
   const wordDoc = new Document({
     sections: [
       {
+        properties: {
+          page: {
+            margin: {
+              top: 720,    // 0.5 inch
+              bottom: 720,
+              left: 720,
+              right: 720,
+            },
+          },
+        },
         children: [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: 'ใบเสนอราคา (QUOTATION)',
-                bold: true,
-                size: 32,
-                color: '1E3A8A',
-              }),
-            ],
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 200 },
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: companyName, bold: true, size: 24 }),
-              new TextRun({ text: `ที่อยู่: ${address}`, size: 20, break: 1 }),
-              new TextRun({ text: `เลขประจำตัวผู้เสียภาษี: ${taxId} | โทรศัพท์: ${phone} | อีเมล: ${email}`, size: 20, break: 1 }),
-            ],
-            spacing: { after: 200 },
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: `เรียน (เสนอราคาถึง): ${customerName}`, bold: true, size: 22 }),
-              new TextRun({ text: `เบอร์โทรศัพท์: ${customerPhone} | ที่อยู่: ${customerAddress}`, size: 20, break: 1 }),
-              new TextRun({ text: `เลขที่เอกสาร: ${doc.doc_number || doc.doc_no || '-'} | วันที่ออกเอกสาร: ${issueDate}`, size: 20, break: 1 }),
-            ],
-            spacing: { after: 250 },
-          }),
-          new Table({
-            rows: tableRows,
-            width: { size: 100, type: WidthType.PERCENTAGE },
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: `ยอดรวมก่อนภาษี (Subtotal): ${subtotal} บาท`, bold: true, size: 22 }),
-              ...(Number(doc.discount_amount || 0) > 0 ? [new TextRun({ text: `ส่วนลด (Discount): -${discount} บาท`, size: 20, color: 'DC2626', break: 1 })] : []),
-              ...(Number(doc.vat_amount || 0) > 0 ? [new TextRun({ text: `ภาษีมูลค่าเพิ่ม VAT 7%: ${vat} บาท`, size: 20, break: 1 })] : []),
-              new TextRun({ text: `ยอดสุทธิทั้งสิ้น (Grand Total): ${total} บาท`, bold: true, size: 26, color: '1E40AF', break: 1 }),
-            ],
-            alignment: AlignmentType.RIGHT,
-            spacing: { before: 200, after: 200 },
-          }),
-          ...(shop.bank_account_number || shop.promptpay_id ? [
-            new Paragraph({
-              children: [
-                new TextRun({ text: 'ข้อมูลการชำระเงิน:', bold: true, size: 20 }),
-                new TextRun({ text: `ธนาคาร: ${shop.bank_name || '-'} เลขที่บัญชี: ${shop.bank_account_number || '-'} ชื่อบัญชี: ${shop.bank_account_name || companyName}`, size: 20, break: 1 }),
-                ...(shop.promptpay_id ? [new TextRun({ text: `พร้อมเพย์: ${shop.promptpay_id}`, size: 20, break: 1 })] : []),
-              ],
-              spacing: { after: 250 },
-            }),
-          ] : []),
-          new Paragraph({
-            children: [
-              new TextRun({ text: `เงื่อนไขการชำระเงิน: ${doc.notes || 'กำหนดยืนราคา 30 วันนับจากวันที่ออกเอกสาร'}`, size: 18 }),
-            ],
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 200, after: 300 },
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: 'ลงชื่อ ............................................. ผู้เสนอราคา                   ลงชื่อ ............................................. ผู้สั่งซื้อ/อนุมัติ', size: 20 }),
-            ],
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 200 },
-          }),
+          headerTable,
+          new Paragraph({ spacing: { after: 150 } }),
+          customerCard,
+          new Paragraph({ spacing: { after: 150 } }),
+          itemsTable,
+          new Paragraph({ spacing: { after: 150 } }),
+          bottomSectionTable,
+          new Paragraph({ spacing: { after: 350 } }),
+          signatureTable,
         ],
       },
     ],

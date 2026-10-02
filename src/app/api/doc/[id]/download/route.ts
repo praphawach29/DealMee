@@ -28,12 +28,41 @@ export async function GET(
       return new NextResponse('ไม่พบเอกสารที่ต้องการดาวน์โหลด', { status: 404 })
     }
 
-    // 2. Fetch shop profile
+    // 2. Fetch shop profile & logo
     const { data: shop } = await supabase
       .from('shops')
       .select('*')
       .eq('id', doc.shop_id)
       .single()
+
+    let logoBuffer: Buffer | undefined
+    let logoUrl = shop?.logo_url || shop?.image_url || ''
+    if (!logoUrl && shop?.line_token) {
+      try {
+        const lineRes = await fetch('https://api.line.me/v2/bot/info', {
+          headers: { Authorization: `Bearer ${shop.line_token}` },
+        })
+        if (lineRes.ok) {
+          const botInfo = await lineRes.json()
+          if (botInfo.pictureUrl) {
+            logoUrl = botInfo.pictureUrl
+          }
+        }
+      } catch (e) {
+        // silent fallback
+      }
+    }
+
+    if (logoUrl) {
+      try {
+        const imgRes = await fetch(logoUrl)
+        if (imgRes.ok) {
+          logoBuffer = Buffer.from(await imgRes.arrayBuffer())
+        }
+      } catch (e) {
+        // silent fallback
+      }
+    }
 
     const shopProfile = {
       name: shop?.name,
@@ -46,6 +75,7 @@ export async function GET(
       bank_account_number: shop?.bank_account_number || shop?.payment_bank_account,
       bank_account_name: shop?.bank_account_name || shop?.payment_bank_acc_name,
       promptpay_id: shop?.promptpay_number || shop?.payment_promptpay || shop?.promptpay_id,
+      logo_buffer: logoBuffer,
     }
 
     let fileBuffer: Buffer
