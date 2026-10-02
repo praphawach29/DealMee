@@ -470,12 +470,12 @@ export async function GET(
       <table class="w-full text-left text-sm border-collapse">
         <thead>
           <tr class="bg-slate-800 text-white text-xs font-bold uppercase tracking-wider">
-            <th class="py-3 px-3 w-12 text-center text-slate-300">#</th>
-            <th class="py-3 px-4">รายการสินค้า / รายละเอียด</th>
-            <th class="py-3 px-3 text-center w-20 text-slate-300">จำนวน</th>
-            <th class="py-3 px-3 text-center w-20 text-slate-300">หน่วย</th>
-            <th class="py-3 px-4 text-right w-32">ราคา/หน่วย (บาท)</th>
-            <th class="py-3 px-4 text-right w-36">จำนวนเงิน (บาท)</th>
+            <th class="py-3 px-3 w-12 text-center text-slate-300 whitespace-nowrap">#</th>
+            <th class="py-3 px-4 text-left whitespace-nowrap">รายการสินค้า</th>
+            <th class="py-3 px-3 text-center w-20 text-slate-300 whitespace-nowrap">จำนวน</th>
+            <th class="py-3 px-3 text-center w-20 text-slate-300 whitespace-nowrap">หน่วย</th>
+            <th class="py-3 px-3 text-right w-28 whitespace-nowrap">ราคา/หน่วย</th>
+            <th class="py-3 px-4 text-right w-36 whitespace-nowrap">จำนวนเงิน (บาท)</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-200">
