@@ -77,7 +77,7 @@ export async function GET(
     const safeDocNo = String(docNo).replace(/[^a-zA-Z0-9_-]/g, '_')
     const companySignature = shop?.company_signature_url || shop?.features?.company_signature_url || ''
     const isAccepted = doc.status === 'accepted' || (typeof doc.notes === 'string' && doc.notes.includes('[STATUS:ACCEPTED'))
-    const acceptedAt = doc.accepted_at || (typeof doc.notes === 'string' && doc.notes.match(/\[STATUS:ACCEPTED:([^\]]+)\]/)?.[1]) || null
+    const acceptedAt = (typeof doc.notes === 'string' && doc.notes.match(/\[STATUS:ACCEPTED:([^\]]+)\]/)?.[1]) || doc.accepted_at || (doc.status === 'accepted' ? doc.updated_at : null)
     const acceptedDateStr = acceptedAt ? new Date(acceptedAt).toLocaleDateString('th-TH', {
       year: 'numeric',
       month: 'short',

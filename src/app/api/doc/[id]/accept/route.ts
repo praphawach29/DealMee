@@ -21,31 +21,35 @@ export async function POST(
     }
 
     const nowIso = new Date().toISOString()
+    const currentNotes = typeof doc.notes === 'string' ? doc.notes : ''
+    const updatedNotes = currentNotes.includes('[STATUS:ACCEPTED')
+      ? currentNotes
+      : `${currentNotes}\n[STATUS:ACCEPTED:${nowIso}]`.trim()
 
-    // 2. Attempt to update with status and accepted_at columns
-    let updateRes = await supabase
+    // 2. Update status to 'accepted', with timestamp in updated_at and notes
+    let { error } = await supabase
       .from('documents')
       .update({
         status: 'accepted',
-        accepted_at: nowIso,
+        updated_at: nowIso,
+        notes: updatedNotes,
       })
       .eq('id', id)
 
-    // 3. Fallback: If status column does not exist yet in schema, record in notes
-    if (updateRes.error && (updateRes.error.message?.includes('status') || updateRes.error.code === '42703')) {
-      const currentNotes = typeof doc.notes === 'string' ? doc.notes : ''
-      const updatedNotes = `${currentNotes}\n[STATUS:ACCEPTED:${nowIso}]`.trim()
-      updateRes = await supabase
+    // Fallback: If status or updated_at fails for any reason, update notes only
+    if (error) {
+      const fallbackRes = await supabase
         .from('documents')
         .update({
           notes: updatedNotes,
         })
         .eq('id', id)
+      error = fallbackRes.error
     }
 
-    if (updateRes.error) {
+    if (error) {
       return NextResponse.json(
-        { error: `ไม่สามารถบันทึกการอนุมัติได้: ${updateRes.error.message}` },
+        { error: `ไม่สามารถบันทึกการอนุมัติได้: ${error.message}` },
         { status: 500 }
       )
     }
