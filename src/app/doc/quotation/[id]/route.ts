@@ -55,6 +55,7 @@ export async function GET(
     })
 
     const initialLetter = companyName.trim().charAt(0) || 'D'
+    const safeDocNo = String(doc.doc_number || doc.doc_no || 'QT').replace(/[^a-zA-Z0-9_-]/g, '_')
 
     const html = `<!DOCTYPE html>
 <html lang="th">
@@ -83,6 +84,7 @@ export async function GET(
     }
   </style>
 </head>
+<body class="bg-slate-100/80 min-h-screen py-4 sm:py-10 text-gray-800 antialiased">
   <!-- Top LINE Notice Banner (Shown when opened in LINE) -->
   <div id="lineTopBanner" class="max-w-4xl mx-auto px-3 sm:px-4 mb-2 hidden no-print">
     <div class="bg-amber-50 border border-amber-200/90 rounded-xl p-3 flex items-center justify-between gap-3 text-xs text-amber-900 shadow-xs">
@@ -418,7 +420,7 @@ export async function GET(
 
   <script>
     function isLineApp() {
-      return /Line\//i.test(navigator.userAgent);
+      return navigator.userAgent.toLowerCase().includes('line');
     }
 
     function handlePrintOrPdf() {
@@ -468,10 +470,9 @@ export async function GET(
       if (desktopTable) desktopTable.style.display = 'block';
 
       try {
-        const safeDocNo = '${(doc.doc_number || doc.doc_no || 'QT').replace(/[/\\\\?%*:|"<>]/g, '_')}';
         const opt = {
           margin: [8, 8, 8, 8],
-          filename: 'ใบเสนอราคา_' + safeDocNo + '.pdf',
+          filename: 'ใบเสนอราคา_' + '${safeDocNo}' + '.pdf',
           image: { type: 'jpeg', quality: 0.98 },
           html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollY: 0 },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }

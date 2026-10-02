@@ -53,6 +53,7 @@ export async function GET(
     const signatoryName = letterData.signatory_name || '( .................................................... )'
     const signatoryPosition = letterData.signatory_position || 'ผู้อำนวยการ / หัวหน้าหน่วยงาน'
     const contactInfo = letterData.contact_info || `${shop?.company_phone || ''} ${shop?.company_email || ''}`.trim()
+    const safeDocNo = String(docNumber || 'official').replace(/[^a-zA-Z0-9_-]/g, '_')
 
     const html = `<!DOCTYPE html>
 <html lang="th">
@@ -214,7 +215,7 @@ export async function GET(
 
   <script>
     function isLineApp() {
-      return /Line\//i.test(navigator.userAgent);
+      return navigator.userAgent.toLowerCase().includes('line');
     }
 
     function handlePrintOrPdf() {
@@ -258,10 +259,9 @@ export async function GET(
       }
 
       try {
-        const safeDocNo = '${(docNumber || 'official').replace(/[/\\\\?%*:|"<>]/g, '_')}';
         const opt = {
           margin: [8, 8, 8, 8],
-          filename: 'หนังสือราชการ_' + safeDocNo + '.pdf',
+          filename: 'หนังสือราชการ_' + '${safeDocNo}' + '.pdf',
           image: { type: 'jpeg', quality: 0.98 },
           html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollY: 0 },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
