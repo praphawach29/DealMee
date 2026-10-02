@@ -714,6 +714,17 @@ export async function GET(
         document.getElementById('linePrintModal').classList.remove('hidden');
         return;
       }
+
+      const target = event.currentTarget;
+      if (target && !target.dataset.loading) {
+        target.dataset.loading = 'true';
+        const originalText = target.innerHTML;
+        target.innerHTML = '⏳ กำลังโหลด...';
+        setTimeout(() => {
+          target.innerHTML = originalText;
+          delete target.dataset.loading;
+        }, 3000);
+      }
     }
 
     function handlePrintOrPdf() {
@@ -830,7 +841,12 @@ export async function GET(
 </html>`
 
     return new NextResponse(html, {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
     })
   } catch (err: any) {
     console.error('[Quotation Route Exception]:', err)
