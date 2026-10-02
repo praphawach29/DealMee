@@ -638,63 +638,129 @@ export async function generateQuotationXlsxWithJs(
     day: 'numeric',
   })
 
+  const subtotal = Number(doc.subtotal || 0)
+  const discount = Number(doc.discount_amount || 0)
+  const vat = Number(doc.vat_amount || 0)
+  const total = Number(doc.total_amount || 0)
+
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'DealMee AI'
   const sheet = workbook.addWorksheet('ใบเสนอราคา', {
-    views: [{ showGridLines: true }]
+    views: [{ showGridLines: true }],
   })
 
+  // 6 Columns aligned 1:1 with Web and Word:
+  // Col A: #
+  // Col B: รายการสินค้า
+  // Col C: จำนวน
+  // Col D: หน่วย
+  // Col E: ราคา/หน่วย (บาท)
+  // Col F: จำนวนเงิน (บาท)
   sheet.columns = [
-    { key: 'col1', width: 8 },
-    { key: 'col2', width: 40 },
-    { key: 'col3', width: 14 },
+    { key: 'col1', width: 6 },
+    { key: 'col2', width: 38 },
+    { key: 'col3', width: 12 },
     { key: 'col4', width: 12 },
     { key: 'col5', width: 18 },
     { key: 'col6', width: 22 },
   ]
 
-  // Header Title
-  const titleRow = sheet.addRow([`ใบเสนอราคา (QUOTATION) - ${docNo}`])
-  titleRow.height = 30
-  sheet.getCell('A1').font = { size: 16, bold: true, color: { argb: '1E3A8A' } }
-  sheet.getCell('A1').alignment = { vertical: 'middle' }
-  sheet.mergeCells('A1:F1')
+  // 1. Header Title & Document Number
+  sheet.mergeCells('A1:D1')
+  const titleCell = sheet.getCell('A1')
+  titleCell.value = 'ใบเสนอราคา (QUOTATION)'
+  titleCell.font = { size: 16, bold: true, color: { argb: 'FF1E3A8A' } }
+  titleCell.alignment = { vertical: 'middle', horizontal: 'left' }
 
-  // Business & Customer Details
-  sheet.addRow([`ผู้เสนอราคา: ${companyName}`, '', '', `เลขที่เอกสาร: ${docNo}`])
-  sheet.addRow([`ที่อยู่: ${shop.company_address || '-'}`, '', '', `วันที่ออกเอกสาร: ${issueDate}`])
-  sheet.addRow([`ลูกค้า: ${customerName} | โทร: ${doc.customer_phone || '-'}`, '', '', `กำหนดยืนราคา: 30 วัน`])
-  sheet.addRow([])
+  sheet.mergeCells('E1:F1')
+  const docNoCell = sheet.getCell('E1')
+  docNoCell.value = `เลขที่: ${docNo}`
+  docNoCell.font = { size: 12, bold: true, color: { argb: 'FF2563EB' } }
+  docNoCell.alignment = { vertical: 'middle', horizontal: 'right' }
+  sheet.getRow(1).height = 32
 
-  // Items Table Header
-  const headerRow = sheet.addRow(['#', 'รายการสินค้า / บริการ', 'หน่วย', 'จำนวน', 'ราคา/หน่วย (บาท)', 'จำนวนเงิน (บาท)'])
-  headerRow.height = 24
+  // 2. Company & Issue Date
+  sheet.mergeCells('A2:D2')
+  const sellerCell = sheet.getCell('A2')
+  sellerCell.value = `ผู้ให้บริการ: ${companyName}`
+  sellerCell.font = { size: 11, bold: true, color: { argb: 'FF0F172A' } }
+  sellerCell.alignment = { vertical: 'middle' }
+
+  sheet.mergeCells('E2:F2')
+  const dateCell = sheet.getCell('E2')
+  dateCell.value = `วันที่: ${issueDate}`
+  dateCell.font = { size: 10, color: { argb: 'FF475569' } }
+  dateCell.alignment = { vertical: 'middle', horizontal: 'right' }
+  sheet.getRow(2).height = 20
+
+  // 3. Address & Validity
+  sheet.mergeCells('A3:D3')
+  const addressCell = sheet.getCell('A3')
+  addressCell.value = `ที่อยู่: ${shop.company_address || '-'}${shop.company_phone ? ' | โทร: ' + shop.company_phone : ''}`
+  addressCell.font = { size: 10, color: { argb: 'FF475569' } }
+  addressCell.alignment = { vertical: 'middle' }
+
+  sheet.mergeCells('E3:F3')
+  const validCell = sheet.getCell('E3')
+  validCell.value = 'กำหนดยืนราคา: 30 วัน'
+  validCell.font = { size: 10, color: { argb: 'FF475569' } }
+  validCell.alignment = { vertical: 'middle', horizontal: 'right' }
+  sheet.getRow(3).height = 20
+
+  // 4. Customer Details
+  sheet.mergeCells('A4:D4')
+  const customerCell = sheet.getCell('A4')
+  customerCell.value = `ลูกค้า: ${customerName}${doc.customer_phone ? ' | โทร: ' + doc.customer_phone : ''}`
+  customerCell.font = { size: 11, bold: true, color: { argb: 'FF1E40AF' } }
+  customerCell.alignment = { vertical: 'middle' }
+
+  sheet.mergeCells('E4:F4')
+  const taxCell = sheet.getCell('E4')
+  taxCell.value = shop.company_tax_id ? `เลขประจำตัวผู้เสียภาษี: ${shop.company_tax_id}` : ''
+  taxCell.font = { size: 9, color: { argb: 'FF64748B' } }
+  taxCell.alignment = { vertical: 'middle', horizontal: 'right' }
+  sheet.getRow(4).height = 22
+
+  // 5. Spacer Row
+  sheet.getRow(5).height = 10
+
+  // 6. Table Header (Single line, matching Word & Web: #, รายการสินค้า, จำนวน, หน่วย, ราคา/หน่วย, จำนวนเงิน)
+  const headerRow = sheet.getRow(6)
+  headerRow.values = ['#', 'รายการสินค้า', 'จำนวน', 'หน่วย', 'ราคา/หน่วย (บาท)', 'จำนวนเงิน (บาท)']
+  headerRow.height = 26
   headerRow.eachCell((cell) => {
-    cell.font = { bold: true, color: { argb: 'FFFFFF' }, size: 11 }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1E293B' } }
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } }
     cell.alignment = { vertical: 'middle', horizontal: 'center' }
     cell.border = {
-      top: { style: 'thin', color: { argb: 'CBD5E1' } },
-      bottom: { style: 'thin', color: { argb: 'CBD5E1' } },
-      left: { style: 'thin', color: { argb: 'CBD5E1' } },
-      right: { style: 'thin', color: { argb: 'CBD5E1' } },
+      top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
     }
   })
+  headerRow.getCell(2).alignment = { vertical: 'middle', horizontal: 'left' }
+  headerRow.getCell(5).alignment = { vertical: 'middle', horizontal: 'right' }
+  headerRow.getCell(6).alignment = { vertical: 'middle', horizontal: 'right' }
 
+  // 7. Table Item Rows
+  let currentRowIdx = 7
   const items = Array.isArray(doc.items) && doc.items.length > 0 ? doc.items : []
   items.forEach((item, idx) => {
     const qty = Number(item.qty || 1)
     const price = Number(item.price || 0)
     const lineTotal = qty * price
-    const row = sheet.addRow([
+    const row = sheet.getRow(currentRowIdx)
+    row.values = [
       idx + 1,
       item.name || 'สินค้า',
-      item.unit || 'ชิ้น',
       qty,
+      item.unit || 'ชิ้น',
       price,
       lineTotal,
-    ])
-    row.height = 22
+    ]
+    row.height = 24
+
     row.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' }
     row.getCell(2).alignment = { vertical: 'middle', horizontal: 'left' }
     row.getCell(3).alignment = { vertical: 'middle', horizontal: 'center' }
@@ -702,55 +768,195 @@ export async function generateQuotationXlsxWithJs(
     row.getCell(5).alignment = { vertical: 'middle', horizontal: 'right' }
     row.getCell(6).alignment = { vertical: 'middle', horizontal: 'right' }
 
-    row.getCell(4).numFmt = '#,##0'
+    row.getCell(2).font = { bold: true, color: { argb: 'FF0F172A' }, size: 10 }
+    row.getCell(3).numFmt = '#,##0'
     row.getCell(5).numFmt = '#,##0.00'
     row.getCell(6).numFmt = '#,##0.00'
+    row.getCell(6).font = { bold: true, color: { argb: 'FF0F172A' }, size: 10 }
 
+    const isEven = idx % 2 === 1
+    const bgFill = isEven ? 'FFF8FAFC' : 'FFFFFFFF'
     row.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgFill } }
       cell.border = {
-        top: { style: 'thin', color: { argb: 'E2E8F0' } },
-        bottom: { style: 'thin', color: { argb: 'E2E8F0' } },
-        left: { style: 'thin', color: { argb: 'E2E8F0' } },
-        right: { style: 'thin', color: { argb: 'E2E8F0' } },
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
       }
     })
+
+    currentRowIdx++
   })
 
-  // Summary Rows
-  sheet.addRow([])
-  const addSummaryRow = (label: string, val: number, isGrandTotal = false) => {
-    const sRow = sheet.addRow(['', '', '', '', label, val])
-    sRow.height = isGrandTotal ? 24 : 20
-    sRow.getCell(5).font = { bold: isGrandTotal, size: isGrandTotal ? 12 : 10, color: { argb: isGrandTotal ? '1E3A8A' : '0F172A' } }
-    sRow.getCell(6).font = { bold: isGrandTotal, size: isGrandTotal ? 12 : 10, color: { argb: isGrandTotal ? '1E3A8A' : '0F172A' } }
-    sRow.getCell(5).alignment = { vertical: 'middle', horizontal: 'right' }
-    sRow.getCell(6).alignment = { vertical: 'middle', horizontal: 'right' }
-    sRow.getCell(6).numFmt = '#,##0.00'
-    if (isGrandTotal) {
-      sRow.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'EFF6FF' } }
-      sRow.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'EFF6FF' } }
+  // 8. Spacer Row
+  sheet.getRow(currentRowIdx).height = 10
+  currentRowIdx++
+
+  // 9. Subtotal
+  const subtotalRow = sheet.getRow(currentRowIdx)
+  subtotalRow.getCell(5).value = 'ยอดรวมก่อนภาษี:'
+  subtotalRow.getCell(5).font = { size: 10, color: { argb: 'FF475569' } }
+  subtotalRow.getCell(5).alignment = { vertical: 'middle', horizontal: 'right' }
+  subtotalRow.getCell(6).value = subtotal
+  subtotalRow.getCell(6).font = { size: 10, color: { argb: 'FF0F172A' } }
+  subtotalRow.getCell(6).alignment = { vertical: 'middle', horizontal: 'right' }
+  subtotalRow.getCell(6).numFmt = '#,##0.00'
+  subtotalRow.height = 20
+  currentRowIdx++
+
+  // Discount (if any)
+  if (discount > 0) {
+    const discRow = sheet.getRow(currentRowIdx)
+    discRow.getCell(5).value = 'ส่วนลด:'
+    discRow.getCell(5).font = { size: 10, color: { argb: 'FFDC2626' } }
+    discRow.getCell(5).alignment = { vertical: 'middle', horizontal: 'right' }
+    discRow.getCell(6).value = -discount
+    discRow.getCell(6).font = { size: 10, color: { argb: 'FFDC2626' } }
+    discRow.getCell(6).alignment = { vertical: 'middle', horizontal: 'right' }
+    discRow.getCell(6).numFmt = '#,##0.00'
+    discRow.height = 20
+    currentRowIdx++
+  }
+
+  // VAT (if any)
+  if (vat > 0) {
+    const vatRow = sheet.getRow(currentRowIdx)
+    vatRow.getCell(5).value = 'ภาษีมูลค่าเพิ่ม 7%:'
+    vatRow.getCell(5).font = { size: 10, color: { argb: 'FF475569' } }
+    vatRow.getCell(5).alignment = { vertical: 'middle', horizontal: 'right' }
+    vatRow.getCell(6).value = vat
+    vatRow.getCell(6).font = { size: 10, color: { argb: 'FF0F172A' } }
+    vatRow.getCell(6).alignment = { vertical: 'middle', horizontal: 'right' }
+    vatRow.getCell(6).numFmt = '#,##0.00'
+    vatRow.height = 20
+    currentRowIdx++
+  }
+
+  // 10. Grand Total Box (Electric Blue background)
+  const grandTotalRow = sheet.getRow(currentRowIdx)
+  grandTotalRow.getCell(5).value = 'ยอดสุทธิทั้งสิ้น (บาท):'
+  grandTotalRow.getCell(5).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }
+  grandTotalRow.getCell(5).alignment = { vertical: 'middle', horizontal: 'right' }
+  grandTotalRow.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } }
+
+  grandTotalRow.getCell(6).value = total
+  grandTotalRow.getCell(6).font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } }
+  grandTotalRow.getCell(6).alignment = { vertical: 'middle', horizontal: 'right' }
+  grandTotalRow.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } }
+  grandTotalRow.getCell(6).numFmt = '#,##0.00'
+  grandTotalRow.height = 26
+
+  ;[5, 6].forEach((col) => {
+    grandTotalRow.getCell(col).border = {
+      top: { style: 'medium', color: { argb: 'FF1D4ED8' } },
+      bottom: { style: 'medium', color: { argb: 'FF1D4ED8' } },
+      left: { style: 'medium', color: { argb: 'FF1D4ED8' } },
+      right: { style: 'medium', color: { argb: 'FF1D4ED8' } },
     }
-  }
+  })
+  currentRowIdx++
 
-  addSummaryRow('ยอดรวมก่อนภาษี:', Number(doc.subtotal || 0))
-  if (Number(doc.discount_amount || 0) > 0) {
-    addSummaryRow('ส่วนลด:', -Number(doc.discount_amount || 0))
-  }
-  if (Number(doc.vat_amount || 0) > 0) {
-    addSummaryRow('ภาษีมูลค่าเพิ่ม 7%:', Number(doc.vat_amount || 0))
-  }
-  addSummaryRow('ยอดสุทธิทั้งสิ้น (บาท):', Number(doc.total_amount || 0), true)
+  // 11. Thai Baht Text
+  sheet.mergeCells(`D${currentRowIdx}:F${currentRowIdx}`)
+  const bahtCell = sheet.getCell(`D${currentRowIdx}`)
+  bahtCell.value = `( ${formatThaiBahtText(total)} )`
+  bahtCell.font = { italic: true, size: 9, color: { argb: 'FF64748B' } }
+  bahtCell.alignment = { vertical: 'middle', horizontal: 'right' }
+  sheet.getRow(currentRowIdx).height = 18
+  currentRowIdx++
 
+  // 12. Payment Details Card
   if (shop.bank_account_number || shop.promptpay_id) {
-    sheet.addRow([])
-    const bankText = `การชำระเงิน: ธนาคาร ${shop.bank_name || '-'} เลขที่บัญชี ${shop.bank_account_number || '-'} ชื่อบัญชี ${shop.bank_account_name || companyName}`
-    const bRow = sheet.addRow([bankText])
-    bRow.getCell(1).font = { size: 10, italic: true, color: { argb: '475569' } }
+    sheet.getRow(currentRowIdx).height = 12
+    currentRowIdx++
+
+    sheet.mergeCells(`A${currentRowIdx}:D${currentRowIdx}`)
+    const payTitleCell = sheet.getCell(`A${currentRowIdx}`)
+    payTitleCell.value = '💳 ข้อมูลการชำระเงิน (Payment Details)'
+    payTitleCell.font = { bold: true, size: 10, color: { argb: 'FF1E40AF' } }
+    payTitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } }
+    payTitleCell.alignment = { vertical: 'middle' }
+    payTitleCell.border = {
+      top: { style: 'thin', color: { argb: 'FFBFDBFE' } },
+      left: { style: 'thin', color: { argb: 'FFBFDBFE' } },
+      right: { style: 'thin', color: { argb: 'FFBFDBFE' } },
+    }
+    sheet.getRow(currentRowIdx).height = 22
+    currentRowIdx++
+
+    sheet.mergeCells(`A${currentRowIdx}:D${currentRowIdx}`)
+    const bankCell = sheet.getCell(`A${currentRowIdx}`)
+    bankCell.value = `ธนาคาร: ${shop.bank_name || '-'}  |  เลขที่บัญชี: ${shop.bank_account_number || '-'}  |  ชื่อบัญชี: ${shop.bank_account_name || companyName}`
+    bankCell.font = { size: 9, color: { argb: 'FF1E293B' } }
+    bankCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } }
+    bankCell.alignment = { vertical: 'middle' }
+    bankCell.border = {
+      left: { style: 'thin', color: { argb: 'FFBFDBFE' } },
+      right: { style: 'thin', color: { argb: 'FFBFDBFE' } },
+      bottom: shop.promptpay_id ? undefined : { style: 'thin', color: { argb: 'FFBFDBFE' } },
+    }
+    sheet.getRow(currentRowIdx).height = 20
+    currentRowIdx++
+
     if (shop.promptpay_id) {
-      const pRow = sheet.addRow([`พร้อมเพย์: ${shop.promptpay_id}`])
-      pRow.getCell(1).font = { size: 10, italic: true, color: { argb: '475569' } }
+      sheet.mergeCells(`A${currentRowIdx}:D${currentRowIdx}`)
+      const ppCell = sheet.getCell(`A${currentRowIdx}`)
+      ppCell.value = `พร้อมเพย์ (PromptPay): ${shop.promptpay_id}`
+      ppCell.font = { bold: true, size: 9, color: { argb: 'FF1E3A8A' } }
+      ppCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } }
+      ppCell.alignment = { vertical: 'middle' }
+      ppCell.border = {
+        left: { style: 'thin', color: { argb: 'FFBFDBFE' } },
+        right: { style: 'thin', color: { argb: 'FFBFDBFE' } },
+        bottom: { style: 'thin', color: { argb: 'FFBFDBFE' } },
+      }
+      sheet.getRow(currentRowIdx).height = 20
+      currentRowIdx++
     }
   }
+
+  // 13. Signatures Section
+  sheet.getRow(currentRowIdx).height = 24
+  currentRowIdx++
+
+  const sigRow1 = currentRowIdx
+  sheet.mergeCells(`A${sigRow1}:C${sigRow1}`)
+  sheet.getCell(`A${sigRow1}`).value = 'ลงชื่อ ................................................................'
+  sheet.getCell(`A${sigRow1}`).font = { size: 9, color: { argb: 'FF64748B' } }
+  sheet.getCell(`A${sigRow1}`).alignment = { horizontal: 'center', vertical: 'middle' }
+
+  sheet.mergeCells(`D${sigRow1}:F${sigRow1}`)
+  sheet.getCell(`D${sigRow1}`).value = 'ลงชื่อ ................................................................'
+  sheet.getCell(`D${sigRow1}`).font = { size: 9, color: { argb: 'FF64748B' } }
+  sheet.getCell(`D${sigRow1}`).alignment = { horizontal: 'center', vertical: 'middle' }
+  sheet.getRow(sigRow1).height = 20
+  currentRowIdx++
+
+  const sigRow2 = currentRowIdx
+  sheet.mergeCells(`A${sigRow2}:C${sigRow2}`)
+  sheet.getCell(`A${sigRow2}`).value = `( ${companyName} )`
+  sheet.getCell(`A${sigRow2}`).font = { bold: true, size: 10, color: { argb: 'FF0F172A' } }
+  sheet.getCell(`A${sigRow2}`).alignment = { horizontal: 'center', vertical: 'middle' }
+
+  sheet.mergeCells(`D${sigRow2}:F${sigRow2}`)
+  sheet.getCell(`D${sigRow2}`).value = `( ${customerName} )`
+  sheet.getCell(`D${sigRow2}`).font = { bold: true, size: 10, color: { argb: 'FF0F172A' } }
+  sheet.getCell(`D${sigRow2}`).alignment = { horizontal: 'center', vertical: 'middle' }
+  sheet.getRow(sigRow2).height = 20
+  currentRowIdx++
+
+  const sigRow3 = currentRowIdx
+  sheet.mergeCells(`A${sigRow3}:C${sigRow3}`)
+  sheet.getCell(`A${sigRow3}`).value = 'ผู้เสนอราคา'
+  sheet.getCell(`A${sigRow3}`).font = { size: 9, color: { argb: 'FF64748B' } }
+  sheet.getCell(`A${sigRow3}`).alignment = { horizontal: 'center', vertical: 'middle' }
+
+  sheet.mergeCells(`D${sigRow3}:F${sigRow3}`)
+  sheet.getCell(`D${sigRow3}`).value = 'ผู้สั่งซื้อ / ผู้อนุมัติ'
+  sheet.getCell(`D${sigRow3}`).font = { size: 9, color: { argb: 'FF64748B' } }
+  sheet.getCell(`D${sigRow3}`).alignment = { horizontal: 'center', vertical: 'middle' }
+  sheet.getRow(sigRow3).height = 20
 
   const arrayBuffer = await workbook.xlsx.writeBuffer()
   return Buffer.from(arrayBuffer)
