@@ -68,19 +68,115 @@ export async function GET(
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     body { font-family: 'Sarabun', sans-serif; }
+
+    @page {
+      size: A4 portrait;
+      margin: 10mm 12mm 12mm 12mm;
+    }
+
+    /* Print & PDF Exact Styling */
     @media print {
-      .no-print { display: none !important; }
-      .mobile-items { display: none !important; }
-      .desktop-table { display: block !important; }
-      body { background: white !important; padding: 0 !important; }
-      .paper-container { 
-        box-shadow: none !important; 
-        border: none !important; 
-        padding: 0 !important; 
-        max-width: 100% !important; 
-        margin: 0 !important; 
-        border-radius: 0 !important; 
+      .no-print, #lineTopBanner, #linePrintModal {
+        display: none !important;
       }
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      html, body {
+        background: #ffffff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        font-size: 13px !important;
+        color: #0f172a !important;
+      }
+      .paper-container {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+      }
+      .mobile-items {
+        display: none !important;
+      }
+      .desktop-table {
+        display: block !important;
+        width: 100% !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 8px !important;
+        margin-top: 12px !important;
+        margin-bottom: 16px !important;
+      }
+      .desktop-table table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+      }
+      .desktop-table th {
+        background-color: #f1f5f9 !important;
+        color: #334155 !important;
+        border-bottom: 2px solid #cbd5e1 !important;
+        padding: 8px 12px !important;
+        font-size: 12px !important;
+        font-weight: 700 !important;
+      }
+      .desktop-table td {
+        padding: 10px 12px !important;
+        border-bottom: 1px solid #e2e8f0 !important;
+        font-size: 13px !important;
+      }
+      .print-grid-2col {
+        display: grid !important;
+        grid-template-columns: 1.1fr 0.9fr !important;
+        gap: 20px !important;
+        align-items: start !important;
+      }
+      .print-signatures {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 32px !important;
+        margin-top: 36px !important;
+        padding-top: 24px !important;
+        border-top: 1px solid #e2e8f0 !important;
+        page-break-inside: avoid !important;
+      }
+    }
+
+    /* PDF Rendering Mode (applied when html2pdf captures the paper) */
+    .pdf-render {
+      width: 794px !important;
+      max-width: 794px !important;
+      padding: 24px !important;
+      background: white !important;
+      box-shadow: none !important;
+      border: none !important;
+      border-radius: 0 !important;
+    }
+    .pdf-render .mobile-items {
+      display: none !important;
+    }
+    .pdf-render .desktop-table {
+      display: block !important;
+      width: 100% !important;
+    }
+    .pdf-render .desktop-table table {
+      width: 100% !important;
+    }
+    .pdf-render .print-grid-2col {
+      display: grid !important;
+      grid-template-columns: 1.1fr 0.9fr !important;
+      gap: 20px !important;
+    }
+    .pdf-render .print-signatures {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      gap: 32px !important;
+      margin-top: 36px !important;
+      page-break-inside: avoid !important;
     }
   </style>
 </head>
@@ -283,7 +379,7 @@ export async function GET(
     </div>
 
     <!-- Calculations & Payment Terms -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 pt-1">
+    <div class="grid grid-cols-1 sm:grid-cols-2 print-grid-2col gap-4 sm:gap-6 pt-1">
       <div class="space-y-3">
         <div>
           <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
@@ -347,15 +443,15 @@ export async function GET(
     </div>
 
     <!-- Signature Blocks -->
-    <div class="grid grid-cols-2 gap-4 sm:gap-8 pt-6 sm:pt-8 border-t border-slate-200 text-center text-xs text-slate-600">
+    <div class="print-signatures grid grid-cols-2 gap-4 sm:gap-8 pt-6 sm:pt-8 border-t border-slate-200 text-center text-xs text-slate-600">
       <div class="space-y-6 sm:space-y-8">
         <p class="font-medium text-slate-700">ในนาม ${companyName}</p>
-        <div class="w-32 sm:w-48 mx-auto border-b border-slate-300"></div>
+        <div class="w-32 sm:w-48 mx-auto border-b-2 border-slate-300"></div>
         <p>( ผู้มีอำนาจลงนาม / ผู้เสนอราคา )</p>
       </div>
       <div class="space-y-6 sm:space-y-8">
         <p class="font-medium text-slate-700">ผู้สั่งซื้อ / ผู้อนุมัติ</p>
-        <div class="w-32 sm:w-48 mx-auto border-b border-slate-300"></div>
+        <div class="w-32 sm:w-48 mx-auto border-b-2 border-slate-300"></div>
         <p>( ${doc.customer_name || '...........................................'} )</p>
       </div>
     </div>
@@ -381,6 +477,17 @@ export async function GET(
           <a href="/doc/quotation/${id}?openExternalBrowser=1&autoDownloadPdf=1" target="_blank" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer no-underline active:scale-95 text-center mb-1">
             <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
             <span>🌐 เปิดใน Chrome เพื่อบันทึก PDF ทันที</span>
+          </a>
+        </div>
+
+        <!-- Success box with direct open link after PDF is generated -->
+        <div id="pdfSuccessBox" class="hidden p-3 bg-emerald-50 border border-emerald-200/90 rounded-xl space-y-2 text-center">
+          <div class="text-xs font-bold text-emerald-800 flex items-center justify-center gap-1.5">
+            <span>✅ ดาวน์โหลดไฟล์ PDF สำเร็จแล้ว</span>
+          </div>
+          <a id="btnOpenPdfDirect" href="#" target="_blank" class="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 no-underline active:scale-95">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+            <span>👁️ คลิกที่นี่เพื่อเปิดดูไฟล์ PDF ทันที</span>
           </a>
         </div>
 
@@ -437,7 +544,10 @@ export async function GET(
 
     function triggerPrint() {
       try {
-        window.print();
+        closeLineModal();
+        setTimeout(() => {
+          window.print();
+        }, 150);
       } catch (err) {
         alert('อุปกรณ์ไม่รองรับการสั่งพิมพ์โดยตรง กรุณากดปุ่ม "บันทึกเป็นไฟล์ PDF ลงเครื่อง" ด้านบนแทนค่ะ');
       }
@@ -459,34 +569,53 @@ export async function GET(
       const mobileItems = document.querySelector('.mobile-items');
       const desktopTable = document.querySelector('.desktop-table');
 
-      // Temporarily format as clean A4 standard width (794px = 210mm at 96dpi)
-      const origWidth = paper ? paper.style.width : '';
-      const origMaxWidth = paper ? paper.style.maxWidth : '';
-      if (paper) {
-        paper.style.width = '794px';
-        paper.style.maxWidth = '794px';
-      }
+      // Add pdf-render class to format exact A4 desktop layout
+      if (paper) paper.classList.add('pdf-render');
       if (mobileItems) mobileItems.style.display = 'none';
       if (desktopTable) desktopTable.style.display = 'block';
 
       try {
+        // ASCII filename ensures Chrome & Windows preserve .pdf extension
+        const pdfFilename = 'Quotation_' + '${safeDocNo}' + '.pdf';
         const opt = {
-          margin: [8, 8, 8, 8],
-          filename: 'ใบเสนอราคา_' + '${safeDocNo}' + '.pdf',
+          margin: [10, 10, 10, 10],
+          filename: pdfFilename,
           image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollY: 0 },
+          html2canvas: { 
+            scale: 2, 
+            useCORS: true, 
+            allowTaint: true, 
+            logging: false, 
+            scrollY: 0,
+            windowWidth: 1024
+          },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
-        await html2pdf().set(opt).from(paper).save();
-        closeLineModal();
+
+        const pdfBlob = await html2pdf().set(opt).from(paper).outputPdf('blob');
+        const pdfFile = new Blob([pdfBlob], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(pdfFile);
+
+        // 1. Download as Quotation_XXX.pdf
+        const downloadLink = document.createElement('a');
+        downloadLink.href = blobUrl;
+        downloadLink.download = pdfFilename;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+
+        // 2. Show instant view link in modal
+        const successBox = document.getElementById('pdfSuccessBox');
+        const openLink = document.getElementById('btnOpenPdfDirect');
+        if (successBox && openLink) {
+          openLink.href = blobUrl;
+          successBox.classList.remove('hidden');
+        }
       } catch (err) {
         console.error('PDF error:', err);
         alert('เกิดข้อผิดพลาดในการสร้าง PDF กรุณาลองใช้ฟังก์ชันพิมพ์ หรือดาวน์โหลดเป็นไฟล์ Word แทนค่ะ');
       } finally {
-        if (paper) {
-          paper.style.width = origWidth;
-          paper.style.maxWidth = origMaxWidth;
-        }
+        if (paper) paper.classList.remove('pdf-render');
         if (mobileItems) mobileItems.style.display = '';
         if (desktopTable) desktopTable.style.display = '';
         if (btnText) btnText.innerText = oldText;

@@ -66,10 +66,26 @@ export async function GET(
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     body { font-family: 'Sarabun', sans-serif; }
+
+    @page {
+      size: A4 portrait;
+      margin: 15mm 20mm 20mm 25mm;
+    }
+
     @media print {
-      .no-print { display: none !important; }
-      body { background: white; margin: 0; padding: 0; }
-      .page-sheet { box-shadow: none !important; margin: 0 !important; max-width: 100% !important; padding: 2.5cm 2cm 2cm 3cm !important; }
+      .no-print, #linePrintModal { display: none !important; }
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      body { background: white !important; margin: 0 !important; padding: 0 !important; }
+      .page-sheet { 
+        box-shadow: none !important; 
+        margin: 0 !important; 
+        max-width: 100% !important; 
+        padding: 0 !important; 
+        min-height: auto !important;
+      }
     }
   </style>
 </head>
@@ -182,6 +198,17 @@ export async function GET(
           </a>
         </div>
 
+        <!-- Success box with direct open link after PDF is generated -->
+        <div id="pdfSuccessBox" class="hidden p-3 bg-emerald-50 border border-emerald-200/90 rounded-xl space-y-2 text-center">
+          <div class="text-xs font-bold text-emerald-800 flex items-center justify-center gap-1.5">
+            <span>✅ ดาวน์โหลดไฟล์ PDF สำเร็จแล้ว</span>
+          </div>
+          <a id="btnOpenPdfDirect" href="#" target="_blank" class="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 no-underline active:scale-95">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+            <span>👁️ คลิกที่นี่เพื่อเปิดดูไฟล์ PDF ทันที</span>
+          </a>
+        </div>
+
         <button id="btnSavePdf" onclick="downloadPdfFile()" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 text-center">
           <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
           <span id="btnSavePdfText">📥 บันทึกเป็นไฟล์ PDF (A4) ลงเครื่องทันที</span>
@@ -232,7 +259,10 @@ export async function GET(
 
     function triggerPrint() {
       try {
-        window.print();
+        closeLineModal();
+        setTimeout(() => {
+          window.print();
+        }, 150);
       } catch (err) {
         alert('อุปกรณ์ไม่รองรับการสั่งพิมพ์โดยตรง กรุณากดปุ่ม "บันทึกเป็นไฟล์ PDF ลงเครื่อง" ด้านบนแทนค่ะ');
       }
@@ -259,15 +289,32 @@ export async function GET(
       }
 
       try {
+        const pdfFilename = 'Official_Letter_' + '${safeDocNo}' + '.pdf';
         const opt = {
-          margin: [8, 8, 8, 8],
-          filename: 'หนังสือราชการ_' + '${safeDocNo}' + '.pdf',
+          margin: [10, 10, 10, 10],
+          filename: pdfFilename,
           image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollY: 0 },
+          html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollY: 0, windowWidth: 1024 },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
-        await html2pdf().set(opt).from(sheet).save();
-        closeLineModal();
+
+        const pdfBlob = await html2pdf().set(opt).from(sheet).outputPdf('blob');
+        const pdfFile = new Blob([pdfBlob], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(pdfFile);
+
+        const downloadLink = document.createElement('a');
+        downloadLink.href = blobUrl;
+        downloadLink.download = pdfFilename;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+
+        const successBox = document.getElementById('pdfSuccessBox');
+        const openLink = document.getElementById('btnOpenPdfDirect');
+        if (successBox && openLink) {
+          openLink.href = blobUrl;
+          successBox.classList.remove('hidden');
+        }
       } catch (err) {
         console.error('PDF error:', err);
         alert('เกิดข้อผิดพลาดในการสร้าง PDF กรุณาลองใช้ฟังก์ชันพิมพ์ หรือดาวน์โหลดเป็นไฟล์ Word แทนค่ะ');
