@@ -13,7 +13,9 @@ interface ShopData {
   company_phone?: string | null
   company_email?: string | null
   company_logo_url?: string | null
+  company_signature_url?: string | null
   vat_enabled?: boolean | null
+  features?: any
 }
 
 export default function CompanySettingsForm({ shop }: { shop: ShopData }) {
@@ -174,6 +176,31 @@ export default function CompanySettingsForm({ shop }: { shop: ShopData }) {
               placeholder="เช่น https://yourdomain.com/logo.png"
               className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
             />
+          </div>
+
+          {/* Authorized Signature Card */}
+          <div className="space-y-2 sm:col-span-2 p-4 bg-slate-50/70 border border-outline-variant/60 rounded-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+                  ✍️ รูปลายเซ็นผู้มีอำนาจ / ผู้เสนอราคา (Authorized Signature)
+                </label>
+                <p className="text-[11px] sm:text-xs text-on-surface-variant">
+                  PNG พื้นหลังโปร่งใสจะแสดงผลดีที่สุด — ลายเซ็นจะนำไปประทับในใบเสนอราคาอัตโนมัติ (ทั้งบนเว็บ, PDF, Word และ Excel)
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pt-1">
+              <input
+                type="url"
+                name="company_signature_url"
+                id="company_signature_url"
+                defaultValue={shop.company_signature_url || shop.features?.company_signature_url || ''}
+                placeholder="เช่น https://yourdomain.com/signature.png"
+                className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline-variant bg-white text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-3 pt-2 sm:col-span-2">

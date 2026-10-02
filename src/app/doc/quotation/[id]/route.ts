@@ -73,7 +73,22 @@ export async function GET(
     })
 
     const initialLetter = companyName.trim().charAt(0) || 'D'
-    const safeDocNo = String(doc.doc_number || doc.doc_no || 'QT').replace(/[^a-zA-Z0-9_-]/g, '_')
+    const docNo = doc.doc_number || doc.doc_no || 'QT'
+    const safeDocNo = String(docNo).replace(/[^a-zA-Z0-9_-]/g, '_')
+    const companySignature = shop?.company_signature_url || shop?.features?.company_signature_url || ''
+    const isAccepted = doc.status === 'accepted' || (typeof doc.notes === 'string' && doc.notes.includes('[STATUS:ACCEPTED'))
+    const acceptedAt = doc.accepted_at || (typeof doc.notes === 'string' && doc.notes.match(/\[STATUS:ACCEPTED:([^\]]+)\]/)?.[1]) || null
+    const acceptedDateStr = acceptedAt ? new Date(acceptedAt).toLocaleDateString('th-TH', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }) : ''
+
+    const publicUrl = `https://app.dealmee.app/doc/quotation/${id}`
+    const lineShareText = `📄 ใบเสนอราคา ${docNo}\n🏢 จาก: ${companyName}\n👤 ผู้รับ: ${doc.customer_name || 'คุณลูกค้า'}\n💰 ยอดสุทธิทั้งสิ้น: ฿${total.toLocaleString('th-TH', { minimumFractionDigits: 2 })}\n\n🔗 เปิดดูใบเสนอราคาและดาวน์โหลด:\n${publicUrl}`
+    const lineShareUrl = `https://line.me/R/msg/text/?${encodeURIComponent(lineShareText)}`
 
     // Helper: Convert total number to Thai Baht text (เช่น หนึ่งพันแปดร้อยบาทถ้วน)
     function formatThaiBaht(num: number): string {
@@ -277,33 +292,89 @@ export async function GET(
   </div>
 
   <!-- Top Action Controls Bar -->
-  <div class="max-w-4xl mx-auto px-3 sm:px-4 mb-3 sm:mb-5 no-print">
-    <div class="bg-white/95 backdrop-blur-md p-2.5 sm:p-3 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-2.5">
-      <div class="flex items-center justify-between w-full sm:w-auto">
+  <div class="max-w-4xl mx-auto px-3 sm:px-4 mb-2.5 sm:mb-4 no-print">
+    <div class="bg-white/95 backdrop-blur-md p-2.5 sm:p-3 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-2.5">
+      <div class="flex items-center justify-between w-full md:w-auto">
         <div class="flex items-center gap-2">
-          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span class="text-xs sm:text-sm font-bold text-slate-800">ใบเสนอราคา (Quotation)</span>
+          <span class="w-2.5 h-2.5 rounded-full ${isAccepted ? 'bg-emerald-500' : 'bg-amber-500'} ${isAccepted ? '' : 'animate-pulse'}"></span>
+          <span class="text-xs sm:text-sm font-bold text-slate-800">
+            ${isAccepted ? 'ใบเสนอราคา (อนุมัติแล้ว)' : 'ใบเสนอราคา (รออนุมัติ)'}
+          </span>
         </div>
         <span class="text-[11px] font-mono font-bold text-blue-800 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-200 sm:ml-2">
-          ${doc.doc_number || doc.doc_no}
+          ${docNo}
         </span>
       </div>
 
-      <div class="grid grid-cols-3 gap-2 w-full sm:w-auto">
-        <a href="/api/doc/${id}/download?format=docx" download="Quotation_${safeDocNo}.docx" onclick="handleDocDownload(event, 'docx')" class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl border border-indigo-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
+      <div class="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full md:w-auto justify-end">
+        <!-- 1-Click LINE Share -->
+        <a href="${lineShareUrl}" target="_blank" rel="noopener noreferrer" class="flex-1 sm:flex-none px-3 py-2 bg-[#06C755]/10 hover:bg-[#06C755]/20 text-[#05963F] font-bold text-xs rounded-xl border border-[#06C755]/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
+          <svg class="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 24 24"><path d="M24 10.304c0-5.369-5.383-9.738-12-9.738-6.616 0-12 4.369-12 9.738 0 4.814 4.269 8.846 10.019 9.572.391.084.922.258 1.057.592.121.303.079.778.039 1.085l-.171 1.027c-.053.303-.242 1.186 1.039.647 1.281-.54 6.911-4.069 9.428-6.967 1.739-1.907 2.589-3.844 2.589-5.956z"/></svg>
+          <span>แชร์ LINE</span>
+        </a>
+
+        <!-- Copy Link -->
+        <button onclick="handleCopyQuotationLink()" class="flex-1 sm:flex-none px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 text-center shadow-xs">
+          <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+          <span id="copyLinkText">คัดลอกลิงก์</span>
+        </button>
+
+        <!-- Word -->
+        <a href="/api/doc/${id}/download?format=docx" download="Quotation_${safeDocNo}.docx" onclick="handleDocDownload(event, 'docx')" class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl border border-indigo-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
           <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-          Word
+          <span>Word</span>
         </a>
-        <a href="/api/doc/${id}/download?format=xlsx" download="Quotation_${safeDocNo}.xlsx" onclick="handleDocDownload(event, 'xlsx')" class="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl border border-emerald-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
+
+        <!-- Excel -->
+        <a href="/api/doc/${id}/download?format=xlsx" download="Quotation_${safeDocNo}.xlsx" onclick="handleDocDownload(event, 'xlsx')" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl border border-emerald-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
           <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-          Excel
+          <span>Excel</span>
         </a>
+
+        <!-- พิมพ์/PDF -->
         <button onclick="handlePrintOrPdf()" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 text-center">
           <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
-          พิมพ์/PDF
+          <span>พิมพ์/PDF</span>
         </button>
       </div>
     </div>
+  </div>
+
+  <!-- Interactive Customer Approval Card (no-print) -->
+  <div class="max-w-4xl mx-auto px-3 sm:px-4 mb-3 sm:mb-5 no-print">
+    ${!isAccepted ? `
+      <div id="customerApprovalSection" class="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 border border-emerald-500/30">
+        <div class="space-y-1 text-center sm:text-left">
+          <h4 class="font-bold text-sm sm:text-base flex items-center justify-center sm:justify-start gap-2">
+            <span class="text-xl">🤝</span> ตกลงสั่งซื้อตามใบเสนอราคานี้?
+          </h4>
+          <p class="text-xs text-emerald-100 max-w-xl leading-relaxed">
+            หากตรวจสอบรายการสินค้าและยอดเงินถูกต้องแล้ว สามารถกดยืนยันเพื่อสั่งซื้อได้ทันที ทางร้านค้าจะได้รับแจ้งเตือนเพื่อเตรียมจัดส่งหรือเริ่มงานให้ค่ะ
+          </p>
+        </div>
+        <button id="btnAcceptQuote" onclick="handleAcceptQuotation()" class="w-full sm:w-auto px-6 py-3 bg-white hover:bg-emerald-50 text-emerald-800 font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-95 shrink-0 flex items-center justify-center gap-2 cursor-pointer">
+          <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+          <span>✅ ยืนยันตกลงสั่งซื้อ (Approve)</span>
+        </button>
+      </div>
+    ` : `
+      <div class="p-3.5 sm:p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 shadow-xs flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-xs">
+            ✓
+          </div>
+          <div>
+            <div class="font-bold text-xs sm:text-sm">ลูกค้ายืนยันตกลงสั่งซื้อตามใบเสนอราคาเรียบร้อยแล้ว</div>
+            <div class="text-[11px] text-emerald-700 font-mono">
+              สถานะ: อนุมัติแล้ว (Accepted) ${acceptedDateStr ? `• ${acceptedDateStr} น.` : ''}
+            </div>
+          </div>
+        </div>
+        <span class="px-3 py-1 bg-emerald-600 text-white text-xs font-bold rounded-lg shrink-0 shadow-xs">
+          อนุมัติแล้ว
+        </span>
+      </div>
+    `}
   </div>
 
   <!-- Document Paper Container -->
@@ -585,10 +656,15 @@ export async function GET(
 
     <!-- Signature Blocks -->
     <div class="print-signatures grid grid-cols-2 gap-6 sm:gap-12 pt-6 sm:pt-8 border-t border-slate-200 text-center text-xs text-slate-600">
-      <div class="p-4 bg-slate-50/60 rounded-xl border border-slate-200/80 space-y-4">
+      <!-- Seller Signature -->
+      <div class="p-4 bg-slate-50/60 rounded-xl border border-slate-200/80 space-y-3 flex flex-col justify-between">
         <p class="font-bold text-slate-800 text-xs">ในนาม ${companyName}</p>
-        <div class="h-10 flex items-center justify-center">
-          <span class="text-slate-300 text-[10px] italic">[ ลงลายมือชื่อ / ประทับตรา ]</span>
+        <div class="h-12 sm:h-14 flex items-center justify-center">
+          ${companySignature ? `
+            <img src="${companySignature}" alt="ลายเซ็นผู้มีอำนาจลงนาม" class="max-h-12 max-w-[160px] object-contain mx-auto" />
+          ` : `
+            <span class="text-slate-300 text-[10px] italic">[ ลงลายมือชื่อ / ประทับตรา ]</span>
+          `}
         </div>
         <div class="w-40 sm:w-48 mx-auto border-b-2 border-slate-400"></div>
         <div class="space-y-0.5 text-[11px]">
@@ -597,15 +673,26 @@ export async function GET(
         </div>
       </div>
 
-      <div class="p-4 bg-slate-50/60 rounded-xl border border-slate-200/80 space-y-4">
+      <!-- Customer Approval Signature -->
+      <div class="p-4 bg-slate-50/60 rounded-xl border border-slate-200/80 space-y-3 flex flex-col justify-between">
         <p class="font-bold text-slate-800 text-xs">ผู้สั่งซื้อ / ผู้อนุมัติ (Customer Approval)</p>
-        <div class="h-10 flex items-center justify-center">
-          <span class="text-slate-300 text-[10px] italic">[ ตกลงสั่งซื้อตามรายการข้างต้น ]</span>
+        <div class="h-12 sm:h-14 flex flex-col items-center justify-center">
+          ${isAccepted ? `
+            <div class="flex items-center gap-1 text-emerald-600 font-bold text-xs">
+              <span>✅</span>
+              <span>อนุมัติสั่งซื้อเรียบร้อยแล้ว</span>
+            </div>
+            <div class="text-[10px] text-emerald-700 font-mono mt-0.5">
+              ${acceptedDateStr ? `ยืนยันเมื่อ ${acceptedDateStr} น.` : 'ยืนยันสั่งซื้อออนไลน์'}
+            </div>
+          ` : `
+            <span class="text-slate-300 text-[10px] italic">[ ตกลงสั่งซื้อตามรายการข้างต้น ]</span>
+          `}
         </div>
-        <div class="w-40 sm:w-48 mx-auto border-b-2 border-slate-400"></div>
+        <div class="w-40 sm:w-48 mx-auto border-b-2 ${isAccepted ? 'border-emerald-500' : 'border-slate-400'}"></div>
         <div class="space-y-0.5 text-[11px]">
           <p class="font-semibold text-slate-800">( ${doc.customer_name || '...........................................'} )</p>
-          <p class="text-slate-400 font-mono">วันที่: ...... / ...... / ..........</p>
+          <p class="text-slate-400 font-mono">${isAccepted && acceptedDateStr ? `วันที่อนุมัติ: ${acceptedDateStr} น.` : 'วันที่: ...... / ...... / ..........'}</p>
         </div>
       </div>
     </div>
@@ -684,6 +771,18 @@ export async function GET(
             </a>
           </div>
         </div>
+
+        <!-- Quick LINE & Copy Share inside Modal -->
+        <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
+          <a href="${lineShareUrl}" target="_blank" rel="noopener noreferrer" class="py-2.5 px-3 bg-[#06C755]/10 hover:bg-[#06C755]/20 text-[#05963F] font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 no-underline active:scale-95 text-center border border-[#06C755]/30">
+            <svg class="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 24 24"><path d="M24 10.304c0-5.369-5.383-9.738-12-9.738-6.616 0-12 4.369-12 9.738 0 4.814 4.269 8.846 10.019 9.572.391.084.922.258 1.057.592.121.303.079.778.039 1.085l-.171 1.027c-.053.303-.242 1.186 1.039.647 1.281-.54 6.911-4.069 9.428-6.967 1.739-1.907 2.589-3.844 2.589-5.956z"/></svg>
+            <span>แชร์ LINE</span>
+          </a>
+          <button onclick="handleCopyQuotationLink()" class="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 text-center">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+            <span id="modalCopyLinkText">คัดลอกลิงก์</span>
+          </button>
+        </div>
       </div>
 
       <div class="p-3 bg-amber-50 rounded-xl border border-amber-200/70 text-[11px] text-amber-800 space-y-1">
@@ -702,6 +801,67 @@ export async function GET(
   </div>
 
   <script>
+    function handleCopyQuotationLink() {
+      const url = window.location.href.split('?')[0];
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+          showCopySuccess();
+        }).catch(() => fallbackCopy(url));
+      } else {
+        fallbackCopy(url);
+      }
+    }
+
+    function fallbackCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showCopySuccess();
+    }
+
+    function showCopySuccess() {
+      const el1 = document.getElementById('copyLinkText');
+      const el2 = document.getElementById('modalCopyLinkText');
+      [el1, el2].forEach(el => {
+        if (el) {
+          const old = el.innerText;
+          el.innerText = '✓ คัดลอกแล้ว!';
+          setTimeout(() => { el.innerText = old; }, 2000);
+        }
+      });
+    }
+
+    async function handleAcceptQuotation() {
+      if (!confirm('ยืนยันตกลงสั่งซื้อตามรายการและยอดเงินในใบเสนอราคานี้ใช่หรือไม่?')) return;
+      const btn = document.getElementById('btnAcceptQuote');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ กำลังบันทึกการยืนยัน...';
+      }
+      try {
+        const res = await fetch('/api/doc/${id}/accept', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          alert('🎉 ขอบพระคุณค่ะ! ยืนยันตกลงสั่งซื้อตามใบเสนอราคาเรียบร้อยแล้ว ทางร้านค้าจะดำเนินการต่อไปให้ทันทีค่ะ');
+          window.location.reload();
+        } else {
+          alert(data.error || 'เกิดข้อผิดพลาดในการยืนยัน กรุณาลองใหม่อีกครั้งค่ะ');
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '✅ ยืนยันตกลงสั่งซื้อ (Approve)';
+          }
+        }
+      } catch (err) {
+        alert('ไม่สามารถเชื่อมต่อระบบได้ กรุณาลองใหม่อีกครั้งค่ะ');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '✅ ยืนยันตกลงสั่งซื้อ (Approve)';
+        }
+      }
+    }
     function isLineApp() {
       return navigator.userAgent.toLowerCase().includes('line');
     }

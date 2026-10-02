@@ -36,7 +36,7 @@ export async function GET(
       .single()
 
     let logoBuffer: Buffer | undefined
-    let logoUrl = shop?.logo_url || shop?.image_url || ''
+    let logoUrl = shop?.company_logo_url || shop?.logo_url || shop?.image_url || ''
     if (!logoUrl && shop?.line_token) {
       try {
         const lineRes = await fetch('https://api.line.me/v2/bot/info', {
@@ -64,6 +64,19 @@ export async function GET(
       }
     }
 
+    let signatureBuffer: Buffer | undefined
+    const signatureUrl = shop?.company_signature_url || shop?.features?.company_signature_url || ''
+    if (signatureUrl) {
+      try {
+        const sigRes = await fetch(signatureUrl)
+        if (sigRes.ok) {
+          signatureBuffer = Buffer.from(await sigRes.arrayBuffer())
+        }
+      } catch (e) {
+        // silent fallback
+      }
+    }
+
     const shopProfile = {
       name: shop?.name,
       company_name: shop?.company_name,
@@ -76,6 +89,7 @@ export async function GET(
       bank_account_name: shop?.bank_account_name || shop?.payment_bank_acc_name,
       promptpay_id: shop?.promptpay_number || shop?.payment_promptpay || shop?.promptpay_id,
       logo_buffer: logoBuffer,
+      signature_buffer: signatureBuffer,
     }
 
     let fileBuffer: Buffer

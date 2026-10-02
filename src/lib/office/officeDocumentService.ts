@@ -103,6 +103,7 @@ export interface ShopProfileData {
   bank_account_name?: string
   promptpay_id?: string
   logo_buffer?: Buffer
+  signature_buffer?: Buffer
 }
 
 // Helper: Convert total number to Thai Baht text
@@ -184,6 +185,16 @@ export async function generateQuotationDocxWithJs(
     logoRun = new ImageRun({
       data: shop.logo_buffer,
       transformation: { width: 55, height: 55 },
+      type: isPng ? 'png' : 'jpg',
+    })
+  }
+
+  let signatureRun: ImageRun | undefined
+  if (shop.signature_buffer && shop.signature_buffer.length > 0) {
+    const isPng = shop.signature_buffer[0] === 0x89 && shop.signature_buffer[1] === 0x50
+    signatureRun = new ImageRun({
+      data: shop.signature_buffer,
+      transformation: { width: 110, height: 42 },
       type: isPng ? 'png' : 'jpg',
     })
   }
@@ -564,9 +575,14 @@ export async function generateQuotationDocxWithJs(
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'ลงชื่อ ................................................................', size: 18, color: '64748B', font: 'Sarabun' }),
-                  new TextRun({ text: `( ${companyName} )`, bold: true, size: 18, color: '0F172A', break: 1, font: 'Sarabun' }),
-                  new TextRun({ text: 'ผู้เสนอราคา', size: 17, color: '64748B', break: 1, font: 'Sarabun' }),
+                  ...(signatureRun ? [
+                    signatureRun,
+                    new TextRun({ text: '', break: 1 }),
+                  ] : [
+                    new TextRun({ text: 'ลงชื่อ ................................................................', size: 18, color: '64748B', font: 'Sarabun' }),
+                  ]),
+                  new TextRun({ text: `( ${companyName} )`, bold: true, size: 18, color: '0F172A', break: signatureRun ? 1 : 1, font: 'Sarabun' }),
+                  new TextRun({ text: 'ผู้มีอำนาจลงนาม / ผู้เสนอราคา', size: 17, color: '64748B', break: 1, font: 'Sarabun' }),
                 ],
                 alignment: AlignmentType.CENTER,
               }),
@@ -922,15 +938,36 @@ export async function generateQuotationXlsxWithJs(
 
   const sigRow1 = currentRowIdx
   sheet.mergeCells(`A${sigRow1}:C${sigRow1}`)
-  sheet.getCell(`A${sigRow1}`).value = 'ลงชื่อ ................................................................'
-  sheet.getCell(`A${sigRow1}`).font = { size: 9, color: { argb: 'FF64748B' } }
-  sheet.getCell(`A${sigRow1}`).alignment = { horizontal: 'center', vertical: 'middle' }
-
   sheet.mergeCells(`D${sigRow1}:F${sigRow1}`)
+
+  if (shop.signature_buffer && shop.signature_buffer.length > 0) {
+    try {
+      const isPng = shop.signature_buffer[0] === 0x89 && shop.signature_buffer[1] === 0x50
+      const sigImgId = workbook.addImage({
+        buffer: shop.signature_buffer as any,
+        extension: isPng ? 'png' : 'jpeg',
+      })
+      sheet.addImage(sigImgId, {
+        tl: { col: 1.0, row: sigRow1 - 1 },
+        ext: { width: 130, height: 44 },
+      })
+      sheet.getRow(sigRow1).height = 42
+    } catch {
+      sheet.getCell(`A${sigRow1}`).value = 'ลงชื่อ ................................................................'
+      sheet.getCell(`A${sigRow1}`).font = { size: 9, color: { argb: 'FF64748B' } }
+      sheet.getCell(`A${sigRow1}`).alignment = { horizontal: 'center', vertical: 'middle' }
+      sheet.getRow(sigRow1).height = 20
+    }
+  } else {
+    sheet.getCell(`A${sigRow1}`).value = 'ลงชื่อ ................................................................'
+    sheet.getCell(`A${sigRow1}`).font = { size: 9, color: { argb: 'FF64748B' } }
+    sheet.getCell(`A${sigRow1}`).alignment = { horizontal: 'center', vertical: 'middle' }
+    sheet.getRow(sigRow1).height = 20
+  }
+
   sheet.getCell(`D${sigRow1}`).value = 'ลงชื่อ ................................................................'
   sheet.getCell(`D${sigRow1}`).font = { size: 9, color: { argb: 'FF64748B' } }
   sheet.getCell(`D${sigRow1}`).alignment = { horizontal: 'center', vertical: 'middle' }
-  sheet.getRow(sigRow1).height = 20
   currentRowIdx++
 
   const sigRow2 = currentRowIdx

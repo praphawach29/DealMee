@@ -170,7 +170,15 @@ export async function updateCompanySettings(formData: FormData) {
     return { error: 'ไม่สามารถสร้างหรือค้นหาข้อมูลร้านค้าได้' }
   }
 
-  const updateData = {
+  const currentFeatures = (shop.features && typeof shop.features === 'object') ? shop.features : {}
+  const signatureUrl = ((formData.get('company_signature_url') as string) || '').trim()
+
+  const updatedFeatures = {
+    ...currentFeatures,
+    company_signature_url: signatureUrl,
+  }
+
+  const updateData: Record<string, any> = {
     company_name: ((formData.get('company_name') as string) || '').trim(),
     company_tax_id: ((formData.get('company_tax_id') as string) || '').trim(),
     company_address: ((formData.get('company_address') as string) || '').trim(),
@@ -178,13 +186,22 @@ export async function updateCompanySettings(formData: FormData) {
     company_email: ((formData.get('company_email') as string) || '').trim(),
     company_logo_url: ((formData.get('company_logo_url') as string) || '').trim(),
     vat_enabled: formData.get('vat_enabled') === 'true' || formData.get('vat_enabled') === 'on',
+    features: updatedFeatures,
     updated_at: new Date().toISOString(),
   }
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from('shops')
-    .update(updateData)
+    .update({ ...updateData, company_signature_url: signatureUrl })
     .eq('id', shop.id)
+
+  if (error && (error.message?.includes('company_signature_url') || error.code === '42703' || error.code === 'PGRST204')) {
+    const res = await supabase
+      .from('shops')
+      .update(updateData)
+      .eq('id', shop.id)
+    error = res.error
+  }
 
   if (error) {
     return { error: `บันทึกไม่สำเร็จ: ${error.message}` }
