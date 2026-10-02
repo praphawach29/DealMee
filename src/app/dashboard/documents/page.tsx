@@ -52,6 +52,7 @@ export default async function DocumentsPage() {
         companyName={shop.company_name || shop.name}
         vatEnabled={shop.vat_enabled || false}
         companyProfile={companyProfile}
+        features={(shop.features as Record<string, boolean>) || {}}
       />
     </div>
   )

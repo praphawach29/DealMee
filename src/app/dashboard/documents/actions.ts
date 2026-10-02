@@ -286,3 +286,172 @@ export async function deleteDocumentAction(id: string) {
   revalidatePath('/dashboard/documents')
   return { success: true }
 }
+
+/**
+ * 1-Click Convert an approved Quotation into an Invoice
+ */
+export async function convertQuotationToInvoiceAction(quotationId: string) {
+  const supabase = await createClient()
+  const resolved = await resolveShop(supabase)
+  if ('error' in resolved) return { error: resolved.error }
+
+  // 1. Fetch source quotation
+  const { data: quote, error: quoteError } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('id', quotationId)
+    .eq('shop_id', resolved.shop.id)
+    .single()
+
+  if (quoteError || !quote) {
+    return { error: 'ไม่พบใบเสนอราคาต้นทาง' }
+  }
+
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const randNum = Math.floor(1000 + Math.random() * 9000)
+  const invoiceDocNumber = `INV-${dateStr}-${randNum}`
+
+  const nowIso = new Date().toISOString()
+  const initialInvoiceNotes = `อ้างอิงใบเสนอราคา: ${quote.doc_number || quote.doc_no}\n[FROM_QUOTATION:${quote.id}:${quote.doc_number}]`
+
+  // 2. Insert invoice into documents table
+  const { data: newDoc, error: insertError } = await supabase
+    .from('documents')
+    .insert({
+      shop_id: resolved.shop.id,
+      doc_no: invoiceDocNumber,
+      doc_number: invoiceDocNumber,
+      doc_type: 'invoice',
+      customer_name: quote.customer_name,
+      customer_phone: quote.customer_phone,
+      customer_address: quote.customer_address,
+      items: quote.items,
+      subtotal: quote.subtotal,
+      discount_amount: quote.discount_amount || 0,
+      vat_amount: quote.vat_amount || 0,
+      total_amount: quote.total_amount,
+      status: 'pending_payment',
+      notes: initialInvoiceNotes,
+      created_at: nowIso,
+      updated_at: nowIso,
+    })
+    .select('id, doc_number')
+    .single()
+
+  if (insertError || !newDoc) {
+    return { error: `สร้างใบแจ้งหนี้ไม่สำเร็จ: ${insertError?.message}` }
+  }
+
+  // 3. Mark original quotation with link to invoice
+  const currentQuoteNotes = typeof quote.notes === 'string' ? quote.notes : ''
+  await supabase
+    .from('documents')
+    .update({
+      notes: `${currentQuoteNotes}\n[CONVERTED_TO_INVOICE:${newDoc.doc_number}]`.trim(),
+      updated_at: nowIso,
+    })
+    .eq('id', quotationId)
+
+  revalidatePath('/dashboard/documents')
+  return {
+    success: true,
+    docId: newDoc.id,
+    docNumber: newDoc.doc_number,
+    docUrl: `/doc/quotation/${newDoc.id}`,
+  }
+}
+
+/**
+ * 1-Click Convert an approved Quotation into a Sales Order & Order
+ */
+export async function convertQuotationToSalesOrderAction(quotationId: string) {
+  const supabase = await createClient()
+  const resolved = await resolveShop(supabase)
+  if ('error' in resolved) return { error: resolved.error }
+
+  // 1. Fetch source quotation
+  const { data: quote, error: quoteError } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('id', quotationId)
+    .eq('shop_id', resolved.shop.id)
+    .single()
+
+  if (quoteError || !quote) {
+    return { error: 'ไม่พบใบเสนอราคาต้นทาง' }
+  }
+
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const randNum = Math.floor(1000 + Math.random() * 9000)
+  const soDocNumber = `SO-${dateStr}-${randNum}`
+  const nowIso = new Date().toISOString()
+
+  // 2. Insert Sales Order document
+  const { data: newDoc, error: insertError } = await supabase
+    .from('documents')
+    .insert({
+      shop_id: resolved.shop.id,
+      doc_no: soDocNumber,
+      doc_number: soDocNumber,
+      doc_type: 'sales_order',
+      customer_name: quote.customer_name,
+      customer_phone: quote.customer_phone,
+      customer_address: quote.customer_address,
+      items: quote.items,
+      subtotal: quote.subtotal,
+      discount_amount: quote.discount_amount || 0,
+      vat_amount: quote.vat_amount || 0,
+      total_amount: quote.total_amount,
+      status: 'confirmed',
+      notes: `อ้างอิงใบเสนอราคา: ${quote.doc_number || quote.doc_no}\n[FROM_QUOTATION:${quote.id}:${quote.doc_number}]`,
+      created_at: nowIso,
+      updated_at: nowIso,
+    })
+    .select('id, doc_number')
+    .single()
+
+  if (insertError || !newDoc) {
+    return { error: `สร้างใบสั่งขายไม่สำเร็จ: ${insertError?.message}` }
+  }
+
+  // 3. Summarize items and create an entry in `orders` table so it shows in Orders tab
+  const itemsList = Array.isArray(quote.items) ? quote.items : []
+  const itemsSummary = itemsList.map((it: any) => `${it.name || 'สินค้า'} (x${it.qty || 1})`).join(', ') || 'คำสั่งซื้อจากใบเสนอราคา'
+
+  try {
+    await supabase.from('orders').insert({
+      shop_id: resolved.shop.id,
+      order_no: soDocNumber,
+      customer_name: quote.customer_name || 'ลูกค้า',
+      phone: quote.customer_phone || '',
+      total_amount: Number(quote.total_amount) || 0,
+      items_summary: itemsSummary,
+      status: 'pending',
+      created_at: nowIso,
+      updated_at: nowIso,
+    })
+  } catch (orderErr) {
+    console.warn('[convertQuotationToSalesOrder] Could not sync to orders table:', orderErr)
+  }
+
+  // 4. Mark original quotation with link to SO
+  const currentQuoteNotes = typeof quote.notes === 'string' ? quote.notes : ''
+  await supabase
+    .from('documents')
+    .update({
+      notes: `${currentQuoteNotes}\n[CONVERTED_TO_SO:${newDoc.doc_number}]`.trim(),
+      updated_at: nowIso,
+    })
+    .eq('id', quotationId)
+
+  revalidatePath('/dashboard/documents')
+  revalidatePath('/dashboard/orders')
+  revalidatePath('/dashboard')
+
+  return {
+    success: true,
+    docId: newDoc.id,
+    docNumber: newDoc.doc_number,
+    docUrl: `/doc/quotation/${newDoc.id}`,
+  }
+}

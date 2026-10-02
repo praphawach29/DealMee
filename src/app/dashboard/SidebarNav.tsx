@@ -35,7 +35,9 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
     setActivePath(pathname)
   }, [pathname])
 
-  const showBookingTools = bizType === 'booking' || bizType === 'restaurant' || features.booking_system === true
+  const isBookingBiz = bizType === 'booking' || bizType === 'service'
+  const isRetailBiz = bizType === 'retail' || bizType === 'ecommerce'
+  const showBookingTools = isBookingBiz || (!isRetailBiz && bizType === 'restaurant') || (isRetailBiz ? (features.booking_system === true && features.enable_retail_booking === true) : features.booking_system === true)
 
   const isActive = (path: string) => {
     if (path === '/dashboard') {

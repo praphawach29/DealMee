@@ -27,6 +27,8 @@ import {
   draftOfficialLetterAction,
   saveOfficialLetterAction,
   deleteDocumentAction,
+  convertQuotationToInvoiceAction,
+  convertQuotationToSalesOrderAction,
   OfficialLetterDraft,
 } from './actions'
 
@@ -64,6 +66,7 @@ interface DocumentStudioProps {
   companyName?: string
   vatEnabled?: boolean
   companyProfile?: CompanyProfile
+  features?: Record<string, boolean>
 }
 
 type TabType = 'quotations' | 'official' | 'archive'
@@ -74,11 +77,13 @@ export default function DocumentStudioClient({
   companyName,
   vatEnabled = false,
   companyProfile,
+  features = {},
 }: DocumentStudioProps) {
   const [activeTab, setActiveTab] = useState<TabType>('quotations')
   const [documents, setDocuments] = useState<DocumentItem[]>(initialDocuments)
   const [searchQuery, setSearchQuery] = useState('')
   const [docStatusFilter, setDocStatusFilter] = useState<'all' | 'accepted' | 'pending'>('all')
+  const [convertingId, setConvertingId] = useState<string | null>(null)
 
   // ── Quotation State ──
   const [showPreviewModal, setShowPreviewModal] = useState(false)
@@ -262,6 +267,34 @@ export default function DocumentStudioClient({
     }
   }
 
+  // 1-Click Convert Quotation to Invoice
+  const handleConvertToInvoice = async (quotationId: string) => {
+    if (!confirm('ยืนยันสร้าง "ใบแจ้งหนี้ (Invoice)" จากใบเสนอราคานี้หรือไม่?')) return
+    setConvertingId(quotationId)
+    const res = await convertQuotationToInvoiceAction(quotationId)
+    setConvertingId(null)
+    if (res.error) {
+      alert(res.error)
+    } else {
+      alert(`สร้างใบแจ้งหนี้ ${res.docNumber} เรียบร้อยแล้ว!`)
+      window.location.reload()
+    }
+  }
+
+  // 1-Click Convert Quotation to Sales Order
+  const handleConvertToSalesOrder = async (quotationId: string) => {
+    if (!confirm('ยืนยันสร้าง "ใบสั่งขาย (Sales Order)" และบันทึกลงระบบออเดอร์หรือไม่?')) return
+    setConvertingId(quotationId)
+    const res = await convertQuotationToSalesOrderAction(quotationId)
+    setConvertingId(null)
+    if (res.error) {
+      alert(res.error)
+    } else {
+      alert(`สร้างใบสั่งขาย ${res.docNumber} และส่งเข้าหน้ารายการออเดอร์เรียบร้อยแล้ว!`)
+      window.location.reload()
+    }
+  }
+
   // Add Item row in Quote
   const handleAddItem = () => {
     setQuoteItems([...quoteItems, { name: '', qty: 1, price: 0, unit: 'ชิ้น' }])
@@ -284,7 +317,7 @@ export default function DocumentStudioClient({
   }
 
   const acceptedCount = documents.filter((d) => d.status === 'accepted' || (typeof d.notes === 'string' && d.notes.includes('[STATUS:ACCEPTED'))).length
-  const pendingCount = documents.filter((d) => d.doc_type === 'quotation' && d.status !== 'accepted' && !(typeof d.notes === 'string' && d.notes.includes('[STATUS:ACCEPTED'))).length
+  const pendingCount = documents.filter((d) => (d.doc_type === 'quotation' || d.doc_type === 'invoice') && d.status !== 'accepted' && !(typeof d.notes === 'string' && d.notes.includes('[STATUS:ACCEPTED'))).length
 
   const filteredDocs = documents.filter((d) => {
     const q = searchQuery.toLowerCase()
@@ -297,7 +330,7 @@ export default function DocumentStudioClient({
 
     const isAccepted = d.status === 'accepted' || (typeof d.notes === 'string' && d.notes.includes('[STATUS:ACCEPTED'))
     if (docStatusFilter === 'accepted') return isAccepted
-    if (docStatusFilter === 'pending') return d.doc_type === 'quotation' && !isAccepted
+    if (docStatusFilter === 'pending') return !isAccepted
     return true
   })
 
@@ -313,7 +346,7 @@ export default function DocumentStudioClient({
             เอกสารและใบเสนอราคาอัจฉริยะ (Smart Document Studio)
           </h1>
           <p className="text-xs sm:text-sm text-on-surface-variant mt-1">
-            นำเข้าเอกสาร Excel, Word, PDF หรือภาพถ่าย เพื่อแปลงเป็นใบเสนอราคา BOQ หรือร่างหนังสือราชการตามระเบียบสารบรรณอัตโนมัติ
+            นำเข้าเอกสาร Excel, Word, PDF หรือภาพถ่าย เพื่อแปลงเป็นใบเสนอราคา BOQ ใบสั่งขาย หรือใบแจ้งหนี้อัตโนมัติ
           </p>
         </div>
 
@@ -330,17 +363,19 @@ export default function DocumentStudioClient({
             <Sparkles className="w-4 h-4 text-amber-500" />
             สร้างใบเสนอราคา / BOQ
           </button>
-          <button
-            onClick={() => setActiveTab('official')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'official'
-                ? 'bg-surface text-on-surface shadow-sm'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            <Building2 className="w-4 h-4 text-emerald-500" />
-            ร่างหนังสือราชการ
-          </button>
+          {features?.official_letters === true && (
+            <button
+              onClick={() => setActiveTab('official')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'official'
+                  ? 'bg-surface text-on-surface shadow-sm'
+                  : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <Building2 className="w-4 h-4 text-emerald-500" />
+              ร่างหนังสือราชการ
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('archive')}
             className={`px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center gap-1.5 ${
@@ -1056,7 +1091,10 @@ export default function DocumentStudioClient({
                 <tbody className="divide-y divide-outline-variant/40 bg-surface">
                   {filteredDocs.map((doc) => {
                     const isQuotation = doc.doc_type === 'quotation'
-                    const docUrl = isQuotation ? `/doc/quotation/${doc.id}` : `/doc/official/${doc.id}`
+                    const isInvoice = doc.doc_type === 'invoice'
+                    const isSalesOrder = doc.doc_type === 'sales_order'
+                    const isCommercial = isQuotation || isInvoice || isSalesOrder
+                    const docUrl = isCommercial ? `/doc/quotation/${doc.id}` : `/doc/official/${doc.id}`
                     const isAccepted = doc.status === 'accepted' || (typeof doc.notes === 'string' && doc.notes.includes('[STATUS:ACCEPTED'))
 
                     return (
@@ -1067,27 +1105,67 @@ export default function DocumentStudioClient({
                         <td className="py-3 px-3">
                           <span
                             className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
-                              isQuotation
+                              isInvoice
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : isSalesOrder
+                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                : isQuotation
                                 ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-sky-50 text-sky-700 border-sky-200'
                             }`}
                           >
-                            {isQuotation ? 'ใบเสนอราคา (Quotation)' : 'หนังสือราชการ (Official)'}
+                            {isInvoice
+                              ? 'ใบแจ้งหนี้ (Invoice)'
+                              : isSalesOrder
+                              ? 'ใบสั่งขาย (Sales Order)'
+                              : isQuotation
+                              ? 'ใบเสนอราคา (Quotation)'
+                              : 'หนังสือราชการ (Official)'}
                           </span>
                         </td>
                         <td className="py-3 px-3">
                           {isQuotation ? (
                             isAccepted ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                อนุมัติแล้ว
-                              </span>
+                              <div className="space-y-1.5">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                  อนุมัติแล้ว
+                                </span>
+                                <div className="flex flex-wrap items-center gap-1">
+                                  <button
+                                    onClick={() => handleConvertToInvoice(doc.id)}
+                                    disabled={convertingId === doc.id}
+                                    className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-emerald-600 hover:bg-emerald-700 text-white transition cursor-pointer shadow-2xs disabled:opacity-50 flex items-center gap-0.5"
+                                    title="ออกใบแจ้งหนี้เพื่อเรียกเก็บเงิน"
+                                  >
+                                    {convertingId === doc.id ? '...' : '+ ออกใบแจ้งหนี้'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleConvertToSalesOrder(doc.id)}
+                                    disabled={convertingId === doc.id}
+                                    className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-indigo-600 hover:bg-indigo-700 text-white transition cursor-pointer shadow-2xs disabled:opacity-50 flex items-center gap-0.5"
+                                    title="ออกใบสั่งขายและบันทึกลงระบบออเดอร์"
+                                  >
+                                    {convertingId === doc.id ? '...' : '+ ใบสั่งขาย'}
+                                  </button>
+                                </div>
+                              </div>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
                                 รออนุมัติ
                               </span>
                             )
+                          ) : isInvoice ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              รอชำระเงิน
+                            </span>
+                          ) : isSalesOrder ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                              ยืนยันสั่งซื้อ
+                            </span>
                           ) : (
                             <span className="text-on-surface-variant text-xs">-</span>
                           )}
@@ -1096,7 +1174,7 @@ export default function DocumentStudioClient({
                           {doc.customer_name || '-'}
                         </td>
                         <td className="py-3 px-3 text-right font-mono font-bold text-on-surface">
-                          {isQuotation && doc.total_amount
+                          {isCommercial && doc.total_amount
                             ? `${Number(doc.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} บ.`
                             : '-'}
                         </td>
@@ -1105,7 +1183,7 @@ export default function DocumentStudioClient({
                           {new Date(doc.created_at).toLocaleDateString('th-TH')}
                         </td>
                         <td className="py-3 px-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                          <div className="flex items-center justify-end gap-1">
                             <a
                               href={docUrl}
                               target="_blank"
@@ -1115,6 +1193,24 @@ export default function DocumentStudioClient({
                             >
                               <ExternalLink className="w-4 h-4" />
                             </a>
+                            {isCommercial && (
+                              <>
+                                <a
+                                  href={`/api/doc/${doc.id}/download?format=docx`}
+                                  className="p-1.5 rounded-lg text-on-surface-variant hover:text-indigo-600 hover:bg-indigo-50 transition"
+                                  title="ดาวน์โหลด Word (.docx)"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                </a>
+                                <a
+                                  href={`/api/doc/${doc.id}/download?format=xlsx`}
+                                  className="p-1.5 rounded-lg text-on-surface-variant hover:text-emerald-600 hover:bg-emerald-50 transition"
+                                  title="ดาวน์โหลด Excel (.xlsx)"
+                                >
+                                  <FileSpreadsheet className="w-4 h-4" />
+                                </a>
+                              </>
+                            )}
                             <button
                               onClick={() => {
                                 const fullUrl = `${window.location.origin}${docUrl}`

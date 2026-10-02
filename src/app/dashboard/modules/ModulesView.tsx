@@ -5,15 +5,18 @@ import { updateShopFeatures } from './actions'
 
 interface ModulesViewProps {
   initialFeatures: Record<string, boolean>
+  bizType?: string
 }
 
-export default function ModulesView({ initialFeatures }: ModulesViewProps) {
+export default function ModulesView({ initialFeatures, bizType = 'retail' }: ModulesViewProps) {
+  const isBookingDefault = bizType === 'booking' || bizType === 'service'
   const [featureState, setFeatureState] = useState<Record<string, boolean>>({
     auto_reply: initialFeatures?.auto_reply ?? true,
-    booking_system: initialFeatures?.booking_system ?? true,
+    booking_system: initialFeatures?.booking_system ?? isBookingDefault,
     slip_verify: initialFeatures?.slip_verify ?? false,
     product_recommend: initialFeatures?.product_recommend ?? true,
     admin_notify: initialFeatures?.admin_notify ?? true,
+    official_letters: initialFeatures?.official_letters ?? false,
   })
 
   const [loading, setLoading] = useState(false)
@@ -55,12 +58,21 @@ export default function ModulesView({ initialFeatures }: ModulesViewProps) {
       icon: 'notifications_active',
       color: 'text-rose-600 bg-rose-500/10',
     },
+    {
+      id: 'official_letters',
+      name: '🏛️ ระบบร่างหนังสือราชการ (ระเบียบสารบรรณ)',
+      description: 'เปิดใช้สตูดิโอร่างหนังสือราชการ บันทึกข้อความ ครุฑไทย และจัดรูปแบบตามระเบียบงานสารบรรณ พ.ศ. 2526',
+      icon: 'history_edu',
+      color: 'text-indigo-600 bg-indigo-500/10',
+    },
   ]
 
   const handleToggle = async (id: string) => {
+    const nextVal = !featureState[id]
     const nextState = {
       ...featureState,
-      [id]: !featureState[id],
+      [id]: nextVal,
+      ...(id === 'booking_system' ? { enable_retail_booking: nextVal } : {}),
     }
 
     setFeatureState(nextState)

@@ -1296,6 +1296,35 @@ async function preparePlanningState({
       `\n(ใช้เลขที่ออเดอร์จากรายการนี้เท่านั้น ห้ามแต่งเลขใหม่)`
     : `\n\n[ออเดอร์ที่บันทึกจริงแล้วของลูกค้ารายนี้]\nยังไม่มีออเดอร์ที่บันทึกจริงเลย — ถ้ายังไม่ได้เรียก take_order สำเร็จในเทิร์นนี้ ห้ามบอกลูกค้าว่ารับออเดอร์แล้วเด็ดขาด`
 
+  // 5d. Grounding for Quotations & Invoices: allows AI to answer queries about
+  // active quotations, items, pricing, discounts, and payment details
+  let documentStateContext = ''
+  try {
+    const { data: myDocuments } = await db
+      .from('documents')
+      .select('doc_number, doc_no, doc_type, customer_name, customer_phone, total_amount, status, items, notes, created_at')
+      .eq('shop_id', shop.id)
+      .order('created_at', { ascending: false })
+      .limit(6)
+
+    if (myDocuments && myDocuments.length > 0) {
+      documentStateContext =
+        `\n\n[ใบเสนอราคาและใบแจ้งหนี้ล่าสุดของร้านค้า]\n` +
+        myDocuments.map((d: any) => {
+          const no = d.doc_number || d.doc_no || 'DOC'
+          const typeStr = d.doc_type === 'invoice' ? 'ใบแจ้งหนี้ (Invoice)' : d.doc_type === 'sales_order' ? 'ใบสั่งขาย (Sales Order)' : 'ใบเสนอราคา (Quotation)'
+          const statusStr = d.status === 'accepted' ? 'อนุมัติแล้ว (Accepted)' : d.status === 'pending_payment' ? 'รอชำระเงิน' : 'รออนุมัติ'
+          const itemsList = Array.isArray(d.items)
+            ? d.items.map((it: any) => `${it.name || 'สินค้า'} (x${it.qty || 1} @ ฿${Number(it.price || 0).toLocaleString()})`).join(', ')
+            : '-'
+          return `- ${typeStr} ${no} (ลูกค้า: ${d.customer_name || '-'}) ยอด: ฿${Number(d.total_amount || 0).toLocaleString()} บ. [สถานะ: ${statusStr}] รายการ: [${itemsList}]`
+        }).join('\n') +
+        `\n(ถ้าลูกค้าถามเกี่ยวกับใบเสนอราคา, ยอดเงินในใบแจ้งหนี้, รายการสินค้า, หรือการชำระเงินตามบิล ให้ตอบตามข้อมูลเอกสารข้างต้นอย่างสุภาพและถูกต้อง)`
+    }
+  } catch (docErr) {
+    console.warn('[salesAgentEngine] Could not load documents context:', docErr)
+  }
+
   // 5. System Instruction — split into a static block (stable per shop:
   // identity, knowledge base, products, payment info) and a dynamic block
   // (customer profile, chat history — changes per customer/message). This
@@ -1431,7 +1460,7 @@ ${paymentInfo}`
   const goldenClosersContext = formatGoldenClosersPromptContext(goldenTrajectories)
 
   const dynamicSystemPrompt = `${salesStageContext}${goldenClosersContext ? `\n\n${goldenClosersContext}` : ''}
-${customerProfileContext}${bookingStateContext}${orderStateContext}
+${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}
 ${historyContext}`
 
   const systemInstruction = `${staticSystemPrompt}\n${dynamicSystemPrompt}`

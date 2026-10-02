@@ -8,6 +8,8 @@ export async function GET(
   try {
     const { id } = await params
     const supabase = createAdminClient()
+    const url = new URL(req.url)
+    const showAdminDownloads = url.searchParams.get('admin') === 'true'
 
     // 1. Fetch document by id
     const { data: doc, error: docError } = await supabase
@@ -17,8 +19,15 @@ export async function GET(
       .single()
 
     if (docError || !doc) {
-      return new NextResponse('ไม่พบเอกสารใบเสนอราคาที่ต้องการ', { status: 404 })
+      return new NextResponse('ไม่พบเอกสารที่ต้องการ', { status: 404 })
     }
+
+    const isInvoice = doc.doc_type === 'invoice'
+    const isSalesOrder = doc.doc_type === 'sales_order'
+    const docTitleTh = isInvoice ? 'ใบแจ้งหนี้ / ใบเรียกเก็บเงิน' : isSalesOrder ? 'ใบสั่งขาย' : 'ใบเสนอราคา'
+    const docTitleEn = isInvoice ? 'INVOICE / BILL' : isSalesOrder ? 'SALES ORDER' : 'QUOTATION'
+    const titleColorClass = isInvoice ? 'text-emerald-700' : isSalesOrder ? 'text-indigo-700' : 'text-blue-700'
+    const badgeColorClass = isInvoice ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : isSalesOrder ? 'bg-indigo-50 text-indigo-800 border-indigo-200' : 'bg-blue-50 text-blue-800 border-blue-200'
 
     // 2. Fetch shop details for company profile
     const { data: shop } = await supabase
@@ -157,7 +166,7 @@ export async function GET(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ใบเสนอราคา Quotation - ${doc.doc_number || doc.doc_no || 'QT'}</title>
+  <title>${docTitleTh} ${doc.doc_number || doc.doc_no || ''} | ${companyName}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -296,12 +305,12 @@ export async function GET(
     <div class="bg-white/95 backdrop-blur-md p-2.5 sm:p-3 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-2.5">
       <div class="flex items-center justify-between w-full md:w-auto">
         <div class="flex items-center gap-2">
-          <span class="w-2.5 h-2.5 rounded-full ${isAccepted ? 'bg-emerald-500' : 'bg-amber-500'} ${isAccepted ? '' : 'animate-pulse'}"></span>
+          <span class="w-2.5 h-2.5 rounded-full ${isAccepted ? 'bg-emerald-500' : isInvoice ? 'bg-emerald-600' : 'bg-amber-500'} ${isAccepted ? '' : 'animate-pulse'}"></span>
           <span class="text-xs sm:text-sm font-bold text-slate-800">
-            ${isAccepted ? 'ใบเสนอราคา (อนุมัติแล้ว)' : 'ใบเสนอราคา (รออนุมัติ)'}
+            ${docTitleTh} (${isAccepted ? 'อนุมัติแล้ว' : isInvoice ? 'รอชำระเงิน' : 'รออนุมัติ'})
           </span>
         </div>
-        <span class="text-[11px] font-mono font-bold text-blue-800 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-200 sm:ml-2">
+        <span class="text-[11px] font-mono font-bold ${isInvoice ? 'text-emerald-800 bg-emerald-50 border-emerald-200' : 'text-blue-800 bg-blue-50 border-blue-200'} px-2.5 py-0.5 rounded-lg border sm:ml-2">
           ${docNo}
         </span>
       </div>
@@ -319,17 +328,19 @@ export async function GET(
           <span id="copyLinkText">คัดลอกลิงก์</span>
         </button>
 
-        <!-- Word -->
-        <a href="/api/doc/${id}/download?format=docx" download="Quotation_${safeDocNo}.docx" onclick="handleDocDownload(event, 'docx')" class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl border border-indigo-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
+        ${showAdminDownloads ? `
+        <!-- Word (Admin Only) -->
+        <a href="/api/doc/${id}/download?format=docx" download="${isInvoice ? 'Invoice' : isSalesOrder ? 'SalesOrder' : 'Quotation'}_${safeDocNo}.docx" onclick="handleDocDownload(event, 'docx')" class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl border border-indigo-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
           <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
           <span>Word</span>
         </a>
 
-        <!-- Excel -->
-        <a href="/api/doc/${id}/download?format=xlsx" download="Quotation_${safeDocNo}.xlsx" onclick="handleDocDownload(event, 'xlsx')" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl border border-emerald-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
+        <!-- Excel (Admin Only) -->
+        <a href="/api/doc/${id}/download?format=xlsx" download="${isInvoice ? 'Invoice' : isSalesOrder ? 'SalesOrder' : 'Quotation'}_${safeDocNo}.xlsx" onclick="handleDocDownload(event, 'xlsx')" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl border border-emerald-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
           <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
           <span>Excel</span>
         </a>
+        ` : ''}
 
         <!-- พิมพ์/PDF -->
         <button onclick="handlePrintOrPdf()" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 text-center">
@@ -340,9 +351,36 @@ export async function GET(
     </div>
   </div>
 
-  <!-- Interactive Customer Approval Card (no-print) -->
+  <!-- Interactive Callout Banner (no-print) -->
   <div class="max-w-4xl mx-auto px-3 sm:px-4 mb-3 sm:mb-5 no-print">
-    ${!isAccepted ? `
+    ${isInvoice ? `
+      <div class="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 border border-emerald-500/30">
+        <div class="space-y-1 text-center sm:text-left">
+          <h4 class="font-bold text-sm sm:text-base flex items-center justify-center sm:justify-start gap-2">
+            <span class="text-xl">💳</span> ใบแจ้งหนี้เรียกชำระเงิน (Invoice)
+          </h4>
+          <p class="text-xs text-emerald-100 max-w-xl leading-relaxed">
+            กรุณาตรวจสอบยอดชำระเงินและสแกนจ่ายผ่าน QR Code หรือโอนเข้าบัญชีธนาคารด้านล่าง แล้วส่งสลิปหลักฐานการโอนเข้า LINE ร้านค้าเพื่อยืนยันได้ทันทีค่ะ
+          </p>
+        </div>
+        ${lineShareUrl ? `
+        <a href="${lineShareUrl}" target="_blank" rel="noopener noreferrer" class="w-full sm:w-auto px-5 py-2.5 bg-white hover:bg-emerald-50 text-emerald-800 font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-95 shrink-0 flex items-center justify-center gap-2 cursor-pointer no-underline text-center">
+          <span>💬 ส่งสลิปโอนเงินใน LINE</span>
+        </a>
+        ` : ''}
+      </div>
+    ` : isSalesOrder ? `
+      <div class="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 border border-indigo-500/30">
+        <div class="space-y-1 text-center sm:text-left">
+          <h4 class="font-bold text-sm sm:text-base flex items-center justify-center sm:justify-start gap-2">
+            <span class="text-xl">📦</span> ใบสั่งขายสินค้า / บริการ (Sales Order)
+          </h4>
+          <p class="text-xs text-indigo-100 max-w-xl leading-relaxed">
+            เอกสารยืนยันคำสั่งซื้อเพื่อดำเนินการเตรียมสินค้า เบิกจ่าย หรือเริ่มดำเนินงานตามขั้นตอน
+          </p>
+        </div>
+      </div>
+    ` : !isAccepted ? `
       <div id="customerApprovalSection" class="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 border border-emerald-500/30">
         <div class="space-y-1 text-center sm:text-left">
           <h4 class="font-bold text-sm sm:text-base flex items-center justify-center sm:justify-start gap-2">
@@ -434,18 +472,18 @@ export async function GET(
       <!-- Right: Document Meta Header -->
       <div class="w-full sm:w-auto text-left sm:text-right shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 flex flex-col sm:items-end">
         <div class="inline-block">
-          <h2 class="text-2xl sm:text-3xl font-black text-blue-700 tracking-wider uppercase">
-            ใบเสนอราคา
+          <h2 class="text-2xl sm:text-3xl font-black ${titleColorClass} tracking-wider uppercase">
+            ${docTitleTh}
           </h2>
           <p class="text-[11px] sm:text-xs font-bold text-slate-400 tracking-[0.25em] uppercase text-right">
-            QUOTATION
+            ${docTitleEn}
           </p>
         </div>
 
         <div class="mt-2.5 bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 sm:p-3 text-xs text-slate-700 space-y-1.5 min-w-[210px] text-left">
           <div class="flex items-center justify-between gap-3">
             <span class="text-slate-500 text-[11px] font-semibold">เลขที่เอกสาร:</span>
-            <span class="font-mono font-bold text-blue-900 bg-white px-2 py-0.5 rounded border border-blue-100 text-xs shadow-2xs">
+            <span class="font-mono font-bold ${isInvoice ? 'text-emerald-900 bg-white border-emerald-100' : 'text-blue-900 bg-white border-blue-100'} px-2 py-0.5 rounded border text-xs shadow-2xs">
               ${doc.doc_number || doc.doc_no}
             </span>
           </div>
@@ -454,8 +492,8 @@ export async function GET(
             <span class="font-medium text-slate-800 text-[11px]">${issueDate}</span>
           </div>
           <div class="flex items-center justify-between gap-3 pt-1 border-t border-slate-200/70">
-            <span class="text-slate-500 text-[11px] font-semibold">กำหนดยืนราคา:</span>
-            <span class="font-semibold text-emerald-700 text-[11px]">30 วัน</span>
+            <span class="text-slate-500 text-[11px] font-semibold">${isInvoice ? 'วันครบกำหนดชำระ:' : 'กำหนดยืนราคา:'}</span>
+            <span class="font-semibold ${isInvoice ? 'text-rose-700' : 'text-emerald-700'} text-[11px]">${isInvoice ? 'ตามกำหนดในบิล' : '30 วัน'}</span>
           </div>
         </div>
       </div>
@@ -465,8 +503,8 @@ export async function GET(
     <div class="p-4 sm:p-5 bg-gradient-to-br from-slate-50 via-white to-blue-50/20 rounded-2xl border border-slate-200 flex flex-col sm:flex-row justify-between gap-4">
       <div class="space-y-1.5 flex-1">
         <div class="flex items-center gap-2">
-          <span class="text-[10px] sm:text-[11px] font-extrabold text-blue-700 uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded border border-blue-200/60">
-            ลูกค้าผู้รับการเสนอราคา / Customer
+          <span class="text-[10px] sm:text-[11px] font-extrabold ${isInvoice ? 'text-emerald-700 bg-emerald-50 border-emerald-200/60' : isSalesOrder ? 'text-indigo-700 bg-indigo-50 border-indigo-200/60' : 'text-blue-700 bg-blue-50 border-blue-200/60'} uppercase tracking-wider px-2 py-0.5 rounded border">
+            ${isInvoice ? 'ลูกค้าผู้รับใบแจ้งหนี้ / Bill To' : isSalesOrder ? 'ลูกค้าผู้สั่งซื้อ / Buyer' : 'ลูกค้าผู้รับการเสนอราคา / Customer'}
           </span>
         </div>
         <p class="text-base sm:text-lg font-black text-slate-900 leading-snug">
@@ -489,7 +527,17 @@ export async function GET(
       </div>
 
       <div class="flex flex-col justify-between items-start sm:items-end gap-2 shrink-0">
-        ${isAccepted ? `
+        ${isInvoice ? `
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-full border border-emerald-200 shadow-2xs">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            💳 ใบแจ้งหนี้ (Invoice)
+          </span>
+        ` : isSalesOrder ? `
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-800 text-xs font-bold rounded-full border border-indigo-200 shadow-2xs">
+            <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+            📦 ใบสั่งขาย (Sales Order)
+          </span>
+        ` : isAccepted ? `
           <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-full border border-emerald-200 shadow-2xs">
             <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
             ✓ อนุมัติสั่งซื้อแล้ว (Accepted)

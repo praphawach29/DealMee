@@ -23,15 +23,16 @@ export default async function ModulesPage() {
 
   const { data: shop } = await supabase
     .from('shops')
-    .select('features')
+    .select('features, business_type')
     .eq('id', profile.workspace_id)
     .single()
 
   const initialFeatures = (shop?.features as Record<string, boolean>) || {}
+  const bizType = shop?.business_type || 'retail'
 
   return (
     <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6 max-w-[1440px] mx-auto w-full">
-      <ModulesView initialFeatures={initialFeatures} />
+      <ModulesView initialFeatures={initialFeatures} bizType={bizType} />
     </div>
   )
 }
