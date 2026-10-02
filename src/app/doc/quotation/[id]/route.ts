@@ -32,7 +32,25 @@ export async function GET(
     const companyAddress = shop?.company_address || 'ที่อยู่บริษัท (สามารถระบุได้ที่ ตั้งค่า > ข้อมูลบริษัท)'
     const companyPhone = shop?.company_phone || shop?.phone || '-'
     const companyEmail = shop?.company_email || '-'
-    const companyLogo = shop?.company_logo_url || ''
+    let companyLogo = shop?.company_logo_url || ''
+
+    // Auto-fallback: if company_logo_url is empty but shop has LINE bot token, fetch LINE OA avatar
+    if (!companyLogo && shop?.line_token) {
+      try {
+        const lineRes = await fetch('https://api.line.me/v2/bot/info', {
+          headers: { Authorization: `Bearer ${shop.line_token}` },
+          next: { revalidate: 3600 }
+        })
+        if (lineRes.ok) {
+          const botInfo = await lineRes.json()
+          if (botInfo.pictureUrl) {
+            companyLogo = botInfo.pictureUrl
+          }
+        }
+      } catch (e) {
+        // silent fallback
+      }
+    }
 
     const bankName = shop?.bank_name || shop?.payment_bank_name || ''
     const bankAccountNumber = shop?.bank_account_number || shop?.payment_bank_account || ''
@@ -57,6 +75,68 @@ export async function GET(
     const initialLetter = companyName.trim().charAt(0) || 'D'
     const safeDocNo = String(doc.doc_number || doc.doc_no || 'QT').replace(/[^a-zA-Z0-9_-]/g, '_')
 
+    // Helper: Convert total number to Thai Baht text (เช่น หนึ่งพันแปดร้อยบาทถ้วน)
+    function formatThaiBaht(num: number): string {
+      if (isNaN(num) || num === 0) return 'ศูนย์บาทถ้วน'
+      const fixed = Number(num).toFixed(2)
+      const numbers = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า']
+      const units = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน']
+      const [baht, satang] = fixed.split('.')
+
+      function readGroup(str: string): string {
+        let result = ''
+        const len = str.length
+        for (let i = 0; i < len; i++) {
+          const digit = Number(str[i])
+          const pos = len - i - 1
+          if (digit !== 0) {
+            if (pos === 0 && digit === 1 && len > 1) {
+              result += 'เอ็ด'
+            } else if (pos === 1 && digit === 2) {
+              result += 'ยี่'
+            } else if (pos === 1 && digit === 1) {
+              // no prefix
+            } else {
+              result += numbers[digit]
+            }
+            result += units[pos]
+          }
+        }
+        return result
+      }
+
+      let b = baht
+      const parts: string[] = []
+      while (b.length > 6) {
+        parts.unshift(b.slice(-6))
+        b = b.slice(0, -6)
+      }
+      parts.unshift(b)
+
+      const bahtStr = parts.map((p, idx) => {
+        const r = readGroup(p)
+        return (idx < parts.length - 1 && r) ? r + 'ล้าน' : r
+      }).join('') + 'บาท'
+
+      if (Number(satang) === 0) {
+        return bahtStr + 'ถ้วน'
+      }
+
+      let satangStr = ''
+      const d1 = Number(satang[0])
+      const d2 = Number(satang[1])
+      if (d1 === 1) satangStr += 'สิบ'
+      else if (d1 === 2) satangStr += 'ยี่สิบ'
+      else if (d1 > 2) satangStr += numbers[d1] + 'สิบ'
+
+      if (d2 === 1 && d1 > 0) satangStr += 'เอ็ด'
+      else if (d2 > 0) satangStr += numbers[d2]
+
+      return bahtStr + satangStr + 'สตางค์'
+    }
+
+    const thaiBahtText = formatThaiBaht(total)
+
     const html = `<!DOCTYPE html>
 <html lang="th">
 <head>
@@ -64,14 +144,14 @@ export async function GET(
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ใบเสนอราคา Quotation - ${doc.doc_number || doc.doc_no || 'QT'}</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     body { font-family: 'Sarabun', sans-serif; }
 
     @page {
       size: A4 portrait;
-      margin: 10mm 12mm 12mm 12mm;
+      margin: 8mm 10mm 10mm 10mm;
     }
 
     /* Print & PDF Exact Styling */
@@ -89,7 +169,7 @@ export async function GET(
         padding: 0 !important;
         width: 100% !important;
         height: auto !important;
-        font-size: 13px !important;
+        font-size: 12px !important;
         color: #0f172a !important;
       }
       .paper-container {
@@ -109,39 +189,37 @@ export async function GET(
         width: 100% !important;
         border: 1px solid #cbd5e1 !important;
         border-radius: 8px !important;
-        margin-top: 12px !important;
-        margin-bottom: 16px !important;
+        margin-top: 10px !important;
+        margin-bottom: 14px !important;
       }
       .desktop-table table {
         width: 100% !important;
         border-collapse: collapse !important;
       }
       .desktop-table th {
-        background-color: #f1f5f9 !important;
-        color: #334155 !important;
-        border-bottom: 2px solid #cbd5e1 !important;
+        background-color: #1e293b !important;
+        color: #ffffff !important;
         padding: 8px 12px !important;
-        font-size: 12px !important;
+        font-size: 11px !important;
         font-weight: 700 !important;
       }
       .desktop-table td {
-        padding: 10px 12px !important;
+        padding: 9px 12px !important;
         border-bottom: 1px solid #e2e8f0 !important;
-        font-size: 13px !important;
+        font-size: 12px !important;
       }
       .print-grid-2col {
         display: grid !important;
-        grid-template-columns: 1.1fr 0.9fr !important;
-        gap: 20px !important;
+        grid-template-columns: 1.15fr 0.85fr !important;
+        gap: 16px !important;
         align-items: start !important;
       }
       .print-signatures {
         display: grid !important;
         grid-template-columns: 1fr 1fr !important;
-        gap: 32px !important;
-        margin-top: 36px !important;
-        padding-top: 24px !important;
-        border-top: 1px solid #e2e8f0 !important;
+        gap: 24px !important;
+        margin-top: 24px !important;
+        padding-top: 16px !important;
         page-break-inside: avoid !important;
       }
     }
@@ -166,22 +244,26 @@ export async function GET(
     .pdf-render .desktop-table table {
       width: 100% !important;
     }
+    .pdf-render .desktop-table th {
+      background-color: #1e293b !important;
+      color: #ffffff !important;
+    }
     .pdf-render .print-grid-2col {
       display: grid !important;
-      grid-template-columns: 1.1fr 0.9fr !important;
-      gap: 20px !important;
+      grid-template-columns: 1.15fr 0.85fr !important;
+      gap: 16px !important;
     }
     .pdf-render .print-signatures {
       display: grid !important;
       grid-template-columns: 1fr 1fr !important;
-      gap: 32px !important;
-      margin-top: 36px !important;
+      gap: 24px !important;
+      margin-top: 24px !important;
       page-break-inside: avoid !important;
     }
   </style>
 </head>
-<body class="bg-slate-100/80 min-h-screen py-4 sm:py-10 text-gray-800 antialiased">
-  <!-- Top LINE Notice Banner (Shown when opened in LINE) -->
+<body class="bg-slate-100/90 min-h-screen py-4 sm:py-8 text-slate-800 antialiased">
+  <!-- Top LINE Notice Banner -->
   <div id="lineTopBanner" class="max-w-4xl mx-auto px-3 sm:px-4 mb-2 hidden no-print">
     <div class="bg-amber-50 border border-amber-200/90 rounded-xl p-3 flex items-center justify-between gap-3 text-xs text-amber-900 shadow-xs">
       <div class="flex items-center gap-2">
@@ -199,24 +281,24 @@ export async function GET(
     <div class="bg-white/95 backdrop-blur-md p-2.5 sm:p-3 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-2.5">
       <div class="flex items-center justify-between w-full sm:w-auto">
         <div class="flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span class="text-xs font-bold text-slate-800">ใบเสนอราคา (Quotation)</span>
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="text-xs sm:text-sm font-bold text-slate-800">ใบเสนอราคา (Quotation)</span>
         </div>
-        <span class="text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200 sm:ml-2">
+        <span class="text-[11px] font-mono font-bold text-blue-800 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-200 sm:ml-2">
           ${doc.doc_number || doc.doc_no}
         </span>
       </div>
 
       <div class="grid grid-cols-3 gap-2 w-full sm:w-auto">
-        <a href="/api/doc/${id}/download?format=docx&openExternalBrowser=1" download class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl border border-indigo-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
+        <a href="/api/doc/${id}/download?format=docx&openExternalBrowser=1" download class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl border border-indigo-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
           <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
           Word
         </a>
-        <a href="/api/doc/${id}/download?format=xlsx&openExternalBrowser=1" download class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl border border-emerald-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
+        <a href="/api/doc/${id}/download?format=xlsx&openExternalBrowser=1" download class="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl border border-emerald-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
           <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
           Excel
         </a>
-        <button onclick="handlePrintOrPdf()" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 text-center">
+        <button onclick="handlePrintOrPdf()" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 text-center">
           <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
           พิมพ์/PDF
         </button>
@@ -225,87 +307,127 @@ export async function GET(
   </div>
 
   <!-- Document Paper Container -->
-  <div class="paper-container max-w-4xl mx-auto bg-white p-4 sm:p-10 md:p-12 sm:rounded-2xl shadow-md sm:border border-slate-200/80 space-y-5 sm:space-y-6">
-    <!-- Header: Company Profile & Document Header -->
-    <div class="flex flex-col sm:flex-row justify-between items-start border-b border-slate-200 pb-5 sm:pb-6 gap-4 sm:gap-6">
-      <div class="flex items-start gap-3 sm:gap-4 w-full sm:w-auto">
+  <div class="paper-container max-w-4xl mx-auto bg-white p-5 sm:p-10 md:p-12 sm:rounded-2xl shadow-xl sm:border border-slate-200/90 space-y-5 sm:space-y-6">
+    <!-- Header: Company Profile & Document Details -->
+    <div class="flex flex-col sm:flex-row justify-between items-start border-b border-slate-200/90 pb-5 sm:pb-6 gap-4 sm:gap-6">
+      <!-- Left: Logo & Company Address -->
+      <div class="flex items-start gap-3.5 sm:gap-4 w-full sm:w-auto">
         ${companyLogo ? `
-          <img src="${companyLogo}" alt="Logo" class="w-14 h-14 sm:w-16 sm:h-16 object-contain rounded-xl border border-slate-100 bg-slate-50 p-1 shrink-0" />
+          <div class="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border border-slate-200/90 bg-white p-1.5 shadow-xs shrink-0 flex items-center justify-center overflow-hidden">
+            <img src="${companyLogo}" alt="${companyName}" class="max-w-full max-h-full object-contain rounded-xl" />
+          </div>
         ` : `
-          <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg sm:text-xl shrink-0">
+          <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-blue-800 text-white flex items-center justify-center font-extrabold text-2xl sm:text-3xl shadow-md shrink-0">
             ${initialLetter}
           </div>
         `}
-        <div class="flex-1 min-w-0">
-          <h1 class="text-lg sm:text-2xl font-bold text-slate-900 leading-tight">
-            ${companyName}
-          </h1>
-          <p class="text-xs text-slate-500 mt-1 max-w-md leading-relaxed">
+        <div class="flex-1 min-w-0 space-y-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h1 class="text-xl sm:text-2xl font-black text-slate-900 leading-tight tracking-tight">
+              ${companyName}
+            </h1>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200/60">
+              ผู้ให้บริการ
+            </span>
+          </div>
+
+          <p class="text-xs sm:text-[13px] text-slate-600 leading-relaxed font-normal">
             ${companyAddress}
           </p>
-          <div class="text-[11px] sm:text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span>เลขประจำตัวผู้เสียภาษี: <span class="font-mono font-medium text-slate-700">${companyTaxId}</span></span>
-            <span>|</span>
-            <span>โทร: <span class="font-mono text-slate-700">${companyPhone}</span></span>
+
+          <div class="text-[11px] sm:text-xs text-slate-500 pt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+            ${companyPhone && companyPhone !== '-' ? `
+              <span class="inline-flex items-center gap-1 text-slate-700 font-medium">
+                <svg class="w-3.5 h-3.5 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
+                <span>โทร: <strong class="font-mono text-slate-900 font-bold">${companyPhone}</strong></span>
+              </span>
+            ` : ''}
+
+            ${companyTaxId && companyTaxId !== '-' ? `
+              <span class="inline-flex items-center gap-1 text-slate-700 font-medium">
+                <svg class="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                <span>เลขผู้เสียภาษี: <strong class="font-mono text-slate-800">${companyTaxId}</strong></span>
+              </span>
+            ` : ''}
+
             ${companyEmail && companyEmail !== '-' ? `
-              <span>|</span>
-              <span>อีเมล: ${companyEmail}</span>
+              <span class="inline-flex items-center gap-1 text-slate-700 font-medium">
+                <svg class="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                <span>${companyEmail}</span>
+              </span>
             ` : ''}
           </div>
         </div>
       </div>
 
-      <div class="w-full sm:w-auto text-left sm:text-right shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-        <h2 class="text-2xl sm:text-3xl font-extrabold text-blue-600 tracking-wider">
-          ใบเสนอราคา
-        </h2>
-        <p class="text-[11px] sm:text-xs font-semibold text-slate-400 uppercase tracking-widest mt-0.5">
-          QUOTATION
-        </p>
-        <div class="mt-2 text-xs text-slate-600 space-y-1">
-          <p>
-            <span class="text-slate-400">เลขที่เอกสาร:</span>
-            <span class="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+      <!-- Right: Document Meta Header -->
+      <div class="w-full sm:w-auto text-left sm:text-right shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 flex flex-col sm:items-end">
+        <div class="inline-block">
+          <h2 class="text-2xl sm:text-3xl font-black text-blue-700 tracking-wider uppercase">
+            ใบเสนอราคา
+          </h2>
+          <p class="text-[11px] sm:text-xs font-bold text-slate-400 tracking-[0.25em] uppercase text-right">
+            QUOTATION
+          </p>
+        </div>
+
+        <div class="mt-2.5 bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 sm:p-3 text-xs text-slate-700 space-y-1.5 min-w-[210px] text-left">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-slate-500 text-[11px] font-semibold">เลขที่เอกสาร:</span>
+            <span class="font-mono font-bold text-blue-900 bg-white px-2 py-0.5 rounded border border-blue-100 text-xs shadow-2xs">
               ${doc.doc_number || doc.doc_no}
             </span>
-          </p>
-          <p>
-            <span class="text-slate-400">วันที่ออกเอกสาร:</span>
-            <span class="font-medium text-slate-800">${issueDate}</span>
-          </p>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-slate-500 text-[11px] font-semibold">วันที่ออกเอกสาร:</span>
+            <span class="font-medium text-slate-800 text-[11px]">${issueDate}</span>
+          </div>
+          <div class="flex items-center justify-between gap-3 pt-1 border-t border-slate-200/70">
+            <span class="text-slate-500 text-[11px] font-semibold">กำหนดยืนราคา:</span>
+            <span class="font-semibold text-emerald-700 text-[11px]">30 วัน</span>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Customer Details Box -->
-    <div class="p-3.5 sm:p-4 bg-slate-50/80 rounded-xl border border-slate-200/90 flex flex-col sm:flex-row justify-between gap-3 sm:gap-4">
-      <div class="space-y-1">
-        <h3 class="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-          เรียน (เสนอราคาถึง):
-        </h3>
-        <p class="text-base font-bold text-slate-900">
+    <!-- Customer Details Card -->
+    <div class="p-4 sm:p-5 bg-gradient-to-br from-slate-50 via-white to-blue-50/20 rounded-2xl border border-slate-200 flex flex-col sm:flex-row justify-between gap-4">
+      <div class="space-y-1.5 flex-1">
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] sm:text-[11px] font-extrabold text-blue-700 uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded border border-blue-200/60">
+            ลูกค้าผู้รับการเสนอราคา / Customer
+          </span>
+        </div>
+        <p class="text-base sm:text-lg font-black text-slate-900 leading-snug">
           ${doc.customer_name || 'ลูกค้าผู้มีอุปการคุณ'}
         </p>
-        ${doc.customer_phone ? `
-          <p class="text-xs text-slate-600 flex items-center gap-1.5">
-            <span class="text-slate-400">เบอร์โทร:</span>
-            <span class="font-mono font-medium text-slate-800">${doc.customer_phone}</span>
-          </p>
-        ` : ''}
-        ${doc.customer_address ? `
-          <p class="text-xs text-slate-600">
-            <span class="text-slate-400">ที่อยู่ / หน้างาน:</span> ${doc.customer_address}
-          </p>
-        ` : ''}
+        <div class="text-xs text-slate-600 space-y-0.5 pt-0.5">
+          ${doc.customer_phone ? `
+            <p class="flex items-center gap-1.5">
+              <span class="text-slate-400 font-medium">เบอร์โทรศัพท์:</span>
+              <strong class="font-mono text-slate-900">${doc.customer_phone}</strong>
+            </p>
+          ` : ''}
+          ${doc.customer_address ? `
+            <p class="flex items-start gap-1.5">
+              <span class="text-slate-400 font-medium shrink-0">ที่อยู่ / หน้างาน:</span>
+              <span class="text-slate-700">${doc.customer_address}</span>
+            </p>
+          ` : ''}
+        </div>
       </div>
-      <div class="flex sm:flex-col justify-end items-start sm:items-end">
-        <span class="inline-flex items-center px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full border border-blue-200/60">
-          ● สถานะ: รออนุมัติการสั่งซื้อ
+
+      <div class="flex flex-col justify-between items-start sm:items-end gap-2 shrink-0">
+        <span class="inline-flex items-center px-3 py-1 bg-amber-50 text-amber-800 text-xs font-bold rounded-full border border-amber-200/70 shadow-2xs">
+          ● รออนุมัติการสั่งซื้อ (Pending)
         </span>
+        <div class="text-[11px] text-slate-400 text-left sm:text-right">
+          <span>ผู้ออกเอกสาร: <strong class="text-slate-600 font-medium">${companyName}</strong></span>
+        </div>
       </div>
     </div>
 
-    <!-- Mobile Items View (sm:hidden) - Solves Issue 2 -->
+    <!-- Mobile Items View (sm:hidden) -->
     <div class="mobile-items block sm:hidden space-y-2">
       <div class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between pb-1.5 border-b border-slate-100">
         <span>รายการสินค้า / บริการ</span>
@@ -343,35 +465,35 @@ export async function GET(
       `}
     </div>
 
-    <!-- Desktop & Print Table View (hidden sm:block) -->
-    <div class="desktop-table hidden sm:block overflow-x-auto rounded-xl border border-slate-200">
+    <!-- Desktop & Print Table View -->
+    <div class="desktop-table hidden sm:block rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
       <table class="w-full text-left text-sm border-collapse">
         <thead>
-          <tr class="bg-slate-50/90 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase">
-            <th class="py-3 px-3 w-12 text-center">#</th>
-            <th class="py-3 px-4">รายการสินค้า / บริการ</th>
-            <th class="py-3 px-3 text-center w-24">หน่วย</th>
-            <th class="py-3 px-3 text-center w-20">จำนวน</th>
-            <th class="py-3 px-4 text-right w-28">ราคา/หน่วย (บาท)</th>
-            <th class="py-3 px-4 text-right w-32">จำนวนเงิน (บาท)</th>
+          <tr class="bg-slate-800 text-white text-xs font-bold uppercase tracking-wider">
+            <th class="py-3 px-3 w-12 text-center text-slate-300">#</th>
+            <th class="py-3 px-4">รายการสินค้า / รายละเอียด</th>
+            <th class="py-3 px-3 text-center w-20 text-slate-300">จำนวน</th>
+            <th class="py-3 px-3 text-center w-20 text-slate-300">หน่วย</th>
+            <th class="py-3 px-4 text-right w-32">ราคา/หน่วย (บาท)</th>
+            <th class="py-3 px-4 text-right w-36">จำนวนเงิน (บาท)</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-100">
+        <tbody class="divide-y divide-slate-200">
           ${items.length > 0 ? items.map((item, idx) => {
             const rowTotal = Number((item.price || 0) * (item.qty || 1))
             return `
-              <tr class="hover:bg-slate-50/50">
-                <td class="py-3 px-3 text-center text-xs text-slate-400">${idx + 1}</td>
-                <td class="py-3 px-4 font-medium text-slate-900">${item.name || '(ยังไม่ได้ระบุชื่อสินค้า)'}</td>
-                <td class="py-3 px-3 text-center text-xs text-slate-500">${item.unit || 'ชิ้น'}</td>
-                <td class="py-3 px-3 text-center font-mono text-xs">${item.qty || 1}</td>
-                <td class="py-3 px-4 text-right font-mono text-xs">${Number(item.price || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                <td class="py-3 px-4 text-right font-mono font-semibold text-slate-900">${rowTotal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <tr class="${idx % 2 === 1 ? 'bg-slate-50/60' : 'bg-white'} hover:bg-blue-50/40 transition">
+                <td class="py-3.5 px-3 text-center text-xs text-slate-400 font-medium">${idx + 1}</td>
+                <td class="py-3.5 px-4 font-semibold text-slate-900">${item.name || '(ยังไม่ได้ระบุชื่อสินค้า)'}</td>
+                <td class="py-3.5 px-3 text-center font-mono font-medium text-xs text-slate-800">${item.qty || 1}</td>
+                <td class="py-3.5 px-3 text-center text-xs text-slate-500">${item.unit || 'ชิ้น'}</td>
+                <td class="py-3.5 px-4 text-right font-mono text-xs text-slate-700">${Number(item.price || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td class="py-3.5 px-4 text-right font-mono font-bold text-slate-900">${rowTotal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
               </tr>
             `
           }).join('') : `
             <tr>
-              <td colspan="6" class="py-8 text-center text-slate-400 text-xs">ไม่มีรายการสินค้า</td>
+              <td colspan="6" class="py-10 text-center text-slate-400 text-xs">ไม่มีรายการสินค้า</td>
             </tr>
           `}
         </tbody>
@@ -381,79 +503,116 @@ export async function GET(
     <!-- Calculations & Payment Terms -->
     <div class="grid grid-cols-1 sm:grid-cols-2 print-grid-2col gap-4 sm:gap-6 pt-1">
       <div class="space-y-3">
-        <div>
-          <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-            เงื่อนไขการชำระเงินและข้อกำหนด:
-          </h4>
-          <div class="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200 leading-relaxed whitespace-pre-line">
-            ${doc.notes || '• กำหนดยืนราคาภายใน 30 วันนับจากวันที่ออกเอกสาร\n• กรุณาชำระเงินตามเงื่อนไขที่ตกลงกัน'}
-          </div>
-        </div>
-
         <!-- Bank / Payment Info -->
         ${(bankAccountNumber || promptpayId) ? `
-          <div class="p-3 bg-blue-50/60 rounded-xl border border-blue-100 text-xs text-slate-700 space-y-1">
-            <span class="font-bold text-blue-900 block">ข้อมูลการชำระเงิน:</span>
-            ${bankName ? `<p>ธนาคาร: <span class="font-semibold">${bankName}</span></p>` : ''}
-            ${bankAccountNumber ? `
-              <p>
-                เลขที่บัญชี: <span class="font-mono font-bold text-slate-900">${bankAccountNumber}</span>
-                ${bankAccountName ? `<span> (${bankAccountName})</span>` : ''}
-              </p>
-            ` : ''}
-            ${promptpayId ? `<p>PromptPay: <span class="font-mono font-bold text-slate-900">${promptpayId}</span></p>` : ''}
+          <div class="p-3.5 bg-gradient-to-br from-blue-50/80 to-indigo-50/40 rounded-xl border border-blue-200/70 text-xs text-slate-700 space-y-2 shadow-2xs">
+            <div class="flex items-center gap-1.5 text-blue-900 font-bold text-xs border-b border-blue-200/60 pb-1.5">
+              <svg class="w-4 h-4 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+              <span>ช่องทางการชำระเงิน (Payment Details)</span>
+            </div>
+            <div class="space-y-1 text-slate-800">
+              ${bankName ? `<p class="flex items-center justify-between"><span class="text-slate-500">ธนาคาร:</span> <strong class="font-semibold text-slate-900">${bankName}</strong></p>` : ''}
+              ${bankAccountNumber ? `
+                <p class="flex items-center justify-between">
+                  <span class="text-slate-500">เลขที่บัญชี:</span>
+                  <strong class="font-mono font-bold text-blue-950 text-sm tracking-wide bg-white px-2 py-0.5 rounded border border-blue-100">${bankAccountNumber}</strong>
+                </p>
+                ${bankAccountName ? `<p class="flex items-center justify-between"><span class="text-slate-500">ชื่อบัญชี:</span> <span class="font-medium text-slate-700">${bankAccountName}</span></p>` : ''}
+              ` : ''}
+              ${promptpayId ? `
+                <p class="flex items-center justify-between pt-1 border-t border-blue-100/80">
+                  <span class="text-slate-500">PromptPay:</span>
+                  <strong class="font-mono font-bold text-slate-900">${promptpayId}</strong>
+                </p>
+              ` : ''}
+            </div>
           </div>
         ` : ''}
+
+        <!-- Terms and Notes -->
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/90 text-xs text-slate-600 space-y-1">
+          <h4 class="font-bold text-slate-700 flex items-center gap-1 text-[11px] uppercase tracking-wide">
+            <span>เงื่อนไขการเสนอราคาและข้อกำหนด:</span>
+          </h4>
+          <div class="text-[11px] leading-relaxed whitespace-pre-line text-slate-600 pl-1">
+            ${doc.notes || '• กำหนดยืนราคาภายใน 30 วันนับจากวันที่ออกเอกสาร\n• กรุณาชำระเงินตามเงื่อนไขที่ระบุข้างต้น\n• สินค้าหรือบริการจะเริ่มดำเนินการหลังได้รับหลักฐานการชำระเงิน'}
+          </div>
+        </div>
       </div>
 
       <!-- Totals Table -->
-      <div class="bg-slate-50 p-3.5 sm:p-4 rounded-xl border border-slate-200 space-y-2 text-xs sm:text-sm">
-        <div class="flex justify-between text-slate-600">
-          <span>ยอดรวมก่อนภาษี (Subtotal):</span>
-          <span class="font-mono font-semibold text-slate-900">
-            ${subtotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
-          </span>
-        </div>
-
-        ${discount > 0 ? `
-          <div class="flex justify-between text-rose-600 font-medium">
-            <span>ส่วนลด (Discount):</span>
-            <span class="font-mono">
-              -${discount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
-            </span>
-          </div>
-        ` : ''}
-
-        ${vat > 0 ? `
+      <div class="space-y-2">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/90 space-y-2 text-xs sm:text-sm shadow-2xs">
           <div class="flex justify-between text-slate-600">
-            <span>ภาษีมูลค่าเพิ่ม VAT 7%:</span>
+            <span>ยอดรวมก่อนภาษี (Subtotal):</span>
             <span class="font-mono font-semibold text-slate-900">
-              ${vat.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
+              ${subtotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
             </span>
           </div>
-        ` : ''}
 
-        <div class="flex justify-between text-sm sm:text-base font-bold text-slate-900 pt-2 border-t border-slate-300">
-          <span>ยอดสุทธิทั้งสิ้น (Grand Total):</span>
-          <span class="font-mono text-blue-600 text-base sm:text-xl font-extrabold">
-            ${total.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
-          </span>
+          ${discount > 0 ? `
+            <div class="flex justify-between text-rose-600 font-medium">
+              <span>ส่วนลด (Discount):</span>
+              <span class="font-mono font-semibold">
+                -${discount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
+              </span>
+            </div>
+          ` : ''}
+
+          ${vat > 0 ? `
+            <div class="flex justify-between text-slate-600">
+              <span>ภาษีมูลค่าเพิ่ม VAT 7%:</span>
+              <span class="font-mono font-semibold text-slate-900">
+                ${vat.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
+              </span>
+            </div>
+          ` : ''}
+
+          <div class="pt-2 border-t border-slate-300">
+            <div class="bg-blue-600 text-white rounded-xl p-3 flex justify-between items-center shadow-xs">
+              <span class="text-xs sm:text-sm font-bold tracking-wide">ยอดสุทธิทั้งสิ้น (Grand Total):</span>
+              <span class="font-mono text-lg sm:text-2xl font-black tracking-tight">
+                ฿${total.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div class="text-right text-xs font-bold text-slate-600 pt-1.5 pr-1">
+              ( ${thaiBahtText} )
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Signature Blocks -->
-    <div class="print-signatures grid grid-cols-2 gap-4 sm:gap-8 pt-6 sm:pt-8 border-t border-slate-200 text-center text-xs text-slate-600">
-      <div class="space-y-6 sm:space-y-8">
-        <p class="font-medium text-slate-700">ในนาม ${companyName}</p>
-        <div class="w-32 sm:w-48 mx-auto border-b-2 border-slate-300"></div>
-        <p>( ผู้มีอำนาจลงนาม / ผู้เสนอราคา )</p>
+    <div class="print-signatures grid grid-cols-2 gap-6 sm:gap-12 pt-6 sm:pt-8 border-t border-slate-200 text-center text-xs text-slate-600">
+      <div class="p-4 bg-slate-50/60 rounded-xl border border-slate-200/80 space-y-4">
+        <p class="font-bold text-slate-800 text-xs">ในนาม ${companyName}</p>
+        <div class="h-10 flex items-center justify-center">
+          <span class="text-slate-300 text-[10px] italic">[ ลงลายมือชื่อ / ประทับตรา ]</span>
+        </div>
+        <div class="w-40 sm:w-48 mx-auto border-b-2 border-slate-400"></div>
+        <div class="space-y-0.5 text-[11px]">
+          <p class="font-semibold text-slate-800">( ผู้มีอำนาจลงนาม / ผู้เสนอราคา )</p>
+          <p class="text-slate-400 font-mono">วันที่: ...... / ...... / ..........</p>
+        </div>
       </div>
-      <div class="space-y-6 sm:space-y-8">
-        <p class="font-medium text-slate-700">ผู้สั่งซื้อ / ผู้อนุมัติ</p>
-        <div class="w-32 sm:w-48 mx-auto border-b-2 border-slate-300"></div>
-        <p>( ${doc.customer_name || '...........................................'} )</p>
+
+      <div class="p-4 bg-slate-50/60 rounded-xl border border-slate-200/80 space-y-4">
+        <p class="font-bold text-slate-800 text-xs">ผู้สั่งซื้อ / ผู้อนุมัติ (Customer Approval)</p>
+        <div class="h-10 flex items-center justify-center">
+          <span class="text-slate-300 text-[10px] italic">[ ตกลงสั่งซื้อตามรายการข้างต้น ]</span>
+        </div>
+        <div class="w-40 sm:w-48 mx-auto border-b-2 border-slate-400"></div>
+        <div class="space-y-0.5 text-[11px]">
+          <p class="font-semibold text-slate-800">( ${doc.customer_name || '...........................................'} )</p>
+          <p class="text-slate-400 font-mono">วันที่: ...... / ...... / ..........</p>
+        </div>
       </div>
+    </div>
+
+    <!-- Quotation Bottom Guarantee / Footer -->
+    <div class="text-center pt-2 border-t border-slate-100 text-[11px] text-slate-400">
+      <p>ขอบคุณที่ให้ความไว้วางใจในบริการของเรา • Thank you for your business</p>
     </div>
   </div>
 
