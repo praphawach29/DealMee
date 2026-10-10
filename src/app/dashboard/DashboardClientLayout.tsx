@@ -158,7 +158,7 @@ export default function DashboardClientLayout({
         </header>
 
         {/* Main Content View */}
-        <main className="relative pt-16 flex-1">
+        <main className="relative pt-16 flex-1 pb-10 sm:pb-14">
           {children}
         </main>
       </div>

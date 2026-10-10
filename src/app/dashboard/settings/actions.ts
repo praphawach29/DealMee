@@ -108,6 +108,12 @@ export async function updatePaymentShippingSettings(formData: FormData) {
   const slip_api_key = ((formData.get('slip_api_key') as string) || '').trim()
   const slip_branch_id = ((formData.get('slip_branch_id') as string) || '').trim()
 
+  const cod_fee_type = (formData.get('cod_fee_type') as string) || 'flat'
+  const cod_fee_amount = Number(formData.get('cod_fee_amount') || 30)
+  const shipping_zone_bkk = Number(formData.get('shipping_zone_bkk') || 40)
+  const shipping_zone_upcountry = Number(formData.get('shipping_zone_upcountry') || 60)
+  const shipping_zone_remote = Number(formData.get('shipping_zone_remote') || 100)
+
   const currentFeatures = (shop.features && typeof shop.features === 'object') ? shop.features : {}
   const updatedFeatures = {
     ...currentFeatures,
@@ -117,9 +123,18 @@ export async function updatePaymentShippingSettings(formData: FormData) {
       api_key: slip_api_key,
       branch_id: slip_branch_id,
     },
+    payment_shipping: {
+      promptpay_qr_enabled,
+      cod_enabled,
+      cod_fee_type,
+      cod_fee_amount,
+      shipping_zone_bkk,
+      shipping_zone_upcountry,
+      shipping_zone_remote,
+    },
   }
 
-  const updateData = {
+  const updateData: Record<string, any> = {
     promptpay_number: ((formData.get('promptpay_number') as string) || '').trim(),
     promptpay_name: ((formData.get('promptpay_name') as string) || '').trim(),
     promptpay_qr_enabled,
@@ -129,21 +144,43 @@ export async function updatePaymentShippingSettings(formData: FormData) {
     shipping_provider: (formData.get('shipping_provider') as string) || '',
     shipping_fee_type: (formData.get('shipping_fee_type') as string) || 'flat',
     shipping_fee_amount: Number(formData.get('shipping_fee_amount') || 0),
-    shipping_zone_bkk: Number(formData.get('shipping_zone_bkk') || 40),
-    shipping_zone_upcountry: Number(formData.get('shipping_zone_upcountry') || 60),
-    shipping_zone_remote: Number(formData.get('shipping_zone_remote') || 100),
+    shipping_zone_bkk,
+    shipping_zone_upcountry,
+    shipping_zone_remote,
     free_shipping_threshold,
     cod_enabled,
-    cod_fee_type: (formData.get('cod_fee_type') as string) || 'flat',
-    cod_fee_amount: Number(formData.get('cod_fee_amount') || 30),
+    cod_fee_type,
+    cod_fee_amount,
     features: updatedFeatures,
     updated_at: new Date().toISOString(),
   }
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from('shops')
     .update(updateData)
     .eq('id', shop.id)
+
+  if (error && (error.message?.includes('column') || error.code === '42703' || error.code === 'PGRST204')) {
+    // Fallback: update only base columns and persist enhanced settings in features jsonb
+    const fallbackData = {
+      promptpay_number: updateData.promptpay_number,
+      promptpay_name: updateData.promptpay_name,
+      bank_name: updateData.bank_name,
+      bank_account_number: updateData.bank_account_number,
+      bank_account_name: updateData.bank_account_name,
+      shipping_provider: updateData.shipping_provider,
+      shipping_fee_type: updateData.shipping_fee_type,
+      shipping_fee_amount: updateData.shipping_fee_amount,
+      free_shipping_threshold: updateData.free_shipping_threshold,
+      features: updatedFeatures,
+      updated_at: updateData.updated_at,
+    }
+    const fallbackRes = await supabase
+      .from('shops')
+      .update(fallbackData)
+      .eq('id', shop.id)
+    error = fallbackRes.error
+  }
 
   if (error) {
     return { error: `บันทึกไม่สำเร็จ: ${error.message}` }

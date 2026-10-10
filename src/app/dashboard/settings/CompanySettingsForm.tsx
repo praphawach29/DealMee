@@ -218,11 +218,15 @@ export default function CompanySettingsForm({ shop }: { shop: ShopData }) {
         </div>
       </section>
 
-      <div className="flex justify-end pt-2 sm:pt-4">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-4 sm:pt-6 border-t border-outline-variant/30 mt-6 sm:pr-36">
+        <div className="text-xs text-on-surface-variant flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>ข้อมูลนี้จะถูกนำไปใช้ในหัวเอกสารและใบเสนอราคาอัตโนมัติ</span>
+        </div>
         <button
           type="submit"
           disabled={loading}
-          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-8 py-3 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer text-xs sm:text-sm"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-8 py-3 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer text-xs sm:text-sm shrink-0"
         >
           {loading ? (
             <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 animate-spin" />

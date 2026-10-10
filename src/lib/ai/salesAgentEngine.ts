@@ -180,8 +180,8 @@ export const MAX_OUTPUT_TOKENS = 4096
  * costs roughly one token per character, so the character budget is close
  * enough to a token budget to reason about.
  */
-export const KNOWLEDGE_INLINE_MAX_ITEMS = 40
-export const KNOWLEDGE_INLINE_MAX_CHARS = 6000
+export const KNOWLEDGE_INLINE_MAX_ITEMS = 150
+export const KNOWLEDGE_INLINE_MAX_CHARS = 50000
 
 /**
  * Everything a planning step needs, carried across steps so the webhook
@@ -1518,29 +1518,32 @@ ${historyContext}`
 async function callCurrentStep(state: PlanningState): Promise<ProviderStepResult | null> {
   const { routing, staticSystemPrompt, dynamicSystemPrompt, systemInstruction, turns, claudeKey, openAiKey, geminiKey, modelName } = state
 
+  // On the final step, disable tools so the model synthesizes a customer-facing text answer
+  const activeToolSet = state.step >= MAX_PLANNING_STEPS - 1 ? [] : routing.toolSet
+
   // 1. Primary provider based on routing classification
   if (routing.targetProvider === 'claude' && claudeKey) {
-    const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, turns, claudeKey, routing.toolSet, state)
+    const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, turns, claudeKey, activeToolSet, state)
     if (result) return result
   } else if (routing.targetProvider === 'openai' && openAiKey) {
-    const result = await callOpenAiApi(systemInstruction, turns, openAiKey, routing.toolSet, state)
+    const result = await callOpenAiApi(systemInstruction, turns, openAiKey, activeToolSet, state)
     if (result) return result
   } else if (geminiKey) {
-    const result = await callGeminiApi(systemInstruction, turns, modelName, geminiKey, routing.toolSet, state)
+    const result = await callGeminiApi(systemInstruction, turns, modelName, geminiKey, activeToolSet, state)
     if (result) return result
   }
 
   // 2. Graceful Fallbacks: If primary provider is unavailable or failed, try other configured providers
   if (geminiKey && routing.targetProvider !== 'gemini') {
-    const result = await callGeminiApi(systemInstruction, turns, modelName, geminiKey, routing.toolSet, state)
+    const result = await callGeminiApi(systemInstruction, turns, modelName, geminiKey, activeToolSet, state)
     if (result) return result
   }
   if (claudeKey && routing.targetProvider !== 'claude') {
-    const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, turns, claudeKey, routing.toolSet, state)
+    const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, turns, claudeKey, activeToolSet, state)
     if (result) return result
   }
   if (openAiKey && routing.targetProvider !== 'openai') {
-    const result = await callOpenAiApi(systemInstruction, turns, openAiKey, routing.toolSet, state)
+    const result = await callOpenAiApi(systemInstruction, turns, openAiKey, activeToolSet, state)
     if (result) return result
   }
 
@@ -1589,7 +1592,22 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
 
   state.turns.push({ role: 'assistant', text: response.text, toolCall: response.toolCall })
 
-  const toolResult = await state.executor(response.toolCall.name, response.toolCall.args, state.toolCtx)
+  // Guard against repeated identical tool calls leading to dead loops
+  const isDuplicateToolCall = state.toolCallsExecuted.some(
+    (executed) =>
+      executed.name === response.toolCall!.name &&
+      JSON.stringify(executed.args) === JSON.stringify(response.toolCall!.args)
+  )
+
+  const toolResult = isDuplicateToolCall
+    ? {
+        resultForAi: 'เครื่องมือนี้ถูกเรียกไปแล้วด้วยข้อมูลเดียวกัน กรุณาสรุปคำตอบให้ลูกค้าจากข้อมูลที่มีอยู่ตอนนี้ โดยไม่ต้องเรียกเครื่องมือซ้ำ',
+        immediateMessages: [],
+        scheduledMessage: undefined,
+        productsData: undefined,
+      }
+    : await state.executor(response.toolCall.name, response.toolCall.args, state.toolCtx)
+
   if (toolResult.productsData && toolResult.productsData.length > 0) {
     state.productsData = toolResult.productsData
   }
@@ -1604,12 +1622,8 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
   })
 
   if (state.step === MAX_PLANNING_STEPS - 1) {
-    // If a tool result is already available in turns, present it to the customer instead of throwing handoff
-    const lastToolResult = [...state.turns].reverse().find((t) => t.role === 'tool_result')
-    if (lastToolResult && lastToolResult.result) {
-      return { done: true, finalText: lastToolResult.result }
-    }
-
+    // Reached maximum allowed planning steps without generating final text.
+    // Transfer conversation to human handoff rather than leaking internal raw tool results to the customer.
     try {
       await state.toolCtx.supabase.from('conversations').update({ status: 'human' }).eq('id', state.conversationId)
     } catch (err) {

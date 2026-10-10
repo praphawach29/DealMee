@@ -68,11 +68,12 @@ const SHIPPING_PROVIDERS = [
 ]
 
 export default function PaymentShippingForm({ shop }: { shop: PaymentShippingShopData }) {
+  const paymentShipping = shop.features?.payment_shipping
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [shippingFeeType, setShippingFeeType] = useState<string>(shop.shipping_fee_type || 'flat')
-  const [codEnabled, setCodEnabled] = useState<boolean>(shop.cod_enabled ?? false)
-  const [codFeeType, setCodFeeType] = useState<string>(shop.cod_fee_type || 'flat')
+  const [codEnabled, setCodEnabled] = useState<boolean>(shop.cod_enabled ?? paymentShipping?.cod_enabled ?? false)
+  const [codFeeType, setCodFeeType] = useState<string>(shop.cod_fee_type ?? paymentShipping?.cod_fee_type ?? 'flat')
 
   const slipConfig = shop.features?.slip_verification
   const [slipEnabled, setSlipEnabled] = useState<boolean>(slipConfig?.enabled ?? true)
@@ -185,7 +186,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
             type="checkbox"
             id="promptpay_qr_enabled"
             name="promptpay_qr_enabled"
-            defaultChecked={shop.promptpay_qr_enabled ?? true}
+            defaultChecked={shop.promptpay_qr_enabled ?? paymentShipping?.promptpay_qr_enabled ?? true}
             className="w-4 h-4 text-electric-blue rounded border-outline-variant focus:ring-electric-blue"
           />
           <label htmlFor="promptpay_qr_enabled" className="text-xs sm:text-sm font-medium text-on-surface cursor-pointer select-none">
@@ -651,7 +652,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
                       type="number"
                       min="0"
                       step="5"
-                      defaultValue={shop.shipping_zone_bkk ?? 40}
+                      defaultValue={shop.shipping_zone_bkk ?? paymentShipping?.shipping_zone_bkk ?? 40}
                       placeholder="40"
                       className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all pr-12"
                     />
@@ -671,7 +672,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
                       type="number"
                       min="0"
                       step="5"
-                      defaultValue={shop.shipping_zone_upcountry ?? 60}
+                      defaultValue={shop.shipping_zone_upcountry ?? paymentShipping?.shipping_zone_upcountry ?? 60}
                       placeholder="60"
                       className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all pr-12"
                     />
@@ -691,7 +692,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
                       type="number"
                       min="0"
                       step="5"
-                      defaultValue={shop.shipping_zone_remote ?? 100}
+                      defaultValue={shop.shipping_zone_remote ?? paymentShipping?.shipping_zone_remote ?? 100}
                       placeholder="100"
                       className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all pr-12"
                     />
@@ -780,7 +781,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
                   type="number"
                   min="0"
                   step={codFeeType === 'percent' ? '0.5' : '5'}
-                  defaultValue={shop.cod_fee_amount ?? 30}
+                  defaultValue={shop.cod_fee_amount ?? paymentShipping?.cod_fee_amount ?? 30}
                   placeholder={codFeeType === 'percent' ? '3' : '30'}
                   className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all pr-12"
                 />
@@ -814,11 +815,15 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
         </div>
       )}
 
-      <div className="flex justify-end pt-2 sm:pt-4">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-4 sm:pt-6 border-t border-outline-variant/30 mt-6 sm:pr-36">
+        <div className="text-xs text-on-surface-variant flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>ตรวจสอบความถูกต้องของข้อมูลการชำระเงินและการจัดส่งก่อนกดบันทึก</span>
+        </div>
         <button
           type="submit"
           disabled={loading}
-          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-8 py-3 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer text-xs sm:text-sm"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-8 py-3 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer text-xs sm:text-sm shrink-0"
         >
           {loading ? (
             <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 animate-spin" />

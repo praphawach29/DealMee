@@ -22,7 +22,7 @@ export default async function SettingsPage() {
   }
 
   return (
-    <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6 max-w-[1440px] mx-auto w-full">
+    <div className="px-4 sm:px-6 md:px-8 pt-4 sm:pt-6 pb-28 sm:pb-36 max-w-[1440px] mx-auto w-full">
       <SettingsTabs shop={shop} />
     </div>
   )

@@ -454,7 +454,8 @@ export async function executeTool(
   args: Record<string, any>,
   ctx: ToolExecutionContext
 ): Promise<ToolExecutionResult> {
-  const { shopId, userId, conversationId, shop, supabase, supabaseAdmin, language: lang = 'th' } = ctx
+  const { shopId: rawShopId, userId, conversationId, shop, supabase, supabaseAdmin, language: lang = 'th' } = ctx
+  const shopId = rawShopId || shop?.id
 
   // ── 💳 PAYMENT TOOLS ─────────────────────────────────────────────────
   if (toolName === 'send_payment_qr') {
@@ -1041,28 +1042,82 @@ export async function executeTool(
   // implementation, so calling it silently returned "done" and the bot went
   // on to answer from nothing.
   if (toolName === 'search_knowledge_base') {
-    const keyword = String(args.query || args.keyword || args.question || '').trim()
-    if (!keyword) {
+    const rawQuery = String(args.query || args.keyword || args.question || '').trim()
+    if (!rawQuery) {
       return { resultForAi: 'ยังไม่มีคำค้นหา ให้ถามลูกค้าว่าอยากทราบเรื่องอะไร', immediateMessages: [] }
     }
 
-    const { data: found } = await supabase
-      .from('knowledge_base')
-      .select('title, content')
-      .eq('shop_id', shopId)
-      .eq('status', 'active')
-      .or(`title.ilike.%${keyword}%,content.ilike.%${keyword}%`)
-      .limit(5)
+    // Clean Thai stopwords and conversational particles
+    const stopWords = [
+      'ครับ', 'ค่ะ', 'คะ', 'นะ', 'นะครับ', 'นะคะ', 'ละครับ', 'ละคะ', 'แล้ว', 'ถ้า',
+      'คิด', 'เท่าไหร่', 'เท่าไร', 'ขอ', 'สอบถาม', 'หน่อย', 'จ้า', 'ได้ไหม', 'ได้มั้ย',
+      'ไหม', 'มั้ย', 'บ้าง', 'ยังไง', 'อย่างไร', 'ทำยังไง', 'ทำอย่างไร', 'หรือเปล่า', 'หรือยัง',
+      'อยากทราบ', 'รบกวน', 'วิธี', 'ขั้นตอน'
+    ]
+    let cleanQuery = rawQuery
+    for (const sw of stopWords) {
+      cleanQuery = cleanQuery.split(sw).join(' ')
+    }
+    const searchTokens = cleanQuery
+      .split(/\s+/)
+      .map((w) => w.trim().toLowerCase())
+      .filter((w) => w.length > 0)
 
-    if (!found || found.length === 0) {
+    // 1. Fetch available active/unspecified status KB items for this shop
+    const { data: allItems } = await supabase
+      .from('knowledge_base')
+      .select('id, title, content')
+      .eq('shop_id', shopId)
+      .or('status.eq.active,status.is.null')
+      .limit(150)
+
+    let matchedItems: { title: string; content: string; score: number }[] = []
+
+    if (allItems && allItems.length > 0) {
+      matchedItems = allItems.map((item: any) => {
+        let score = 0
+        const titleLower = (item.title || '').toLowerCase()
+        const contentLower = (item.content || '').toLowerCase()
+
+        // Exact phrase bonus
+        if (titleLower.includes(rawQuery.toLowerCase())) score += 50
+        if (contentLower.includes(rawQuery.toLowerCase())) score += 20
+
+        // Token match scoring
+        for (const token of searchTokens) {
+          if (token.length < 2) continue
+          if (titleLower.includes(token)) score += 15
+          else if (token.length >= 4 && titleLower.split('').some(() => titleLower.includes(token.slice(0, 4)))) score += 5
+          if (contentLower.includes(token)) score += 5
+        }
+
+        // Deprioritize meta-guidelines (e.g. "วิธีตอบ", "ห้ามพูด / ห้ามสัญญา", "เมื่อไหร่ต้องส่งต่อให้คน")
+        // so actual product/pricing/service answers surface first unless asked specifically
+        const isMetaGuideline =
+          titleLower.includes('วิธีตอบ') ||
+          titleLower.includes('ห้ามพูด') ||
+          titleLower.includes('ห้ามสัญญา') ||
+          titleLower.includes('เมื่อไหร่ต้องส่งต่อ')
+        if (isMetaGuideline && !rawQuery.includes('วิธีตอบ') && !rawQuery.includes('ห้ามพูด')) {
+          score -= 15
+        }
+
+        return { title: item.title, content: item.content, score }
+      })
+      .filter((item: any) => item.score > 0)
+      .sort((a: any, b: any) => b.score - a.score)
+      .slice(0, 5)
+    }
+
+    if (matchedItems.length === 0) {
       return {
-        resultForAi: `ไม่พบข้อมูลเรื่อง "${keyword}" ในคลังความรู้ของร้าน ห้ามเดาคำตอบ ให้บอกลูกค้าว่าจะให้แอดมินช่วยตรวจสอบ หรือเรียก request_human_agent`,
+        resultForAi: `ไม่พบข้อมูลเรื่อง "${rawQuery}" ในคลังความรู้ของร้าน ห้ามเดาคำตอบ ให้บอกลูกค้าว่าจะให้แอดมินช่วยตรวจสอบ หรือเรียก request_human_agent`,
         immediateMessages: [],
       }
     }
 
     return {
-      resultForAi: `ข้อมูลจากคลังความรู้: ${found.map((k: any) => `${k.title} — ${k.content}`).join(' | ')}`,
+      resultForAi: `ข้อมูลจากคลังความรู้:\n` + matchedItems.map((k: any) => `[หัวข้อ: ${k.title}]\n${k.content}`).join('\n\n'),
       immediateMessages: [],
     }
   }
