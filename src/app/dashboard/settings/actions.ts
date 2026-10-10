@@ -124,6 +124,9 @@ export async function updatePaymentShippingSettings(formData: FormData) {
       branch_id: slip_branch_id,
     },
     payment_shipping: {
+      bank_name: ((formData.get('bank_name') as string) || '').trim(),
+      bank_account_number: ((formData.get('bank_account_number') as string) || '').trim(),
+      bank_account_name: ((formData.get('bank_account_name') as string) || '').trim(),
       promptpay_qr_enabled,
       cod_enabled,
       cod_fee_type,
@@ -134,13 +137,20 @@ export async function updatePaymentShippingSettings(formData: FormData) {
     },
   }
 
+  const bank_name = ((formData.get('bank_name') as string) || '').trim()
+  const bank_account_number = ((formData.get('bank_account_number') as string) || '').trim()
+  const bank_account_name = ((formData.get('bank_account_name') as string) || '').trim()
+
   const updateData: Record<string, any> = {
     promptpay_number: ((formData.get('promptpay_number') as string) || '').trim(),
     promptpay_name: ((formData.get('promptpay_name') as string) || '').trim(),
     promptpay_qr_enabled,
-    bank_name: (formData.get('bank_name') as string) || '',
-    bank_account_number: ((formData.get('bank_account_number') as string) || '').trim(),
-    bank_account_name: ((formData.get('bank_account_name') as string) || '').trim(),
+    bank_name,
+    payment_bank_name: bank_name,
+    bank_account_number,
+    payment_bank_account: bank_account_number,
+    bank_account_name,
+    payment_bank_acc_name: bank_account_name,
     shipping_provider: (formData.get('shipping_provider') as string) || '',
     shipping_fee_type: (formData.get('shipping_fee_type') as string) || 'flat',
     shipping_fee_amount: Number(formData.get('shipping_fee_amount') || 0),
@@ -166,8 +176,11 @@ export async function updatePaymentShippingSettings(formData: FormData) {
       promptpay_number: updateData.promptpay_number,
       promptpay_name: updateData.promptpay_name,
       bank_name: updateData.bank_name,
+      payment_bank_name: updateData.bank_name,
       bank_account_number: updateData.bank_account_number,
+      payment_bank_account: updateData.bank_account_number,
       bank_account_name: updateData.bank_account_name,
+      payment_bank_acc_name: updateData.bank_account_name,
       shipping_provider: updateData.shipping_provider,
       shipping_fee_type: updateData.shipping_fee_type,
       shipping_fee_amount: updateData.shipping_fee_amount,

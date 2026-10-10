@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { updatePaymentShippingSettings } from './actions'
 import {
   Save,
@@ -24,8 +25,11 @@ export interface PaymentShippingShopData {
   promptpay_name?: string | null
   promptpay_qr_enabled?: boolean | null
   bank_name?: string | null
+  payment_bank_name?: string | null
   bank_account_number?: string | null
+  payment_bank_account?: string | null
   bank_account_name?: string | null
+  payment_bank_acc_name?: string | null
   shipping_provider?: string | null
   shipping_fee_type?: string | null
   shipping_fee_amount?: number | null
@@ -43,6 +47,18 @@ export interface PaymentShippingShopData {
       api_key?: string
       branch_id?: string
     }
+    payment_shipping?: {
+      bank_name?: string
+      bank_account_number?: string
+      bank_account_name?: string
+      promptpay_qr_enabled?: boolean
+      cod_enabled?: boolean
+      cod_fee_type?: string
+      cod_fee_amount?: number
+      shipping_zone_bkk?: number
+      shipping_zone_upcountry?: number
+      shipping_zone_remote?: number
+    }
     [key: string]: any
   } | null
 }
@@ -58,6 +74,20 @@ const THAI_BANKS = [
   { code: 'BAAC', name: 'ธนาคาร ธ.ก.ส.' },
 ]
 
+function normalizeBankName(val?: string | null): string {
+  if (!val) return ''
+  const trimmed = val.trim()
+  const matched = THAI_BANKS.find(
+    (b) =>
+      b.name === trimmed ||
+      b.code.toLowerCase() === trimmed.toLowerCase() ||
+      trimmed.includes(b.code) ||
+      trimmed.includes(b.name) ||
+      b.name.includes(trimmed)
+  )
+  return matched ? matched.name : trimmed
+}
+
 const SHIPPING_PROVIDERS = [
   { id: 'standard', name: '📦 ขนส่งพัสดุทั่วไป (Standard Delivery)' },
   { id: 'flash', name: '⚡ Flash Express' },
@@ -68,12 +98,31 @@ const SHIPPING_PROVIDERS = [
 ]
 
 export default function PaymentShippingForm({ shop }: { shop: PaymentShippingShopData }) {
+  const router = useRouter()
   const paymentShipping = shop.features?.payment_shipping
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [shippingFeeType, setShippingFeeType] = useState<string>(shop.shipping_fee_type || 'flat')
   const [codEnabled, setCodEnabled] = useState<boolean>(shop.cod_enabled ?? paymentShipping?.cod_enabled ?? false)
   const [codFeeType, setCodFeeType] = useState<string>(shop.cod_fee_type ?? paymentShipping?.cod_fee_type ?? 'flat')
+
+  const initialBank = normalizeBankName(
+    shop.bank_name || shop.payment_bank_name || paymentShipping?.bank_name || ''
+  )
+  const [selectedBank, setSelectedBank] = useState<string>(initialBank)
+  const [shippingProvider, setShippingProvider] = useState<string>(shop.shipping_provider || 'standard')
+
+  useEffect(() => {
+    const freshBank = normalizeBankName(
+      shop.bank_name || shop.payment_bank_name || paymentShipping?.bank_name || ''
+    )
+    if (freshBank) {
+      setSelectedBank(freshBank)
+    }
+    if (shop.shipping_provider) {
+      setShippingProvider(shop.shipping_provider)
+    }
+  }, [shop.bank_name, shop.payment_bank_name, paymentShipping?.bank_name, shop.shipping_provider])
 
   const slipConfig = shop.features?.slip_verification
   const [slipEnabled, setSlipEnabled] = useState<boolean>(slipConfig?.enabled ?? true)
@@ -95,6 +144,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
       setMessage({ type: 'error', text: res.error })
     } else if (res?.success) {
       setMessage({ type: 'success', text: res.success })
+      router.refresh()
     }
   }
 
@@ -214,7 +264,8 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
             </label>
             <select
               name="bank_name"
-              defaultValue={shop.bank_name || ''}
+              value={selectedBank}
+              onChange={(e) => setSelectedBank(e.target.value)}
               className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
             >
               <option value="">-- กรุณาเลือกธนาคาร --</option>
@@ -223,6 +274,9 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
                   {b.name}
                 </option>
               ))}
+              {selectedBank && !THAI_BANKS.some((b) => b.name === selectedBank) && (
+                <option value={selectedBank}>{selectedBank}</option>
+              )}
             </select>
           </div>
 
@@ -234,7 +288,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
               <input
                 name="bank_account_number"
                 type="text"
-                defaultValue={shop.bank_account_number || ''}
+                defaultValue={shop.bank_account_number || shop.payment_bank_account || paymentShipping?.bank_account_number || ''}
                 placeholder="เช่น 123-4-56789-0"
                 className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all font-mono"
               />
@@ -247,7 +301,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
               <input
                 name="bank_account_name"
                 type="text"
-                defaultValue={shop.bank_account_name || ''}
+                defaultValue={shop.bank_account_name || shop.payment_bank_acc_name || paymentShipping?.bank_account_name || ''}
                 placeholder="เช่น นายประภาวัชร์ สุทธิประภา"
                 className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
               />
@@ -513,7 +567,8 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
             </label>
             <select
               name="shipping_provider"
-              defaultValue={shop.shipping_provider || 'standard'}
+              value={shippingProvider}
+              onChange={(e) => setShippingProvider(e.target.value)}
               className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
             >
               {SHIPPING_PROVIDERS.map((p) => (
