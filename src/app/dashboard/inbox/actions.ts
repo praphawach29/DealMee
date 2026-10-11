@@ -22,11 +22,62 @@ export async function sendMessage(conversationId: string, messageText: string) {
     return { error: 'ไม่พบข้อมูลร้านค้า' }
   }
 
-  if (!messageText.trim()) {
+  const trimmedText = messageText.trim()
+  if (!trimmedText) {
     return { error: 'กรุณากรอกข้อความ' }
   }
 
-  // 1. Insert message into chat_messages
+  // 1. Fetch conversation details to verify shop ownership and get recipient ID
+  const { data: conv, error: convError } = await supabase
+    .from('conversations')
+    .select('id, shop_id, user_id, platform, status')
+    .eq('id', conversationId)
+    .eq('shop_id', profile.workspace_id)
+    .single()
+
+  if (convError || !conv) {
+    return { error: 'ไม่พบข้อมูลการสนทนานี้' }
+  }
+
+  // 2. If target is a real LINE user/group/room, push message via LINE Messaging API
+  const isLineTarget = conv.user_id && /^[UCR][0-9a-fA-F]{32}$/.test(conv.user_id)
+  if (isLineTarget) {
+    const { data: shop } = await supabase
+      .from('shops')
+      .select('line_token')
+      .eq('id', profile.workspace_id)
+      .single()
+
+    const lineToken = shop?.line_token?.trim()
+    if (!lineToken) {
+      return { error: 'ยังไม่ได้ตั้งค่า LINE Channel Access Token ในการตั้งค่าร้านค้า จึงไม่สามารถส่งข้อความเข้า LINE ได้' }
+    }
+
+    try {
+      const pushRes = await fetch('https://api.line.me/v2/bot/message/push', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${lineToken}`,
+        },
+        body: JSON.stringify({
+          to: conv.user_id,
+          messages: [{ type: 'text', text: trimmedText }],
+        }),
+      })
+
+      if (!pushRes.ok) {
+        const errorDetail = await pushRes.text()
+        console.error('[Inbox Actions] LINE Push API error:', pushRes.status, errorDetail)
+        return { error: `ส่งข้อความเข้า LINE ไม่สำเร็จ (${pushRes.status}): กรุณาตรวจสอบสถานะ LINE Token` }
+      }
+    } catch (err: any) {
+      console.error('[Inbox Actions] LINE Push exception:', err)
+      return { error: `เกิดข้อผิดพลาดในการเชื่อมต่อ LINE: ${err?.message || err}` }
+    }
+  }
+
+  // 3. Insert message into chat_messages
   const { error: msgError } = await supabase
     .from('chat_messages')
     .insert({
@@ -34,26 +85,26 @@ export async function sendMessage(conversationId: string, messageText: string) {
       shop_id: profile.workspace_id,
       sender_type: 'agent',
       sender_name: 'แอดมิน',
-      message: messageText.trim(),
+      message: trimmedText,
     })
 
   if (msgError) {
-    return { error: `ส่งข้อความไม่สำเร็จ: ${msgError.message}` }
+    return { error: `บันทึกข้อความไม่สำเร็จ: ${msgError.message}` }
   }
 
-  // 2. Update conversation last_message, status to 'human', and set paused_until for 1 hour Smart Auto-Pause
+  // 4. Update conversation last_message, status to 'human', and set paused_until for 1 hour Smart Auto-Pause
   const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString()
   await supabase
     .from('conversations')
     .update({
-      last_message: messageText.trim(),
+      last_message: trimmedText,
       last_message_at: new Date().toISOString(),
       status: 'human', // Auto switch to Human when admin replies
       paused_until: pausedUntil,
     })
     .eq('id', conversationId)
 
-  // 3. Trigger Hermes-inspired continuous learning in background
+  // 5. Trigger Hermes-inspired continuous learning in background
   synthesizeFaqFromConversation({
     shopId: profile.workspace_id,
     conversationId,
@@ -66,13 +117,34 @@ export async function sendMessage(conversationId: string, messageText: string) {
 export async function toggleHandoffStatus(conversationId: string, newStatus: 'ai' | 'human' | 'closed') {
   const supabase = await createClient()
 
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return { error: 'กรุณาเข้าสู่ระบบอีกครั้ง' }
+  }
+
+  const { data: profile } = await supabase
+    .from('users')
+    .select('workspace_id')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile?.workspace_id) {
+    return { error: 'ไม่พบข้อมูลร้านค้า' }
+  }
+
+  const pausedUntil = newStatus === 'human'
+    ? new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    : null
+
   const { error } = await supabase
     .from('conversations')
     .update({
       status: newStatus,
+      paused_until: pausedUntil,
       updated_at: new Date().toISOString(),
     })
     .eq('id', conversationId)
+    .eq('shop_id', profile.workspace_id)
 
   if (error) {
     return { error: `เปลี่ยนสถานะไม่สำเร็จ: ${error.message}` }
