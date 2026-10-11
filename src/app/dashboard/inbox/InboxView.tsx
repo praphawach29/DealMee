@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { sendMessage, toggleHandoffStatus, createMockConversation } from './actions'
 import { getSalesStageMeta, type SalesStage } from '@/lib/ai/salesWorkflow'
 
@@ -37,6 +38,7 @@ interface InboxViewProps {
 import CustomerProfileDrawer from './CustomerProfileDrawer'
 
 export default function InboxView({ conversations, messagesMap }: InboxViewProps) {
+  const router = useRouter()
   const [selectedConvId, setSelectedConvId] = useState<string | null>(
     conversations.length > 0 ? conversations[0].id : null
   )
@@ -58,6 +60,14 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeMessages])
+
+  // Polling auto-refresh every 5 seconds to sync incoming LINE messages and statuses
+  useEffect(() => {
+    const interval = setInterval(() => {
+      router.refresh()
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [router])
 
   const filteredConversations = conversations.filter(c => {
     const cleanLastMessage = c.last_message && c.last_message.startsWith('[Tool:') ? '' : c.last_message
@@ -81,6 +91,8 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
     if (res?.error) {
       alert(res.error)
       setInputText(textToSend)
+    } else {
+      router.refresh()
     }
   }
 
@@ -91,6 +103,8 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
     setLoading(false)
     if (res?.error) {
       alert(res.error)
+    } else {
+      router.refresh()
     }
   }
 
@@ -100,6 +114,8 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
     setLoading(false)
     if (res?.error) {
       alert(res.error)
+    } else {
+      router.refresh()
     }
   }
 
@@ -299,6 +315,7 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
                   onClick={() => handleToggleStatus('human')}
                   disabled={loading}
                   className="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white text-[11px] sm:text-xs font-bold px-3 py-1.5 sm:py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+                  title="หยุดบอท AI ชั่วคราว เพื่อให้แอดมินเข้าไปคุยแทน"
                 >
                   <span className="material-symbols-outlined text-[15px]">back_hand</span>
                   <span className="hidden sm:inline">Takeover (แอดมินคุยแทน)</span>
@@ -309,9 +326,10 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
                   onClick={() => handleToggleStatus('ai')}
                   disabled={loading}
                   className="flex items-center gap-1 bg-electric-blue hover:bg-primary text-white text-[11px] sm:text-xs font-bold px-3 py-1.5 sm:py-2 rounded-xl transition-all shadow-xs cursor-pointer"
+                  title="คลิกเมื่อแอดมินคุยเสร็จแล้ว เพื่อให้ AI กลับมาตอบลูกค้าต่อ"
                 >
                   <span className="material-symbols-outlined text-[15px]">smart_toy</span>
-                  <span className="hidden sm:inline">ให้ AI ตอบต่อ</span>
+                  <span className="hidden sm:inline">คืนงานให้ AI ตอบต่อ</span>
                   <span className="sm:hidden">ให้ AI ตอบ</span>
                 </button>
               )}
@@ -330,6 +348,23 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
               </button>
             </div>
           </div>
+
+          {/* Pause Status Alert Banner */}
+          {activeConv.status === 'human' && (
+            <div className="bg-amber-500/10 border-b border-amber-500/20 px-3.5 sm:px-4 py-2 flex items-center justify-between text-xs text-amber-700 dark:text-amber-300 shrink-0">
+              <div className="flex items-center gap-1.5 font-medium">
+                <span className="material-symbols-outlined text-[17px] text-amber-600">pause_circle</span>
+                <span>บอท AI กำลังหยุดตอบชั่วคราว: แอดมินกำลังคุยแทน (เมื่อคุยเสร็จแล้วกด &quot;คืนงานให้ AI ตอบต่อ&quot;)</span>
+              </div>
+              <button
+                onClick={() => handleToggleStatus('ai')}
+                disabled={loading}
+                className="text-[11px] underline font-bold hover:text-amber-900 dark:hover:text-amber-100 cursor-pointer ml-2 shrink-0"
+              >
+                คืนงานให้ AI ทันที
+              </button>
+            </div>
+          )}
 
           {/* Messages Feed */}
           <div className="flex-1 p-3.5 sm:p-6 overflow-y-auto space-y-3 sm:space-y-4">

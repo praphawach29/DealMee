@@ -153,18 +153,37 @@ export async function POST(
         })
 
         // 4. Check if Admin Takeover is active OR Auto-Reply is disabled
+        const cleanText = userText.trim()
+        const lowerText = cleanText.toLowerCase()
+        const isPauseCommand = ['/pause', '/stop', '/admin', '/human'].includes(lowerText) ||
+          cleanText === 'ขอคุยกับแอดมิน' || cleanText === 'ขอคุยกับเจ้าหน้าที่' || cleanText === 'ติดต่อเจ้าหน้าที่'
+
+        if (isPauseCommand) {
+          console.log(`[Webhook] Explicit pause command detected for ${userId}`)
+          const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+          await supabase.from('conversations').update({ status: 'human', paused_until: pausedUntil }).eq('id', conv.id)
+          if (replyToken && lineToken) {
+            await sendLineReply(replyToken, 'รับเรื่องเรียบร้อยแล้วค่ะ น้องบอทได้หยุดการตอบชั่วคราวและประสานงานเจ้าหน้าที่แอดมินให้แล้วนะคะ สักครู่จะมีเจ้าหน้าที่เข้ามาดูแลค่ะ 😊', lineToken)
+          }
+          continue
+        }
+
         if (conv.status === 'human') {
           // Check if Smart Auto-Pause timer (1 hour) has expired OR if last chat was >1 hour ago (e.g. overnight)
           const now = new Date()
           const isPauseExpired = conv.paused_until
             ? now > new Date(conv.paused_until)
             : (conv.last_message_at ? (now.getTime() - new Date(conv.last_message_at).getTime() > 60 * 60 * 1000) : true)
-          const isExplicitReset = userText.trim().startsWith('/ai') || isPauseExpired
+          const isExplicitReset = cleanText.startsWith('/ai') || isPauseExpired
 
           if (isExplicitReset) {
             console.log(`[Webhook] Auto-resuming AI mode for ${userId} (1-Hour Auto-Pause expired or explicit reset)`)
             await supabase.from('conversations').update({ status: 'ai', paused_until: null }).eq('id', conv.id)
             conv.status = 'ai'
+            if (cleanText.startsWith('/ai') && replyToken && lineToken) {
+              await sendLineReply(replyToken, 'น้องบอท AI กลับมาพร้อมดูแลคุณลูกค้าต่อแล้วค่ะ มีอะไรให้ช่วยสอบถามได้เลยนะคะ ✨', lineToken)
+              continue
+            }
           } else {
             console.log(`[Webhook] Skipping AI reply for ${userId} (Admin Takeover active)`)
             continue
