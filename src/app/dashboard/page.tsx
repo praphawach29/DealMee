@@ -48,50 +48,51 @@ export default async function DashboardPage() {
   let totalMessages = 0
   let latestKnowledgeTitle = ''
   let latestKnowledgeDate = ''
+  let pushQuotaInfo = {
+    totalQuota: 300,
+    usedCount: 0,
+    remainingCount: 300,
+    period: new Date().toISOString().slice(0, 7),
+    planName: (shop?.plan || 'pro').toUpperCase(),
+  }
 
   if (currentShopId) {
-    // Fetch Products Count
-    const { count: prodCount } = await supabase
-      .from('products')
-      .select('*', { count: 'exact', head: true })
-      .eq('shop_id', currentShopId)
-    productsCount = prodCount || 0
+    // Run all 5 independent queries in parallel
+    const [
+      prodRes,
+      kbRes,
+      msgRes,
+      orderRes,
+      quotaInfo,
+    ] = await Promise.all([
+      supabase.from('products').select('*', { count: 'exact', head: true }).eq('shop_id', currentShopId),
+      supabase.from('knowledge_base').select('title, created_at', { count: 'exact' }).eq('shop_id', currentShopId).order('created_at', { ascending: false }).limit(1),
+      supabase.from('chat_messages').select('*', { count: 'exact', head: true }).eq('shop_id', currentShopId),
+      supabase.from('orders').select('id, total_amount, status, payment_status').eq('shop_id', currentShopId),
+      getLinePushQuotaInfo(supabase, currentShopId, shop?.plan || 'pro'),
+    ])
 
-    // Fetch Knowledge Base Count & Latest Item
-    const { data: knowledgeItems, count: kCount } = await supabase
-      .from('knowledge_base')
-      .select('title, created_at')
-      .eq('shop_id', currentShopId)
-      .order('created_at', { ascending: false })
+    productsCount = prodRes.count || 0
 
-    knowledgeCount = kCount || knowledgeItems?.length || 0
+    const knowledgeItems = kbRes.data
+    knowledgeCount = kbRes.count || knowledgeItems?.length || 0
     if (knowledgeItems && knowledgeItems.length > 0) {
       latestKnowledgeTitle = knowledgeItems[0].title
       latestKnowledgeDate = new Date(knowledgeItems[0].created_at).toLocaleDateString('th-TH')
     }
 
-    // Fetch Messages Count
-    const { count: mCount } = await supabase
-      .from('chat_messages')
-      .select('*', { count: 'exact', head: true })
-      .eq('shop_id', currentShopId)
-    totalMessages = mCount || shop?.msg_used || 0
+    totalMessages = msgRes.count || shop?.msg_used || 0
 
-    // Fetch Orders Count & Revenue Sum
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('id, total_amount, status, payment_status')
-      .eq('shop_id', currentShopId)
-
+    const orders = orderRes.data
     if (orders && orders.length > 0) {
       ordersCount = orders.length
       totalRevenue = orders.reduce((sum: number, o: { total_amount?: number | null }) => {
         return sum + Number(o.total_amount || 0)
       }, 0)
     }
-  }
 
-  const pushQuotaInfo = await getLinePushQuotaInfo(supabase, currentShopId || '', shop?.plan || 'pro')
+    pushQuotaInfo = quotaInfo
+  }
 
   return (
     <MerchantDashboardClient

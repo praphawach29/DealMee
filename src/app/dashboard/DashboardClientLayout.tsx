@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import SidebarNav from './SidebarNav'
 import Link from 'next/link'
 import {
@@ -29,18 +30,35 @@ export default function DashboardClientLayout({
   isSuperAdmin = false,
   children,
 }: DashboardClientLayoutProps) {
+  const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isCopilotOpen, setIsCopilotOpen] = useState(false)
+  const [isNavigating, setIsNavigating] = useState(false)
+
+  // Reset loading indicator whenever pathname changes
+  useEffect(() => {
+    setIsNavigating(false)
+  }, [pathname])
 
   return (
-    <div className="bg-merchant-bg text-on-surface font-body-md min-h-screen">
+    <div className="bg-merchant-bg text-on-surface font-body-md min-h-screen relative">
+      {/* Top Navigation Progress Indicator for instant feedback */}
+      {isNavigating && (
+        <div className="fixed top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-electric-blue via-indigo-500 to-purple-500 z-[99999] shadow-[0_0_12px_rgba(59,130,246,0.9)] animate-pulse" />
+      )}
+
       {/* 1. Desktop Sidebar */}
       <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white z-50 flex-col border-r border-outline-variant/30 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
         <div className="px-6 py-6 flex items-center gap-3 border-b border-outline-variant/20">
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center font-bold text-white shadow-xs">D</div>
           <span className="font-headline-md text-primary font-bold tracking-tight text-lg">DealMee AI</span>
         </div>
-        <SidebarNav bizType={bizType} features={features} isSuperAdmin={isSuperAdmin} />
+        <SidebarNav
+          bizType={bizType}
+          features={features}
+          isSuperAdmin={isSuperAdmin}
+          onNavStart={() => setIsNavigating(true)}
+        />
       </aside>
 
       {/* 2. Mobile Backdrop Overlay */}
@@ -71,7 +89,13 @@ export default function DashboardClientLayout({
           </button>
         </div>
         <div className="py-3 flex-1 overflow-y-auto">
-          <SidebarNav bizType={bizType} features={features} isSuperAdmin={isSuperAdmin} onNavClick={() => setIsMobileMenuOpen(false)} />
+          <SidebarNav
+            bizType={bizType}
+            features={features}
+            isSuperAdmin={isSuperAdmin}
+            onNavClick={() => setIsMobileMenuOpen(false)}
+            onNavStart={() => setIsNavigating(true)}
+          />
         </div>
       </aside>
 

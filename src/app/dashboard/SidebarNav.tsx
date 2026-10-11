@@ -24,9 +24,10 @@ interface SidebarNavProps {
   features?: Record<string, boolean>
   isSuperAdmin?: boolean
   onNavClick?: () => void
+  onNavStart?: () => void
 }
 
-export default function SidebarNav({ bizType, features = {}, isSuperAdmin = false, onNavClick }: SidebarNavProps) {
+export default function SidebarNav({ bizType, features = {}, isSuperAdmin = false, onNavClick, onNavStart }: SidebarNavProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [activePath, setActivePath] = useState(pathname)
@@ -47,6 +48,9 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
 
   const handleLinkClick = (path: string) => {
     setActivePath(path)
+    if (path !== pathname && onNavStart) {
+      onNavStart()
+    }
     if (onNavClick) onNavClick()
   }
 
