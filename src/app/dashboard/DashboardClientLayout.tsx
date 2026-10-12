@@ -50,9 +50,21 @@ export default function DashboardClientLayout({
 
       {/* 1. Desktop Sidebar */}
       <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white z-50 flex-col border-r border-outline-variant/30 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-        <div className="px-6 py-6 flex items-center gap-3 border-b border-outline-variant/20">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center font-bold text-white shadow-xs">D</div>
-          <span className="font-headline-md text-primary font-bold tracking-tight text-lg">DealMee AI</span>
+        <div className="px-6 py-5 flex items-center gap-3 border-b border-outline-variant/20">
+          <Image
+            src="/logos/concept-d1.jpg"
+            alt="DealMee Logo"
+            width={36}
+            height={36}
+            className="w-9 h-9 rounded-xl object-cover shadow-xs border border-outline-variant/30 shrink-0"
+            priority
+          />
+          <div className="flex flex-col">
+            <span className="font-headline-md font-extrabold tracking-tight text-lg leading-tight">
+              <span className="text-blue-600">Deal</span><span className="text-cyan-500">Mee</span> <span className="text-xs font-bold text-slate-500 uppercase">AI</span>
+            </span>
+            <span className="text-[10px] text-outline font-medium">Sales Copilot • Omnichannel</span>
+          </div>
         </div>
         <SidebarNav
           bizType={bizType}
@@ -85,7 +97,11 @@ export default function DashboardClientLayout({
               height={32}
               className="w-8 h-8 rounded-lg object-cover shadow-xs border border-outline-variant/30"
             />
-            <span className="font-headline-md text-primary font-bold tracking-tight text-lg">DealMee AI</span>
+            <div className="flex flex-col">
+              <span className="font-headline-md font-extrabold tracking-tight text-base leading-tight">
+                <span className="text-blue-600">Deal</span><span className="text-cyan-500">Mee</span> <span className="text-xs font-bold text-slate-500 uppercase ml-1">AI</span>
+              </span>
+            </div>
           </div>
           <button
             onClick={() => setIsMobileMenuOpen(false)}

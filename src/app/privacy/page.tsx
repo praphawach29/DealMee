@@ -1,5 +1,6 @@
 import React from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { ArrowLeft, Shield, Lock, Eye, FileText, CheckCircle2 } from 'lucide-react'
 
 export const metadata = {
@@ -23,10 +24,16 @@ export default function PrivacyPolicyPage() {
             <span>กลับสู่หน้าหลัก DealMee</span>
           </Link>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-xs">
-              D
-            </div>
-            <span className="font-extrabold text-sm text-slate-900 tracking-tight">DealMee AI</span>
+            <Image
+              src="/logos/concept-d1.jpg"
+              alt="DealMee Logo"
+              width={28}
+              height={28}
+              className="w-7 h-7 rounded-lg object-cover shadow-sm border border-slate-100 shrink-0"
+            />
+            <span className="font-extrabold text-sm text-slate-900 tracking-tight">
+              <span className="text-blue-600">Deal</span><span className="text-cyan-500">Mee</span> AI
+            </span>
           </div>
         </div>
       </header>

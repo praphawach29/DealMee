@@ -16,6 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "DealMee AI - พนักงานขาย AI อัจฉริยะ 24 ชม. บน LINE OA | DealMee.app",
   description: "DealMee AI (DealMee.app) ระบบผู้ช่วยปิดการขายอัจฉริยะบน LINE Official Account รับออเดอร์ ตรวจสลิป EasySlip คำนวณค่าส่ง และออกใบเสนอราคา B2B อัตโนมัติ 24 ชั่วโมง",
+  icons: {
+    icon: "/logos/concept-d1.jpg",
+    shortcut: "/logos/concept-d1.jpg",
+    apple: "/logos/concept-d1.jpg",
+  },
 };
 
 export default function RootLayout({

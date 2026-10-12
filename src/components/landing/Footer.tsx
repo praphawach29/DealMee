@@ -2,6 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 
 export default function Footer() {
   const currentYear = new Date().getFullYear()
@@ -14,11 +15,15 @@ export default function Footer() {
           {/* Col 1: Brand Info (Spans 2 cols) */}
           <div className="lg:col-span-2 space-y-4">
             <Link href="/" className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-cyan-500 to-emerald-400 flex items-center justify-center text-white font-bold text-base shadow-md shadow-cyan-500/20">
-                D
-              </div>
+              <Image
+                src="/logos/concept-d1.jpg"
+                alt="DealMee Logo"
+                width={36}
+                height={36}
+                className="w-9 h-9 rounded-xl object-cover shadow-md shadow-cyan-500/20 border border-white/20 shrink-0"
+              />
               <span className="font-extrabold text-2xl tracking-wider text-white">
-                DEAL<span className="text-cyan-400">MEE</span>
+                <span className="text-blue-400">Deal</span><span className="text-cyan-400">Mee</span>
               </span>
             </Link>
             <p className="text-sm sm:text-base text-slate-300 max-w-sm leading-relaxed">

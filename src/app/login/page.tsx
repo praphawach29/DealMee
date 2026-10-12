@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { login, signup } from './actions'
 import { Button } from '@/components/ui/button'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
@@ -137,10 +138,17 @@ function LoginContent() {
           
           {/* Top Logo */}
           <div className="flex items-center gap-3 relative z-10">
-            <div className="w-10 h-10 rounded-2xl bg-white text-blue-600 flex items-center justify-center font-black text-xl shadow-md">
-              D
-            </div>
-            <span className="text-2xl font-black tracking-tight text-white font-headline-lg">DealMee AI</span>
+            <Image
+              src="/logos/concept-d1.jpg"
+              alt="DealMee Logo"
+              width={40}
+              height={40}
+              priority
+              className="w-10 h-10 rounded-2xl object-cover shadow-lg shadow-black/20 border border-white/20 shrink-0"
+            />
+            <span className="text-2xl font-black tracking-tight text-white font-headline-lg">
+              Deal<span className="text-cyan-300">Mee</span> AI
+            </span>
             <span className="px-2.5 py-0.5 rounded-full bg-white/20 text-white text-xs font-semibold backdrop-blur-md">
               Sales Closer AI
             </span>
@@ -182,10 +190,16 @@ function LoginContent() {
           
           {/* Top Brand Logo for Mobile & Tablet */}
           <div className="lg:hidden flex items-center justify-center gap-2.5 mb-6">
-            <div className="w-9 h-9 rounded-2xl bg-blue-600 flex items-center justify-center font-black text-lg text-white shadow-md shadow-blue-600/30">
-              D
-            </div>
-            <span className="text-2xl font-black tracking-tight text-slate-900 font-headline-lg">DealMee AI</span>
+            <Image
+              src="/logos/concept-d1.jpg"
+              alt="DealMee Logo"
+              width={36}
+              height={36}
+              className="w-9 h-9 rounded-xl object-cover shadow-md shadow-blue-600/20 border border-slate-100 shrink-0"
+            />
+            <span className="text-2xl font-black tracking-tight text-slate-900 font-headline-lg">
+              <span className="text-blue-600">Deal</span><span className="text-cyan-500">Mee</span> AI
+            </span>
           </div>
 
           {/* Clean White Card with Smooth Height Transition */}

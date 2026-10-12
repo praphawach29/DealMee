@@ -1,6 +1,7 @@
 import { submitOnboarding } from './actions'
 import { Button } from '@/components/ui/button'
 import { Check } from 'lucide-react'
+import Image from 'next/image'
 
 const TEMPLATES = [
   { id: 'beauty', emoji: '💄', label: 'ความงาม & เครื่องสำอาง', type: 'retail', description: 'ร้านขายสกินแคร์, เครื่องสำอาง, เวชสำอาง' },
@@ -20,8 +21,17 @@ export default function OnboardingPage() {
       <div className="max-w-3xl w-full">
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-2xl bg-electric-blue flex items-center justify-center font-bold text-2xl text-white shadow-lg shadow-electric-blue/20">D</div>
-            <span className="text-3xl font-bold tracking-tight text-deep-indigo font-headline-xl">DealMee AI</span>
+            <Image
+              src="/logos/concept-d1.jpg"
+              alt="DealMee Logo"
+              width={48}
+              height={48}
+              priority
+              className="w-12 h-12 rounded-2xl object-cover shadow-lg shadow-blue-500/20 border border-slate-100"
+            />
+            <span className="text-3xl font-bold tracking-tight text-deep-indigo font-headline-xl">
+              <span className="text-blue-600">Deal</span><span className="text-cyan-500">Mee</span> AI
+            </span>
           </div>
           <h2 className="text-3xl font-bold text-on-surface font-headline-lg">ตั้งค่าร้านค้าของคุณ</h2>
           <p className="mt-2 text-on-surface-variant font-body-lg">กรุณากรอกข้อมูลเบื้องต้นเพื่อเริ่มต้นใช้งาน</p>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import AdminSidebarNav from './AdminSidebarNav'
 import { Crown, Menu, X, LogOut } from 'lucide-react'
 
@@ -21,15 +22,21 @@ export default function AdminClientLayout({
       <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-slate-900 text-white z-50 flex-col border-r border-slate-800 shadow-2xl">
         <div className="px-6 py-5 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-bold text-slate-950 shadow-md">
-              <Crown className="h-4 w-4 text-slate-950" />
-            </div>
+            <Image
+              src="/logos/concept-d1.jpg"
+              alt="DealMee Logo"
+              width={36}
+              height={36}
+              className="w-9 h-9 rounded-xl object-cover shadow-md border border-slate-700 shrink-0"
+              priority
+            />
             <div>
-              <span className="font-headline-md text-white font-bold tracking-tight text-base block leading-none">
-                DealMee AI
+              <span className="font-headline-md text-white font-extrabold tracking-tight text-base block leading-none">
+                <span className="text-blue-400">Deal</span><span className="text-cyan-400">Mee</span> <span className="text-xs text-slate-400 uppercase ml-0.5">AI</span>
               </span>
-              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block mt-1 font-mono">
-                Super Admin
+              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block mt-1.5 font-mono flex items-center gap-1">
+                <Crown className="h-3 w-3 inline text-amber-400" />
+                <span>Super Admin</span>
               </span>
             </div>
           </div>
@@ -53,15 +60,20 @@ export default function AdminClientLayout({
       >
         <div className="px-5 py-5 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-bold text-slate-950 shadow-md">
-              <Crown className="h-4 w-4 text-slate-950" />
-            </div>
+            <Image
+              src="/logos/concept-d1.jpg"
+              alt="DealMee Logo"
+              width={36}
+              height={36}
+              className="w-9 h-9 rounded-xl object-cover shadow-md border border-slate-700 shrink-0"
+            />
             <div>
-              <span className="font-headline-md text-white font-bold tracking-tight text-base block leading-none">
-                DealMee AI
+              <span className="font-headline-md text-white font-extrabold tracking-tight text-base block leading-none">
+                <span className="text-blue-400">Deal</span><span className="text-cyan-400">Mee</span> <span className="text-xs text-slate-400 uppercase ml-0.5">AI</span>
               </span>
-              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block mt-1 font-mono">
-                Super Admin
+              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block mt-1.5 font-mono flex items-center gap-1">
+                <Crown className="h-3 w-3 inline text-amber-400" />
+                <span>Super Admin</span>
               </span>
             </div>
           </div>
