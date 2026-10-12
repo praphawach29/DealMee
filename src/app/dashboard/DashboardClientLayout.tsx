@@ -123,7 +123,7 @@ export default function DashboardClientLayout({
             </div>
             
             {/* Mobile Brand Title */}
-            <span className="sm:hidden font-headline-md text-primary font-bold text-base">
+            <span className="sm:hidden font-headline-md text-primary font-bold text-base whitespace-nowrap shrink-0">
               DealMee AI
             </span>
           </div>

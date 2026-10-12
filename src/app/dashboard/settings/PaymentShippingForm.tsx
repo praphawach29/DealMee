@@ -870,7 +870,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-4 sm:pt-6 border-t border-outline-variant/30 mt-6 sm:pr-36">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-4 sm:pt-6 pb-20 sm:pb-6 border-t border-outline-variant/30 mt-6 sm:pr-36">
         <div className="text-xs text-on-surface-variant flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
           <span>ตรวจสอบความถูกต้องของข้อมูลการชำระเงินและการจัดส่งก่อนกดบันทึก</span>

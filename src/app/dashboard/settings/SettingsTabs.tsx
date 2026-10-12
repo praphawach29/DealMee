@@ -13,11 +13,11 @@ export default function SettingsTabs({ shop }: { shop: any }) {
   return (
     <div className="space-y-5 sm:space-y-6">
       {/* Navigation Tabs Header */}
-      <div className="flex border-b border-outline-variant/40 gap-2 sm:gap-4 overflow-x-auto no-scrollbar">
+      <div className="flex border-b border-outline-variant/40 gap-1.5 sm:gap-3 overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
         <button
           type="button"
           onClick={() => setActiveTab('bot')}
-          className={`flex items-center gap-2 px-4 py-3 font-label-md text-xs sm:text-sm font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer ${
+          className={`flex items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3 font-label-md text-xs sm:text-sm font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer shrink-0 ${
             activeTab === 'bot'
               ? 'border-electric-blue text-electric-blue bg-electric-blue/5 rounded-t-xl'
               : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-t-xl'
@@ -30,7 +30,7 @@ export default function SettingsTabs({ shop }: { shop: any }) {
         <button
           type="button"
           onClick={() => setActiveTab('channels')}
-          className={`flex items-center gap-2 px-4 py-3 font-label-md text-xs sm:text-sm font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer ${
+          className={`flex items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3 font-label-md text-xs sm:text-sm font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer shrink-0 ${
             activeTab === 'channels'
               ? 'border-electric-blue text-electric-blue bg-electric-blue/5 rounded-t-xl'
               : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-t-xl'
@@ -43,7 +43,7 @@ export default function SettingsTabs({ shop }: { shop: any }) {
         <button
           type="button"
           onClick={() => setActiveTab('company')}
-          className={`flex items-center gap-2 px-4 py-3 font-label-md text-xs sm:text-sm font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer ${
+          className={`flex items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3 font-label-md text-xs sm:text-sm font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer shrink-0 ${
             activeTab === 'company'
               ? 'border-electric-blue text-electric-blue bg-electric-blue/5 rounded-t-xl'
               : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-t-xl'
@@ -56,7 +56,7 @@ export default function SettingsTabs({ shop }: { shop: any }) {
         <button
           type="button"
           onClick={() => setActiveTab('payment')}
-          className={`flex items-center gap-2 px-4 py-3 font-label-md text-xs sm:text-sm font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer ${
+          className={`flex items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3 font-label-md text-xs sm:text-sm font-semibold border-b-2 transition-all whitespace-nowrap cursor-pointer shrink-0 ${
             activeTab === 'payment'
               ? 'border-electric-blue text-electric-blue bg-electric-blue/5 rounded-t-xl'
               : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low rounded-t-xl'
