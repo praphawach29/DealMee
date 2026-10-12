@@ -122,7 +122,16 @@ export async function POST(request: NextRequest) {
       supabaseClient: admin,
     })
 
-    const aiText = agentResult.text || ''
+    let aiText = agentResult.text || ''
+    if (!aiText && agentResult.immediateMessages && agentResult.immediateMessages.length > 0) {
+      const foundText = agentResult.immediateMessages.find((m) => m.type === 'text')
+      if (foundText && 'text' in foundText && typeof (foundText as any).text === 'string') {
+        aiText = (foundText as any).text
+      }
+    }
+    if (!aiText) {
+      aiText = `สวัสดีครับ ยินดีต้อนรับสู่ ${shop.name || 'ร้านค้า'} ครับ มีอะไรให้แอดมินช่วยดูแลหรือสนใจสอบถามข้อมูลตัวไหนเพิ่มเติมได้เลยนะครับ`
+    }
 
     // 7. Handle Copilot Mode vs Auto Mode
     if (targetAiMode === 'copilot') {
@@ -137,9 +146,13 @@ export async function POST(request: NextRequest) {
         status: 'copilot_suggestion_ready',
         conversationId: conv.id,
         psid,
+        mode: 'copilot',
         aiMode: 'copilot',
+        reply: aiText,
+        reply_text: aiText,
         suggestedReply: aiText,
-        toolsExecuted: agentResult.toolCallsExecuted,
+        suggested_reply: aiText,
+        toolsExecuted: agentResult.toolCallsExecuted || [],
         messageToAdmin: 'Drafted AI suggestion in Unified Inbox for admin 1-click approval',
       })
     }
@@ -168,9 +181,13 @@ export async function POST(request: NextRequest) {
       status: 'auto_reply_completed',
       conversationId: conv.id,
       psid,
+      mode: 'auto',
       aiMode: 'auto',
       reply: aiText,
-      toolsExecuted: agentResult.toolCallsExecuted,
+      reply_text: aiText,
+      suggestedReply: aiText,
+      suggested_reply: aiText,
+      toolsExecuted: agentResult.toolCallsExecuted || [],
       productsRecommended: agentResult.productsData?.length || 0,
     })
   } catch (err: unknown) {

@@ -668,24 +668,52 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
                 </div>
 
                 {simResult && (
-                  <div className="p-3 rounded-xl bg-surface border border-outline-variant/40 space-y-1.5 text-xs">
+                  <div className="p-3.5 sm:p-4 rounded-xl bg-surface border border-outline-variant/40 space-y-2.5 text-xs animate-in fade-in duration-200">
                     <div className="flex items-center justify-between text-[11px] text-on-surface-variant">
-                      <span className="font-bold text-on-surface">ผลการประมวลผล:</span>
-                      <span className="text-blue-600 font-semibold">{simResult.mode}</span>
+                      <span className="font-bold text-on-surface flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                        ผลการประมวลผลของ AI:
+                      </span>
+                      <span className="text-blue-600 font-semibold px-2 py-0.5 rounded-md bg-blue-500/10 text-[10px]">
+                        {simResult.mode === 'copilot' || simResult.aiMode === 'copilot'
+                          ? 'โหมด Copilot (AI แนะนำคำตอบ)'
+                          : 'โหมด Auto (ตอบอัตโนมัติ)'}
+                      </span>
                     </div>
-                    {simResult.reply_text && (
-                      <div className="p-2.5 rounded-lg bg-blue-500/10 text-on-surface border border-blue-500/20 whitespace-pre-wrap leading-relaxed text-xs">
-                        {simResult.reply_text}
+
+                    {(simResult.reply_text || simResult.reply) && (
+                      <div className="p-3 rounded-xl bg-blue-500/10 text-on-surface border border-blue-500/20 whitespace-pre-wrap leading-relaxed text-xs shadow-xs">
+                        <div className="font-semibold text-blue-600 mb-1 flex items-center gap-1 text-[11px]">
+                          <span>💬 คำตอบที่ลูกค้าจะได้รับ:</span>
+                        </div>
+                        {simResult.reply_text || simResult.reply}
                       </div>
                     )}
-                    {simResult.suggested_reply && (
-                      <div className="p-2.5 rounded-lg bg-purple-500/10 text-on-surface border border-purple-500/20 whitespace-pre-wrap leading-relaxed text-xs">
-                        <span className="font-bold text-purple-600 block mb-0.5">คำตอบแนะนำ (Copilot):</span>
-                        {simResult.suggested_reply}
-                      </div>
-                    )}
+
+                    {(simResult.suggested_reply || simResult.suggestedReply) &&
+                      (simResult.mode === 'copilot' || simResult.aiMode === 'copilot') && (
+                        <div className="p-3 rounded-xl bg-purple-500/10 text-on-surface border border-purple-500/20 whitespace-pre-wrap leading-relaxed text-xs shadow-xs">
+                          <span className="font-bold text-purple-600 block mb-1 text-[11px]">
+                            💡 คำตอบแนะนำสำหรับแอดมิน (Copilot):
+                          </span>
+                          {simResult.suggested_reply || simResult.suggestedReply}
+                        </div>
+                      )}
+
+                    {!simResult.reply_text &&
+                      !simResult.reply &&
+                      !simResult.suggested_reply &&
+                      !simResult.suggestedReply &&
+                      !simResult.error && (
+                        <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-700 text-xs">
+                          ระบบประมวลผลสำเร็จ แต่ไม่มีข้อความตอบกลับ กรุณาลองส่งใหม่อีกครั้ง
+                        </div>
+                      )}
+
                     {simResult.error && (
-                      <div className="text-error-red text-[11px]">{simResult.error}</div>
+                      <div className="p-2.5 rounded-lg bg-red-500/10 text-error-red border border-red-500/20 text-xs">
+                        ⚠️ เกิดข้อผิดพลาด: {simResult.error}
+                      </div>
                     )}
                   </div>
                 )}
