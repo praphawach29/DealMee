@@ -388,3 +388,72 @@ export async function fetchCustomerProfile(userId: string) {
   }
 }
 
+export async function generateAiSuggestion(conversationId: string) {
+  const supabase = await createClient()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) return { error: 'กรุณาเข้าสู่ระบบอีกครั้ง' }
+
+  const { data: userProfile } = await supabase
+    .from('users')
+    .select('workspace_id')
+    .eq('id', user.id)
+    .single()
+
+  if (!userProfile?.workspace_id) return { error: 'ไม่พบข้อมูลร้านค้า' }
+
+  const admin = (await import('@/lib/supabase/admin')).createAdminClient()
+  const { data: conv } = await admin
+    .from('conversations')
+    .select('*')
+    .eq('id', conversationId)
+    .eq('shop_id', userProfile.workspace_id)
+    .single()
+
+  if (!conv) return { error: 'ไม่พบข้อมูลการสนทนา' }
+
+  const { data: shop } = await admin
+    .from('shops')
+    .select('*')
+    .eq('id', userProfile.workspace_id)
+    .single()
+
+  if (!shop) return { error: 'ไม่พบข้อมูลร้านค้า' }
+
+  // Get the last user message
+  const { data: lastUserMsg } = await admin
+    .from('chat_messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .eq('sender_type', 'user')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const userQuery = lastUserMsg?.message || conv.last_message || 'สวัสดีครับ'
+
+  const { processSalesAgentChat } = await import('@/lib/ai/salesAgentEngine')
+  const agentResult = await processSalesAgentChat({
+    shop,
+    userQuery,
+    userId: conv.user_id,
+    conversationId: conv.id,
+    supabaseClient: admin,
+  })
+
+  const suggestedText = agentResult.text?.trim() || ''
+  if (!suggestedText) {
+    return { error: 'ไม่สามารถสร้างคำตอบแนะนำได้ในขณะนี้' }
+  }
+
+  // Update latest user message with this suggestion
+  if (lastUserMsg?.id) {
+    await admin
+      .from('chat_messages')
+      .update({ ai_suggested_reply: suggestedText })
+      .eq('id', lastUserMsg.id)
+  }
+
+  revalidatePath('/dashboard/inbox')
+  return { success: true, suggestion: suggestedText }
+}
+

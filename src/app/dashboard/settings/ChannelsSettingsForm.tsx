@@ -20,6 +20,8 @@ import {
   Zap,
   ChevronDown,
   ChevronUp,
+  ShoppingBag,
+  Store,
 } from 'lucide-react'
 
 interface ShopChannelData {
@@ -30,6 +32,12 @@ interface ShopChannelData {
   facebook_page_token?: string | null
   facebook_verify_token?: string | null
   facebook_app_secret?: string | null
+  tiktok_app_key?: string | null
+  tiktok_app_secret?: string | null
+  tiktok_shop_id?: string | null
+  shopee_partner_id?: string | null
+  shopee_partner_key?: string | null
+  shopee_shop_id?: string | null
 }
 
 export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }) {
@@ -39,23 +47,43 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
   // Collapsible Guide States (Mobile-friendly accordions)
   const [showLineGuide, setShowLineGuide] = useState(false)
   const [showFbGuide, setShowFbGuide] = useState(false)
+  const [showTikTokGuide, setShowTikTokGuide] = useState(false)
+  const [showShopeeGuide, setShowShopeeGuide] = useState(false)
+
+  // Simulator Visibility
   const [showSimulator, setShowSimulator] = useState(false)
+  const [showTikTokSimulator, setShowTikTokSimulator] = useState(false)
+  const [showShopeeSimulator, setShowShopeeSimulator] = useState(false)
 
   // Copy state
   const [copiedLine, setCopiedLine] = useState(false)
   const [copiedFb, setCopiedFb] = useState(false)
+  const [copiedTikTok, setCopiedTikTok] = useState(false)
+  const [copiedShopee, setCopiedShopee] = useState(false)
 
   // Password visibility state
   const [showLineSecret, setShowLineSecret] = useState(false)
   const [showLineToken, setShowLineToken] = useState(false)
   const [showFbToken, setShowFbToken] = useState(false)
   const [showFbSecret, setShowFbSecret] = useState(false)
+  const [showTikTokSecret, setShowTikTokSecret] = useState(false)
+  const [showShopeeKey, setShowShopeeKey] = useState(false)
 
-  // Simulation state
+  // Facebook Simulation state
   const [simText, setSimText] = useState('')
   const [simMode, setSimMode] = useState<'auto' | 'copilot'>('auto')
   const [simLoading, setSimLoading] = useState(false)
   const [simResult, setSimResult] = useState<any>(null)
+
+  // TikTok Simulation state
+  const [simTikTokText, setSimTikTokText] = useState('')
+  const [simTikTokLoading, setSimTikTokLoading] = useState(false)
+  const [simTikTokResult, setSimTikTokResult] = useState<any>(null)
+
+  // Shopee Simulation state
+  const [simShopeeText, setSimShopeeText] = useState('')
+  const [simShopeeLoading, setSimShopeeLoading] = useState(false)
+  const [simShopeeResult, setSimShopeeResult] = useState<any>(null)
 
   const lineWebhookUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/webhook/${shop.id}`
@@ -64,6 +92,14 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
   const fbWebhookUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/webhook/facebook/${shop.id}`
     : `https://app.dealmee.app/api/webhook/facebook/${shop.id}`
+
+  const tiktokWebhookUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/api/webhook/tiktok/${shop.id}`
+    : `https://app.dealmee.app/api/webhook/tiktok/${shop.id}`
+
+  const shopeeWebhookUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/api/webhook/shopee/${shop.id}`
+    : `https://app.dealmee.app/api/webhook/shopee/${shop.id}`
 
   const handleCopyLine = () => {
     navigator.clipboard.writeText(lineWebhookUrl)
@@ -75,6 +111,18 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
     navigator.clipboard.writeText(fbWebhookUrl)
     setCopiedFb(true)
     setTimeout(() => setCopiedFb(false), 2000)
+  }
+
+  const handleCopyTikTok = () => {
+    navigator.clipboard.writeText(tiktokWebhookUrl)
+    setCopiedTikTok(true)
+    setTimeout(() => setCopiedTikTok(false), 2000)
+  }
+
+  const handleCopyShopee = () => {
+    navigator.clipboard.writeText(shopeeWebhookUrl)
+    setCopiedShopee(true)
+    setTimeout(() => setCopiedShopee(false), 2000)
   }
 
   async function handleTestFbSimulation() {
@@ -100,6 +148,52 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
     }
   }
 
+  async function handleTestTikTokSimulation() {
+    if (!simTikTokText.trim()) return
+    setSimTikTokLoading(true)
+    setSimTikTokResult(null)
+    try {
+      const res = await fetch('/api/test/tiktok-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shop_id: shop.id,
+          message: simTikTokText.trim(),
+          ai_mode: 'copilot',
+        }),
+      })
+      const data = await res.json()
+      setSimTikTokResult(data)
+    } catch (err: any) {
+      setSimTikTokResult({ error: err?.message || 'Failed to simulate TikTok message' })
+    } finally {
+      setSimTikTokLoading(false)
+    }
+  }
+
+  async function handleTestShopeeSimulation() {
+    if (!simShopeeText.trim()) return
+    setSimShopeeLoading(true)
+    setSimShopeeResult(null)
+    try {
+      const res = await fetch('/api/test/shopee-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shop_id: shop.id,
+          message: simShopeeText.trim(),
+          ai_mode: 'copilot',
+        }),
+      })
+      const data = await res.json()
+      setSimShopeeResult(data)
+    } catch (err: any) {
+      setSimShopeeResult({ error: err?.message || 'Failed to simulate Shopee message' })
+    } finally {
+      setSimShopeeLoading(false)
+    }
+  }
+
   async function handleSubmit(formData: FormData) {
     setLoading(true)
     setMessage(null)
@@ -120,6 +214,8 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
 
   const isLineConnected = Boolean(shop.line_token && shop.line_token.trim())
   const isFbConnected = Boolean(shop.facebook_page_token && shop.facebook_page_token.trim())
+  const isTikTokConnected = Boolean(shop.tiktok_shop_id || shop.tiktok_app_key)
+  const isShopeeConnected = Boolean(shop.shopee_shop_id || shop.shopee_partner_id)
 
   return (
     <form action={handleSubmit} className="space-y-4 sm:space-y-6">
@@ -713,6 +809,455 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
                     {simResult.error && (
                       <div className="p-2.5 rounded-lg bg-red-500/10 text-error-red border border-red-500/20 text-xs">
                         ⚠️ เกิดข้อผิดพลาด: {simResult.error}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================= */}
+      {/* SECTION 3: TIKTOK SHOP (MARKETPLACE & AI COPILOT)         */}
+      {/* ========================================================= */}
+      <section className="bg-surface rounded-2xl border border-outline-variant/40 shadow-sm overflow-hidden transition-all hover:border-outline-variant">
+        <div className="p-4 sm:p-6 border-b border-outline-variant/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-container-low/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">
+                  TikTok Shop (Seller Center)
+                </h2>
+                <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700">
+                  Marketplace Copilot
+                </span>
+                {isTikTokConnected ? (
+                  <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> เชื่อมต่อแล้ว
+                  </span>
+                ) : (
+                  <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-outline-variant/30 text-on-surface-variant">
+                    ยังไม่ได้เชื่อมต่อ
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                ดึงแชทลูกค้าจาก TikTok Shop เข้าสู่ Unified Inbox พร้อมระบบ AI ร่างคำตอบอนุมัติใน 1 คลิก
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowTikTokGuide(!showTikTokGuide)}
+            className="self-start sm:self-auto flex items-center gap-1 text-xs text-slate-800 dark:text-slate-200 hover:underline font-semibold cursor-pointer shrink-0 py-1"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-slate-600" />
+            <span>{showTikTokGuide ? 'ซ่อนคู่มือ' : 'คู่มือเชื่อมต่อ TikTok'}</span>
+            {showTikTokGuide ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
+        {/* Collapsible TikTok Guide */}
+        {showTikTokGuide && (
+          <div className="p-4 sm:p-5 bg-slate-500/5 border-b border-outline-variant/30 text-xs text-on-surface-variant space-y-3">
+            <h4 className="font-bold text-on-surface flex items-center gap-1.5">
+              <span>📌 ขั้นตอนการเชื่อมต่อ TikTok Shop Partner Console:</span>
+            </h4>
+            <ol className="list-decimal list-inside space-y-2 leading-relaxed">
+              <li>
+                เข้าสู่ระบบที่{' '}
+                <a
+                  href="https://partner.tiktokshop.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-slate-900 dark:text-slate-100 underline font-semibold inline-flex items-center gap-0.5"
+                >
+                  TikTok Shop Partner Center <ExternalLink className="w-3 h-3 inline" />
+                </a>
+              </li>
+              <li>สร้าง Custom App ในหมวด <strong>Customer Service (IM Service)</strong></li>
+              <li>คัดลอก <strong>TikTok Webhook Callback URL</strong> ด้านล่างไปวางใน Webhook Settings</li>
+              <li>นำ <strong>App Key</strong>, <strong>App Secret</strong> และ <strong>Shop ID</strong> มากดยืนยันด้านล่าง</li>
+            </ol>
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-800 dark:text-amber-200">
+              💡 <strong>ความปลอดภัย:</strong> แชทจาก TikTok จะเปิดโหมด <strong>AI Copilot</strong> เป็นค่าเริ่มต้น เพื่อให้แอดมินกดตรวจก่อนส่ง 1 คลิก ป้องกันการผิดกฎมาร์เก็ตเพลส
+            </div>
+          </div>
+        )}
+
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+          {/* Webhook Callback URL */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-on-surface">
+              TikTok Webhook Callback URL
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                readOnly
+                value={tiktokWebhookUrl}
+                className="flex-1 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl border border-outline-variant/60 bg-surface-container-low text-on-surface text-xs font-mono select-all focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleCopyTikTok}
+                className={`px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl border font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95 ${
+                  copiedTikTok
+                    ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm'
+                    : 'bg-surface hover:bg-surface-container border-outline-variant text-on-surface'
+                }`}
+              >
+                {copiedTikTok ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedTikTok ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            {/* App Key */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-on-surface">
+                App Key
+              </label>
+              <input
+                type="text"
+                name="tiktok_app_key"
+                defaultValue={shop.tiktok_app_key || ''}
+                placeholder="เช่น 68abc123..."
+                className="w-full px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl border border-outline-variant/60 bg-surface text-on-surface text-xs focus:border-slate-800 outline-none"
+              />
+            </div>
+
+            {/* App Secret */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-on-surface">
+                App Secret
+              </label>
+              <div className="relative">
+                <input
+                  type={showTikTokSecret ? 'text' : 'password'}
+                  name="tiktok_app_secret"
+                  defaultValue={shop.tiktok_app_secret || ''}
+                  placeholder="App Secret จาก Partner Center"
+                  className="w-full px-3 py-2 sm:px-3.5 sm:py-2.5 pr-9 rounded-xl border border-outline-variant/60 bg-surface text-on-surface text-xs focus:border-slate-800 outline-none font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowTikTokSecret(!showTikTokSecret)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface cursor-pointer p-0.5"
+                >
+                  {showTikTokSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Shop ID */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-on-surface">
+                TikTok Shop ID
+              </label>
+              <input
+                type="text"
+                name="tiktok_shop_id"
+                defaultValue={shop.tiktok_shop_id || ''}
+                placeholder="เช่น 74958291..."
+                className="w-full px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl border border-outline-variant/60 bg-surface text-on-surface text-xs focus:border-slate-800 outline-none"
+              />
+            </div>
+          </div>
+
+          {/* TikTok Real-time Test Simulator */}
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => setShowTikTokSimulator(!showTikTokSimulator)}
+              className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 hover:underline cursor-pointer"
+            >
+              <Zap className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
+              <span>{showTikTokSimulator ? 'ปิดตัวจำลองทดสอบ TikTok' : '⚡ จำลองแชททดสอบระบบ TikTok (Copilot Mode)'}</span>
+              {showTikTokSimulator ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+
+            {showTikTokSimulator && (
+              <div className="mt-3 p-3.5 sm:p-4 rounded-xl bg-surface-container-low border border-outline-variant/40 space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={simTikTokText}
+                    onChange={(e) => setSimTikTokText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleTestTikTokSimulation()
+                      }
+                    }}
+                    placeholder="พิมพ์คำถามลูกค้า TikTok เช่น มีสินค้าพร้อมส่งไหมครับ..."
+                    className="flex-1 px-3 py-2 rounded-xl border border-outline-variant bg-surface text-on-surface text-xs focus:border-slate-800 outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={simTikTokLoading || !simTikTokText.trim()}
+                    onClick={handleTestTikTokSimulation}
+                    className="px-3.5 py-2 bg-slate-900 hover:bg-black text-white font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer shrink-0"
+                  >
+                    {simTikTokLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    <span>ส่งทดสอบ</span>
+                  </button>
+                </div>
+
+                {simTikTokResult && (
+                  <div className="p-3 rounded-xl bg-surface border border-outline-variant/40 space-y-2 text-xs">
+                    <div className="flex items-center justify-between text-[11px] text-on-surface-variant">
+                      <span className="font-bold text-on-surface flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                        AI Copilot Suggestion:
+                      </span>
+                      <span className="text-amber-600 font-semibold px-2 py-0.5 rounded bg-amber-500/10 text-[10px]">
+                        โหมด Copilot (พร้อมส่ง 1 คลิกใน Inbox)
+                      </span>
+                    </div>
+
+                    {(simTikTokResult.suggested_reply || simTikTokResult.reply) && (
+                      <div className="p-3 rounded-xl bg-purple-500/10 text-on-surface border border-purple-500/20 whitespace-pre-wrap leading-relaxed text-xs shadow-xs">
+                        <span className="font-bold text-purple-600 block mb-1 text-[11px]">
+                          💡 คำตอบแนะนำสำหรับแอดมิน:
+                        </span>
+                        {simTikTokResult.suggested_reply || simTikTokResult.reply}
+                      </div>
+                    )}
+
+                    {simTikTokResult.error && (
+                      <div className="p-2.5 rounded-lg bg-red-500/10 text-error-red border border-red-500/20 text-xs">
+                        ⚠️ เกิดข้อผิดพลาด: {simTikTokResult.error}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================= */}
+      {/* SECTION 4: SHOPEE (OPEN PLATFORM & AI COPILOT)            */}
+      {/* ========================================================= */}
+      <section className="bg-surface rounded-2xl border border-outline-variant/40 shadow-sm overflow-hidden transition-all hover:border-outline-variant">
+        <div className="p-4 sm:p-6 border-b border-outline-variant/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-container-low/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-[#EE4D2D] text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Store className="w-5 h-5 sm:w-6 sm:h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">
+                  Shopee (Open Platform)
+                </h2>
+                <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 border border-orange-500/20">
+                  Marketplace Copilot
+                </span>
+                {isShopeeConnected ? (
+                  <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> เชื่อมต่อแล้ว
+                  </span>
+                ) : (
+                  <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-outline-variant/30 text-on-surface-variant">
+                    ยังไม่ได้เชื่อมต่อ
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                รักษาคะแนนการตอบแชท (CRR &gt; 85%) ด้วยระบบ AI ช่วยร่างคำตอบอัตโนมัติให้แอดมินกดส่ง
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowShopeeGuide(!showShopeeGuide)}
+            className="self-start sm:self-auto flex items-center gap-1 text-xs text-[#EE4D2D] hover:underline font-semibold cursor-pointer shrink-0 py-1"
+          >
+            <HelpCircle className="w-3.5 h-3.5 text-[#EE4D2D]" />
+            <span>{showShopeeGuide ? 'ซ่อนคู่มือ' : 'คู่มือเชื่อมต่อ Shopee'}</span>
+            {showShopeeGuide ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
+        {/* Collapsible Shopee Guide */}
+        {showShopeeGuide && (
+          <div className="p-4 sm:p-5 bg-orange-500/5 border-b border-outline-variant/30 text-xs text-on-surface-variant space-y-3">
+            <h4 className="font-bold text-on-surface flex items-center gap-1.5">
+              <span>📌 ขั้นตอนการเชื่อมต่อ Shopee Open Platform Console:</span>
+            </h4>
+            <ol className="list-decimal list-inside space-y-2 leading-relaxed">
+              <li>
+                เข้าสู่ระบบที่{' '}
+                <a
+                  href="https://open.shopee.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#EE4D2D] underline font-semibold inline-flex items-center gap-0.5"
+                >
+                  Shopee Open Platform <ExternalLink className="w-3 h-3 inline" />
+                </a>
+              </li>
+              <li>สร้าง App ในหมวด <strong>Customer Service / Chat API</strong></li>
+              <li>นำ <strong>Shopee Webhook Callback URL</strong> ไปตั้งค่าใน Push Notification URL</li>
+              <li>กรอก <strong>Partner ID</strong>, <strong>Partner Key</strong> และ <strong>Shop ID</strong> ด้านล่างแล้วกดบันทึก</li>
+            </ol>
+          </div>
+        )}
+
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+          {/* Webhook Callback URL */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-on-surface">
+              Shopee Webhook Callback URL
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                readOnly
+                value={shopeeWebhookUrl}
+                className="flex-1 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl border border-outline-variant/60 bg-surface-container-low text-on-surface text-xs font-mono select-all focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleCopyShopee}
+                className={`px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl border font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95 ${
+                  copiedShopee
+                    ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm'
+                    : 'bg-surface hover:bg-surface-container border-outline-variant text-on-surface'
+                }`}
+              >
+                {copiedShopee ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedShopee ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            {/* Partner ID */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-on-surface">
+                Partner ID
+              </label>
+              <input
+                type="text"
+                name="shopee_partner_id"
+                defaultValue={shop.shopee_partner_id || ''}
+                placeholder="เช่น 2004829"
+                className="w-full px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl border border-outline-variant/60 bg-surface text-on-surface text-xs focus:border-[#EE4D2D] outline-none"
+              />
+            </div>
+
+            {/* Partner Key */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-on-surface">
+                Partner Key
+              </label>
+              <div className="relative">
+                <input
+                  type={showShopeeKey ? 'text' : 'password'}
+                  name="shopee_partner_key"
+                  defaultValue={shop.shopee_partner_key || ''}
+                  placeholder="Partner Key จาก Open Platform"
+                  className="w-full px-3 py-2 sm:px-3.5 sm:py-2.5 pr-9 rounded-xl border border-outline-variant/60 bg-surface text-on-surface text-xs focus:border-[#EE4D2D] outline-none font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowShopeeKey(!showShopeeKey)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface cursor-pointer p-0.5"
+                >
+                  {showShopeeKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Shop ID */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-on-surface">
+                Shopee Shop ID
+              </label>
+              <input
+                type="text"
+                name="shopee_shop_id"
+                defaultValue={shop.shopee_shop_id || ''}
+                placeholder="เช่น 10982394"
+                className="w-full px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl border border-outline-variant/60 bg-surface text-on-surface text-xs focus:border-[#EE4D2D] outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Shopee Real-time Test Simulator */}
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => setShowShopeeSimulator(!showShopeeSimulator)}
+              className="text-xs font-semibold text-[#EE4D2D] flex items-center gap-1.5 hover:underline cursor-pointer"
+            >
+              <Zap className="w-3.5 h-3.5 text-[#EE4D2D]" />
+              <span>{showShopeeSimulator ? 'ปิดตัวจำลองทดสอบ Shopee' : '⚡ จำลองแชททดสอบระบบ Shopee (Copilot Mode)'}</span>
+              {showShopeeSimulator ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+
+            {showShopeeSimulator && (
+              <div className="mt-3 p-3.5 sm:p-4 rounded-xl bg-surface-container-low border border-outline-variant/40 space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={simShopeeText}
+                    onChange={(e) => setSimShopeeText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleTestShopeeSimulation()
+                      }
+                    }}
+                    placeholder="พิมพ์คำถามลูกค้า Shopee เช่น สินค้ามีประกันไหมครับ..."
+                    className="flex-1 px-3 py-2 rounded-xl border border-outline-variant bg-surface text-on-surface text-xs focus:border-[#EE4D2D] outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={simShopeeLoading || !simShopeeText.trim()}
+                    onClick={handleTestShopeeSimulation}
+                    className="px-3.5 py-2 bg-[#EE4D2D] hover:bg-[#d63f20] text-white font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer shrink-0"
+                  >
+                    {simShopeeLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    <span>ส่งทดสอบ</span>
+                  </button>
+                </div>
+
+                {simShopeeResult && (
+                  <div className="p-3 rounded-xl bg-surface border border-outline-variant/40 space-y-2 text-xs">
+                    <div className="flex items-center justify-between text-[11px] text-on-surface-variant">
+                      <span className="font-bold text-on-surface flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                        AI Copilot Suggestion:
+                      </span>
+                      <span className="text-amber-600 font-semibold px-2 py-0.5 rounded bg-amber-500/10 text-[10px]">
+                        โหมด Copilot (พร้อมส่ง 1 คลิกใน Inbox)
+                      </span>
+                    </div>
+
+                    {(simShopeeResult.suggested_reply || simShopeeResult.reply) && (
+                      <div className="p-3 rounded-xl bg-purple-500/10 text-on-surface border border-purple-500/20 whitespace-pre-wrap leading-relaxed text-xs shadow-xs">
+                        <span className="font-bold text-purple-600 block mb-1 text-[11px]">
+                          💡 คำตอบแนะนำสำหรับแอดมิน:
+                        </span>
+                        {simShopeeResult.suggested_reply || simShopeeResult.reply}
+                      </div>
+                    )}
+
+                    {simShopeeResult.error && (
+                      <div className="p-2.5 rounded-lg bg-red-500/10 text-error-red border border-red-500/20 text-xs">
+                        ⚠️ เกิดข้อผิดพลาด: {simShopeeResult.error}
                       </div>
                     )}
                   </div>

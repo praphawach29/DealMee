@@ -153,6 +153,14 @@ export async function updateChannelSettings(formData: FormData) {
   const fbVerifyToken = ((formData.get('facebook_verify_token') as string) || '').trim()
   const fbAppSecret = ((formData.get('facebook_app_secret') as string) || '').trim()
 
+  const tiktokAppKey = ((formData.get('tiktok_app_key') as string) || '').trim()
+  const tiktokAppSecret = ((formData.get('tiktok_app_secret') as string) || '').trim()
+  const tiktokShopId = ((formData.get('tiktok_shop_id') as string) || '').trim()
+
+  const shopeePartnerId = ((formData.get('shopee_partner_id') as string) || '').trim()
+  const shopeePartnerKey = ((formData.get('shopee_partner_key') as string) || '').trim()
+  const shopeeShopId = ((formData.get('shopee_shop_id') as string) || '').trim()
+
   const updateData = {
     line_token: lineToken,
     line_secret: lineSecret,
@@ -160,6 +168,12 @@ export async function updateChannelSettings(formData: FormData) {
     facebook_page_token: fbPageToken,
     facebook_verify_token: fbVerifyToken,
     facebook_app_secret: fbAppSecret,
+    tiktok_app_key: tiktokAppKey,
+    tiktok_app_secret: tiktokAppSecret,
+    tiktok_shop_id: tiktokShopId,
+    shopee_partner_id: shopeePartnerId,
+    shopee_partner_key: shopeePartnerKey,
+    shopee_shop_id: shopeeShopId,
     updated_at: new Date().toISOString(),
   }
 
@@ -205,6 +219,46 @@ export async function updateChannelSettings(formData: FormData) {
         credentials: {
           token: lineToken,
           secret: lineSecret,
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'shop_id,platform,account_id' }
+    )
+  }
+
+  // Synchronize TikTok Shop channel account in channel_accounts table
+  if (tiktokShopId || tiktokAppKey) {
+    await supabase.from('channel_accounts').upsert(
+      {
+        shop_id: shop.id,
+        platform: 'tiktok',
+        account_name: `TikTok Shop (${tiktokShopId || 'Default'})`,
+        account_id: tiktokShopId || 'default',
+        is_active: true,
+        credentials: {
+          app_key: tiktokAppKey,
+          app_secret: tiktokAppSecret,
+          shop_id: tiktokShopId,
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'shop_id,platform,account_id' }
+    )
+  }
+
+  // Synchronize Shopee channel account in channel_accounts table
+  if (shopeeShopId || shopeePartnerId) {
+    await supabase.from('channel_accounts').upsert(
+      {
+        shop_id: shop.id,
+        platform: 'shopee',
+        account_name: `Shopee Shop (${shopeeShopId || 'Default'})`,
+        account_id: shopeeShopId || 'default',
+        is_active: true,
+        credentials: {
+          partner_id: shopeePartnerId,
+          partner_key: shopeePartnerKey,
+          shop_id: shopeeShopId,
         },
         updated_at: new Date().toISOString(),
       },

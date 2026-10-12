@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { sendMessage, toggleHandoffStatus, toggleAiMode, createMockConversation } from './actions'
+import { sendMessage, toggleHandoffStatus, toggleAiMode, createMockConversation, generateAiSuggestion } from './actions'
 import { getSalesStageMeta, type SalesStage } from '@/lib/ai/salesWorkflow'
 import {
   SupportedPlatform,
@@ -30,6 +30,7 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
   )
   const [inputText, setInputText] = useState('')
   const [loading, setLoading] = useState(false)
+  const [suggestLoading, setSuggestLoading] = useState(false)
   const [filterStatus, setFilterStatus] = useState<'all' | 'ai' | 'human'>('all')
   const [filterPlatform, setFilterPlatform] = useState<'all' | SupportedPlatform>('all')
   const [searchTerm, setSearchTerm] = useState('')
@@ -120,6 +121,18 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
     setLoading(true)
     const res = await createMockConversation(platform)
     setLoading(false)
+    if (res?.error) {
+      alert(res.error)
+    } else {
+      router.refresh()
+    }
+  }
+
+  async function handleGenerateSuggestion() {
+    if (!selectedConvId || suggestLoading) return
+    setSuggestLoading(true)
+    const res = await generateAiSuggestion(selectedConvId)
+    setSuggestLoading(false)
     if (res?.error) {
       alert(res.error)
     } else {
@@ -603,6 +616,50 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
               </div>
             </div>
           )}
+
+          {/* Quick Action Chips & AI Generate Prompt */}
+          <div className="px-3 sm:px-4 py-1.5 flex items-center gap-1.5 overflow-x-auto scrollbar-none shrink-0 bg-surface/50 border-t border-outline-variant/20">
+            <button
+              type="button"
+              onClick={handleGenerateSuggestion}
+              disabled={suggestLoading || loading}
+              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-gradient-to-r from-purple-500/15 to-electric-blue/15 hover:from-purple-500/25 hover:to-electric-blue/25 text-purple-700 dark:text-purple-300 border border-purple-500/30 transition-all cursor-pointer flex items-center gap-1 shrink-0 disabled:opacity-50"
+              title="ให้ AI ช่วยร่างข้อความตอบกลับล่าสุด"
+            >
+              <span className={`material-symbols-outlined text-[14px] ${suggestLoading ? 'animate-spin' : ''}`}>
+                {suggestLoading ? 'sync' : 'auto_awesome'}
+              </span>
+              <span>{suggestLoading ? 'กำลังร่าง...' : '✨ AI ร่างคำตอบ'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setInputText('ขออนุญาตส่งเลขที่บัญชีสำหรับชำระเงินนะครับ/ค่ะ')}
+              className="px-2 py-1 text-[11px] font-medium rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-all cursor-pointer shrink-0 border border-outline-variant/30"
+            >
+              💳 ขอเลขที่บัญชี
+            </button>
+            <button
+              type="button"
+              onClick={() => setInputText('รบกวนส่งสลิปหลักฐานการโอนเงินเพื่อยืนยันออเดอร์ได้เลยครับ/ค่ะ')}
+              className="px-2 py-1 text-[11px] font-medium rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-all cursor-pointer shrink-0 border border-outline-variant/30"
+            >
+              🧾 ขอสลิปโอนเงิน
+            </button>
+            <button
+              type="button"
+              onClick={() => setInputText('สินค้าพร้อมส่งครับ สามารถกดสั่งซื้อหรือแจ้งยอดได้เลยครับ')}
+              className="px-2 py-1 text-[11px] font-medium rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-all cursor-pointer shrink-0 border border-outline-variant/30"
+            >
+              📦 สินค้าพร้อมส่ง
+            </button>
+            <button
+              type="button"
+              onClick={() => setInputText('ร้านค้าเปิดให้บริการทุกวัน 09:00 - 18:00 น. ครับ')}
+              className="px-2 py-1 text-[11px] font-medium rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-all cursor-pointer shrink-0 border border-outline-variant/30"
+            >
+              ⏰ เวลาทำการ
+            </button>
+          </div>
 
           {/* Message Input Bar */}
           <form onSubmit={(e) => handleSend(e)} className="p-2.5 sm:p-4 bg-surface border-t border-outline-variant/30 flex items-center gap-2 shrink-0">

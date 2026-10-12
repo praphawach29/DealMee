@@ -77,7 +77,11 @@ export function verifyFacebookSignature(
 export async function sendFacebookMessage(
   recipientPsid: string,
   text: string,
-  pageAccessToken: string
+  pageAccessToken: string,
+  options?: {
+    messagingType?: 'RESPONSE' | 'MESSAGE_TAG' | 'UPDATE'
+    tag?: string
+  }
 ): Promise<SendMessageResult> {
   const cleanToken = pageAccessToken.trim()
   if (!cleanToken) {
@@ -96,10 +100,13 @@ export async function sendFacebookMessage(
 
   try {
     const url = `${GRAPH_API_BASE}/me/messages`
-    const payload = {
+    const payload: Record<string, any> = {
       recipient: { id: recipientPsid },
-      messaging_type: 'RESPONSE',
+      messaging_type: options?.messagingType || 'RESPONSE',
       message: { text },
+    }
+    if (options?.tag) {
+      payload.tag = options.tag
     }
 
     const response = await fetch(url, {
