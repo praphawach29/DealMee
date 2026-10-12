@@ -1,22 +1,24 @@
-# Botify SaaS - Project Status
+# DealMee AI (DealMee.app) - Project Status
 
-> อัปเดตล่าสุด: 17 สิงหาคม 2026
+> อัปเดตล่าสุด: 13 ตุลาคม 2026
 > GitHub: praphawach29/ai-agent-google-SDK branch main
-> Last Commit: Stateful Sales Workflow Engine & Hermes-inspired Auto-FAQ Synthesis
+> Last Commit: 946fc26 (feat(branding): implement new DealMee official logo across admin, merchant dashboard, and website)
+> Handover & Action Checklist: ดูรายละเอียดเพิ่มเติมที่ [TODO.md](./TODO.md)
 >
 > เอกสารนี้คือแหล่งข้อมูลสถานะปัจจุบันของโปรเจกต์ฉบับเดียว (single source of truth)
 > สำหรับแผนพัฒนาในอนาคตดูที่ [ROADMAP.md](./ROADMAP.md)
-> (เดิมมีไฟล์ `DEVELOPMENT_STATUS.md` แยกต่างหากซึ่งเนื้อหาไม่ตรงกับไฟล์นี้ — ได้รวมเข้าด้วยกันแล้วและลบไฟล์นั้นทิ้งเพื่อไม่ให้มีสองแหล่งข้อมูลที่ขัดแย้งกัน)
 
 ---
 
 ## Overall Progress
 
-Foundation    ████████████████░░░░  80%
-AI Engine     ████████████████████  98%
-Reliability   ████████████████░░░░  80%  [Phase 1 DONE]
-Billing       ████████████████░░░░  80%  [Phase 2 DONE - รอ live API keys]
-Core UX       ██████████████░░░░░░  70%
+Foundation               ████████████████████  95%
+AI Sales Engine          ████████████████████  98%
+Omnichannel & Inbox      ███████████████████░  95%  [Step 1-3 DONE]
+Central Inventory Pool   ██████████████████░░  90%  [Step 4 DONE]
+B2B Quotation Engine     ████████████████████ 100%  [PDF/Word/Excel + Sign DONE]
+Billing & Subscription   ████████████████░░░░  85%  [Stripe + Omise + Manual Slip]
+Official Branding        ████████████████████ 100%  [DealMee Logo Concept D1]
 
 ---
 
@@ -462,3 +464,41 @@ Beta Launch Target: ~2 เดือน
 - Added production prompt rules so AI behaves as a store manager, not only a booking/sales bot.
 - Tightened booking tools to respect service slot intervals from the database, including 120-minute table-booking rounds.
 - Booking confirmations now include more complete customer-facing details for auditability.
+
+---
+
+### Omnichannel, Central Inventory & Official Branding Milestones (2026-10-12 - 2026-10-13)
+
+1. **Omnichannel Unified Inbox & Social Commerce (Step 1 - Step 3) [DONE]**
+   - **Unified Inbox (`/dashboard/inbox`):**
+     - รวมแชททุกช่องทาง (LINE OA, Facebook Messenger, Shopee, TikTok Shop) ในหน้าจอเดียว
+     - ระบบ Agent Takeover (`is_ai_paused`): แอดมินสามารถกดแทรกแซงและส่งข้อความตรงเข้า LINE OA / Facebook ได้
+     - AI Copilot Draft Assistant: ปุ่มร่างคำตอบ AI ในช่องแชท ช่วยแอดมินตอบอย่างมืออาชีพ
+     - Auto-Refresh Polling ข้อความแบบเรียลไทม์
+   - **Facebook Messenger Integration:**
+     - Webhook endpoint `/api/webhook/facebook/[shop_id]` รองรับ Meta Verify Token และ event `messages`
+     - Test route `/api/test/facebook-webhook` สำหรับจำลองการส่งข้อความ
+   - **Channels Settings Tab (`/dashboard/settings`):**
+     - แท็บเฉพาะสำหรับเชื่อมต่อและจัดการสถานะ LINE, Facebook, Shopee, และ TikTok Shop
+   - **Multi-channel Broadcast (`/dashboard/broadcast`):**
+     - ระบบส่งข้อความบรอดแคสต์เลือกกลุ่มเป้าหมายตามช่องทาง
+
+2. **Central Multi-Store Inventory & Marketplace Sync (BigSeller Architecture - Step 4) [DONE]**
+   - **Master SKU Pooling:** รองรับการซิงค์สต็อกรวมระหว่างหลายหน้าร้านค้าและช่องทาง ป้องกันสินค้าขายเกิน (Overselling)
+   - **Marketplace Sync Engine (`/dashboard/products`):**
+     - ปุ่มและ Modal "ซิงค์สินค้า Marketplace" รองรับ Shopee & TikTok Shop พร้อม Progress bar และ Log บันทึก
+     - ตาราง `marketplace_stock_logs` บันทึกประวัติการเปลี่ยนแปลงสต็อกทุกช่องทาง
+   - **Dynamic Categories:** ปรับฟิลเตอร์หมวดหมู่สินค้าให้ดึงเฉพาะหมวดหมู่ที่มีสินค้าจริงในร้านค้า
+
+3. **B2B Quotation Lifecycle & Multi-Format Luxury Export [DONE]**
+   - Customer Approval Flow: ระบบลงลายมือชื่อดิจิทัล (Digital Signature) ที่ `/doc/quotation/[id]` พร้อมแจ้งเตือน LINE OA เมื่อลูกค้าอนุมัติ
+   - 1-Click Document Conversion: แปลงใบเสนอราคาเป็น Invoice หรือ Sales Order ได้ทันที
+   - เอกสารส่งออกระดับมืออาชีพ: PDF, Word (.docx), และ Excel (.xlsx) จัดหน้าหรูหรา รองรับภาษาไทยและ BahtText
+
+4. **Official DealMee Branding & Logo Refresh [DONE]**
+   - อัปเดตโลโก้ทางการตัวใหม่ (`/logos/concept-d1.jpg`) สไตล์ D-Chat & Verified Star
+   - คุมโทนสีแบรนด์ชัดเจน: `Deal` (Electric Blue) + `Mee` (Cyber Cyan)
+   - ปรับใช้ครบทุกหน้า: Super Admin (`/admin`), Merchant Dashboard (`/dashboard`), Website Landing Page (Navbar & Footer), หน้า Login & Register, Onboarding Wizard, Terms & Privacy, และ Browser Favicon
+
+> **หมายเหตุการติดตั้ง:** กรุณารันไฟล์ SQL migrations ทั้ง 4 ไฟล์ในโฟลเดอร์ `supabase/migrations/` (ระบุรายละเอียดใน `TODO.md`) บน Supabase Dashboard SQL Editor เพื่อเปิดใช้งานฟีเจอร์ฐานข้อมูลทั้งหมด
+
