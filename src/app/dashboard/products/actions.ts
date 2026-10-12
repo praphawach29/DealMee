@@ -402,3 +402,78 @@ export async function seedSampleShopData() {
 
   return { success: 'สร้างข้อมูลตัวอย่างครบถ้วนเรียบร้อยแล้ว!' }
 }
+
+export async function syncMarketplaceProducts(platform: 'all' | 'shopee' | 'tiktok' = 'all') {
+  const supabase = await createClient()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return { error: 'กรุณาเข้าสู่ระบบอีกครั้ง' }
+  }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop?.id) {
+    return { error: 'ไม่พบข้อมูลร้านค้า' }
+  }
+
+  const { syncMarketplaceProductsEngine } = await import('@/lib/marketplace/inventoryManager')
+  const res = await syncMarketplaceProductsEngine(shop.id, platform)
+
+  if (!res.success) {
+    return { error: res.error || 'ซิงค์สินค้าจากมาร์เก็ตเพลสไม่สำเร็จ' }
+  }
+
+  revalidatePath('/dashboard/products')
+  revalidatePath('/dashboard')
+  return {
+    success: true,
+    message: `ซิงค์สินค้าจาก ${platform === 'all' ? 'TikTok Shop & Shopee' : platform.toUpperCase()} สำเร็จแล้ว ${res.syncedCount} รายการ! ข้อมูลสต็อกเชื่อมเข้าสู่คลังสต็อกกลางเรียบร้อย`,
+    syncedCount: res.syncedCount,
+  }
+}
+
+export async function updateCentralProductStock(
+  productId: string,
+  newStock: number,
+  reason: string = 'ปรับยอดสต็อกกลางโดยแอดมิน'
+) {
+  const supabase = await createClient()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return { error: 'กรุณาเข้าสู่ระบบอีกครั้ง' }
+  }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop?.id) {
+    return { error: 'ไม่พบข้อมูลร้านค้า' }
+  }
+
+  const { updateCentralStockEngine } = await import('@/lib/marketplace/inventoryManager')
+  const res = await updateCentralStockEngine(shop.id, productId, newStock, reason, 'manual')
+
+  if (res.error) {
+    return { error: res.error }
+  }
+
+  revalidatePath('/dashboard/products')
+  revalidatePath('/dashboard')
+  return { success: true, message: 'อัปเดตสต็อกกลางและบันทึกประวัติสำเร็จเรียบร้อย' }
+}
+
+export async function getStockAuditLogs() {
+  const supabase = await createClient()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return { error: 'กรุณาเข้าสู่ระบบอีกครั้ง', logs: [] }
+  }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop?.id) {
+    return { error: 'ไม่พบข้อมูลร้านค้า', logs: [] }
+  }
+
+  const { getMarketplaceStockLogs } = await import('@/lib/marketplace/inventoryManager')
+  const logs = await getMarketplaceStockLogs(shop.id, 30)
+
+  return { success: true, logs }
+}
+

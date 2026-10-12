@@ -1,7 +1,15 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { createProduct, deleteProduct, generateAiProductDescription, bulkImportProducts } from './actions'
+import {
+  createProduct,
+  deleteProduct,
+  generateAiProductDescription,
+  bulkImportProducts,
+  syncMarketplaceProducts,
+  updateCentralProductStock,
+  getStockAuditLogs,
+} from './actions'
 
 export interface ProductItem {
   id: string
@@ -14,6 +22,11 @@ export interface ProductItem {
   image_url: string | null
   status: string
   created_at: string
+  master_sku?: string | null
+  source_platform?: string | null
+  external_item_id?: string | null
+  marketplace_sync_enabled?: boolean | null
+  last_stock_sync?: string | null
 }
 
 export default function ProductsManager({ products }: { products: ProductItem[] }) {
@@ -24,6 +37,23 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all')
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Marketplace Sync Modal State
+  const [isOpenSyncModal, setIsOpenSyncModal] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncPlatform, setSyncPlatform] = useState<'all' | 'shopee' | 'tiktok'>('all')
+
+  // Central Stock Quick Edit Modal State
+  const [isOpenStockModal, setIsOpenStockModal] = useState(false)
+  const [selectedStockProduct, setSelectedStockProduct] = useState<ProductItem | null>(null)
+  const [newStockVal, setNewStockVal] = useState<number>(0)
+  const [stockReason, setStockReason] = useState<string>('ปรับยอดสต็อกกลางโดยแอดมิน')
+  const [stockLoading, setStockLoading] = useState(false)
+
+  // Cross-Channel Stock Movement Logs State
+  const [isOpenLogsModal, setIsOpenLogsModal] = useState(false)
+  const [stockLogs, setStockLogs] = useState<any[]>([])
+  const [loadingLogs, setLoadingLogs] = useState(false)
 
   // Form State for Adding Product
   const [productName, setProductName] = useState('')
@@ -219,6 +249,56 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
     reader.readAsText(file)
   }
 
+  // Handle Marketplace Products & Central Stock Synchronization
+  async function handleSyncMarketplace() {
+    setIsSyncing(true)
+    setMessage(null)
+    const res = await syncMarketplaceProducts(syncPlatform)
+    setIsSyncing(false)
+    if (res.error) {
+      alert(res.error)
+    } else if (res.success) {
+      setMessage({ type: 'success', text: res.message || 'ซิงค์สินค้าและสต็อกกลางเรียบร้อยแล้ว!' })
+      setIsOpenSyncModal(false)
+      window.location.reload()
+    }
+  }
+
+  // Handle Opening Quick Stock Editor
+  function handleOpenEditStock(product: ProductItem) {
+    setSelectedStockProduct(product)
+    setNewStockVal(product.stock)
+    setStockReason('ปรับยอดสต็อกกลางโดยแอดมิน')
+    setIsOpenStockModal(true)
+  }
+
+  // Handle Saving Central Stock
+  async function handleSaveCentralStock(e: React.FormEvent) {
+    e.preventDefault()
+    if (!selectedStockProduct) return
+    setStockLoading(true)
+    const res = await updateCentralProductStock(selectedStockProduct.id, newStockVal, stockReason)
+    setStockLoading(false)
+    if (res.error) {
+      alert(res.error)
+    } else {
+      setMessage({ type: 'success', text: 'อัปเดตสต็อกกลางและบันทึกประวัติสำเร็จเรียบร้อย!' })
+      setIsOpenStockModal(false)
+      window.location.reload()
+    }
+  }
+
+  // Handle Opening Audit Logs Drawer
+  async function handleOpenLogsModal() {
+    setIsOpenLogsModal(true)
+    setLoadingLogs(true)
+    const res = await getStockAuditLogs()
+    setLoadingLogs(false)
+    if (res?.logs) {
+      setStockLogs(res.logs)
+    }
+  }
+
   return (
     <div className="flex flex-col w-full relative space-y-5 sm:space-y-6">
       {/* Header */}
@@ -226,11 +306,31 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-on-surface font-headline-md leading-tight">จัดการสินค้า</h1>
           <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5 font-body-md">
-            จัดการแคตตาล็อกสินค้า ราคา และสต๊อก เพื่อให้บอท AI ช่วยเชียร์ขายและแนะนำลูกค้า
+            จัดการแคตตาล็อกสินค้า ราคา และคลังสต็อกกลาง (Central Stock Pooling) ซิงค์ข้ามร้านค้าอัตโนมัติ
           </p>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsOpenSyncModal(true)}
+            className="flex items-center justify-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-label-md font-bold px-3.5 py-2 rounded-xl transition-all shadow-md shadow-blue-500/20 hover:-translate-y-0.5 cursor-pointer text-xs sm:text-sm active:scale-95"
+            title="ดึงสินค้าจาก TikTok Shop และ Shopee มาเชื่อมต่อสต็อกกลาง"
+          >
+            <span className="material-symbols-outlined text-[18px]">sync_alt</span>
+            <span>ซิงค์ Marketplace & คลังกลาง</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleOpenLogsModal}
+            className="flex items-center justify-center gap-1.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md font-bold px-3 py-2 rounded-xl transition-all border border-outline-variant/40 cursor-pointer text-xs sm:text-sm shadow-xs"
+            title="ดูประวัติการตัดสต็อกข้ามช่องทางแบบเรียลไทม์"
+          >
+            <span className="material-symbols-outlined text-[18px]">history</span>
+            <span>ประวัติสต็อกกลาง</span>
+          </button>
+
           <button
             type="button"
             disabled={loading}
@@ -246,15 +346,15 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                 window.location.reload()
               }
             }}
-            className="flex items-center justify-center gap-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 font-label-md font-bold px-3.5 py-2 rounded-xl transition-all border border-purple-300/50 cursor-pointer text-xs sm:text-sm shadow-xs"
+            className="flex items-center justify-center gap-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 font-label-md font-bold px-3 py-2 rounded-xl transition-all border border-purple-300/50 cursor-pointer text-xs sm:text-sm shadow-xs"
           >
             <span className="material-symbols-outlined text-[18px]">auto_fix_high</span>
-            <span>{loading ? 'กำลังปรับแต่ง...' : 'เติมรูปภาพ & ข้อมูลทดสอบ'}</span>
+            <span>{loading ? 'กำลังปรับแต่ง...' : 'เติมข้อมูลทดสอบ'}</span>
           </button>
 
           <button
             onClick={() => setIsOpenImportModal(true)}
-            className="flex items-center justify-center gap-1.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md font-bold px-3.5 py-2 rounded-xl transition-all border border-outline-variant/40 cursor-pointer text-xs sm:text-sm shadow-xs"
+            className="flex items-center justify-center gap-1.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md font-bold px-3 py-2 rounded-xl transition-all border border-outline-variant/40 cursor-pointer text-xs sm:text-sm shadow-xs"
           >
             <span className="material-symbols-outlined text-[18px]">file_upload</span>
             <span>นำเข้า CSV</span>
@@ -423,13 +523,37 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                       </div>
                     )}
 
-                    <span className="absolute top-2 right-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-900/80 backdrop-blur-xs text-white">
+                    {/* Platform Badge (Top-Left) */}
+                    <div className="absolute top-2 left-2 flex items-center gap-1 z-10">
+                      {product.source_platform === 'tiktok' ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/90 backdrop-blur-xs text-white border border-slate-700 shadow-xs flex items-center gap-1">
+                          <span>⚫ TikTok Shop</span>
+                        </span>
+                      ) : product.source_platform === 'shopee' ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EE4D2D]/90 backdrop-blur-xs text-white border border-orange-400 shadow-xs flex items-center gap-1">
+                          <span>🟠 Shopee</span>
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-600/90 backdrop-blur-xs text-white border border-blue-400 shadow-xs flex items-center gap-1">
+                          <span>🌐 Dealmee Central</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <span className="absolute top-2 right-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-900/80 backdrop-blur-xs text-white z-10">
                       {product.category || 'ทั่วไป'}
                     </span>
                   </div>
 
                   <div>
                     <h3 className="font-bold text-sm text-on-surface line-clamp-1">{product.name}</h3>
+                    {product.master_sku && (
+                      <div className="mt-1 mb-1">
+                        <span className="inline-block text-[10px] font-mono text-electric-blue bg-electric-blue/10 px-2 py-0.5 rounded-md font-bold border border-electric-blue/20">
+                          Master SKU: {product.master_sku}
+                        </span>
+                      </div>
+                    )}
                     <p className="text-xs text-on-surface-variant line-clamp-2 mt-0.5 min-h-[32px]">
                       {product.description || 'ไม่มีรายละเอียดสินค้า'}
                     </p>
@@ -443,16 +567,20 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditStock(product)}
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 cursor-pointer transition-all hover:scale-105 active:scale-95 ${
                         isOutOfStock
                           ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
                           : 'bg-success-green/10 text-success-green border border-success-green/20'
                       }`}
+                      title="คลิกเพื่อแก้ไขสต็อกกลาง (Central Stock Pooling)"
                     >
-                      {isOutOfStock ? 'หมดสต๊อก' : `คงเหลือ ${product.stock}`}
-                    </span>
+                      <span className="material-symbols-outlined text-[13px]">tune</span>
+                      <span>{isOutOfStock ? 'หมดสต๊อก' : `สต็อกกลาง: ${product.stock}`}</span>
+                    </button>
 
                     <button
                       onClick={() => handleDelete(product.id)}
@@ -772,6 +900,304 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                   ปิดหน้าต่าง
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Marketplace Sync Modal (Central Stock Integration) */}
+      {isOpenSyncModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="bg-slate-900 text-slate-100 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="shrink-0 px-6 py-4 border-b border-slate-700/80 flex items-center justify-between bg-slate-800/90">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400">
+                  <span className="material-symbols-outlined text-[20px]">sync_alt</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-100 font-headline-md leading-tight">
+                    ซิงค์สินค้า & คลังสต็อกกลาง (Marketplace Sync)
+                  </h3>
+                  <p className="text-[11px] text-slate-400">ดึงสินค้าจาก TikTok Shop และ Shopee พร้อมเปิดระบบสต็อกรวม</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsOpenSyncModal(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 bg-slate-900 overflow-y-auto">
+              {/* Educational Banner about Central Stock Pooling */}
+              <div className="p-4 rounded-xl bg-gradient-to-r from-blue-900/40 to-indigo-900/40 border border-blue-500/30 space-y-2">
+                <div className="flex items-center gap-2 text-blue-300 font-bold text-xs">
+                  <span className="material-symbols-outlined text-[16px]">hub</span>
+                  <span>ฟีเจอร์คลังสต็อกกลาง (Central Stock Pooling แบบ BigSeller)</span>
+                </div>
+                <ul className="text-[11px] text-slate-300 space-y-1.5 pl-1 leading-relaxed">
+                  <li>• <strong>แชร์สต็อกเดียวกันข้ามร้าน:</strong> หากมีร้านใน TikTok Shop, Shopee และ LINE OA สินค้าที่รหัส Master SKU เดียวกันจะแชร์จำนวนสต็อกกลางชุดเดียวกันทันที</li>
+                  <li>• <strong>ตัดสต็อกแบบเรียลไทม์:</strong> เมื่อขายได้ในช่องทางใดก็ตาม สต็อกกลางจะถูกตัดทันที ป้องกันการขายเกิน (Overselling)</li>
+                  <li>• <strong>AI Sales Agent รู้สต็อกจริง:</strong> บอทจะเช็คสต็อกสดก่อนตอบลูกค้าในแชทเสมอ ป้องกันการรับออเดอร์ของที่หมดสต็อก</li>
+                </ul>
+              </div>
+
+              {/* Select Platform */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-200">
+                  เลือกช่องทางที่ต้องการซิงค์:
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSyncPlatform('all')}
+                    className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                      syncPlatform === 'all'
+                        ? 'bg-blue-600/30 border-blue-500 text-white shadow-sm'
+                        : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">store</span>
+                    <span>ทุกช่องทาง (All)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSyncPlatform('tiktok')}
+                    className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                      syncPlatform === 'tiktok'
+                        ? 'bg-black/60 border-slate-400 text-white shadow-sm'
+                        : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="text-sm">⚫</span>
+                    <span>TikTok Shop</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSyncPlatform('shopee')}
+                    className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                      syncPlatform === 'shopee'
+                        ? 'bg-orange-600/30 border-orange-500 text-white shadow-sm'
+                        : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="text-sm">🟠</span>
+                    <span>Shopee</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsOpenSyncModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  disabled={isSyncing}
+                  onClick={handleSyncMarketplace}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                >
+                  <span className={`material-symbols-outlined text-[16px] ${isSyncing ? 'animate-spin' : ''}`}>
+                    {isSyncing ? 'refresh' : 'sync'}
+                  </span>
+                  <span>{isSyncing ? 'กำลังซิงค์ข้อมูล...' : 'เริ่มซิงค์เข้าสู่คลังสต็อกกลาง'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Quick Edit Central Stock Modal */}
+      {isOpenStockModal && selectedStockProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="bg-slate-900 text-slate-100 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="shrink-0 px-6 py-4 border-b border-slate-700/80 flex items-center justify-between bg-slate-800/90">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <span className="material-symbols-outlined text-[20px]">tune</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-100 font-headline-md leading-tight">
+                    ปรับยอดสต็อกกลาง (Central Stock)
+                  </h3>
+                  <p className="text-[11px] text-slate-400">ซิงค์อัปเดตไปทุกหน้าร้านค้าและ AI ทันที</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsOpenStockModal(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCentralStock} className="p-6 space-y-4 bg-slate-900">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/70 border border-slate-700/70">
+                <div className="w-12 h-12 rounded-lg bg-slate-900 overflow-hidden shrink-0 flex items-center justify-center">
+                  {selectedStockProduct.image_url ? (
+                    <img src={selectedStockProduct.image_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="material-symbols-outlined text-slate-600">inventory_2</span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-bold text-xs text-slate-200 truncate">{selectedStockProduct.name}</h4>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    Master SKU: {selectedStockProduct.master_sku || 'ยังไม่กำหนด'}
+                  </p>
+                  <span className="text-[10px] text-emerald-400 font-bold">
+                    สต็อกปัจจุบัน: {selectedStockProduct.stock} ชิ้น
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-200 mb-1">
+                  จำนวนสต็อกกลางใหม่ *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={newStockVal}
+                  onChange={(e) => setNewStockVal(parseInt(e.target.value, 10) || 0)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-base font-bold font-mono focus:border-emerald-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-200 mb-1">
+                  เหตุผลในการปรับยอด (สำหรับบันทึก Log)
+                </label>
+                <input
+                  type="text"
+                  value={stockReason}
+                  onChange={(e) => setStockReason(e.target.value)}
+                  placeholder="เช่น เติมสินค้าเข้าคลัง +50, ตรวจนับสต็อกประจำสัปดาห์..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs focus:border-emerald-500 outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsOpenStockModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors cursor-pointer"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={stockLoading}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <span className={`material-symbols-outlined text-[16px] ${stockLoading ? 'animate-spin' : ''}`}>
+                    {stockLoading ? 'refresh' : 'check'}
+                  </span>
+                  <span>{stockLoading ? 'กำลังบันทึก...' : 'บันทึกสต็อกกลาง'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Cross-Channel Stock Audit Logs Modal */}
+      {isOpenLogsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="bg-slate-900 text-slate-100 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="shrink-0 px-6 py-4 border-b border-slate-700/80 flex items-center justify-between bg-slate-800/90">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-400">
+                  <span className="material-symbols-outlined text-[20px]">history</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-100 font-headline-md leading-tight">
+                    ประวัติการตัดสต็อกข้ามช่องทาง (Cross-Channel Stock Logs)
+                  </h3>
+                  <p className="text-[11px] text-slate-400">บันทึกทุกการเคลื่อนไหวของสต็อกกลางจากทุกแพลตฟอร์ม</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsOpenLogsModal(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-3 bg-slate-900 flex-1">
+              {loadingLogs ? (
+                <div className="py-12 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
+                  <span className="material-symbols-outlined text-[20px] animate-spin">refresh</span>
+                  <span>กำลังโหลดประวัติสต็อก...</span>
+                </div>
+              ) : stockLogs.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs space-y-2">
+                  <span className="material-symbols-outlined text-[36px] text-slate-600 block mx-auto">history_toggle_off</span>
+                  <p>ยังไม่มีประวัติการเคลื่อนไหวของสต็อกในระบบ</p>
+                  <p className="text-[11px] text-slate-500">เมื่อมีการซิงค์สินค้า หรือมีการซื้อขายผ่านแชท รายการจะปรากฏที่นี่</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {stockLogs.map((log) => (
+                    <div
+                      key={log.id}
+                      className="p-3 rounded-xl bg-slate-800/70 border border-slate-700/60 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-200 truncate">{log.product_name}</span>
+                          <span className="text-[10px] font-mono text-slate-400 px-1.5 py-0.5 bg-slate-900 rounded">
+                            {log.master_sku}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">{log.reason || 'ปรับยอดสต็อก'}</p>
+                        <span className="text-[10px] text-slate-500">
+                          {new Date(log.created_at).toLocaleString('th-TH')}
+                        </span>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <span
+                            className={`font-mono font-bold text-xs ${
+                              log.change_amount > 0 ? 'text-emerald-400' : 'text-red-400'
+                            }`}
+                          >
+                            {log.change_amount > 0 ? `+${log.change_amount}` : log.change_amount}
+                          </span>
+                          <span className="text-[10px] text-slate-400">ชิ้น</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          คงเหลือ: <span className="font-bold text-slate-200">{log.balance_after}</span>
+                        </div>
+                        <span className="inline-block mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase bg-slate-700/60 text-slate-300">
+                          {log.platform}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="shrink-0 p-4 border-t border-slate-800 bg-slate-900 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsOpenLogsModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors cursor-pointer"
+              >
+                ปิดหน้าต่าง
+              </button>
             </div>
           </div>
         </div>

@@ -528,6 +528,15 @@ export async function executeTool(
     // circular import at module-load time (customerMemory <-> engine).
     const { recordCustomerOrder } = await import('@/lib/customerMemory')
     await recordCustomerOrder(shopId, userId, Number(args.total_price) || 0)
+
+    // Central Stock Deduction: Deduct from central pooled inventory across channels
+    try {
+      const { deductCentralStockOnOrder } = await import('@/lib/marketplace/inventoryManager')
+      await deductCentralStockOnOrder(shopId, args.product, Number(args.qty) || 1, 'line', orderNo)
+    } catch (stockErr) {
+      console.error('[Central Stock Deduction Error]:', stockErr)
+    }
+
     await updateSalesStage(ctx, 'post_sale')
     // Pushed verbatim rather than left to the model: this block carries the
     // order total and the shop's account number, and a reworded digit here
@@ -649,12 +658,17 @@ export async function executeTool(
   }
 
   if (toolName === 'check_stock') {
-    const { data: prods } = await supabase.from('products').select('name,stock,price').eq('shop_id', shopId).ilike('name', `%${args.product_name}%`).limit(3)
+    const { data: prods } = await supabase
+      .from('products')
+      .select('name,stock,price,master_sku,source_platform')
+      .eq('shop_id', shopId)
+      .or(`name.ilike.%${args.product_name}%,master_sku.ilike.%${args.product_name}%`)
+      .limit(3)
     if (!prods || prods.length === 0) {
       return { resultForAi: `ไม่พบสินค้า "${args.product_name}" ให้แจ้งลูกค้าตามนี้`, immediateMessages: [] }
     }
     return {
-      resultForAi: prods.map((p: any) => `${p.name}: ${p.stock > 0 ? `เหลือ ${p.stock} ชิ้น` : 'หมดสต๊อก'}, ราคา ${Number(p.price).toLocaleString()} บาท`).join('; '),
+      resultForAi: prods.map((p: any) => `${p.name} (รหัส SKU: ${p.master_sku || 'กลาง'}): ${p.stock > 0 ? `มีสินค้าพร้อมส่งในคลังกลาง ${p.stock} ชิ้น (ซิงค์ข้ามช่องทาง Shopee & TikTok Shop)` : 'สินค้าหมดสต๊อกชั่วคราว'}, ราคา ${Number(p.price).toLocaleString()} บาท`).join('; '),
       immediateMessages: [],
     }
   }
