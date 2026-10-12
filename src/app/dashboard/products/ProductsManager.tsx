@@ -70,10 +70,9 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const csvInputRef = useRef<HTMLInputElement>(null)
 
-  // Dynamically extract categories
-  const defaultCategories = ['เสื้อผ้า', 'ความงาม', 'ไอที', 'อาหาร', 'ทั่วไป']
+  // Dynamically extract categories strictly from existing products in this shop
   const existingCategories = Array.from(new Set(products.map(p => p.category).filter(Boolean)))
-  const allCategories = Array.from(new Set([...defaultCategories, ...existingCategories]))
+  const allCategories = existingCategories.length > 0 ? existingCategories : ['ทั่วไป']
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -471,7 +470,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
             ทั้งหมด
           </button>
 
-          {allCategories.map(cat => (
+          {existingCategories.map(cat => (
             <button
               key={cat}
               onClick={() => setSelectedCategoryFilter(cat)}
