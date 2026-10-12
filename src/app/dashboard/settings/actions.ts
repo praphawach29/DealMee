@@ -129,6 +129,93 @@ export async function updateBotSettings(formData: FormData) {
   return { success: 'บันทึกการตั้งค่าบอทและช่องทางแชทเรียบร้อยแล้ว!' }
 }
 
+export async function updateChannelSettings(formData: FormData) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return { error: 'กรุณาเข้าสู่ระบบอีกครั้ง' }
+  }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop?.id) {
+    return { error: 'ไม่พบข้อมูลร้านค้า' }
+  }
+
+  const lineToken = ((formData.get('line_token') as string) || '').trim()
+  const lineSecret = ((formData.get('line_secret') as string) || '').trim()
+  const fbPageId = ((formData.get('facebook_page_id') as string) || '').trim()
+  const fbPageToken = ((formData.get('facebook_page_token') as string) || '').trim()
+  const fbVerifyToken = ((formData.get('facebook_verify_token') as string) || '').trim()
+  const fbAppSecret = ((formData.get('facebook_app_secret') as string) || '').trim()
+
+  const updateData = {
+    line_token: lineToken,
+    line_secret: lineSecret,
+    facebook_page_id: fbPageId,
+    facebook_page_token: fbPageToken,
+    facebook_verify_token: fbVerifyToken,
+    facebook_app_secret: fbAppSecret,
+    updated_at: new Date().toISOString(),
+  }
+
+  const { error } = await supabase
+    .from('shops')
+    .update(updateData)
+    .eq('id', shop.id)
+
+  if (error) {
+    return { error: `บันทึกไม่สำเร็จ: ${error.message}` }
+  }
+
+  // Synchronize Facebook channel account in channel_accounts table
+  if (fbPageId) {
+    await supabase.from('channel_accounts').upsert(
+      {
+        shop_id: shop.id,
+        platform: 'facebook',
+        account_name: `Facebook Page (${fbPageId})`,
+        account_id: fbPageId,
+        is_active: true,
+        credentials: {
+          page_access_token: fbPageToken,
+          verify_token: fbVerifyToken,
+          app_secret: fbAppSecret,
+        },
+        webhook_secret: fbVerifyToken,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'shop_id,platform,account_id' }
+    )
+  }
+
+  // Synchronize LINE channel account in channel_accounts table
+  if (lineToken) {
+    await supabase.from('channel_accounts').upsert(
+      {
+        shop_id: shop.id,
+        platform: 'line',
+        account_name: 'LINE Official Account',
+        account_id: 'default',
+        is_active: true,
+        credentials: {
+          token: lineToken,
+          secret: lineSecret,
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'shop_id,platform,account_id' }
+    )
+  }
+
+  revalidatePath('/dashboard/settings')
+  return { success: 'บันทึกการตั้งค่าช่องทางแชทเรียบร้อยแล้ว!' }
+}
+
 export async function updatePaymentShippingSettings(formData: FormData) {
   const supabase = await createClient()
 

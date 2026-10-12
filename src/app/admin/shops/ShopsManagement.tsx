@@ -14,6 +14,9 @@ interface ShopItem {
   created_at: string
   owner_email?: string | null
   owner_name?: string | null
+  has_line?: boolean
+  has_facebook?: boolean
+  facebook_page_id?: string | null
 }
 
 export default function ShopsManagement({ initialShops }: { initialShops: ShopItem[] }) {
@@ -182,6 +185,36 @@ export default function ShopsManagement({ initialShops }: { initialShops: ShopIt
                   </span>
                 </div>
 
+                {/* Connected Channels Badges */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-outline font-medium">ช่องทาง:</span>
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      shop.has_line
+                        ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                        : 'bg-slate-500/10 text-slate-400 border border-slate-500/20 opacity-70'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${shop.has_line ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+                    <span>LINE OA</span>
+                  </span>
+
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      shop.has_facebook
+                        ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                        : 'bg-slate-500/10 text-slate-400 border border-slate-500/20 opacity-70'
+                    }`}
+                    title={shop.facebook_page_id ? `Page ID: ${shop.facebook_page_id}` : undefined}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${shop.has_facebook ? 'bg-blue-500' : 'bg-slate-400'}`}></span>
+                    <span>Facebook</span>
+                    {shop.facebook_page_id && (
+                      <span className="text-[9px] opacity-70 font-mono">({shop.facebook_page_id.slice(-4)})</span>
+                    )}
+                  </span>
+                </div>
+
                 <div className="grid grid-cols-2 gap-2 text-xs bg-merchant-bg p-3 rounded-xl border border-outline-variant/30">
                   <div>
                     <span className="text-[10px] text-outline block font-medium">แพ็กเกจ</span>
@@ -256,6 +289,7 @@ export default function ShopsManagement({ initialShops }: { initialShops: ShopIt
               <tr className="border-b border-outline-variant/30 bg-surface-container-low text-on-surface-variant font-label-md">
                 <th className="py-3.5 px-6 font-bold">ชื่อร้านค้า / อีเมลผู้สมัคร</th>
                 <th className="py-3.5 px-4 font-bold">แพ็กเกจปัจจุบัน</th>
+                <th className="py-3.5 px-4 font-bold">ช่องทางเชื่อมต่อ</th>
                 <th className="py-3.5 px-4 font-bold">ข้อความที่ใช้</th>
                 <th className="py-3.5 px-4 font-bold">สถานะ</th>
                 <th className="py-3.5 px-4 font-bold">วันที่สมัคร</th>
@@ -305,6 +339,36 @@ export default function ShopsManagement({ initialShops }: { initialShops: ShopIt
                         <option value="agency">AGENCY</option>
                         <option value="byok">BYOK</option>
                       </select>
+                    </td>
+
+                    <td className="py-4 px-4">
+                      <div className="flex flex-col gap-1.5">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold w-fit ${
+                            shop.has_line
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                              : 'bg-slate-500/10 text-slate-400 border border-slate-500/20 opacity-60'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${shop.has_line ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+                          <span>LINE OA</span>
+                        </span>
+
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold w-fit ${
+                            shop.has_facebook
+                              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                              : 'bg-slate-500/10 text-slate-400 border border-slate-500/20 opacity-60'
+                          }`}
+                          title={shop.facebook_page_id ? `Page ID: ${shop.facebook_page_id}` : undefined}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${shop.has_facebook ? 'bg-blue-500' : 'bg-slate-400'}`}></span>
+                          <span>Facebook</span>
+                          {shop.facebook_page_id && (
+                            <span className="text-[9px] opacity-70 font-mono">({shop.facebook_page_id.slice(-4)})</span>
+                          )}
+                        </span>
+                      </div>
                     </td>
 
                     <td className="py-4 px-4 font-mono font-bold text-on-surface">

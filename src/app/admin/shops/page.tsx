@@ -8,7 +8,7 @@ export default async function AdminShopsPage() {
   const [shopsRes, usersRes] = await Promise.all([
     admin
       .from('shops')
-      .select('id, name, plan, status, msg_used, token_used, created_at, company_email')
+      .select('id, name, plan, status, msg_used, token_used, created_at, company_email, line_token, facebook_page_token, facebook_page_id')
       .order('created_at', { ascending: false }),
     admin
       .from('users')
@@ -35,6 +35,9 @@ export default async function AdminShopsPage() {
       created_at: s.created_at,
       owner_email: owner?.email || s.company_email || 'ไม่ระบุอีเมล',
       owner_name: owner?.name || null,
+      has_line: Boolean(s.line_token && s.line_token.trim()),
+      has_facebook: Boolean(s.facebook_page_token && s.facebook_page_token.trim()),
+      facebook_page_id: s.facebook_page_id || null,
     }
   })
 
