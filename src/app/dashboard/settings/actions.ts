@@ -47,6 +47,11 @@ export async function updateBotSettings(formData: FormData) {
     repurchase_delay_days: repurchaseDelayDays,
   }
 
+  const fbPageId = ((formData.get('facebook_page_id') as string) || '').trim()
+  const fbPageToken = ((formData.get('facebook_page_token') as string) || '').trim()
+  const fbVerifyToken = ((formData.get('facebook_verify_token') as string) || '').trim()
+  const fbAppSecret = ((formData.get('facebook_app_secret') as string) || '').trim()
+
   const updateData = {
     name: ((formData.get('name') as string) || '').trim(),
     bot_name: ((formData.get('bot_name') as string) || '').trim(),
@@ -56,6 +61,10 @@ export async function updateBotSettings(formData: FormData) {
     system_prompt: ((formData.get('system_prompt') as string) || '').trim(),
     line_token: rawToken.trim(),
     line_secret: rawSecret.trim(),
+    facebook_page_id: fbPageId,
+    facebook_page_token: fbPageToken,
+    facebook_verify_token: fbVerifyToken,
+    facebook_app_secret: fbAppSecret,
     company_name: ((formData.get('company_name') as string) || '').trim(),
     company_tax_id: ((formData.get('company_tax_id') as string) || '').trim(),
     company_address: ((formData.get('company_address') as string) || '').trim(),
@@ -76,8 +85,48 @@ export async function updateBotSettings(formData: FormData) {
     return { error: `บันทึกไม่สำเร็จ: ${error.message}` }
   }
 
+  // Synchronize Facebook channel account in channel_accounts table
+  if (fbPageId) {
+    await supabase.from('channel_accounts').upsert(
+      {
+        shop_id: shop.id,
+        platform: 'facebook',
+        account_name: `Facebook Page (${fbPageId})`,
+        account_id: fbPageId,
+        is_active: true,
+        credentials: {
+          page_access_token: fbPageToken,
+          verify_token: fbVerifyToken,
+          app_secret: fbAppSecret,
+        },
+        webhook_secret: fbVerifyToken,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'shop_id,platform,account_id' }
+    )
+  }
+
+  // Synchronize LINE channel account in channel_accounts table
+  if (rawToken.trim()) {
+    await supabase.from('channel_accounts').upsert(
+      {
+        shop_id: shop.id,
+        platform: 'line',
+        account_name: 'LINE Official Account',
+        account_id: 'default',
+        is_active: true,
+        credentials: {
+          token: rawToken.trim(),
+          secret: rawSecret.trim(),
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'shop_id,platform,account_id' }
+    )
+  }
+
   revalidatePath('/dashboard/settings')
-  return { success: 'บันทึกการตั้งค่าบอทเรียบร้อยแล้ว!' }
+  return { success: 'บันทึกการตั้งค่าบอทและช่องทางแชทเรียบร้อยแล้ว!' }
 }
 
 export async function updatePaymentShippingSettings(formData: FormData) {

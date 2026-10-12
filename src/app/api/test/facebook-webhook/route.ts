@@ -1,0 +1,181 @@
+import { NextResponse, type NextRequest } from 'next/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
+import { upsertCustomerProfile } from '@/lib/customerMemory'
+
+/**
+ * Developer Simulation API Route for Facebook Messenger
+ * Allows testing Facebook webhook ingestion, AI reasoning, and Copilot suggestions
+ * without needing a live Meta Graph API webhook or public domain tunnel.
+ *
+ * POST /api/test/facebook-webhook
+ * Body: { shop_id: string, user_id?: string, message: string, ai_mode?: 'auto' | 'copilot' | 'manual' }
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { shop_id, user_id, message, ai_mode } = body
+
+    if (!shop_id || !message) {
+      return NextResponse.json(
+        { error: 'Missing required parameters: shop_id, message' },
+        { status: 400 }
+      )
+    }
+
+    const psid = user_id || `sim-fb-${Math.floor(100000 + Math.random() * 900000)}`
+    const targetAiMode = ai_mode || 'auto'
+
+    const admin = createAdminClient()
+
+    // 1. Fetch shop record
+    const { data: shop, error: shopError } = await admin
+      .from('shops')
+      .select('*')
+      .eq('id', shop_id)
+      .maybeSingle()
+
+    if (shopError || !shop) {
+      return NextResponse.json(
+        { error: `Shop not found with ID "${shop_id}"` },
+        { status: 404 }
+      )
+    }
+
+    // 2. Find or create conversation
+    let { data: conv } = await admin
+      .from('conversations')
+      .select('*')
+      .eq('shop_id', shop_id)
+      .eq('platform', 'facebook')
+      .eq('user_id', psid)
+      .maybeSingle()
+
+    if (!conv) {
+      const { data: newConv, error: createError } = await admin
+        .from('conversations')
+        .insert({
+          shop_id: shop_id,
+          user_id: psid,
+          platform_sender_id: psid,
+          channel_account_id: shop.facebook_page_id || 'simulated-page-id',
+          customer_name: `คุณเฟสบุ๊ค (จำลอง ${psid.slice(-4)})`,
+          platform: 'facebook',
+          status: 'ai',
+          ai_mode: targetAiMode,
+          last_message: message,
+        })
+        .select('*')
+        .single()
+
+      if (createError || !newConv) {
+        return NextResponse.json(
+          { error: `Failed to create conversation: ${createError?.message}` },
+          { status: 500 }
+        )
+      }
+      conv = newConv
+    } else {
+      await admin
+        .from('conversations')
+        .update({
+          last_message: message,
+          last_message_at: new Date().toISOString(),
+          ai_mode: targetAiMode,
+        })
+        .eq('id', conv.id)
+    }
+
+    // 3. Upsert customer memory
+    await upsertCustomerProfile(shop_id, psid, conv.customer_name)
+
+    // 4. Record incoming user message
+    const { data: userMsg } = await admin
+      .from('chat_messages')
+      .insert({
+        conversation_id: conv.id,
+        shop_id: shop_id,
+        sender_type: 'user',
+        sender_name: conv.customer_name || 'ลูกค้า Facebook',
+        message: message,
+        platform: 'facebook',
+      })
+      .select('id')
+      .single()
+
+    // 5. If manual mode, return without running AI
+    if (targetAiMode === 'manual') {
+      return NextResponse.json({
+        status: 'manual_mode',
+        message: 'Message received. AI auto-reply is turned off (manual mode).',
+        conversationId: conv.id,
+        psid,
+      })
+    }
+
+    // 6. Run AI Sales Agent Engine
+    const agentResult = await processSalesAgentChat({
+      shop,
+      userQuery: message,
+      userId: psid,
+      conversationId: conv.id,
+      supabaseClient: admin,
+    })
+
+    const aiText = agentResult.text || ''
+
+    // 7. Handle Copilot Mode vs Auto Mode
+    if (targetAiMode === 'copilot') {
+      if (userMsg?.id && aiText) {
+        await admin
+          .from('chat_messages')
+          .update({ ai_suggested_reply: aiText })
+          .eq('id', userMsg.id)
+      }
+
+      return NextResponse.json({
+        status: 'copilot_suggestion_ready',
+        conversationId: conv.id,
+        psid,
+        aiMode: 'copilot',
+        suggestedReply: aiText,
+        toolsExecuted: agentResult.toolCallsExecuted,
+        messageToAdmin: 'Drafted AI suggestion in Unified Inbox for admin 1-click approval',
+      })
+    }
+
+    // Auto Mode: record AI response into chat_messages
+    if (aiText) {
+      await admin.from('chat_messages').insert({
+        conversation_id: conv.id,
+        shop_id: shop_id,
+        sender_type: 'agent',
+        sender_name: shop.bot_name || 'น้องบอท Dealmee',
+        message: aiText,
+        platform: 'facebook',
+      })
+
+      await admin
+        .from('conversations')
+        .update({
+          last_message: aiText,
+          last_message_at: new Date().toISOString(),
+        })
+        .eq('id', conv.id)
+    }
+
+    return NextResponse.json({
+      status: 'auto_reply_completed',
+      conversationId: conv.id,
+      psid,
+      aiMode: 'auto',
+      reply: aiText,
+      toolsExecuted: agentResult.toolCallsExecuted,
+      productsRecommended: agentResult.productsData?.length || 0,
+    })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[Facebook Simulator Error]:', err)
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}

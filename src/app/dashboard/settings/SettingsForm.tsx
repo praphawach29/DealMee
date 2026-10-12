@@ -18,6 +18,8 @@ import {
   Copy,
   Check,
   RefreshCw,
+  Send,
+  Sparkles,
 } from 'lucide-react'
 
 interface ShopData {
@@ -30,6 +32,10 @@ interface ShopData {
   system_prompt: string | null
   line_token: string | null
   line_secret: string | null
+  facebook_page_id?: string | null
+  facebook_page_token?: string | null
+  facebook_verify_token?: string | null
+  facebook_app_secret?: string | null
   business_type: string | null
   company_name?: string | null
   company_tax_id?: string | null
@@ -50,17 +56,57 @@ interface ShopData {
 export default function SettingsForm({ shop }: { shop: ShopData }) {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [copiedLine, setCopiedLine] = useState(false)
+  const [copiedFb, setCopiedFb] = useState(false)
   const [isPlaygroundOpen, setIsPlaygroundOpen] = useState(false)
 
-  const webhookUrl = typeof window !== 'undefined'
+  // Facebook Simulation State
+  const [simText, setSimText] = useState('')
+  const [simMode, setSimMode] = useState<'auto' | 'copilot'>('auto')
+  const [simLoading, setSimLoading] = useState(false)
+  const [simResult, setSimResult] = useState<any>(null)
+
+  const lineWebhookUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/webhook/${shop.id}`
     : `https://app.dealmee.app/api/webhook/${shop.id}`
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(webhookUrl)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const fbWebhookUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/api/webhook/facebook/${shop.id}`
+    : `https://app.dealmee.app/api/webhook/facebook/${shop.id}`
+
+  const handleCopyLine = () => {
+    navigator.clipboard.writeText(lineWebhookUrl)
+    setCopiedLine(true)
+    setTimeout(() => setCopiedLine(false), 2000)
+  }
+
+  const handleCopyFb = () => {
+    navigator.clipboard.writeText(fbWebhookUrl)
+    setCopiedFb(true)
+    setTimeout(() => setCopiedFb(false), 2000)
+  }
+
+  async function handleTestFbSimulation() {
+    if (!simText.trim()) return
+    setSimLoading(true)
+    setSimResult(null)
+    try {
+      const res = await fetch('/api/test/facebook-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shop_id: shop.id,
+          message: simText.trim(),
+          ai_mode: simMode,
+        }),
+      })
+      const data = await res.json()
+      setSimResult(data)
+    } catch (err: any) {
+      setSimResult({ error: err?.message || 'Failed to simulate Facebook message' })
+    } finally {
+      setSimLoading(false)
+    }
   }
 
   async function handleSubmit(formData: FormData) {
@@ -402,27 +448,206 @@ export default function SettingsForm({ shop }: { shop: ShopData }) {
 
           <div className="space-y-1.5">
             <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
-              Webhook URL ประจำร้านค้าของคุณ
+              LINE Webhook URL ประจำร้านค้าของคุณ
             </label>
             <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 readOnly
-                value={webhookUrl}
+                value={lineWebhookUrl}
                 className="w-full flex-1 px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-surface-container-high text-on-surface-variant text-xs font-mono outline-none truncate"
               />
               <button
                 type="button"
-                onClick={handleCopy}
+                onClick={handleCopyLine}
                 className="w-full sm:w-auto px-4 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md text-xs sm:text-sm rounded-xl transition-all flex items-center justify-center gap-1.5 border border-outline-variant/50 shrink-0 cursor-pointer"
               >
-                {copied ? <Check className="w-4 h-4 text-success-green shrink-0" /> : <Copy className="w-4 h-4 shrink-0" />}
-                <span>{copied ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
+                {copiedLine ? <Check className="w-4 h-4 text-success-green shrink-0" /> : <Copy className="w-4 h-4 shrink-0" />}
+                <span>{copiedLine ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
               </button>
             </div>
             <p className="text-[11px] sm:text-xs text-outline mt-1 leading-relaxed">
               นำ URL นี้ไปใส่ใน LINE Developers Console → Messaging API → Webhook URL แล้วกดเปิด Verify
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Section 4: Facebook Page (Messenger) Integration */}
+      <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
+        <div className="flex items-center justify-between border-b border-outline-variant/30 pb-3.5 sm:pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-600 shrink-0">
+              <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+              </svg>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">เชื่อมต่อ Facebook Page (Messenger)</h2>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 border border-blue-500/20">Omnichannel v2</span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-on-surface-variant">เชื่อมต่อ Meta Graph API และ Webhook ให้บอทตอบแชทลูกค้า Facebook อัตโนมัติ</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3.5 sm:space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
+            <div className="space-y-1.5">
+              <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+                Facebook Page ID
+              </label>
+              <input
+                name="facebook_page_id"
+                type="text"
+                defaultValue={shop.facebook_page_id || ''}
+                placeholder="เช่น 109823476123456"
+                className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all font-mono"
+              />
+              <p className="text-[11px] text-outline">รหัสประจำ Facebook Page ที่ต้องการเปิดใช้งาน</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+                Verify Token (กำหนดเองได้)
+              </label>
+              <input
+                name="facebook_verify_token"
+                type="text"
+                defaultValue={shop.facebook_verify_token || `dealmee_verify_${shop.id.slice(0, 8)}`}
+                placeholder="dealmee_verify_token_123"
+                className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all font-mono"
+              />
+              <p className="text-[11px] text-outline">ใช้ยืนยัน Webhook ตอนตั้งค่าใน Meta Developers Console</p>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+              Page Access Token (Long-Lived Token)
+            </label>
+            <input
+              name="facebook_page_token"
+              type="password"
+              defaultValue={shop.facebook_page_token || ''}
+              placeholder="EAABw..."
+              className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all font-mono"
+            />
+            <p className="text-[11px] text-outline">Token สำหรับส่งข้อความตอบกลับผ่าน Graph API (ทำงานได้ทันทีในโหมด Development)</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+              App Secret (สำหรับยืนยันความปลอดภัย X-Hub-Signature-256)
+            </label>
+            <input
+              name="facebook_app_secret"
+              type="password"
+              defaultValue={shop.facebook_app_secret || ''}
+              placeholder="••••••••••••••••••••••••"
+              className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all font-mono"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md">
+              Facebook Webhook Callback URL
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                readOnly
+                value={fbWebhookUrl}
+                className="w-full flex-1 px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-surface-container-high text-on-surface-variant text-xs font-mono outline-none truncate"
+              />
+              <button
+                type="button"
+                onClick={handleCopyFb}
+                className="w-full sm:w-auto px-4 py-2.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md text-xs sm:text-sm rounded-xl transition-all flex items-center justify-center gap-1.5 border border-outline-variant/50 shrink-0 cursor-pointer"
+              >
+                {copiedFb ? <Check className="w-4 h-4 text-success-green shrink-0" /> : <Copy className="w-4 h-4 shrink-0" />}
+                <span>{copiedFb ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
+              </button>
+            </div>
+            <p className="text-[11px] sm:text-xs text-outline mt-1 leading-relaxed">
+              นำ URL นี้และ Verify Token ไปใส่ใน Meta for Developers → Webhooks → Page (Messenger) แล้วเลือก Subscribe อีเวนต์ <code>messages</code> และ <code>messaging_postbacks</code>
+            </p>
+          </div>
+
+          {/* Interactive Facebook Simulator Box */}
+          <div className="mt-4 p-4 rounded-xl border border-blue-500/20 bg-blue-500/5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-blue-700">
+                <Sparkles className="w-4 h-4 shrink-0" />
+                <span>จำลองทดสอบ Facebook Messenger (ไม่ต้องรอ Meta ตรวจสอบแอพ)</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <span className="text-on-surface-variant">โหมด:</span>
+                <select
+                  value={simMode}
+                  onChange={(e) => setSimMode(e.target.value as any)}
+                  className="px-2 py-0.5 rounded border border-outline-variant bg-surface text-on-surface text-xs outline-none"
+                >
+                  <option value="auto">Auto Reply (บอทตอบทันที)</option>
+                  <option value="copilot">Copilot (ร่างให้แอดมินตรวจ)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                value={simText}
+                onChange={(e) => setSimText(e.target.value)}
+                placeholder="พิมพ์ข้อความทดสอบ เช่น สอบถามสินค้า หรือ มีโปรโมชั่นไหม"
+                className="flex-1 px-3 py-2 text-xs rounded-xl border border-outline-variant bg-surface text-on-surface outline-none focus:border-blue-500"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleTestFbSimulation()
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleTestFbSimulation}
+                disabled={simLoading || !simText.trim()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-sm"
+              >
+                {simLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                <span>{simLoading ? 'กำลังประมวลผล...' : 'ทดสอบส่งข้อความ'}</span>
+              </button>
+            </div>
+
+            {simResult && (
+              <div className="p-3 rounded-lg bg-surface border border-outline-variant/60 text-xs space-y-1.5 mt-2 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between text-[11px] font-semibold">
+                  <span className={simResult.error ? 'text-error-red' : 'text-success-green'}>
+                    {simResult.error ? '❌ เกิดข้อผิดพลาด' : '✅ จำลองการทำงานสำเร็จ'}
+                  </span>
+                  <span className="text-on-surface-variant font-mono">
+                    {simResult.status} ({simResult.aiMode || simMode})
+                  </span>
+                </div>
+                {simResult.reply && (
+                  <div className="p-2 rounded bg-surface-container-low text-on-surface leading-relaxed">
+                    <span className="font-semibold text-blue-600 block mb-0.5">บอท AI ตอบกลับ:</span>
+                    {simResult.reply}
+                  </div>
+                )}
+                {simResult.suggestedReply && (
+                  <div className="p-2 rounded bg-amber-500/10 border border-amber-500/30 text-on-surface leading-relaxed">
+                    <span className="font-semibold text-amber-700 block mb-0.5">💡 คำแนะนำร่างข้อความ (Copilot Mode):</span>
+                    {simResult.suggestedReply}
+                    <div className="text-[10px] text-amber-800 mt-1">ข้อความนี้จะถูกส่งไปแสดงในหน้ารวมแชท (Inbox) เพื่อให้แอดมินกดอนุมัติส่งได้ใน 1 คลิก</div>
+                  </div>
+                )}
+                {simResult.error && (
+                  <div className="text-error-red text-[11px]">{simResult.error}</div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </section>

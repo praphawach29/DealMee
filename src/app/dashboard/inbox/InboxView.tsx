@@ -2,40 +2,26 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { sendMessage, toggleHandoffStatus, createMockConversation } from './actions'
+import { sendMessage, toggleHandoffStatus, toggleAiMode, createMockConversation } from './actions'
 import { getSalesStageMeta, type SalesStage } from '@/lib/ai/salesWorkflow'
+import {
+  SupportedPlatform,
+  AiMode,
+  PLATFORM_CONFIG,
+  AI_MODE_CONFIG,
+  normalizePlatform,
+  ConversationOmnichannel,
+  ChatMessageOmnichannel,
+} from '@/types/omnichannel'
+import CustomerProfileDrawer from './CustomerProfileDrawer'
 
-export interface Conversation {
-  id: string
-  shop_id: string
-  user_id: string
-  customer_name: string
-  customer_avatar: string | null
-  platform: string
-  last_message: string | null
-  last_message_at: string
-  unread_count: number
-  status: 'ai' | 'human' | 'closed'
-  sales_stage?: 'greeting' | 'showcase' | 'closing' | 'post_sale' | string | null
-  created_at: string
-}
-
-export interface ChatMessage {
-  id: string
-  conversation_id: string
-  shop_id: string
-  sender_type: 'user' | 'bot' | 'agent'
-  sender_name: string | null
-  message: string
-  created_at: string
-}
+export type Conversation = ConversationOmnichannel
+export type ChatMessage = ChatMessageOmnichannel
 
 interface InboxViewProps {
   conversations: Conversation[]
   messagesMap: Record<string, ChatMessage[]>
 }
-
-import CustomerProfileDrawer from './CustomerProfileDrawer'
 
 export default function InboxView({ conversations, messagesMap }: InboxViewProps) {
   const router = useRouter()
@@ -45,8 +31,10 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
   const [inputText, setInputText] = useState('')
   const [loading, setLoading] = useState(false)
   const [filterStatus, setFilterStatus] = useState<'all' | 'ai' | 'human'>('all')
+  const [filterPlatform, setFilterPlatform] = useState<'all' | SupportedPlatform>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [showProfileDrawer, setShowProfileDrawer] = useState(false)
+  const [showMockMenu, setShowMockMenu] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -57,11 +45,16 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
     msg => !msg.message.startsWith('[Tool:') && !msg.message.startsWith('[System:') && !msg.message.startsWith('[Evaluation:')
   )
 
+  // Find latest AI suggestion if any
+  const latestAiSuggestion = [...activeMessages]
+    .reverse()
+    .find(m => m.ai_suggested_reply)?.ai_suggested_reply
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeMessages])
 
-  // Polling auto-refresh every 5 seconds to sync incoming LINE messages and statuses
+  // Polling auto-refresh every 5 seconds to sync incoming messages and statuses
   useEffect(() => {
     const interval = setInterval(() => {
       router.refresh()
@@ -74,14 +67,16 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
     const matchesSearch = c.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (cleanLastMessage && cleanLastMessage.toLowerCase().includes(searchTerm.toLowerCase()))
     const matchesFilter = filterStatus === 'all' || c.status === filterStatus
-    return matchesSearch && matchesFilter
+    const convPlat = normalizePlatform(c.platform)
+    const matchesPlatform = filterPlatform === 'all' || convPlat === filterPlatform
+    return matchesSearch && matchesFilter && matchesPlatform
   })
 
-  async function handleSend(e: React.FormEvent) {
-    e.preventDefault()
-    if (!selectedConvId || !inputText.trim() || loading) return
+  async function handleSend(e?: React.FormEvent, customText?: string) {
+    if (e) e.preventDefault()
+    const textToSend = customText ?? inputText
+    if (!selectedConvId || !textToSend.trim() || loading) return
 
-    const textToSend = inputText
     setInputText('')
     setLoading(true)
 
@@ -108,9 +103,22 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
     }
   }
 
-  async function handleCreateMock() {
+  async function handleToggleAiMode(newMode: AiMode) {
+    if (!selectedConvId) return
     setLoading(true)
-    const res = await createMockConversation()
+    const res = await toggleAiMode(selectedConvId, newMode)
+    setLoading(false)
+    if (res?.error) {
+      alert(res.error)
+    } else {
+      router.refresh()
+    }
+  }
+
+  async function handleCreateMock(platform: SupportedPlatform = 'line') {
+    setShowMockMenu(false)
+    setLoading(true)
+    const res = await createMockConversation(platform)
     setLoading(false)
     if (res?.error) {
       alert(res.error)
@@ -122,24 +130,61 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
   return (
     <div className="h-[calc(100vh-8.5rem)] sm:h-[calc(100vh-9.5rem)] min-h-[550px] flex border border-outline-variant/40 bg-surface rounded-2xl shadow-sm overflow-hidden">
       
-      {/* Pane 1: Conversations List (Hidden on mobile if a conversation is selected) */}
+      {/* Pane 1: Conversations List */}
       <div className={`w-full md:w-72 lg:w-80 shrink-0 border-r border-outline-variant/30 flex-col bg-surface-container-lowest ${
         selectedConvId ? 'hidden md:flex' : 'flex'
       }`}>
         
         {/* Header & Filter */}
         <div className="p-3.5 sm:p-4 border-b border-outline-variant/30 space-y-3">
-          <div className="flex items-center justify-between">
-            <h1 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">กล่องข้อความ</h1>
-            <button
-              onClick={handleCreateMock}
-              disabled={loading}
-              className="text-xs bg-electric-blue/10 text-electric-blue hover:bg-electric-blue/20 font-bold px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer shrink-0"
-              title="สร้างแชทจำลองสำหรับทดสอบ"
-            >
-              <span className="material-symbols-outlined text-[15px]">add</span>
-              <span>จำลองแชท</span>
-            </button>
+          <div className="flex items-center justify-between relative">
+            <div>
+              <h1 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm">Omnichannel Inbox</h1>
+              <p className="text-[10px] text-outline">รวมแชททุกช่องทางในที่เดียว</p>
+            </div>
+            
+            <div className="relative">
+              <button
+                onClick={() => setShowMockMenu(!showMockMenu)}
+                disabled={loading}
+                className="text-xs bg-electric-blue/10 text-electric-blue hover:bg-electric-blue/20 font-bold px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                title="สร้างแชทจำลองทดสอบ"
+              >
+                <span className="material-symbols-outlined text-[15px]">add</span>
+                <span>จำลองแชท</span>
+              </button>
+
+              {/* Mock Platform Menu */}
+              {showMockMenu && (
+                <div className="absolute right-0 top-full mt-1.5 w-48 bg-surface border border-outline-variant rounded-xl shadow-lg z-50 p-1.5 space-y-1">
+                  <div className="text-[10px] font-bold text-outline px-2 py-1">เลือกช่องทางจำลอง:</div>
+                  <button
+                    onClick={() => handleCreateMock('line')}
+                    className="w-full text-left px-2.5 py-1.5 text-xs font-semibold rounded-lg hover:bg-emerald-50 text-emerald-700 flex items-center gap-2 cursor-pointer"
+                  >
+                    <span>🟢 LINE OA</span>
+                  </button>
+                  <button
+                    onClick={() => handleCreateMock('facebook')}
+                    className="w-full text-left px-2.5 py-1.5 text-xs font-semibold rounded-lg hover:bg-blue-50 text-blue-700 flex items-center gap-2 cursor-pointer"
+                  >
+                    <span>🔵 Facebook Page</span>
+                  </button>
+                  <button
+                    onClick={() => handleCreateMock('tiktok')}
+                    className="w-full text-left px-2.5 py-1.5 text-xs font-semibold rounded-lg hover:bg-slate-100 text-slate-800 flex items-center gap-2 cursor-pointer"
+                  >
+                    <span>⚫ TikTok Shop</span>
+                  </button>
+                  <button
+                    onClick={() => handleCreateMock('shopee')}
+                    className="w-full text-left px-2.5 py-1.5 text-xs font-semibold rounded-lg hover:bg-orange-50 text-orange-700 flex items-center gap-2 cursor-pointer"
+                  >
+                    <span>🟠 Shopee</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="relative">
@@ -148,26 +193,80 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="ค้นหาชื่อลูกค้า..."
+              placeholder="ค้นหาชื่อลูกค้าหรือข้อความ..."
               className="w-full pl-9 pr-3 py-1.5 text-xs border border-outline-variant rounded-xl bg-merchant-bg text-on-surface focus:outline-none focus:border-electric-blue"
             />
           </div>
 
-          {/* Filter Pills */}
+          {/* Platform Channel Filter Tabs */}
+          <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
+            <button
+              onClick={() => setFilterPlatform('all')}
+              className={`py-1 px-2.5 text-[11px] font-bold rounded-lg transition-all shrink-0 cursor-pointer ${
+                filterPlatform === 'all'
+                  ? 'bg-on-surface text-surface shadow-xs'
+                  : 'bg-surface text-on-surface-variant hover:bg-surface-container'
+              }`}
+            >
+              ทั้งหมด
+            </button>
+            <button
+              onClick={() => setFilterPlatform('line')}
+              className={`py-1 px-2 text-[11px] font-bold rounded-lg transition-all shrink-0 cursor-pointer ${
+                filterPlatform === 'line'
+                  ? 'bg-[#06C755] text-white shadow-xs'
+                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+              }`}
+            >
+              LINE
+            </button>
+            <button
+              onClick={() => setFilterPlatform('facebook')}
+              className={`py-1 px-2 text-[11px] font-bold rounded-lg transition-all shrink-0 cursor-pointer ${
+                filterPlatform === 'facebook'
+                  ? 'bg-[#1877F2] text-white shadow-xs'
+                  : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+              }`}
+            >
+              Facebook
+            </button>
+            <button
+              onClick={() => setFilterPlatform('tiktok')}
+              className={`py-1 px-2 text-[11px] font-bold rounded-lg transition-all shrink-0 cursor-pointer ${
+                filterPlatform === 'tiktok'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+              }`}
+            >
+              TikTok
+            </button>
+            <button
+              onClick={() => setFilterPlatform('shopee')}
+              className={`py-1 px-2 text-[11px] font-bold rounded-lg transition-all shrink-0 cursor-pointer ${
+                filterPlatform === 'shopee'
+                  ? 'bg-[#EE4D2D] text-white shadow-xs'
+                  : 'bg-orange-50 text-orange-700 hover:bg-orange-100'
+              }`}
+            >
+              Shopee
+            </button>
+          </div>
+
+          {/* AI / Human Filter Pills */}
           <div className="flex gap-1 overflow-x-auto pb-0.5">
             <button
               onClick={() => setFilterStatus('all')}
-              className={`flex-1 py-1 px-2 text-[11px] font-bold rounded-lg transition-all shrink-0 ${
+              className={`flex-1 py-1 px-2 text-[10px] font-bold rounded-lg transition-all shrink-0 cursor-pointer ${
                 filterStatus === 'all'
                   ? 'bg-electric-blue text-white shadow-xs'
                   : 'bg-surface text-on-surface-variant hover:bg-surface-container'
               }`}
             >
-              ทั้งหมด ({conversations.length})
+              รวม ({filteredConversations.length})
             </button>
             <button
               onClick={() => setFilterStatus('ai')}
-              className={`flex-1 py-1 px-2 text-[11px] font-bold rounded-lg transition-all shrink-0 ${
+              className={`flex-1 py-1 px-2 text-[10px] font-bold rounded-lg transition-all shrink-0 cursor-pointer ${
                 filterStatus === 'ai'
                   ? 'bg-electric-blue text-white shadow-xs'
                   : 'bg-surface text-on-surface-variant hover:bg-surface-container'
@@ -177,7 +276,7 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
             </button>
             <button
               onClick={() => setFilterStatus('human')}
-              className={`flex-1 py-1 px-2 text-[11px] font-bold rounded-lg transition-all shrink-0 ${
+              className={`flex-1 py-1 px-2 text-[10px] font-bold rounded-lg transition-all shrink-0 cursor-pointer ${
                 filterStatus === 'human'
                   ? 'bg-electric-blue text-white shadow-xs'
                   : 'bg-surface text-on-surface-variant hover:bg-surface-container'
@@ -193,6 +292,10 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
           {filteredConversations.length > 0 ? (
             filteredConversations.map((conv) => {
               const isSelected = conv.id === selectedConvId
+              const platKey = normalizePlatform(conv.platform)
+              const platConfig = PLATFORM_CONFIG[platKey] || PLATFORM_CONFIG.line
+              const curAiMode = conv.ai_mode || (conv.status === 'human' ? 'manual' : 'auto')
+
               return (
                 <div
                   key={conv.id}
@@ -203,8 +306,16 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
                       : 'hover:bg-surface-container'
                   }`}
                 >
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-electric-blue/10 text-electric-blue flex items-center justify-center font-bold shrink-0 text-xs sm:text-sm">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-electric-blue/10 text-electric-blue flex items-center justify-center font-bold shrink-0 text-xs sm:text-sm relative">
                     {conv.customer_name.charAt(0)}
+                    {/* Platform mini indicator on avatar */}
+                    <span
+                      className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border border-surface flex items-center justify-center text-[8px] font-bold text-white shadow-xs"
+                      style={{ backgroundColor: platConfig.color }}
+                      title={platConfig.name}
+                    >
+                      {platConfig.shortLabel.charAt(0)}
+                    </span>
                   </div>
 
                   <div className="flex-1 min-w-0">
@@ -221,15 +332,17 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
 
                     <div className="flex items-center justify-between gap-1 flex-wrap">
                       <div className="flex items-center gap-1">
-                        <span className={`px-2 py-0.5 text-[9px] sm:text-[10px] font-bold rounded-md flex items-center gap-1 ${
-                          conv.status === 'ai'
-                            ? 'bg-blue-50 text-blue-600 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
-                            : 'bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
+                        {/* AI Mode Badge */}
+                        <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded-md flex items-center gap-0.5 border ${
+                          curAiMode === 'auto'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : curAiMode === 'copilot'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-slate-100 text-slate-700 border-slate-200'
                         }`}>
-                          <span className="material-symbols-outlined text-[11px]">
-                            {conv.status === 'ai' ? 'smart_toy' : 'person'}
+                          <span>
+                            {curAiMode === 'auto' ? '🤖 Auto' : curAiMode === 'copilot' ? '💡 Copilot' : '👤 แอดมิน'}
                           </span>
-                          {conv.status === 'ai' ? 'AI ตอบ' : 'แอดมินตอบ'}
                         </span>
 
                         {(() => {
@@ -243,8 +356,9 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
                         })()}
                       </div>
 
-                      <span className="text-[9px] bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300 dark:border-green-800 px-1.5 py-0.5 rounded font-bold border border-green-200">
-                        LINE
+                      {/* Omnichannel Platform Badge */}
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold border ${platConfig.badgeClass}`}>
+                        {platConfig.shortLabel}
                       </span>
                     </div>
                   </div>
@@ -254,9 +368,9 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
           ) : (
             <div className="p-8 text-center text-outline">
               <span className="material-symbols-outlined text-3xl mb-2">forum</span>
-              <p className="text-xs">ไม่พบแชทที่ค้นหา</p>
+              <p className="text-xs">ไม่พบแชทในหมวดที่เลือก</p>
               <button
-                onClick={handleCreateMock}
+                onClick={() => handleCreateMock('line')}
                 className="mt-3 text-xs bg-electric-blue text-white px-3 py-1.5 rounded-lg font-bold cursor-pointer"
               >
                 + สร้างแชทจำลองทดสอบ
@@ -273,80 +387,136 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
         }`}>
           
           {/* Active Chat Top Bar */}
+          {/* Active Chat Header */}
           <div className="p-3 sm:p-4 bg-surface border-b border-outline-variant/30 flex items-center justify-between shadow-xs shrink-0">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-              {/* Back button for mobile */}
-              <button
-                onClick={() => setSelectedConvId(null)}
-                className="md:hidden p-1.5 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container shrink-0"
-              >
-                <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-              </button>
+            {(() => {
+              const activePlatKey = normalizePlatform(activeConv.platform)
+              const activePlatConfig = PLATFORM_CONFIG[activePlatKey] || PLATFORM_CONFIG.line
+              const activeAiMode = activeConv.ai_mode || (activeConv.status === 'human' ? 'manual' : 'auto')
 
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-electric-blue/10 text-electric-blue flex items-center justify-center font-bold text-xs sm:text-sm shrink-0">
-                {activeConv.customer_name.charAt(0)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="text-xs sm:text-sm font-bold text-on-surface flex items-center gap-1.5 truncate">
-                  <span className="truncate">{activeConv.customer_name}</span>
-                  <span className="text-[9px] bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300 dark:border-green-800 px-1.5 py-0.5 rounded font-bold border border-green-200 shrink-0">
-                    LINE OA
-                  </span>
-                </h2>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-[10px] text-outline font-mono truncate">ID: {activeConv.user_id}</p>
-                  {(() => {
-                    const activeStage = getSalesStageMeta(activeConv.sales_stage)
-                    return (
-                      <span className={`px-2 py-0.2 text-[9px] font-bold rounded-md flex items-center gap-1 border ${activeStage.badgeClass}`} title={activeStage.description}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${activeStage.dotClass}`} />
-                        <span>ขั้นตอน: {activeStage.label}</span>
+              return (
+                <>
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                    {/* Back button for mobile */}
+                    <button
+                      onClick={() => setSelectedConvId(null)}
+                      className="md:hidden p-1.5 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container shrink-0 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">arrow_back</span>
+                    </button>
+
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-electric-blue/10 text-electric-blue flex items-center justify-center font-bold text-xs sm:text-sm shrink-0 relative">
+                      {activeConv.customer_name.charAt(0)}
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border border-surface flex items-center justify-center text-[8px] font-bold text-white shadow-xs"
+                        style={{ backgroundColor: activePlatConfig.color }}
+                        title={activePlatConfig.name}
+                      >
+                        {activePlatConfig.shortLabel.charAt(0)}
                       </span>
-                    )
-                  })()}
-                </div>
-              </div>
-            </div>
+                    </div>
 
-            {/* Human Handoff Toggle */}
-            <div className="flex items-center gap-2 shrink-0">
-              {activeConv.status === 'ai' ? (
-                <button
-                  onClick={() => handleToggleStatus('human')}
-                  disabled={loading}
-                  className="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white text-[11px] sm:text-xs font-bold px-3 py-1.5 sm:py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-                  title="หยุดบอท AI ชั่วคราว เพื่อให้แอดมินเข้าไปคุยแทน"
-                >
-                  <span className="material-symbols-outlined text-[15px]">back_hand</span>
-                  <span className="hidden sm:inline">Takeover (แอดมินคุยแทน)</span>
-                  <span className="sm:hidden">คุยแทน</span>
-                </button>
-              ) : (
-                <button
-                  onClick={() => handleToggleStatus('ai')}
-                  disabled={loading}
-                  className="flex items-center gap-1 bg-electric-blue hover:bg-primary text-white text-[11px] sm:text-xs font-bold px-3 py-1.5 sm:py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-                  title="คลิกเมื่อแอดมินคุยเสร็จแล้ว เพื่อให้ AI กลับมาตอบลูกค้าต่อ"
-                >
-                  <span className="material-symbols-outlined text-[15px]">smart_toy</span>
-                  <span className="hidden sm:inline">คืนงานให้ AI ตอบต่อ</span>
-                  <span className="sm:hidden">ให้ AI ตอบ</span>
-                </button>
-              )}
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-xs sm:text-sm font-bold text-on-surface flex items-center gap-1.5 truncate">
+                        <span className="truncate">{activeConv.customer_name}</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold border shrink-0 ${activePlatConfig.badgeClass}`}>
+                          {activePlatConfig.name}
+                        </span>
+                      </h2>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-[10px] text-outline font-mono truncate">ID: {activeConv.user_id}</p>
+                        {(() => {
+                          const activeStage = getSalesStageMeta(activeConv.sales_stage)
+                          return (
+                            <span className={`px-2 py-0.2 text-[9px] font-bold rounded-md flex items-center gap-1 border ${activeStage.badgeClass}`} title={activeStage.description}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${activeStage.dotClass}`} />
+                              <span>ขั้นตอน: {activeStage.label}</span>
+                            </span>
+                          )
+                        })()}
+                      </div>
+                    </div>
+                  </div>
 
-              <button
-                onClick={() => setShowProfileDrawer(!showProfileDrawer)}
-                className={`p-2 rounded-xl border transition-all flex items-center gap-1 text-xs font-bold ${
-                  showProfileDrawer
-                    ? 'bg-electric-blue text-white border-electric-blue'
-                    : 'bg-surface text-on-surface-variant border-outline-variant hover:bg-surface-container'
-                }`}
-                title="เปิด/ปิด โปรไฟล์ความจำลูกค้า"
-              >
-                <span className="material-symbols-outlined text-base">person_search</span>
-                <span className="hidden lg:inline">AI Memory</span>
-              </button>
-            </div>
+                  {/* AI Mode Selector & Quick Controls */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* AI Mode Pill Switcher */}
+                    <div className="hidden sm:flex items-center bg-surface-container p-0.5 rounded-xl border border-outline-variant/40 text-xs">
+                      <button
+                        onClick={() => handleToggleAiMode('auto')}
+                        disabled={loading}
+                        className={`px-2 py-1 rounded-lg font-bold text-[10px] sm:text-[11px] transition-all cursor-pointer ${
+                          activeAiMode === 'auto'
+                            ? 'bg-electric-blue text-white shadow-xs'
+                            : 'text-on-surface-variant hover:text-on-surface'
+                        }`}
+                        title="AI ปิดดีลอัตโนมัติ 24/7"
+                      >
+                        🤖 Auto
+                      </button>
+                      <button
+                        onClick={() => handleToggleAiMode('copilot')}
+                        disabled={loading}
+                        className={`px-2 py-1 rounded-lg font-bold text-[10px] sm:text-[11px] transition-all cursor-pointer ${
+                          activeAiMode === 'copilot'
+                            ? 'bg-amber-500 text-white shadow-xs'
+                            : 'text-on-surface-variant hover:text-on-surface'
+                        }`}
+                        title="AI ช่วยร่างคำตอบ แอดมินตรวจสอบก่อนส่ง"
+                      >
+                        💡 Copilot
+                      </button>
+                      <button
+                        onClick={() => handleToggleAiMode('manual')}
+                        disabled={loading}
+                        className={`px-2 py-1 rounded-lg font-bold text-[10px] sm:text-[11px] transition-all cursor-pointer ${
+                          activeAiMode === 'manual'
+                            ? 'bg-slate-700 text-white shadow-xs'
+                            : 'text-on-surface-variant hover:text-on-surface'
+                        }`}
+                        title="แอดมินพิมพ์คุยเอง 100%"
+                      >
+                        👤 แอดมิน
+                      </button>
+                    </div>
+
+                    {/* Mobile fallback button */}
+                    <div className="sm:hidden">
+                      {activeConv.status === 'ai' ? (
+                        <button
+                          onClick={() => handleToggleStatus('human')}
+                          disabled={loading}
+                          className="bg-amber-500 text-white text-[10px] font-bold px-2 py-1.5 rounded-lg"
+                        >
+                          คุยแทน
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleToggleStatus('ai')}
+                          disabled={loading}
+                          className="bg-electric-blue text-white text-[10px] font-bold px-2 py-1.5 rounded-lg"
+                        >
+                          ให้ AI
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => setShowProfileDrawer(!showProfileDrawer)}
+                      className={`p-2 rounded-xl border transition-all flex items-center gap-1 text-xs font-bold cursor-pointer ${
+                        showProfileDrawer
+                          ? 'bg-electric-blue text-white border-electric-blue'
+                          : 'bg-surface text-on-surface-variant border-outline-variant hover:bg-surface-container'
+                      }`}
+                      title="เปิด/ปิด โปรไฟล์ความจำลูกค้า"
+                    >
+                      <span className="material-symbols-outlined text-base">person_search</span>
+                      <span className="hidden lg:inline">AI Memory</span>
+                    </button>
+                  </div>
+                </>
+              )
+            })()}
           </div>
 
           {/* Pause Status Alert Banner */}
@@ -354,14 +524,14 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
             <div className="bg-amber-500/10 border-b border-amber-500/20 px-3.5 sm:px-4 py-2 flex items-center justify-between text-xs text-amber-700 dark:text-amber-300 shrink-0">
               <div className="flex items-center gap-1.5 font-medium">
                 <span className="material-symbols-outlined text-[17px] text-amber-600">pause_circle</span>
-                <span>บอท AI กำลังหยุดตอบชั่วคราว: แอดมินกำลังคุยแทน (เมื่อคุยเสร็จแล้วกด &quot;คืนงานให้ AI ตอบต่อ&quot;)</span>
+                <span>โหมดแอดมินคุยแทน: บอท AI หยุดตอบชั่วคราว (เมื่อคุยเสร็จสามารถสลับกลับเป็น Auto ได้ทันที)</span>
               </div>
               <button
-                onClick={() => handleToggleStatus('ai')}
+                onClick={() => handleToggleAiMode('auto')}
                 disabled={loading}
                 className="text-[11px] underline font-bold hover:text-amber-900 dark:hover:text-amber-100 cursor-pointer ml-2 shrink-0"
               >
-                คืนงานให้ AI ทันที
+                เปิด Auto ทันที
               </button>
             </div>
           )}
@@ -403,13 +573,44 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
             <div ref={messagesEndRef} />
           </div>
 
+          {/* AI Copilot Suggestion Box (for Copilot / Suggest mode) */}
+          {latestAiSuggestion && (
+            <div className="mx-3 sm:mx-4 mb-2 p-3 bg-gradient-to-r from-amber-500/10 to-electric-blue/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 shrink-0 animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <div className="flex items-start gap-2 text-xs text-on-surface min-w-0">
+                <span className="material-symbols-outlined text-amber-500 text-[18px] shrink-0 mt-0.5">auto_awesome</span>
+                <div>
+                  <span className="font-bold text-amber-700 dark:text-amber-400">💡 AI ร่างคำตอบแนะนำ: </span>
+                  <span className="text-on-surface-variant italic">&quot;{latestAiSuggestion}&quot;</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setInputText(latestAiSuggestion)}
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-surface border border-outline-variant hover:bg-surface-container text-on-surface transition-all cursor-pointer"
+                >
+                  นำไปแก้ไข
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSend(undefined, latestAiSuggestion)}
+                  disabled={loading}
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-electric-blue hover:bg-primary text-white shadow-xs transition-all cursor-pointer flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[13px]">send</span>
+                  <span>ส่งทันที</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Message Input Bar */}
-          <form onSubmit={handleSend} className="p-2.5 sm:p-4 bg-surface border-t border-outline-variant/30 flex items-center gap-2 shrink-0">
+          <form onSubmit={(e) => handleSend(e)} className="p-2.5 sm:p-4 bg-surface border-t border-outline-variant/30 flex items-center gap-2 shrink-0">
             <input
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder={activeConv.status === 'ai' ? "พิมพ์ตอบกลับ (สลับเป็นแอดมินให้อัตโนมัติ)..." : "พิมพ์ข้อความตอบกลับ..."}
+              placeholder={activeConv.ai_mode === 'auto' ? "พิมพ์ตอบกลับ (สลับเป็นแอดมินให้อัตโนมัติ)..." : "พิมพ์ข้อความตอบกลับ..."}
               className="flex-1 px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm border border-outline-variant rounded-xl bg-merchant-bg text-on-surface focus:outline-none focus:border-electric-blue"
             />
             <button
@@ -432,7 +633,7 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
             คลิกเลือกชื่อลูกค้าจากแถบซ้ายมือเพื่อดูประวัติการสนทนาและพิมพ์ตอบกลับ
           </p>
           <button
-            onClick={handleCreateMock}
+            onClick={() => handleCreateMock('line')}
             className="bg-electric-blue text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md cursor-pointer"
           >
             + สร้างแชทจำลองทดสอบ
@@ -451,49 +652,67 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
 
       {activeConv && !showProfileDrawer && (
         <div className="hidden lg:flex w-64 xl:w-72 border-l border-outline-variant/30 bg-surface flex-col p-5 space-y-5 shrink-0">
-          <div className="text-center space-y-2 pb-4 border-b border-outline-variant/30">
-            <div className="w-14 h-14 rounded-full bg-electric-blue/10 text-electric-blue flex items-center justify-center font-bold text-xl mx-auto">
-              {activeConv.customer_name.charAt(0)}
-            </div>
-            <h3 className="font-bold text-on-surface text-sm truncate">{activeConv.customer_name}</h3>
-            <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-bold border border-green-200 inline-block">
-              LINE Official Account
-            </span>
-          </div>
+          {(() => {
+            const sidePlatKey = normalizePlatform(activeConv.platform)
+            const sidePlatConfig = PLATFORM_CONFIG[sidePlatKey] || PLATFORM_CONFIG.line
+            const sideAiMode = activeConv.ai_mode || (activeConv.status === 'human' ? 'manual' : 'auto')
+            const sideAiConfig = AI_MODE_CONFIG[sideAiMode]
 
-          <div className="space-y-3.5 text-xs">
-            <h4 className="font-bold text-outline uppercase tracking-wider text-[10px]">รายละเอียดลูกค้า</h4>
-            
-            <div className="space-y-1">
-              <p className="text-outline">Platform ID:</p>
-              <p className="font-mono text-on-surface font-semibold text-[11px] truncate">{activeConv.user_id}</p>
-            </div>
+            return (
+              <>
+                <div className="text-center space-y-2 pb-4 border-b border-outline-variant/30">
+                  <div className="w-14 h-14 rounded-full bg-electric-blue/10 text-electric-blue flex items-center justify-center font-bold text-xl mx-auto relative">
+                    {activeConv.customer_name.charAt(0)}
+                    <span
+                      className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-surface flex items-center justify-center text-[9px] font-bold text-white shadow-xs"
+                      style={{ backgroundColor: sidePlatConfig.color }}
+                    >
+                      {sidePlatConfig.shortLabel.charAt(0)}
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-on-surface text-sm truncate">{activeConv.customer_name}</h3>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border inline-block ${sidePlatConfig.badgeClass}`}>
+                    {sidePlatConfig.name}
+                  </span>
+                </div>
 
-            <div className="space-y-1">
-              <p className="text-outline">สถานะการตอบ:</p>
-              <p className="font-semibold text-on-surface flex items-center gap-1.5 text-xs">
-                <span className={`w-2 h-2 rounded-full ${activeConv.status === 'ai' ? 'bg-blue-500' : 'bg-amber-500'}`}></span>
-                {activeConv.status === 'ai' ? 'บอท AI ควบคุมอยู่' : 'แอดมินเข้าควบคุมแล้ว'}
-              </p>
-            </div>
+                <div className="space-y-3.5 text-xs">
+                  <h4 className="font-bold text-outline uppercase tracking-wider text-[10px]">รายละเอียดลูกค้า</h4>
+                  
+                  <div className="space-y-1">
+                    <p className="text-outline">Platform ID:</p>
+                    <p className="font-mono text-on-surface font-semibold text-[11px] truncate">{activeConv.user_id}</p>
+                  </div>
 
-            <div className="space-y-1">
-              <p className="text-outline">เริ่มสนทนาเมื่อ:</p>
-              <p className="font-semibold text-on-surface text-xs" suppressHydrationWarning>
-                {new Date(activeConv.created_at).toLocaleDateString('th-TH')}
-              </p>
-            </div>
+                  <div className="space-y-1">
+                    <p className="text-outline">โหมด AI ปัจจุบัน:</p>
+                    <p className="font-semibold text-on-surface flex items-center gap-1.5 text-xs">
+                      <span className={`w-2 h-2 rounded-full ${sideAiMode === 'auto' ? 'bg-blue-500' : sideAiMode === 'copilot' ? 'bg-amber-500' : 'bg-slate-500'}`}></span>
+                      {sideAiConfig.label}
+                    </p>
+                  </div>
 
-            <button
-              onClick={() => setShowProfileDrawer(true)}
-              className="w-full py-2 px-3 bg-electric-blue/10 text-electric-blue hover:bg-electric-blue/20 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 mt-4"
-            >
-              <span className="material-symbols-outlined text-sm">person_search</span>
-              <span>ดูข้อมูล AI Memory</span>
-            </button>
-          </div>
+                  <div className="space-y-1">
+                    <p className="text-outline">เริ่มสนทนาเมื่อ:</p>
+                    <p className="font-semibold text-on-surface text-xs" suppressHydrationWarning>
+                      {new Date(activeConv.created_at).toLocaleDateString('th-TH')}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => setShowProfileDrawer(true)}
+                    className="w-full py-2 px-3 bg-electric-blue/10 text-electric-blue hover:bg-electric-blue/20 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 mt-4 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-sm">person_search</span>
+                    <span>ดูข้อมูล AI Memory</span>
+                  </button>
+                </div>
+              </>
+            )
+          })()}
         </div>
       )}
     </div>
   )
 }
+

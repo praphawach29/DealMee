@@ -117,10 +117,12 @@ export async function POST(
             .insert({
               shop_id,
               user_id: userId,
+              platform_sender_id: userId,
               customer_name: `ลูกค้า LINE (${userId.substring(0, 6)})`,
-              platform: 'LINE',
+              platform: 'line',
               last_message: userText,
               status: 'ai',
+              ai_mode: 'auto',
             })
             .select()
             .single()
@@ -144,13 +146,18 @@ export async function POST(
         await upsertCustomerProfile(shop_id, userId, conv.customer_name)
 
         // 3. Save incoming customer message to chat_messages
-        await supabase.from('chat_messages').insert({
-          conversation_id: conv.id,
-          shop_id,
-          sender_type: 'user',
-          sender_name: 'ลูกค้า',
-          message: userText,
-        })
+        const { data: savedUserMsg } = await supabase
+          .from('chat_messages')
+          .insert({
+            conversation_id: conv.id,
+            shop_id,
+            sender_type: 'user',
+            sender_name: 'ลูกค้า',
+            message: userText,
+            platform: 'line',
+          })
+          .select('id')
+          .single()
 
         // 4. Check if Admin Takeover is active OR Auto-Reply is disabled
         const cleanText = userText.trim()
@@ -209,6 +216,17 @@ export async function POST(
           conversationId: conv.id,
           supabaseClient: supabase,
         })
+
+        // If in Copilot mode: do not send to user directly, instead save as ai_suggested_reply
+        if (conv.ai_mode === 'copilot') {
+          console.log(`[Webhook] Conversation is in Copilot mode for ${userId}. Saving draft suggestion.`)
+          if (savedUserMsg?.id && agentResult.text) {
+            await supabase.from('chat_messages').update({
+              ai_suggested_reply: agentResult.text,
+            }).eq('id', savedUserMsg.id)
+          }
+          continue
+        }
 
         await deliverAgentResult({
           agentResult,
@@ -284,6 +302,7 @@ async function deliverAgentResult({
       sender_type: 'bot',
       sender_name: (shop.bot_name && !/botify/i.test(shop.bot_name)) ? shop.bot_name : 'น้อง DealMee',
       message: aiReplyText,
+      platform: 'line',
     })
   }
 

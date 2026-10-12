@@ -1,0 +1,254 @@
+import { createHmac, timingSafeEqual } from 'crypto'
+
+/**
+ * Facebook Graph API Base URL (v21.0 is current LTS for Meta Graph API)
+ */
+const GRAPH_API_BASE = 'https://graph.facebook.com/v21.0'
+
+export interface FacebookProfile {
+  id: string
+  name: string
+  first_name?: string
+  last_name?: string
+  profile_pic?: string
+}
+
+export interface SendMessageResult {
+  success: boolean
+  messageId?: string
+  recipientId?: string
+  error?: string
+}
+
+/**
+ * Verify Meta X-Hub-Signature-256 header using the Meta App Secret.
+ * Uses timingSafeEqual to protect against timing attacks.
+ */
+export function verifyFacebookSignature(
+  rawBody: string,
+  signatureHeader: string | null | undefined,
+  appSecret: string | null | undefined
+): boolean {
+  // If app secret is not configured yet in merchant settings, bypass with warning
+  if (!appSecret || !appSecret.trim()) {
+    console.warn('[Facebook Webhook] No app_secret configured; skipping signature verification.')
+    return true
+  }
+
+  if (!signatureHeader) {
+    console.warn('[Facebook Webhook] Missing x-hub-signature-256 header.')
+    return false
+  }
+
+  const cleanSecret = appSecret.trim()
+  const cleanHeader = signatureHeader.trim()
+
+  // Header format: sha256=<hex_digest>
+  const expectedPrefix = 'sha256='
+  if (!cleanHeader.startsWith(expectedPrefix)) {
+    console.warn('[Facebook Webhook] Header does not start with sha256=')
+    return false
+  }
+
+  const signatureHash = cleanHeader.slice(expectedPrefix.length)
+
+  try {
+    const computedHash = createHmac('sha256', cleanSecret)
+      .update(rawBody, 'utf8')
+      .digest('hex')
+
+    const sigBuffer = Buffer.from(signatureHash, 'hex')
+    const compBuffer = Buffer.from(computedHash, 'hex')
+
+    if (sigBuffer.length !== compBuffer.length) {
+      return false
+    }
+
+    return timingSafeEqual(sigBuffer, compBuffer)
+  } catch (err) {
+    console.error('[Facebook Webhook] Error during signature comparison:', err)
+    return false
+  }
+}
+
+/**
+ * Send a text message to a Facebook user via the Graph API /me/messages endpoint.
+ */
+export async function sendFacebookMessage(
+  recipientPsid: string,
+  text: string,
+  pageAccessToken: string
+): Promise<SendMessageResult> {
+  const cleanToken = pageAccessToken.trim()
+  if (!cleanToken) {
+    return {
+      success: false,
+      error: 'Facebook Page Access Token is missing',
+    }
+  }
+
+  if (!recipientPsid || !text) {
+    return {
+      success: false,
+      error: 'Recipient ID or message text is empty',
+    }
+  }
+
+  try {
+    const url = `${GRAPH_API_BASE}/me/messages`
+    const payload = {
+      recipient: { id: recipientPsid },
+      messaging_type: 'RESPONSE',
+      message: { text },
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cleanToken}`,
+      },
+      body: JSON.stringify(payload),
+    })
+
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      const errorMsg = data?.error?.message || `HTTP ${response.status}: Failed to send Facebook message`
+      console.error('[Facebook Send API Error]:', data)
+      return {
+        success: false,
+        error: errorMsg,
+      }
+    }
+
+    return {
+      success: true,
+      messageId: data.message_id,
+      recipientId: data.recipient_id,
+    }
+  } catch (err: any) {
+    console.error('[Facebook Send Exception]:', err)
+    return {
+      success: false,
+      error: err?.message || 'Network error sending to Facebook Graph API',
+    }
+  }
+}
+
+/**
+ * Set sender action (typing_on, typing_off, mark_seen) in Messenger chat
+ */
+export async function sendFacebookTypingIndicator(
+  recipientPsid: string,
+  pageAccessToken: string,
+  action: 'typing_on' | 'typing_off' | 'mark_seen' = 'typing_on'
+): Promise<void> {
+  const cleanToken = pageAccessToken.trim()
+  if (!cleanToken || !recipientPsid) return
+
+  try {
+    const url = `${GRAPH_API_BASE}/me/messages`
+    await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cleanToken}`,
+      },
+      body: JSON.stringify({
+        recipient: { id: recipientPsid },
+        sender_action: action,
+      }),
+    })
+  } catch (err) {
+    // Non-blocking indicator failure can be safely ignored
+    console.log('[Facebook Typing Indicator Note]:', err)
+  }
+}
+
+/**
+ * Fetch Facebook user profile by Page-Scoped ID (PSID).
+ * Returns name & profile picture if permissions allow, or fallback name.
+ */
+export async function fetchFacebookUserProfile(
+  psid: string,
+  pageAccessToken: string
+): Promise<FacebookProfile> {
+  const defaultFallback: FacebookProfile = {
+    id: psid,
+    name: `ลูกค้า Facebook (${psid.slice(-6)})`,
+  }
+
+  const cleanToken = pageAccessToken.trim()
+  if (!cleanToken || !psid) return defaultFallback
+
+  try {
+    const url = `${GRAPH_API_BASE}/${psid}?fields=first_name,last_name,name,profile_pic&access_token=${encodeURIComponent(cleanToken)}`
+    const response = await fetch(url)
+    if (!response.ok) {
+      return defaultFallback
+    }
+
+    const data = await response.json()
+    const fullName = data.name || (data.first_name ? `${data.first_name} ${data.last_name || ''}`.trim() : null)
+
+    return {
+      id: psid,
+      name: fullName || defaultFallback.name,
+      first_name: data.first_name,
+      last_name: data.last_name,
+      profile_pic: data.profile_pic,
+    }
+  } catch {
+    return defaultFallback
+  }
+}
+
+/**
+ * Send Facebook Quick Reply buttons (e.g. for FAQs or menu options)
+ */
+export async function sendFacebookQuickReplies(
+  recipientPsid: string,
+  text: string,
+  quickReplies: Array<{ title: string; payload: string }>,
+  pageAccessToken: string
+): Promise<SendMessageResult> {
+  const cleanToken = pageAccessToken.trim()
+  if (!cleanToken) {
+    return { success: false, error: 'Token is missing' }
+  }
+
+  try {
+    const url = `${GRAPH_API_BASE}/me/messages`
+    const payload = {
+      recipient: { id: recipientPsid },
+      messaging_type: 'RESPONSE',
+      message: {
+        text,
+        quick_replies: quickReplies.map((q) => ({
+          content_type: 'text',
+          title: q.title.slice(0, 20),
+          payload: q.payload,
+        })),
+      },
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cleanToken}`,
+      },
+      body: JSON.stringify(payload),
+    })
+
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      return { success: false, error: data?.error?.message || 'Quick reply error' }
+    }
+
+    return { success: true, messageId: data.message_id }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Quick reply exception' }
+  }
+}

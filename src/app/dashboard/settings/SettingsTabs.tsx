@@ -23,7 +23,7 @@ export default function SettingsTabs({ shop }: { shop: any }) {
           }`}
         >
           <Bot className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-          <span>บอท & LINE OA</span>
+          <span>บอท AI & ช่องทางแชท (LINE / Facebook)</span>
         </button>
 
         <button

@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DealMee — ตัวอย่างการออกแบบโลโก้ (Logo Concepts Showcase)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #2E5BFF;
+      --cyan: #00CFEC;
+      --dark: #060C1B;
+      --card-dark: #0F172A;
+      --bg: #F8FAFC;
+      --text: #0F172A;
+      --text-muted: #64748B;
+      --border: #E2E8F0;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'IBM Plex Sans Thai', 'Plus Jakarta Sans', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 32px 16px 80px;
+    }
+
+    .container {
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(46, 91, 255, 0.08);
+      color: var(--primary);
+      border: 1px solid rgba(46, 91, 255, 0.2);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+
+    .brand-preview-hero {
+      font-size: 32px;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      background: #FFFFFF;
+      padding: 10px 24px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.04);
+      margin-top: 10px;
+    }
+
+    .word-deal { color: var(--primary); }
+    .word-mee { color: var(--cyan); }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 15px;
+      max-width: 600px;
+      margin: 8px auto 0;
+    }
+
+    .section-title {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 40px 0 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-title span {
+      background: var(--primary);
+      color: white;
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 24px;
+      margin-bottom: 40px;
+    }
+
+    .card {
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+      transition: transform 0.2s, box-shadow 0.2s;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 30px rgba(46, 91, 255, 0.08);
+    }
+
+    .card-dark-theme {
+      background: #090F1E;
+      border-color: #1E293B;
+      color: #F8FAFC;
+    }
+
+    .card-img-wrapper {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: #F1F5F9;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card-dark-theme .card-img-wrapper {
+      background: #060C1B;
+    }
+
+    .card-img-wrapper img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .card-content {
+      padding: 24px;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-tag {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--primary);
+      margin-bottom: 6px;
+    }
+
+    .card-dark-theme .card-tag {
+      color: var(--cyan);
+    }
+
+    .card h3 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .card p {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      flex-grow: 1;
+    }
+
+    .card-dark-theme p {
+      color: #94A3B8;
+    }
+
+    .features-list {
+      list-style: none;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border-top: 1px solid var(--border);
+      padding-top: 14px;
+    }
+
+    .card-dark-theme .features-list {
+      border-top-color: #1E293B;
+    }
+
+    .features-list li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .bullet {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--primary);
+    }
+
+    .card-dark-theme .bullet {
+      background: var(--cyan);
+    }
+
+    .color-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: monospace;
+      font-weight: 600;
+      background: #F1F5F9;
+      border: 1px solid var(--border);
+    }
+
+    .dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+    }
+
+    .vector-demo-box {
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      text-align: center;
+      margin-bottom: 32px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="badge">✨ DEALMEE BRAND IDENTITY</div>
+      <h1>ตัวอย่างการออกแบบโลโก้ DealMee</h1>
+      <p class="subtitle">ชุดปรับปรุงตามคำขอ: <strong>เน้นตัวอักษร D ให้เด่นชัด</strong> และ <strong>สลับสีชื่อแบรนด์ Deal (น้ำเงิน) + Mee (ฟ้าสว่าง)</strong></p>
+      
+      <div class="brand-preview-hero">
+        <span class="word-deal">Deal</span><span class="word-mee">Mee</span>
+      </div>
+    </header>
+
+    <!-- SECTION 1: ชุดปรับปรุงใหม่ล่าสุด (เน้นตัว D + สลับสีชื่อแบรนด์) -->
+    <div class="section-title">
+      <span>1</span> ชุดปรับปรุงใหม่: เน้นสัญลักษณ์ตัว "D" + สลับสี DealMee
+    </div>
+
+    <div class="grid">
+      <!-- D-1 -->
+      <div class="card">
+        <div class="card-img-wrapper">
+          <img src="./logos/concept-d1.jpg" alt="Concept D-1" onerror="this.onerror=null; this.src='../public/logos/concept-d1.jpg';">
+        </div>
+        <div class="card-content">
+          <div class="card-tag">Concept D-1 • ชัดเจน & ทันสมัย</div>
+          <h3>The D-Chat & Verified Star</h3>
+          <p>ตัวอักษร D ทรงกล่องแชท ผสานเครื่องหมายถูก (Checkmark) พุ่งทะยานสู่ดวงดาว AI ปิดดีลสำเร็จและตรวจสลิปแม่นยำ พร้อมตัวหนังสือ DealMee สลับสี</p>
+          <ul class="features-list">
+            <li><span class="bullet"></span> ตัว D มีติ่งกล่องข้อความ + เครื่องหมายเช็กผ่าน</li>
+            <li><span class="bullet"></span> ข้อความ Deal (น้ำเงินสด) + Mee (ฟ้าไซแอน)</li>
+            <li><span class="bullet"></span> สะท้อนความน่าเชื่อถือ & ปิดการขายไว</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- D-2 -->
+      <div class="card card-dark-theme">
+        <div class="card-img-wrapper">
+          <img src="./logos/concept-d2.jpg" alt="Concept D-2" onerror="this.onerror=null; this.src='../public/logos/concept-d2.jpg';">
+        </div>
+        <div class="card-content">
+          <div class="card-tag">Concept D-2 • สไตล์ Dark Mode & SaaS</div>
+          <h3>The D-Infinity Ribbon & AI Sparkle</h3>
+          <p>ริบบิ้นเรืองแสงทรงตัว D วนลูป Infinity 3D สื่อถึง AI Sales Copilot ที่พร้อมตอบแชทและขายสินค้าตลอด 24 ชั่วโมงไม่มีพัก ฝังดาว AI เปล่งประกายตรงกลาง</p>
+          <ul class="features-list">
+            <li><span class="bullet"></span> ตัว D สไตล์โมเดิร์น 3D Glowing Ribbon</li>
+            <li><span class="bullet"></span> โทน Cosmic Navy ดุดัน ล้ำสมัยระดับสากล</li>
+            <li><span class="bullet"></span> ดีเทลแสงนีออนสะดุดตาบนหน้าจอมืด</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- D-3 -->
+      <div class="card">
+        <div class="card-img-wrapper">
+          <img src="./logos/concept-d3.jpg" alt="Concept D-3" onerror="this.onerror=null; this.src='../public/logos/concept-d3.jpg';">
+        </div>
+        <div class="card-content">
+          <div class="card-tag">Concept D-3 • สไตล์คลีน มินิมอล เท่</div>
+          <h3>The Forward D & Growth Arrow</h3>
+          <p>ตัวอักษร D โครงสร้างโค้งมน ผสานลูกศรพุ่งไปข้างหน้า (Forward / Growth) สื่อถึงยอดขายเติบโตและตอบกลับลูกค้าฉับไว พร้อมข้อความ DealMee สลับสี</p>
+          <ul class="features-list">
+            <li><span class="bullet"></span> ดีไซน์เรียบง่าย ชัดเจน ใช้งานง่ายในขนาดเล็ก</li>
+            <li><span class="bullet"></span> สัญลักษณ์ลูกศรพุ่งไปข้างหน้า = ยอดขายพุ่ง</li>
+            <li><span class="bullet"></span> เหมาะกับทุกพื้นผิวทั้งเว็บและแอป</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 2: แบบแนวคิดรอบแรก -->
+    <div class="section-title">
+      <span>2</span> แบบแนวคิดรอบแรก (First Iteration)
+    </div>
+
+    <div class="grid">
+      <!-- 1 -->
+      <div class="card">
+        <div class="card-img-wrapper">
+          <img src="./logos/concept-1.jpg" alt="Concept 1" onerror="this.onerror=null; this.src='../public/logos/concept-1.jpg';">
+        </div>
+        <div class="card-content">
+          <div class="card-tag">แนวคิดที่ 1</div>
+          <h3>The Conversational Handshake</h3>
+          <p>กล่องข้อความสนทนาสองฝั่งซ้อนทับกันเป็นรูปมือจับตกลงดีล สื่อถึงมิตรภาพและการเจรจาค้าขาย</p>
+        </div>
+      </div>
+
+      <!-- 2 -->
+      <div class="card card-dark-theme">
+        <div class="card-img-wrapper">
+          <img src="./logos/concept-2.jpg" alt="Concept 2" onerror="this.onerror=null; this.src='../public/logos/concept-2.jpg';">
+        </div>
+        <div class="card-content">
+          <div class="card-tag">แนวคิดที่ 2</div>
+          <h3>Futuristic Monogram DM</h3>
+          <p>ตัวย่อ D และ M คล้องผสานกันพร้อมดาวประกาย AI เท่ ล้ำสมัย สไตล์ Tech Copilot</p>
+        </div>
+      </div>
+
+      <!-- 3 -->
+      <div class="card">
+        <div class="card-img-wrapper">
+          <img src="./logos/concept-3.jpg" alt="Concept 3" onerror="this.onerror=null; this.src='../public/logos/concept-3.jpg';">
+        </div>
+        <div class="card-content">
+          <div class="card-tag">แนวคิดที่ 3</div>
+          <h3>Verified Sales Copilot</h3>
+          <p>กล่องแชท + แท็กดีลสินค้า + เช็กถูกตรวจสลิปผ่าน เน้นความเป็นอีคอมเมิร์ซและการเงิน</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 3: Live Color Tokens -->
+    <div class="vector-demo-box">
+      <h3 style="margin-bottom: 14px; font-size: 18px;">🎨 รหัสสีมาตรฐานประจำแบรนด์ DealMee</h3>
+      <div style="display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
+        <div class="color-pill">
+          <span class="dot" style="background: #2E5BFF;"></span>
+          Electric Blue: #2E5BFF (Deal)
+        </div>
+        <div class="color-pill">
+          <span class="dot" style="background: #00CFEC;"></span>
+          Cyber Cyan: #00CFEC (Mee)
+        </div>
+        <div class="color-pill">
+          <span class="dot" style="background: #060C1B;"></span>
+          Cosmic Navy: #060C1B (Dark BG)
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
