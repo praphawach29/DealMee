@@ -24,7 +24,8 @@ export default function SettingsTabs({ shop }: { shop: any }) {
           }`}
         >
           <Bot className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-          <span>บอท AI & บุคลิกภาพ</span>
+          <span className="sm:hidden">บอท AI</span>
+          <span className="hidden sm:inline">บอท AI & บุคลิกภาพ</span>
         </button>
 
         <button
@@ -37,7 +38,8 @@ export default function SettingsTabs({ shop }: { shop: any }) {
           }`}
         >
           <Share2 className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-          <span>เชื่อมต่อ LINE & Facebook</span>
+          <span className="sm:hidden">LINE & Facebook</span>
+          <span className="hidden sm:inline">เชื่อมต่อ LINE & Facebook</span>
         </button>
 
         <button
@@ -50,7 +52,8 @@ export default function SettingsTabs({ shop }: { shop: any }) {
           }`}
         >
           <Store className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-          <span>ข้อมูลร้านค้า & เอกสาร</span>
+          <span className="sm:hidden">ข้อมูลร้านค้า</span>
+          <span className="hidden sm:inline">ข้อมูลร้านค้า & เอกสาร</span>
         </button>
 
         <button
@@ -63,7 +66,8 @@ export default function SettingsTabs({ shop }: { shop: any }) {
           }`}
         >
           <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-          <span>การชำระเงิน & จัดส่ง</span>
+          <span className="sm:hidden">ชำระเงิน & จัดส่ง</span>
+          <span className="hidden sm:inline">การชำระเงิน & จัดส่ง</span>
         </button>
       </div>
 

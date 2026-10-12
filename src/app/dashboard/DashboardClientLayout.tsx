@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import SidebarNav from './SidebarNav'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   Menu,
   X,
@@ -77,7 +78,13 @@ export default function DashboardClientLayout({
       >
         <div className="px-5 py-5 flex items-center justify-between border-b border-outline-variant/30">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center font-bold text-white shadow-xs">D</div>
+            <Image
+              src="/logos/concept-d1.jpg"
+              alt="DealMee Logo"
+              width={32}
+              height={32}
+              className="w-8 h-8 rounded-lg object-cover shadow-xs border border-outline-variant/30"
+            />
             <span className="font-headline-md text-primary font-bold tracking-tight text-lg">DealMee AI</span>
           </div>
           <button
@@ -102,17 +109,18 @@ export default function DashboardClientLayout({
       {/* 4. Main Wrapper */}
       <div className="lg:pl-64 flex flex-col min-h-screen relative">
         {/* Top Navigation Header */}
-        <header className="fixed top-0 left-0 lg:left-64 right-0 h-16 bg-surface/90 backdrop-blur-xl z-40 flex items-center justify-between px-4 lg:px-8 shadow-[0_1px_8px_rgba(0,0,0,0.03)] border-b border-outline-variant/30">
-          <div className="flex items-center gap-3">
+        <header className="fixed top-0 left-0 lg:left-64 right-0 h-16 bg-surface/90 backdrop-blur-xl z-40 flex items-center justify-between px-3.5 sm:px-4 lg:px-8 shadow-[0_1px_8px_rgba(0,0,0,0.03)] border-b border-outline-variant/30">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Hamburger Button for Mobile */}
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="lg:hidden p-2 rounded-xl text-on-surface hover:bg-surface-container transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="lg:hidden p-1.5 rounded-xl text-on-surface hover:bg-surface-container transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
               aria-label="Open navigation menu"
             >
               <Menu className="h-5 w-5" />
             </button>
 
+            {/* Desktop Search Box */}
             <div className="hidden sm:flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-surface-container/60 border border-outline-variant/30">
               <Search className="h-4 w-4 text-outline" />
               <input
@@ -122,17 +130,24 @@ export default function DashboardClientLayout({
               />
             </div>
             
-            {/* Mobile Brand Title */}
-            <span className="sm:hidden font-headline-md text-primary font-bold text-base whitespace-nowrap shrink-0">
-              DealMee AI
-            </span>
+            {/* Mobile Logo Only (Clean & Compact) */}
+            <Link href="/dashboard" className="sm:hidden flex items-center gap-2 shrink-0">
+              <Image
+                src="/logos/concept-d1.jpg"
+                alt="DealMee Logo"
+                width={32}
+                height={32}
+                className="w-8 h-8 rounded-lg object-cover shadow-xs border border-outline-variant/30"
+                priority
+              />
+            </Link>
           </div>
 
-          <div className="flex items-center gap-3 lg:gap-5">
-            {/* AI Copilot Button in Header */}
+          <div className="flex items-center gap-2 sm:gap-3 lg:gap-5">
+            {/* AI Copilot Button in Header (Desktop only - Mobile uses floating FAB button) */}
             <button
               onClick={() => setIsCopilotOpen(true)}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs transition-all active:scale-[0.98] shadow-xs hover:shadow-md hover:shadow-indigo-500/25 cursor-pointer shrink-0 min-h-[36px] border border-indigo-400/30"
+              className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs transition-all active:scale-[0.98] shadow-xs hover:shadow-md hover:shadow-indigo-500/25 cursor-pointer shrink-0 min-h-[36px] border border-indigo-400/30"
               title="เปิดผู้ช่วย DealMee Copilot (AI วิเคราะห์ร้านค้า)"
             >
               <div className="w-5 h-5 rounded-lg bg-white/20 flex items-center justify-center">
@@ -142,37 +157,42 @@ export default function DashboardClientLayout({
               <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs"></span>
             </button>
 
+            {/* Notifications Bell */}
             <button
-              className="relative p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="relative p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
               aria-label="Notifications"
             >
               <Bell className="h-5 w-5" />
-              <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-error-red rounded-full"></span>
+              <span className="absolute top-2 right-2 w-2 h-2 bg-error-red rounded-full"></span>
             </button>
 
-            <div className="flex items-center gap-3 pl-2 sm:pl-4 border-l border-outline-variant/50">
-              {isSuperAdmin && (
-                <Link
-                  href="/admin"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 font-bold text-xs font-label-md transition-all border border-amber-500/30 shrink-0 active:scale-[0.98]"
-                >
-                  <ShieldAlert className="h-4 w-4 text-amber-500" />
-                  <span className="hidden sm:inline">Super Admin</span>
-                </Link>
-              )}
+            {/* Super Admin Badge (Desktop only on Header - on Mobile it's in the Hamburger Menu) */}
+            {isSuperAdmin && (
+              <Link
+                href="/admin"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 font-bold text-xs font-label-md transition-all border border-amber-500/30 shrink-0 active:scale-[0.98]"
+              >
+                <ShieldAlert className="h-4 w-4 text-amber-500" />
+                <span>Super Admin</span>
+              </Link>
+            )}
+
+            {/* User Profile Avatar */}
+            <div className="flex items-center gap-2 pl-1 sm:pl-4 sm:border-l border-outline-variant/50">
               <div className="hidden md:block text-right">
                 <p className="font-label-md text-on-surface text-xs font-semibold">{userEmail}</p>
                 <p className="text-[10px] text-outline uppercase tracking-wider font-bold">Pro Plan</p>
               </div>
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 border-primary-fixed bg-surface-container-high flex items-center justify-center font-bold text-primary text-xs shadow-xs">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 border-primary-fixed bg-surface-container-high flex items-center justify-center font-bold text-primary text-xs shadow-xs shrink-0">
                 {userEmail?.charAt(0).toUpperCase()}
               </div>
             </div>
 
-            <form action="/auth/signout" method="post" className="ml-1">
+            {/* Sign Out (Desktop only on Header - on Mobile it's in the Hamburger Menu) */}
+            <form action="/auth/signout" method="post" className="hidden sm:block ml-1">
               <button
                 title="ลงชื่อออก"
-                className="p-2 text-on-surface-variant hover:bg-error-red/10 hover:text-error-red rounded-full transition-colors flex items-center justify-center cursor-pointer min-h-[44px] min-w-[44px]"
+                className="p-2 text-on-surface-variant hover:bg-error-red/10 hover:text-error-red rounded-full transition-colors flex items-center justify-center cursor-pointer min-h-[40px] min-w-[40px]"
                 aria-label="Sign out"
               >
                 <LogOut className="h-4 w-4" />

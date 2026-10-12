@@ -133,12 +133,13 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
             <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-electric-blue/10 text-electric-blue border border-electric-blue/20 shrink-0">
               Omnichannel
             </span>
-            <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 shrink-0">
+            <span className="hidden sm:inline-block text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 shrink-0">
               Live Integration
             </span>
           </div>
           <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">
-            เชื่อมต่อ LINE Official Account และ Facebook Messenger เพื่อให้บอท AI ช่วยตอบแชทและปิดการขาย 24 ชม.
+            <span className="sm:hidden">เชื่อมต่อ LINE OA และ Facebook ให้บอท AI ตอบลูกค้าอัตโนมัติ 24 ชม.</span>
+            <span className="hidden sm:inline">เชื่อมต่อ LINE Official Account และ Facebook Messenger เพื่อให้บอท AI ช่วยตอบแชทและปิดการขาย 24 ชม.</span>
           </p>
         </div>
 
@@ -148,7 +149,8 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
           className="self-end sm:self-auto flex items-center justify-center gap-1.5 sm:gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 cursor-pointer disabled:opacity-50 shrink-0 text-xs sm:text-sm active:scale-95"
         >
           {loading ? <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 animate-spin" /> : <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
-          <span>{loading ? 'กำลังบันทึก...' : 'บันทึกการเชื่อมต่อ'}</span>
+          <span className="sm:hidden">{loading ? 'กำลังบันทึก...' : 'บันทึก'}</span>
+          <span className="hidden sm:inline">{loading ? 'กำลังบันทึก...' : 'บันทึกการเชื่อมต่อ'}</span>
         </button>
       </div>
 
@@ -183,7 +185,8 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
             </h3>
           </div>
           <p className="text-[11px] sm:text-xs text-on-surface-variant leading-relaxed">
-            ข้อความจาก LINE OA และ Facebook จะรวมอยู่ในหน้ารวมแชทเดียวกัน บอท AI จะช่วยตอบอัตโนมัติหรือร่างคำตอบแบบ Copilot ให้ทันที
+            <span className="sm:hidden">รวมแชทจาก LINE และ Facebook ในที่เดียว บอท AI ตอบอัตโนมัติหรือร่างคำตอบทันที</span>
+            <span className="hidden sm:inline">ข้อความจาก LINE OA และ Facebook จะรวมอยู่ในหน้ารวมแชทเดียวกัน บอท AI จะช่วยตอบอัตโนมัติหรือร่างคำตอบแบบ Copilot ให้ทันที</span>
           </p>
         </div>
 
@@ -192,14 +195,16 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
             isLineConnected ? 'bg-emerald-500/15 text-emerald-600 border border-emerald-500/30' : 'bg-slate-500/10 text-slate-500 border border-slate-500/20'
           }`}>
             <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${isLineConnected ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
-            <span>LINE {isLineConnected ? 'พร้อมใช้งาน' : 'ยังไม่ต่อ'}</span>
+            <span className="sm:hidden">LINE {isLineConnected ? 'ต่อแล้ว' : 'ยังไม่ต่อ'}</span>
+            <span className="hidden sm:inline">LINE {isLineConnected ? 'พร้อมใช้งาน' : 'ยังไม่ต่อ'}</span>
           </span>
 
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold ${
             isFbConnected ? 'bg-blue-500/15 text-blue-600 border border-blue-500/30' : 'bg-slate-500/10 text-slate-500 border border-slate-500/20'
           }`}>
             <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${isFbConnected ? 'bg-blue-500' : 'bg-slate-400'}`}></span>
-            <span>Facebook {isFbConnected ? 'พร้อมใช้งาน' : 'ยังไม่ต่อ'}</span>
+            <span className="sm:hidden">FB {isFbConnected ? 'ต่อแล้ว' : 'ยังไม่ต่อ'}</span>
+            <span className="hidden sm:inline">Facebook {isFbConnected ? 'พร้อมใช้งาน' : 'ยังไม่ต่อ'}</span>
           </span>
         </div>
       </div>
@@ -216,7 +221,8 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
             <div>
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <h2 className="text-sm sm:text-lg font-bold text-on-surface font-headline-sm">
-                  เชื่อมต่อ LINE Official Account
+                  <span className="sm:hidden">LINE Official Account</span>
+                  <span className="hidden sm:inline">เชื่อมต่อ LINE Official Account</span>
                 </h2>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
                   isLineConnected
@@ -227,7 +233,8 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-on-surface-variant">
-                รับและตอบแชทลูกค้า LINE OA อัตโนมัติผ่าน Messaging API
+                <span className="sm:hidden">รับและตอบแชทลูกค้า LINE OA อัตโนมัติ</span>
+                <span className="hidden sm:inline">รับและตอบแชทลูกค้า LINE OA อัตโนมัติผ่าน Messaging API</span>
               </p>
             </div>
           </div>
@@ -239,8 +246,9 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
             rel="noopener noreferrer"
             className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/25 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 rounded-xl font-bold text-xs transition-all shrink-0 active:scale-[0.98]"
           >
-            <span>ไปหา Key ที่ LINE Developers Console</span>
-            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+            <span className="sm:hidden">ไปหา Key ที่ LINE Developers ↗</span>
+            <span className="hidden sm:inline">ไปหา Key ที่ LINE Developers Console</span>
+            <ExternalLink className="hidden sm:inline w-3.5 h-3.5 shrink-0" />
           </a>
         </div>
 
@@ -384,7 +392,8 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
             <div>
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <h2 className="text-sm sm:text-lg font-bold text-on-surface font-headline-sm">
-                  เชื่อมต่อ Facebook Page (Messenger)
+                  <span className="sm:hidden">Facebook (Messenger)</span>
+                  <span className="hidden sm:inline">เชื่อมต่อ Facebook Page (Messenger)</span>
                 </h2>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
                   isFbConnected
@@ -395,7 +404,8 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-on-surface-variant">
-                รับข้อความจาก Facebook Messenger และให้ AI ช่วยตอบหรือร่างคำแนะนำทันที
+                <span className="sm:hidden">รับและตอบแชทลูกค้า Messenger อัตโนมัติ</span>
+                <span className="hidden sm:inline">รับข้อความจาก Facebook Messenger และให้ AI ช่วยตอบหรือร่างคำแนะนำทันที</span>
               </p>
             </div>
           </div>
@@ -407,8 +417,9 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
             rel="noopener noreferrer"
             className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 active:bg-blue-500/25 text-blue-700 dark:text-blue-400 border border-blue-500/30 rounded-xl font-bold text-xs transition-all shrink-0 active:scale-[0.98]"
           >
-            <span>ไปหา Key ที่ Meta for Developers</span>
-            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+            <span className="sm:hidden">ไปหา Key ที่ Meta Developers ↗</span>
+            <span className="hidden sm:inline">ไปหา Key ที่ Meta for Developers</span>
+            <ExternalLink className="hidden sm:inline w-3.5 h-3.5 shrink-0" />
           </a>
         </div>
 
