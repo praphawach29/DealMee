@@ -268,8 +268,13 @@ export async function POST(
 
           if (isExplicitReset) {
             console.log(`[Facebook Webhook] Auto-resuming AI mode for PSID ${senderPsid}`)
-            await supabase.from('conversations').update({ status: 'ai', paused_until: null }).eq('id', conv.id)
+            await supabase.from('conversations').update({ 
+              status: 'ai', 
+              ai_mode: 'auto', 
+              paused_until: null 
+            }).eq('id', conv.id)
             conv.status = 'ai'
+            conv.ai_mode = 'auto'
             if (cleanText.startsWith('/ai') && pageToken) {
               await sendFacebookMessage(
                 senderPsid,

@@ -108,8 +108,19 @@ export async function POST(
           .from('conversations')
           .select('*')
           .eq('shop_id', shop_id)
+          .eq('platform', 'line')
           .eq('user_id', userId)
-          .single()
+          .maybeSingle()
+
+        if (!conv) {
+          const { data: legacyConv } = await supabase
+            .from('conversations')
+            .select('*')
+            .eq('shop_id', shop_id)
+            .eq('user_id', userId)
+            .maybeSingle()
+          if (legacyConv) conv = legacyConv
+        }
 
         if (!conv) {
           const { data: newConv } = await supabase
@@ -168,7 +179,11 @@ export async function POST(
         if (isPauseCommand) {
           console.log(`[Webhook] Explicit pause command detected for ${userId}`)
           const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString()
-          await supabase.from('conversations').update({ status: 'human', paused_until: pausedUntil }).eq('id', conv.id)
+          await supabase.from('conversations').update({ 
+            status: 'human', 
+            ai_mode: 'manual', 
+            paused_until: pausedUntil 
+          }).eq('id', conv.id)
           if (replyToken && lineToken) {
             await sendLineReply(replyToken, 'รับเรื่องเรียบร้อยแล้วค่ะ น้องบอทได้หยุดการตอบชั่วคราวและประสานงานเจ้าหน้าที่แอดมินให้แล้วนะคะ สักครู่จะมีเจ้าหน้าที่เข้ามาดูแลค่ะ 😊', lineToken)
           }
@@ -185,8 +200,13 @@ export async function POST(
 
           if (isExplicitReset) {
             console.log(`[Webhook] Auto-resuming AI mode for ${userId} (1-Hour Auto-Pause expired or explicit reset)`)
-            await supabase.from('conversations').update({ status: 'ai', paused_until: null }).eq('id', conv.id)
+            await supabase.from('conversations').update({ 
+              status: 'ai', 
+              ai_mode: 'auto', 
+              paused_until: null 
+            }).eq('id', conv.id)
             conv.status = 'ai'
+            conv.ai_mode = 'auto'
             if (cleanText.startsWith('/ai') && replyToken && lineToken) {
               await sendLineReply(replyToken, 'น้องบอท AI กลับมาพร้อมดูแลคุณลูกค้าต่อแล้วค่ะ มีอะไรให้ช่วยสอบถามได้เลยนะคะ ✨', lineToken)
               continue
