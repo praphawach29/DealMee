@@ -1,13 +1,26 @@
 # DealMee AI - Project Handover & TODO List
 
-> **บันทึกล่าสุด:** 13 ตุลาคม 2026 (03:30 น.)  
+> **บันทึกล่าสุด:** 14 ตุลาคม 2026 (11:05 น.)  
 > **Repository:** `praphawach29/ai-agent-google-SDK` (Branch: `main`)  
-> **Last Commit:** `946fc26` - *feat(branding): implement new DealMee official logo across admin, merchant dashboard, and website*  
+> **Last Commit:** `49829a7` - *feat(facebook): add product cards carousel and media sending for Messenger*  
 > **Status:** Production Build Passed (`npm run build` ✓, TypeScript 0 errors ✓)
 
 ---
 
 ## 📌 สรุปงานและฟีเจอร์ที่พัฒนาสำเร็จในรอบนี้ (What's Done)
+
+### 0. Facebook Messenger Live Full Commerce & App Review (อัปเดตล่าสุด)
+- **Live Messenger Testing Confirmed:**
+  - ผ่านการทดสอบ Webhook Handshake และตอบกลับข้อความจาก Facebook Page จริงเรียบร้อย
+  - ซิงค์เข้าหน้าประวัติแชทและ Unified Inbox ทันที
+- **Product Carousel & Rich Cards บน Facebook Messenger:**
+  - พัฒนา `sendFacebookProductCarousel` ด้วย Generic Template Carousel ส่งการ์ดสินค้าพร้อมรูปภาพ, ราคา, สถานะสต็อก, และปุ่ม **"🛒 สั่งซื้อสินค้านี้"**
+  - รองรับ Postback Payload (`event.postback?.payload`) ทำให้คลิกสั่งซื้อแล้วบอท AI พาเข้ากระบวนการสรุปยอดได้ทันที
+  - เพิ่ม `sendFacebookImage` รองรับการส่งภาพ QR Code PromptPay, รูปสลิป และรูปภาพสินค้าเข้าแชท
+- **Human Takeover 1-Hour Auto-Resume Bug Fix:**
+  - แก้ไขจุดที่เมื่อแอดมินกด Takeover ครบ 1 ชม. แล้วระบบต้องรีเซ็ตทั้ง `status: 'ai'` และ `ai_mode: 'auto'` เพื่อให้บอทกลับมาตอบอัตโนมัติได้อย่างสมบูรณ์แบบ
+- **Meta App Review Comprehensive Guide:**
+  - จัดทำเอกสารคู่มือฉบับสมบูรณ์สำหรับขออนุมัติกับ Meta ที่ [`docs/FACEBOOK_APP_REVIEW_GUIDE.md`](file:///c:/Users/Jack/Documents/DealmeeChatbot/docs/FACEBOOK_APP_REVIEW_GUIDE.md) พร้อมสคริปต์ภาษาอังกฤษสำหรับ Copy & Paste
 
 ### 1. Omnichannel & Multi-Channel Chat System (Step 1 - Step 3)
 - **Unified Inbox (`/dashboard/inbox`):**
