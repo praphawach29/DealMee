@@ -5,6 +5,8 @@ import {
   sendFacebookMessage,
   sendFacebookTypingIndicator,
   fetchFacebookUserProfile,
+  sendFacebookProductCarousel,
+  sendFacebookImage,
 } from '@/lib/facebook/messengerHelper'
 import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage } from '@/lib/billing/usage'
@@ -159,13 +161,13 @@ export async function POST(
 
         const senderPsid = event.sender?.id
         const recipientPageId = event.recipient?.id
-        const messageText = event.message?.text
+        const rawMessage = event.message?.text || event.postback?.payload || event.postback?.title
 
-        if (!senderPsid || !messageText) {
+        if (!senderPsid || !rawMessage) {
           continue
         }
 
-        const cleanText = messageText.trim()
+        const cleanText = String(rawMessage).trim()
 
         // 3. Find or Create Conversation
         let { data: conv } = await supabase
@@ -310,6 +312,51 @@ export async function POST(
 
         const aiReplyText = agentResult?.text?.trim() || ''
 
+        // Send Facebook Product Carousel if products were searched/recommended OR specifically requested
+        let fbProducts = agentResult.productsData || []
+
+        const isDocOrQuotation =
+          /(ใบเสนอราคา|เสนอราคา|quotation|หนังสือราชการ|บันทึกข้อความ|เอกสารทางการ)/i.test(cleanText) ||
+          agentResult.toolCallsExecuted.some(
+            (t) => t.name === 'create_quotation' || t.name === 'create_official_letter'
+          )
+
+        if (features.product_recommend === false || isDocOrQuotation) {
+          fbProducts = []
+        } else if (fbProducts.length === 0 && pageToken) {
+          const rawUserQuery = cleanText.toLowerCase().trim()
+          // Explicit product inquiry keywords like "มีเสื้อยืดไหม", "ขอดูเสื้อ", "มีสินค้าอะไรบ้าง"
+          const isExplicitProductQuery =
+            /(มี|ขอ|ดู|ค้นหา|แนะนำ|ซื้อ|สั่ง|ขาย)\s*(เสื้อ|กางเกง|กระเป๋า|รองเท้า|หมวก|เคส|ผ้าพันคอ|กระบอกน้ำ|สินค้า|แคตตาล็อก)/i.test(rawUserQuery) ||
+            /(มี.*ไหม|มี.*มั้ย|ขอดู.*หน่อย|ราคาเท่าไหร่|มีแบบไหนบ้าง)/i.test(rawUserQuery)
+
+          if (isExplicitProductQuery) {
+            const { data: shopProducts } = await supabase
+              .from('products')
+              .select('id, name, price, stock, category, description, image_url')
+              .eq('shop_id', shop_id)
+              .limit(10)
+
+            if (shopProducts && shopProducts.length > 0) {
+              const matched = shopProducts.filter((p: any) => {
+                const pName = (p.name || '').toLowerCase()
+                const pCat = (p.category || '').toLowerCase()
+                return (
+                  rawUserQuery.includes(pName) ||
+                  (pCat && rawUserQuery.includes(pCat)) ||
+                  pName.split(' ').some((w: string) => w.length >= 2 && rawUserQuery.includes(w))
+                )
+              })
+
+              if (matched.length > 0) {
+                fbProducts = matched
+              } else if (/(สินค้าทั้งหมด|มีอะไรบ้าง|มีอะไรขายบ้าง|ขอดูสินค้า|แนะนำสินค้า)/i.test(rawUserQuery)) {
+                fbProducts = shopProducts.slice(0, 5)
+              }
+            }
+          }
+        }
+
         // 10. Check conversation ai_mode:
         // - 'copilot': Save draft suggestion in chat_messages for admin approval
         // - 'auto': Deliver response to Facebook user via Graph API
@@ -327,29 +374,47 @@ export async function POST(
           continue
         }
 
-        if (conv.ai_mode === 'auto' && aiReplyText) {
+        if (conv.ai_mode === 'auto' && (aiReplyText || fbProducts.length > 0)) {
           // Save AI reply message in database
-          await supabase.from('chat_messages').insert({
-            conversation_id: conv.id,
-            shop_id,
-            sender_type: 'agent',
-            sender_name: shop.bot_name || 'น้องบอท Dealmee',
-            message: aiReplyText,
-            platform: 'facebook',
-          })
-
-          // Update conversation last message
-          await supabase
-            .from('conversations')
-            .update({
-              last_message: aiReplyText,
-              last_message_at: new Date().toISOString(),
+          if (aiReplyText) {
+            await supabase.from('chat_messages').insert({
+              conversation_id: conv.id,
+              shop_id,
+              sender_type: 'agent',
+              sender_name: shop.bot_name || 'น้องบอท Dealmee',
+              message: aiReplyText,
+              platform: 'facebook',
             })
-            .eq('id', conv.id)
 
-          // Deliver reply to customer on Facebook
-          if (pageToken) {
-            await sendFacebookMessage(senderPsid, aiReplyText, pageToken)
+            // Update conversation last message
+            await supabase
+              .from('conversations')
+              .update({
+                last_message: aiReplyText,
+                last_message_at: new Date().toISOString(),
+              })
+              .eq('id', conv.id)
+
+            // Deliver text reply to customer on Facebook
+            if (pageToken) {
+              await sendFacebookMessage(senderPsid, aiReplyText, pageToken)
+            }
+          }
+
+          // Deliver product carousel if products were found
+          if (pageToken && fbProducts.length > 0) {
+            await sendFacebookProductCarousel(senderPsid, fbProducts, pageToken)
+          }
+
+          // Deliver any immediate messages (e.g. PromptPay QR image)
+          if (pageToken && agentResult.immediateMessages && agentResult.immediateMessages.length > 0) {
+            for (const im of agentResult.immediateMessages) {
+              if (im.type === 'image' && im.content) {
+                await sendFacebookImage(senderPsid, im.content, pageToken)
+              } else if (im.type === 'text' && im.content) {
+                await sendFacebookMessage(senderPsid, im.content, pageToken)
+              }
+            }
           }
 
           // Bill message usage

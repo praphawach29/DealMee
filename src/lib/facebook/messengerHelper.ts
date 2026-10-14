@@ -259,3 +259,137 @@ export async function sendFacebookQuickReplies(
     return { success: false, error: err?.message || 'Quick reply exception' }
   }
 }
+
+export interface FacebookProductCard {
+  id: string
+  name: string
+  price: number
+  stock?: number | null
+  description?: string | null
+  image_url?: string | null
+}
+
+/**
+ * Send Facebook Generic Template Carousel with Product Cards, Images, Prices & Order Buttons
+ */
+export async function sendFacebookProductCarousel(
+  recipientPsid: string,
+  products: FacebookProductCard[],
+  pageAccessToken: string
+): Promise<SendMessageResult> {
+  const cleanToken = pageAccessToken.trim()
+  if (!cleanToken || !recipientPsid || !products || products.length === 0) {
+    return { success: false, error: 'Missing token, recipient, or products' }
+  }
+
+  const defaultImage = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80'
+
+  const elements = products.slice(0, 10).map((p) => {
+    const img = p.image_url && p.image_url.startsWith('http') ? p.image_url : defaultImage
+    const priceText = `฿${Number(p.price || 0).toLocaleString('th-TH')}`
+    const stockText = p.stock !== null && p.stock !== undefined ? (Number(p.stock) > 0 ? `พร้อมส่ง ${p.stock} ชิ้น` : 'สินค้าหมดชั่วคราว') : 'พร้อมส่ง'
+    const descText = p.description ? `\n${p.description.slice(0, 40)}` : ''
+    const subtitle = `${priceText} • ${stockText}${descText}`
+
+    return {
+      title: p.name.slice(0, 80),
+      image_url: img,
+      subtitle: subtitle.slice(0, 80),
+      buttons: [
+        {
+          type: 'postback',
+          title: '🛒 สั่งซื้อสินค้านี้',
+          payload: `สนใจสั่งซื้อ ${p.name}`,
+        },
+      ],
+    }
+  })
+
+  try {
+    const url = `${GRAPH_API_BASE}/me/messages`
+    const payload = {
+      recipient: { id: recipientPsid },
+      messaging_type: 'RESPONSE',
+      message: {
+        attachment: {
+          type: 'template',
+          payload: {
+            template_type: 'generic',
+            elements,
+          },
+        },
+      },
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cleanToken}`,
+      },
+      body: JSON.stringify(payload),
+    })
+
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      console.error('[Facebook Product Carousel Error]:', data)
+      return { success: false, error: data?.error?.message || 'Failed to send product carousel' }
+    }
+
+    return { success: true, messageId: data.message_id }
+  } catch (err: any) {
+    console.error('[Facebook Product Carousel Exception]:', err)
+    return { success: false, error: err?.message || 'Exception sending product carousel' }
+  }
+}
+
+/**
+ * Send an image attachment to a Facebook user via the Graph API /me/messages endpoint.
+ */
+export async function sendFacebookImage(
+  recipientPsid: string,
+  imageUrl: string,
+  pageAccessToken: string
+): Promise<SendMessageResult> {
+  const cleanToken = pageAccessToken.trim()
+  if (!cleanToken || !recipientPsid || !imageUrl) {
+    return { success: false, error: 'Missing token, recipient, or image URL' }
+  }
+
+  try {
+    const url = `${GRAPH_API_BASE}/me/messages`
+    const payload = {
+      recipient: { id: recipientPsid },
+      messaging_type: 'RESPONSE',
+      message: {
+        attachment: {
+          type: 'image',
+          payload: {
+            url: imageUrl,
+            is_reusable: true,
+          },
+        },
+      },
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cleanToken}`,
+      },
+      body: JSON.stringify(payload),
+    })
+
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      console.error('[Facebook Image Send Error]:', data)
+      return { success: false, error: data?.error?.message || 'Failed to send image' }
+    }
+
+    return { success: true, messageId: data.message_id }
+  } catch (err: any) {
+    console.error('[Facebook Image Send Exception]:', err)
+    return { success: false, error: err?.message || 'Exception sending image' }
+  }
+}
