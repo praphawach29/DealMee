@@ -25,11 +25,11 @@ export default function PrivacyPolicyPage() {
           </Link>
           <div className="flex items-center gap-2">
             <Image
-              src="/logos/concept-d1.jpg"
+              src="/logos/dealmee-icon.png"
               alt="DealMee Logo"
               width={28}
               height={28}
-              className="w-7 h-7 rounded-lg object-cover shadow-sm border border-slate-100 shrink-0"
+              className="w-7 h-7 object-contain drop-shadow-sm shrink-0"
             />
             <span className="font-extrabold text-sm text-slate-900 tracking-tight">
               <span className="text-blue-600">Deal</span><span className="text-cyan-500">Mee</span> AI

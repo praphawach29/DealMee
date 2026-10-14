@@ -16,11 +16,11 @@ export default function Footer() {
           <div className="lg:col-span-2 space-y-4">
             <Link href="/" className="flex items-center gap-2.5">
               <Image
-                src="/logos/concept-d1.jpg"
+                src="/logos/dealmee-icon.png"
                 alt="DealMee Logo"
                 width={36}
                 height={36}
-                className="w-9 h-9 rounded-xl object-cover shadow-md shadow-cyan-500/20 border border-white/20 shrink-0"
+                className="w-9 h-9 object-contain drop-shadow-md shrink-0"
               />
               <span className="font-extrabold text-2xl tracking-wider text-white">
                 <span className="text-blue-400">Deal</span><span className="text-cyan-400">Mee</span>

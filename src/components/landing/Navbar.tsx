@@ -29,11 +29,11 @@ export default function Navbar() {
         {/* Brand Logo */}
         <Link href="/" className="flex items-center gap-2.5 group">
           <Image
-            src="/logos/concept-d1.jpg"
+            src="/logos/dealmee-icon.png"
             alt="DealMee Logo"
             width={40}
             height={40}
-            className="w-10 h-10 rounded-xl object-cover shadow-md shadow-cyan-500/20 group-hover:scale-105 transition-transform duration-200 border border-white/20 shrink-0"
+            className="w-10 h-10 object-contain drop-shadow-md group-hover:scale-105 transition-transform duration-200 shrink-0"
             priority
           />
           <div className="flex flex-col">

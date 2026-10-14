@@ -50,21 +50,20 @@ export default function DashboardClientLayout({
 
       {/* 1. Desktop Sidebar */}
       <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white z-50 flex-col border-r border-outline-variant/30 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-        <div className="px-6 py-5 flex items-center gap-3 border-b border-outline-variant/20">
-          <Image
-            src="/logos/concept-d1.jpg"
-            alt="DealMee Logo"
-            width={36}
-            height={36}
-            className="w-9 h-9 rounded-xl object-cover shadow-xs border border-outline-variant/30 shrink-0"
-            priority
-          />
-          <div className="flex flex-col">
-            <span className="font-headline-md font-extrabold tracking-tight text-lg leading-tight">
-              <span className="text-blue-600">Deal</span><span className="text-cyan-500">Mee</span> <span className="text-xs font-bold text-slate-500 uppercase">AI</span>
+        <div className="px-6 py-5 flex items-center justify-between border-b border-outline-variant/20">
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <Image
+              src="/logos/dealmee-logo-horizontal.png"
+              alt="DealMee Logo"
+              width={130}
+              height={34}
+              className="h-8 w-auto object-contain shrink-0"
+              priority
+            />
+            <span className="bg-blue-50 text-blue-600 border border-blue-200 text-[10px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+              AI
             </span>
-            <span className="text-[10px] text-outline font-medium">Sales Copilot • Omnichannel</span>
-          </div>
+          </Link>
         </div>
         <SidebarNav
           bizType={bizType}
@@ -89,13 +88,13 @@ export default function DashboardClientLayout({
         }`}
       >
         <div className="px-5 py-5 flex items-center justify-between border-b border-outline-variant/30">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <Image
-              src="/logos/concept-d1.jpg"
+              src="/logos/dealmee-icon.png"
               alt="DealMee Logo"
               width={32}
               height={32}
-              className="w-8 h-8 rounded-lg object-cover shadow-xs border border-outline-variant/30"
+              className="w-8 h-8 object-contain shrink-0"
             />
             <div className="flex flex-col">
               <span className="font-headline-md font-extrabold tracking-tight text-base leading-tight">
@@ -149,11 +148,11 @@ export default function DashboardClientLayout({
             {/* Mobile Logo Only (Clean & Compact) */}
             <Link href="/dashboard" className="sm:hidden flex items-center gap-2 shrink-0">
               <Image
-                src="/logos/concept-d1.jpg"
+                src="/logos/dealmee-icon.png"
                 alt="DealMee Logo"
                 width={32}
                 height={32}
-                className="w-8 h-8 rounded-lg object-cover shadow-xs border border-outline-variant/30"
+                className="w-8 h-8 object-contain shrink-0"
                 priority
               />
             </Link>

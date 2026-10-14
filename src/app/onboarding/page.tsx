@@ -22,12 +22,12 @@ export default function OnboardingPage() {
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center gap-3 mb-6">
             <Image
-              src="/logos/concept-d1.jpg"
+              src="/logos/dealmee-icon.png"
               alt="DealMee Logo"
               width={48}
               height={48}
               priority
-              className="w-12 h-12 rounded-2xl object-cover shadow-lg shadow-blue-500/20 border border-slate-100"
+              className="w-12 h-12 object-contain drop-shadow-md"
             />
             <span className="text-3xl font-bold tracking-tight text-deep-indigo font-headline-xl">
               <span className="text-blue-600">Deal</span><span className="text-cyan-500">Mee</span> AI

@@ -139,12 +139,12 @@ function LoginContent() {
           {/* Top Logo */}
           <div className="flex items-center gap-3 relative z-10">
             <Image
-              src="/logos/concept-d1.jpg"
+              src="/logos/dealmee-icon.png"
               alt="DealMee Logo"
               width={40}
               height={40}
               priority
-              className="w-10 h-10 rounded-2xl object-cover shadow-lg shadow-black/20 border border-white/20 shrink-0"
+              className="w-10 h-10 object-contain drop-shadow-lg shrink-0"
             />
             <span className="text-2xl font-black tracking-tight text-white font-headline-lg">
               Deal<span className="text-cyan-300">Mee</span> AI
@@ -191,11 +191,11 @@ function LoginContent() {
           {/* Top Brand Logo for Mobile & Tablet */}
           <div className="lg:hidden flex items-center justify-center gap-2.5 mb-6">
             <Image
-              src="/logos/concept-d1.jpg"
+              src="/logos/dealmee-icon.png"
               alt="DealMee Logo"
               width={36}
               height={36}
-              className="w-9 h-9 rounded-xl object-cover shadow-md shadow-blue-600/20 border border-slate-100 shrink-0"
+              className="w-9 h-9 object-contain drop-shadow-md shrink-0"
             />
             <span className="text-2xl font-black tracking-tight text-slate-900 font-headline-lg">
               <span className="text-blue-600">Deal</span><span className="text-cyan-500">Mee</span> AI

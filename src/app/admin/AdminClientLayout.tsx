@@ -23,11 +23,11 @@ export default function AdminClientLayout({
         <div className="px-6 py-5 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
             <Image
-              src="/logos/concept-d1.jpg"
+              src="/logos/dealmee-icon.png"
               alt="DealMee Logo"
               width={36}
               height={36}
-              className="w-9 h-9 rounded-xl object-cover shadow-md border border-slate-700 shrink-0"
+              className="w-9 h-9 object-contain drop-shadow-md shrink-0"
               priority
             />
             <div>
@@ -61,11 +61,11 @@ export default function AdminClientLayout({
         <div className="px-5 py-5 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
             <Image
-              src="/logos/concept-d1.jpg"
+              src="/logos/dealmee-icon.png"
               alt="DealMee Logo"
               width={36}
               height={36}
-              className="w-9 h-9 rounded-xl object-cover shadow-md border border-slate-700 shrink-0"
+              className="w-9 h-9 object-contain drop-shadow-md shrink-0"
             />
             <div>
               <span className="font-headline-md text-white font-extrabold tracking-tight text-base block leading-none">
