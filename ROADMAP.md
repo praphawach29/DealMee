@@ -1,4 +1,4 @@
-﻿# Botify SaaS - Development Roadmap to Production
+# Botify SaaS - Development Roadmap to Production
 
 > อัปเดต: 28 กรกฎาคม 2026
 > เป้าหมาย: Production-Ready SaaS ที่ร้านค้าสมัครและจ่ายเงินได้จริง
@@ -221,31 +221,35 @@ Definition of Done Phase 4:
 
 ---
 
-## PHASE 5 - Expansion (หลัง Launch)
+## PHASE 5 - Next-Gen AI Commerce & Expansion (ยุทธศาสตร์หลัก 3 ข้อ)
+> รายละเอียดเชิงลึกดูที่: [docs/AI_LIVE_AND_COMPETITIVE_INTELLIGENCE_PLAN.md](./docs/AI_LIVE_AND_COMPETITIVE_INTELLIGENCE_PLAN.md)
 
-### 5.1 Multi-Platform
+### เสาหลักที่ 1: ตรวจสอบและยกระดับ Omnichannel AI Agent สู่ความสมบูรณ์แบบ 100%
+- **สถานะ:** LINE OA และ Facebook Messenger ผ่านการทดสอบแล้ว > 85-90% (ตอบกลับ, ส่งการ์ดสินค้า Carousel, ปุ่มสั่งซื้อ, โอนเงิน PromptPay)
+- **งานขยายผล:**
+  - Polish ทุก Scenario ของ LINE และ Facebook Messenger ให้เสถียร 100% ไร้รอยต่อ
+  - เชื่อมต่อ **Instagram Direct (IG)** ผ่าน Meta Graph API
+  - ดึงข้อมูลแชทจาก Marketplace (Shopee & TikTok Shop Chat Ingestion) มารวมใน Unified Inbox
+  - *การทดสอบ:* Stress-test 20 บทสนทนาพร้อมกัน, ทดสอบรับออเดอร์และตัดสต็อกจริง
 
-| Platform | Impact |
-|---|---|
-| Facebook Messenger | High |
-| WhatsApp Business API | High |
-| Instagram Direct | Medium |
-| TikTok Shop | Medium |
-| Web Chat Widget | Medium |
+### เสาหลักที่ 2: ฟีเจอร์ส่องร้านคู่แข่ง (Competitor Intelligence)
+- **แหล่งข้อมูล:** ผสานพลังจาก [cporter202/social-media-scraping-apis](https://github.com/cporter202/social-media-scraping-apis.git) (3,268 ready-to-use APIs)
+- **ฟังก์ชันหลัก:**
+  - ตรวจจับราคาสินค้า โปรโมชั่น และสต็อกของคู่แข่งบน Facebook, TikTok, IG
+  - สกัดคอนเทนต์ยอดนิยม (Top-performing posts/reels), ยอดไลก์, แฮชแท็กที่กำลังไวรัล
+  - ให้ AI Copilot วิเคราะห์เปรียบเทียบจุดเด่น-จุดด้อย และแนะนำกลยุทธ์ตั้งราคา/แคปชั่นให้ร้านค้า
+  - *การทดสอบ:* สแกนร้านคู่แข่งจริง 5 ร้านค้า ตรวจสอบความแม่นยำของราคาและข้อมูล
 
-### 5.2 White-Label Solution
-
-ขายให้เอเจนซี่ไปขายต่อ:
-- Custom domain
-- Custom branding
-- Agency dashboard (จัดการหลายร้าน)
-- Revenue sharing
-
-### 5.3 Marketplace / Plugin System
-
-- Shopee/Lazada sync
-- Google Sheets sync
-- Automated Shipping & Tracking: เชื่อมต่อ Flash Express / Kerry / J&T / ไปรษณีย์ไทย สำหรับสร้างเลขพัสดุและแจ้งลูกค้าอัตโนมัติใน LINE OA (ทำให้ tools `track_parcel`/`calculate_shipping` ที่ตอนนี้เป็นแค่ "Defined" กลายเป็น LIVE)
+### เสาหลักที่ 3: DealMee AI Live Studio (24/7 Virtual Commerce Streamer)
+- **มูลค่าธุรกิจ:** ยกระดับค่าบริการแพลตฟอร์มสู่หลักหมื่น/เดือน (9,900 - 29,900+ บาท/เดือน)
+- **แพลตฟอร์มเป้าหมาย:** **TikTok Live, Facebook Live, Shopee Live**
+- **สถาปัตยกรรมหลัก:**
+  - **Comment Listener:** ดักฟังคอมเมนต์สดจากห้องไลฟ์แบบเรียลไทม์ (Sub-second)
+  - **Dynamic Basket Switcher:** เชื่อมคลังสินค้า DealMee Master SKU ลูกค้าถามถึงตะกร้าไหน AI สลับภาพและสเปกขึ้นจอทันที
+  - **OBS Studio Browser Source Overlay (`/live/overlay/[shop_id]`):** กราฟิกแสดงตะกร้าสินค้าแบบเคลื่อนไหวบนจอไลฟ์
+  - **Thai Neural Voice (TTS) & Virtual Human:** สังเคราะห์เสียงพูดภาษาไทยตอบคำถามลูกค้าสดๆ พร้อมขยับปากอวตารเสมือนจริง
+  - **Auto-Pin & Auto-CF:** สั่งปักหมุดตะกร้าบน TikTok/Shopee และทักแชท Messenger ส่งลิงก์ชำระเงินเมื่อคนดูพิมพ์ CF
+  - *การทดสอบ:* ทดสอบสตรีมผ่าน OBS Studio จำลองคอมเมนต์สด และตรวจวัด Response Time < 2 วินาที
 
 ---
 

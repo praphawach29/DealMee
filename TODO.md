@@ -102,28 +102,42 @@ supabase/migrations/20261013030000_marketplace_central_inventory.sql
 ---
 
 ## 📋 แผนงานถัดไปเมื่อกลับมาทำต่อ (Action Items / TO-DO Checklist)
+> **เกณฑ์การผ่าน (DoD):** ทุกหัวข้อต้องทำการทดลองและทดสอบจริง (End-to-End Testing) จนแน่ใจว่าทำงานได้สมบูรณ์ 100%
 
-### Phase A: Marketplace API Live Connect (เชื่อมต่อ API จริง)
-- [ ] **Shopee Open Platform Integration:**
-  - สร้าง OAuth Redirect Handler ที่ `/api/auth/shopee/callback` เพื่อรับ `code` และแลก `access_token`
-  - นำ `partner_id` และ `partner_key` มารองรับการเชื่อมต่อร้านค้าจริง
-  - เชื่อมโยงฟังก์ชันดึงสินค้า (`get_item_list`) และอัปเดตสต็อก (`update_stock`)
-- [ ] **TikTok Shop Partner API Integration:**
-  - สร้าง OAuth Authorization Flow สำหรับ TikTok Shop Partner
-  - รองรับ Webhook รับคำสั่งซื้อใหม่จาก TikTok Shop ที่ `/api/webhook/tiktok/[shop_id]`
-- [ ] **Automatic Stock Deduction Hook:**
-  - เมื่อมีออเดอร์ปิดการขายสำเร็จ (ไม่ว่าจะจาก LINE, Facebook, Shopee หรือ TikTok):
-    - ระบบจะหักสต็อก Master SKU กลางอัตโนมัติ
-    - ยิงอัปเดตสต็อกคงเหลือกลับไปยัง Marketplace ทุกช่องทางทันทีเพื่อป้องกันสินค้าหมดแล้วยังขายได้
+### เสาหลักที่ 1: ตรวจสอบ Omnichannel AI Agent สู่ความสมบูรณ์แบบ 100% (LINE + FB + IG + Marketplace Chat)
+- [ ] **LINE OA & Facebook Messenger 100% Polish:**
+  - [x] LINE OA และ Facebook Messenger ผ่านการทดสอบจริงแล้ว > 85-90% (ตอบแชท, ส่งการ์ด Carousel, รับออเดอร์, ส่ง QR)
+  - [ ] Stress-test จำลองการถามตอบ 20 บทสนทนาพร้อมกัน เช็คความแม่นยำของคำตอบและไม่สะดุด
+  - [ ] ตรวจสอบความถูกต้องของการตัดสต็อกแบบเรียลไทม์ และระบบ Auto-Resume หลังหมดเวลาพัก 1 ชม.
+- [ ] **Instagram Direct Messenger Integration (IG):**
+  - [ ] เชื่อมต่อ Instagram Graph API (Messenger Platform for IG) ร่วมกับโครงสร้างของ Facebook Webhook
+  - [ ] ทดสอบการตอบแชทและส่งการ์ดสินค้าบน Instagram Direct
+- [ ] **Marketplace Chat Ingestion (Shopee & TikTok Shop):**
+  - [ ] ดึงประวัติการคุยจาก Shopee Open Platform และ TikTok Shop เข้ามาที่ Unified Inbox (`/dashboard/inbox`)
+  - [ ] แอดมินสามารถเปิดดูและให้ AI Copilot ช่วยร่างคำตอบส่งกลับไปยัง Shopee/TikTok ได้ในที่เดียว
 
-### Phase B: Facebook Messenger Live Production Testing
-- [ ] นำ URL Webhook จริง (`https://dealmee.app/api/webhook/facebook/<shop_id>`) ไปตั้งค่าใน Meta Developers Portal
-- [ ] ทดสอบส่งข้อความจาก Facebook Page จริง ตรวจสอบว่า AI ตอบกลับข้อความผ่าน Graph API ได้ถูกต้อง
-- [ ] ตรวจสอบว่าข้อความปรากฏใน Inbox แบบเรียลไทม์
+### เสาหลักที่ 2: ระบบส่องร้านคู่แข่ง (Competitor Intelligence & Market Insights)
+- [ ] **API Ingestion จาก `cporter202/social-media-scraping-apis`:**
+  - [ ] เชื่อมโยงโมดูล Scraping API สำหรับส่องข้อมูลจาก TikTok, Instagram, Facebook
+- [ ] **Competitor Pricing & Promotion Tracker:**
+  - [ ] หน้าแดชบอร์ด `/dashboard/competitors` ให้ร้านค้าใส่ลิงก์ร้านคู่แข่งที่ต้องการเฝ้ามอง
+  - [ ] ระบบตรวจจับการปรับราคา และแจ้งเตือนเมื่อคู่แข่งลดราคาหรือจัด Flash Sale
+- [ ] **Viral Content & Strategy Generator:**
+  - [ ] ดึงโพสต์และคลิปที่ยอดวิว/ยอดไลก์สูงสุดของคู่แข่ง
+  - [ ] ให้ AI สรุปกลยุทธ์และร่างไอเดียคอนเทนต์ + แคปชั่นขายของที่น่าดึงดูดกว่าส่งให้ร้านค้า
 
-### Phase C: Dashboard Enhancements
-- [ ] เพิ่มหน้าดูประวัติการเคลื่อนไหวสต็อก (Stock Movement History) แยกต่างหากในเมนูสินค้า
-- [ ] เพิ่มระบบแจ้งเตือนเมื่อสินค้าใกล้หมดสต็อก (Low Stock Alert via LINE Notify / Push)
+### เสาหลักที่ 3: ระบบ DealMee AI Live Studio (24/7 Virtual Commerce Streamer)
+- [ ] **Real-time Live Comment Listener:**
+  - [ ] เชื่อมต่อ WebSocket ดักฟังคอมเมนต์สดจาก TikTok Live, Facebook Live, Shopee Live
+- [ ] **OBS Studio Live Overlay Widget (`/live/overlay/[shop_id]`):**
+  - [ ] สร้างหน้าจอกราฟิกการ์ดสินค้าเคลื่อนไหว (Animated Product Overlay) ดึงข้อมูลจากคลังสินค้า DealMee
+  - [ ] เมื่อมีคอมเมนต์ถามถึงสินค้าตะกร้าไหน หน้าจอจะสลับภาพตะกร้าขึ้นมาเด่นทันที
+- [ ] **Thai Neural Voice (TTS) & Lip-Sync:**
+  - [ ] สังเคราะห์เสียงพูดภาษาไทยสมจริงตอบคำถามลูกค้ากลางไลฟ์แบบเรียลไทม์ (< 2 วินาที)
+  - [ ] เชื่อมต่อภาพอวตารคนเสมือนจริง (Digital Human) ขยับปากพูดตอบสด
+- [ ] **Auto-Pin & Instant Checkout:**
+  - [ ] สั่ง Pin ตะกร้าสินค้าบน TikTok/Shopee
+  - [ ] ทักแชท Messenger ส่งลิงก์ชำระเงินเมื่อคนดูพิมพ์ "CF" ใน Facebook Live
 
 ---
 
