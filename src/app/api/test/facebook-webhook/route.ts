@@ -14,7 +14,8 @@ import { upsertCustomerProfile } from '@/lib/customerMemory'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { shop_id, user_id, message, ai_mode } = body
+    const { shop_id, user_id, message, ai_mode, platform = 'facebook' } = body
+    const targetPlatform = platform === 'instagram' ? 'instagram' : 'facebook'
 
     if (!shop_id || !message) {
       return NextResponse.json(
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const psid = user_id || `sim-fb-${Math.floor(100000 + Math.random() * 900000)}`
+    const psid = user_id || `sim-${targetPlatform === 'instagram' ? 'ig' : 'fb'}-${Math.floor(100000 + Math.random() * 900000)}`
     const targetAiMode = ai_mode || 'auto'
 
     const admin = createAdminClient()
@@ -47,11 +48,12 @@ export async function POST(request: NextRequest) {
       .from('conversations')
       .select('*')
       .eq('shop_id', shop_id)
-      .eq('platform', 'facebook')
+      .eq('platform', targetPlatform)
       .eq('user_id', psid)
       .maybeSingle()
 
     if (!conv) {
+      const defaultName = targetPlatform === 'instagram' ? `คุณ Instagram (จำลอง ${psid.slice(-4)})` : `คุณเฟสบุ๊ค (จำลอง ${psid.slice(-4)})`
       const { data: newConv, error: createError } = await admin
         .from('conversations')
         .insert({
@@ -59,8 +61,8 @@ export async function POST(request: NextRequest) {
           user_id: psid,
           platform_sender_id: psid,
           channel_account_id: shop.facebook_page_id || 'simulated-page-id',
-          customer_name: `คุณเฟสบุ๊ค (จำลอง ${psid.slice(-4)})`,
-          platform: 'facebook',
+          customer_name: defaultName,
+          platform: targetPlatform,
           status: 'ai',
           ai_mode: targetAiMode,
           last_message: message,
@@ -96,9 +98,9 @@ export async function POST(request: NextRequest) {
         conversation_id: conv.id,
         shop_id: shop_id,
         sender_type: 'user',
-        sender_name: conv.customer_name || 'ลูกค้า Facebook',
+        sender_name: conv.customer_name || (targetPlatform === 'instagram' ? 'ลูกค้า Instagram' : 'ลูกค้า Facebook'),
         message: message,
-        platform: 'facebook',
+        platform: targetPlatform,
       })
       .select('id')
       .single()
@@ -165,7 +167,7 @@ export async function POST(request: NextRequest) {
         sender_type: 'agent',
         sender_name: shop.bot_name || 'น้องบอท Dealmee',
         message: aiText,
-        platform: 'facebook',
+        platform: targetPlatform,
       })
 
       await admin

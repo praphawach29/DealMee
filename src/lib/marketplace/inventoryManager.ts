@@ -1,4 +1,4 @@
-import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export interface MarketplaceSyncResult {
   success: boolean
@@ -100,7 +100,7 @@ export async function syncMarketplaceProductsEngine(
   shopId: string,
   platform: 'all' | 'shopee' | 'tiktok'
 ): Promise<MarketplaceSyncResult> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // 1. Fetch current shop to verify marketplace setup
   const { data: shop, error: shopErr } = await supabase
@@ -233,7 +233,7 @@ export async function updateCentralStockEngine(
   reason: string = 'ปรับยอดสต็อกกลางโดยแอดมิน',
   platform: string = 'manual'
 ) {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // 1. Fetch current product
   const { data: prod, error: prodErr } = await supabase
@@ -289,7 +289,7 @@ export async function deductCentralStockOnOrder(
   platform: 'line' | 'facebook' | 'tiktok' | 'shopee' | 'manual',
   orderRef?: string
 ) {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Find product
   const { data: prod } = await supabase
@@ -329,7 +329,7 @@ export async function deductCentralStockOnOrder(
  * Fetch recent cross-channel stock logs for a shop
  */
 export async function getMarketplaceStockLogs(shopId: string, limit: number = 25): Promise<StockLogItem[]> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data, error } = await supabase
     .from('marketplace_stock_logs')

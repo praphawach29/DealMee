@@ -141,10 +141,13 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 })
     }
 
-    // Facebook Webhook structure: object === 'page'
-    if (body.object !== 'page') {
-      return NextResponse.json({ status: 'ignored_not_page' }, { status: 200 })
+    // Facebook / Instagram Webhook structure: object === 'page' | 'instagram'
+    const isFacebook = body.object === 'page'
+    const isInstagram = body.object === 'instagram'
+    if (!isFacebook && !isInstagram) {
+      return NextResponse.json({ status: 'ignored_unsupported_object' }, { status: 200 })
     }
+    const targetPlatform = isInstagram ? 'instagram' : 'facebook'
 
     const entries = body.entry || []
     const features = (shop.features as Record<string, boolean>) || {}
@@ -174,13 +177,15 @@ export async function POST(
           .from('conversations')
           .select('*')
           .eq('shop_id', shop_id)
-          .eq('platform', 'facebook')
+          .eq('platform', targetPlatform)
           .eq('user_id', senderPsid)
           .maybeSingle()
 
         if (!conv) {
-          // Attempt to fetch Facebook user profile
-          const profile = await fetchFacebookUserProfile(senderPsid, pageToken)
+          // Attempt to fetch user profile (Facebook or Instagram fallback)
+          const profile = isFacebook
+            ? await fetchFacebookUserProfile(senderPsid, pageToken)
+            : { name: `ลูกค้า Instagram (${senderPsid.slice(-4)})`, profile_pic: null }
 
           const { data: newConv, error: convCreateError } = await supabase
             .from('conversations')
@@ -191,7 +196,7 @@ export async function POST(
               channel_account_id: recipientPageId || shop.facebook_page_id || null,
               customer_name: profile.name,
               customer_avatar: profile.profile_pic || null,
-              platform: 'facebook',
+              platform: targetPlatform,
               last_message: cleanText,
               status: 'ai',
               ai_mode: 'auto',
@@ -200,7 +205,7 @@ export async function POST(
             .single()
 
           if (convCreateError || !newConv) {
-            console.error('[Facebook Webhook] Error creating conversation:', convCreateError)
+            console.error('[Meta Webhook] Error creating conversation:', convCreateError)
             continue
           }
           conv = newConv
@@ -226,9 +231,9 @@ export async function POST(
             conversation_id: conv.id,
             shop_id,
             sender_type: 'user',
-            sender_name: conv.customer_name || 'ลูกค้า Facebook',
+            sender_name: conv.customer_name || (isInstagram ? 'ลูกค้า Instagram' : 'ลูกค้า Facebook'),
             message: cleanText,
-            platform: 'facebook',
+            platform: targetPlatform,
             platform_message_id: event.message?.mid || null,
           })
           .select('id')
@@ -383,7 +388,7 @@ export async function POST(
               sender_type: 'agent',
               sender_name: shop.bot_name || 'น้องบอท Dealmee',
               message: aiReplyText,
-              platform: 'facebook',
+              platform: targetPlatform,
             })
 
             // Update conversation last message
