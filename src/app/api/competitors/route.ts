@@ -68,6 +68,31 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    if (action === 'sync_knowledge') {
+      const { title, content, competitor_name } = body
+      if (!title || !content) {
+        return NextResponse.json({ error: 'Missing title or content' }, { status: 400 })
+      }
+
+      const { data: item, error: kbError } = await supabase.from('knowledge_base').insert({
+        shop_id,
+        title,
+        content,
+        category: 'กลยุทธ์คู่แข่ง',
+        source: 'competitor_spy',
+        source_ref: competitor_name || null,
+        status: 'active',
+      }).select('id').single()
+
+      if (kbError) throw kbError
+
+      return NextResponse.json({
+        success: true,
+        message: 'เพิ่มข้อมูลเข้าคลังความรู้บอทเรียบร้อยแล้ว!',
+        id: item?.id,
+      })
+    }
+
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Server error' }, { status: 500 })

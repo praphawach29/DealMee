@@ -4,6 +4,8 @@ import { getLinePushQuotaInfo } from '@/lib/billing/pushQuota'
 import { fetchBroadcastHistory } from './actions'
 import BroadcastClientView from './BroadcastClientView'
 
+import { Suspense } from 'react'
+
 export const dynamic = 'force-dynamic'
 
 export default async function BroadcastPage() {
@@ -25,7 +27,9 @@ export default async function BroadcastPage() {
         </p>
       </div>
 
-      <BroadcastClientView initialBroadcasts={broadcasts} pushQuotaInfo={pushQuotaInfo} />
+      <Suspense fallback={<div className="p-8 text-center text-slate-400">กำลังโหลด...</div>}>
+        <BroadcastClientView initialBroadcasts={broadcasts} pushQuotaInfo={pushQuotaInfo} />
+      </Suspense>
     </div>
   )
 }

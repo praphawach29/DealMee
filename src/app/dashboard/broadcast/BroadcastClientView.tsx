@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { getAudienceCount, sendBroadcast, type BroadcastItem, type AudienceCountResult } from './actions'
 import { PushQuotaInfo } from '@/lib/billing/pushQuota'
 
@@ -19,16 +20,24 @@ export default function BroadcastClientView({
     planName: 'PRO',
   },
 }: BroadcastClientViewProps) {
+  const searchParams = useSearchParams()
   const [selectedChannels, setSelectedChannels] = useState<string[]>(['line', 'facebook'])
   const [targetTag, setTargetTag] = useState('')
   const [prefKey, setPrefKey] = useState('')
   const [prefValue, setPrefValue] = useState('')
-  const [title, setTitle] = useState('')
-  const [message, setMessage] = useState('')
+  const [title, setTitle] = useState(searchParams?.get('title') || '')
+  const [message, setMessage] = useState(searchParams?.get('message') || '')
   const [previewTab, setPreviewTab] = useState<'line' | 'facebook'>('line')
   const [audienceData, setAudienceData] = useState<AudienceCountResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [broadcasts, setBroadcasts] = useState<BroadcastItem[]>(initialBroadcasts)
+
+  useEffect(() => {
+    const qTitle = searchParams?.get('title')
+    const qMsg = searchParams?.get('message')
+    if (qTitle) setTitle(qTitle)
+    if (qMsg) setMessage(qMsg)
+  }, [searchParams])
 
   const usedPercentage = Math.min(100, Math.round((pushQuotaInfo.usedCount / pushQuotaInfo.totalQuota) * 100))
   const remainingPercentage = 100 - usedPercentage

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Radar,
   Search,
@@ -24,6 +25,9 @@ import {
   Zap,
   RefreshCw,
   Key,
+  BookOpen,
+  Send,
+  Radio,
 } from 'lucide-react'
 import { ScrapedCompetitorProfile } from '@/lib/competitors/scraperEngine'
 import { CompetitorRecord } from '@/lib/competitors/competitorStore'
@@ -54,6 +58,61 @@ export default function CompetitorDashboardClient({
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [isSavingKey, setIsSavingKey] = useState(false)
   const [savedKeySuccess, setSavedKeySuccess] = useState('')
+  const router = useRouter()
+  const [isSyncingKb, setIsSyncingKb] = useState(false)
+  const [kbSuccessMsg, setKbSuccessMsg] = useState('')
+
+  const handleSyncKnowledge = async () => {
+    if (!activeAnalysis || !shop?.id) return
+    setIsSyncingKb(true)
+    setKbSuccessMsg('')
+
+    const kbTitle = `กลยุทธ์การขาย & รับมือคู่แข่ง: ${activeAnalysis.name} (${activeAnalysis.handle})`
+    const kbContent = `บทวิเคราะห์ราคาและการแข่งขัน:
+${activeAnalysis.aiPlaybook.pricingStrategyVerdict}
+
+จุดเด่นและแต้มต่อของร้านเราเมื่อเทียบกับ ${activeAnalysis.name}:
+${activeAnalysis.aiPlaybook.priceAdvantageBullets.map((b) => `• ${b}`).join('\n')}
+
+แนวทางปิดการขายและแก้ข้อโต้แย้ง (Objection Handling):
+- เมื่อลูกค้าเปรียบเทียบเรื่องราคา ให้เน้นความคุ้มค่า จัดเซต และพร้อมส่งจากไทยใน 24 ชั่วโมง
+- นำเสนอรับประกันคุณภาพสินค้าและการบริการอย่างรวดเร็ว
+
+แคปชันและข้อความปิดการขายที่แนะนำ:
+${activeAnalysis.aiPlaybook.winningCaptionTemplate}`
+
+    try {
+      const res = await fetch('/api/competitors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sync_knowledge',
+          shop_id: shop.id,
+          competitor_name: activeAnalysis.name,
+          title: kbTitle,
+          content: kbContent,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setKbSuccessMsg('บันทึกเข้าคลังความรู้บอทสำเร็จ! แชทบอทเรียนรู้กลยุทธ์นี้แล้ว 🎉')
+        setTimeout(() => setKbSuccessMsg(''), 5000)
+      } else {
+        alert(data.error || 'บันทึกไม่สำเร็จ')
+      }
+    } catch (err: any) {
+      alert(err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ')
+    } finally {
+      setIsSyncingKb(false)
+    }
+  }
+
+  const handleGoToBroadcast = () => {
+    if (!activeAnalysis) return
+    const title = `โปรโมชันพิเศษจากกลยุทธ์ ${activeAnalysis.name}`
+    const message = activeAnalysis.aiPlaybook.winningCaptionTemplate
+    router.push(`/dashboard/broadcast?title=${encodeURIComponent(title)}&message=${encodeURIComponent(message)}`)
+  }
 
   // Sync when initialCompetitors prop changes
   React.useEffect(() => {
@@ -368,7 +427,7 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
 
       {/* Main Analysis Workspace */}
       {activeAnalysis ? (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm space-y-6">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 sm:p-6 shadow-sm space-y-6">
           {/* Target Profile Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-4">
@@ -424,11 +483,65 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
             </div>
           </div>
 
-          {/* Tab Navigation */}
-          <div className="flex border-b border-slate-200 dark:border-slate-800">
+          {/* 1-Click Action Conversion Bar */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-purple-50/90 dark:from-blue-950/40 dark:via-indigo-950/30 dark:to-purple-950/40 border border-blue-200/70 dark:border-blue-800/40 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                  นำข้อมูลคู่แข่งนี้ไปสร้างยอดขายทันที
+                </h4>
+                <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-400">
+                  ส่งกลยุทธ์ให้แชทบอทใช้ปิดการขาย หรือสร้างแคมเปญบรอดแคสต์หาลูกค้าได้ใน 1 คลิก
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              {/* Button 1: Sync to Bot Knowledge */}
+              <button
+                onClick={handleSyncKnowledge}
+                disabled={isSyncingKb}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer min-h-[44px]"
+              >
+                {isSyncingKb ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>กำลังบันทึกเข้าบอท...</span>
+                  </>
+                ) : (
+                  <>
+                    <BookOpen className="w-4 h-4" />
+                    <span>⚡ ส่งเข้าคลังความรู้บอทใน 1 คลิก</span>
+                  </>
+                )}
+              </button>
+
+              {/* Button 2: Create Broadcast */}
+              <button
+                onClick={handleGoToBroadcast}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer min-h-[44px]"
+              >
+                <Send className="w-4 h-4" />
+                <span>📢 สร้างแคมเปญบรอดแคสต์อัตโนมัติ</span>
+              </button>
+            </div>
+          </div>
+
+          {kbSuccessMsg && (
+            <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+              <span>{kbSuccessMsg}</span>
+            </div>
+          )}
+
+          {/* Tab Navigation (Responsive Scroll on Mobile/Tablet) */}
+          <div className="flex border-b border-slate-200 dark:border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-none pb-1 gap-1 -mx-2 px-2 sm:mx-0 sm:px-0">
             <button
               onClick={() => setActiveTab('price')}
-              className={`pb-3 px-4 font-bold text-sm border-b-2 transition-all cursor-pointer ${
+              className={`pb-3 px-3.5 sm:px-4 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer min-h-[44px] flex items-center shrink-0 ${
                 activeTab === 'price'
                   ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
@@ -438,7 +551,7 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
             </button>
             <button
               onClick={() => setActiveTab('viral')}
-              className={`pb-3 px-4 font-bold text-sm border-b-2 transition-all cursor-pointer ${
+              className={`pb-3 px-3.5 sm:px-4 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer min-h-[44px] flex items-center shrink-0 ${
                 activeTab === 'viral'
                   ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
@@ -448,7 +561,7 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
             </button>
             <button
               onClick={() => setActiveTab('copilot')}
-              className={`pb-3 px-4 font-bold text-sm border-b-2 transition-all cursor-pointer ${
+              className={`pb-3 px-3.5 sm:px-4 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer min-h-[44px] flex items-center shrink-0 ${
                 activeTab === 'copilot'
                   ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
@@ -631,21 +744,30 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
               </div>
 
               {/* Ready-to-use Caption Generator */}
-              <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 text-white">
-                <div className="flex items-center justify-between mb-3">
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 text-white">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
                   <span className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5" />
                     แคปชั่นโพสต์ขายพร้อมคัดลอก (Winning Caption Draft)
                   </span>
-                  <button
-                    onClick={() => copyCaption(activeAnalysis.aiPlaybook.winningCaptionTemplate)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all cursor-pointer"
-                  >
-                    {copiedCaption ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedCaption ? 'คัดลอกเรียบร้อย!' : 'คัดลอกแคปชั่น'}</span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => copyCaption(activeAnalysis.aiPlaybook.winningCaptionTemplate)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all cursor-pointer min-h-[40px]"
+                    >
+                      {copiedCaption ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedCaption ? 'คัดลอกเรียบร้อย!' : 'คัดลอกแคปชั่น'}</span>
+                    </button>
+                    <button
+                      onClick={handleGoToBroadcast}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all cursor-pointer min-h-[40px]"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>ส่งไปสร้างบรอดแคสต์ทันที</span>
+                    </button>
+                  </div>
                 </div>
-                <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm text-slate-200 leading-relaxed bg-slate-900/90 p-4 rounded-xl border border-slate-800">
+                <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm text-slate-200 leading-relaxed bg-slate-900/90 p-3.5 sm:p-4 rounded-xl border border-slate-800">
                   {activeAnalysis.aiPlaybook.winningCaptionTemplate}
                 </pre>
               </div>
