@@ -97,8 +97,18 @@ export async function POST(req: NextRequest) {
       stock: Number(p.stock) || 0,
     }))
 
+    // Check if shop has a saved RapidAPI key in settings
+    const { data: keySetting } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', `rapidapi_key_${shop_id}`)
+      .maybeSingle()
+
+    const rapidApiKey = keySetting?.value || process.env.RAPIDAPI_KEY || ''
+
     // 3. Run live scraping / competitive intelligence engine
     const profile = await scrapeCompetitorIntelligence(url, mappedProducts, {
+      apiKey: rapidApiKey,
       forceRefresh: !!force_refresh,
     })
 

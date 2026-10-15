@@ -51,6 +51,34 @@ export default function CompetitorDashboardClient({
   const [copiedCaption, setCopiedCaption] = useState(false)
   const [showSqlModal, setShowSqlModal] = useState(false)
   const [showApiModal, setShowApiModal] = useState(false)
+  const [apiKeyInput, setApiKeyInput] = useState('')
+  const [isSavingKey, setIsSavingKey] = useState(false)
+  const [savedKeySuccess, setSavedKeySuccess] = useState('')
+
+  const handleSaveApiKey = async () => {
+    setIsSavingKey(true)
+    setSavedKeySuccess('')
+    try {
+      const res = await fetch('/api/competitors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save_api_key',
+          shop_id: shop.id,
+          rapidapi_key: apiKeyInput,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setSavedKeySuccess('บันทึก Key เรียบร้อยแล้ว!')
+        setTimeout(() => setSavedKeySuccess(''), 3000)
+      }
+    } catch (err: any) {
+      alert(err.message || 'บันทึกไม่สำเร็จ')
+    } finally {
+      setIsSavingKey(false)
+    }
+  }
 
   // Sample presets for quick testing
   const presets = [
@@ -726,25 +754,45 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
                 </p>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
-                <div className="flex items-center gap-2 font-bold text-amber-400 text-sm mb-1">
-                  <Key className="w-4 h-4" />
-                  <span>2. การเชื่อมต่อ Scraper API สำหรับดึงข้อมูลสดจาก Social Media</span>
+              <div className="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-500/30">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 font-bold text-amber-300 text-sm">
+                    <Key className="w-4 h-4" />
+                    <span>2. วาง RapidAPI Key เพื่อดึงข้อมูลสด (ทำงานได้ทันที ไม่ต้องแก้โค้ด):</span>
+                  </div>
+                  {savedKeySuccess && (
+                    <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" /> {savedKeySuccess}
+                    </span>
+                  )}
                 </div>
-                <p className="text-slate-400 mb-2">
-                  อ้างอิงจาก <code>cporter202/social-media-scraping-apis</code> คุณสามารถสมัครคีย์ฟรีได้ที่ <strong>RapidAPI.com</strong> แล้วนำคีย์มาใส่ในไฟล์ <code>.env.local</code> (หรือ Vercel Environment Variables):
+                <p className="text-slate-400 mb-2.5">
+                  คัดลอก <strong>Application Key</strong> จาก RapidAPI มาวางที่นี่ แล้วกดบันทึก ระบบจะเริ่มดึงยอด Followers จริงและคลิปไวรัลสดทันที:
                 </p>
-                <div className="relative">
-                  <pre className="bg-slate-900 p-3 rounded-xl font-mono text-amber-300 text-[11px] border border-slate-800">
-{`# ไฟล์ .env.local หรือ Vercel Environment Variables
-RAPIDAPI_KEY="ใส่_api_key_ของคุณที่นี่"`}
-                  </pre>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="password"
+                    placeholder="วาง RapidAPI Key เช่น e45b98f237msh..."
+                    value={apiKeyInput}
+                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
+                  />
                   <button
-                    onClick={() => copyToClipboard('RAPIDAPI_KEY="your-rapidapi-key-here"', 'env-copy')}
-                    className="absolute top-2 right-2 px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-[10px] text-white flex items-center gap-1 cursor-pointer"
+                    onClick={handleSaveApiKey}
+                    disabled={isSavingKey || !apiKeyInput.trim()}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md disabled:opacity-50"
                   >
-                    {copiedTag === 'env-copy' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedTag === 'env-copy' ? 'คัดลอก' : 'Copy'}</span>
+                    {isSavingKey ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" />
+                        <span>กำลังบันทึก...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Key className="w-3.5 h-3.5" />
+                        <span>บันทึก Key เข้าสู่ระบบ</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
