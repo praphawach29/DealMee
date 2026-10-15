@@ -156,27 +156,76 @@ async function fetchLiveRapidApiData(
 
   try {
     if (parsed.platform === 'tiktok') {
-      // RapidAPI TikTok Scraper endpoint (high reliability, low latency)
-      const res = await fetch(`https://tiktok-scraper7.p.rapidapi.com/user/info?unique_id=${encodeURIComponent(cleanHandle)}`, {
-        headers: {
-          'x-rapidapi-key': apiKey,
-          'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com',
-        },
-        signal: controller.signal,
-      })
+      // RapidAPI TikTok Scraper: Fetch profile info and top 5 recent posts in parallel
+      const [infoRes, postsRes] = await Promise.allSettled([
+        fetch(`https://tiktok-scraper7.p.rapidapi.com/user/info?unique_id=${encodeURIComponent(cleanHandle)}`, {
+          headers: {
+            'x-rapidapi-key': apiKey,
+            'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com',
+          },
+          signal: controller.signal,
+        }),
+        fetch(`https://tiktok-scraper7.p.rapidapi.com/user/posts?unique_id=${encodeURIComponent(cleanHandle)}&count=5`, {
+          headers: {
+            'x-rapidapi-key': apiKey,
+            'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com',
+          },
+          signal: controller.signal,
+        }),
+      ])
 
-      if (res.ok) {
-        const json = await res.json()
+      let name: string | undefined
+      let avatar_url: string | undefined
+      let follower_count: number | undefined
+      let posts: CompetitorPost[] | undefined
+
+      if (infoRes.status === 'fulfilled' && infoRes.value.ok) {
+        const json = await infoRes.value.json().catch(() => null)
         const user = json?.data?.user
         const stats = json?.data?.stats
-
         if (user) {
-          clearTimeout(timeoutId)
-          return {
-            name: user.nickname || cleanHandle,
-            avatar_url: user.avatarLarger || user.avatarMedium,
-            follower_count: Number(stats?.followerCount || stats?.follower_count || 0),
-          }
+          name = user.nickname || cleanHandle
+          avatar_url = user.avatarLarger || user.avatarMedium || user.avatarThumb
+          follower_count = Number(stats?.followerCount || stats?.follower_count || 0)
+        }
+      }
+
+      if (postsRes.status === 'fulfilled' && postsRes.value.ok) {
+        const json = await postsRes.value.json().catch(() => null)
+        const videos = json?.data?.videos || json?.data?.aweme_list || json?.data?.posts
+        if (Array.isArray(videos) && videos.length > 0) {
+          posts = videos.slice(0, 5).map((v: any, idx: number) => {
+            const views = Number(v.play_count || 0)
+            const likes = Number(v.digg_count || 0)
+            const comments = Number(v.comment_count || 0)
+            const shares = Number(v.share_count || 0)
+            const eng = views > 0 ? Number((((likes + comments + shares) / views) * 100).toFixed(2)) : 0
+            const hashtags = (v.title?.match(/#[^\s#]+/g) || ['#tiktok', '#viral'])
+
+            return {
+              id: String(v.video_id || v.aweme_id || `tt-${idx}`),
+              post_url: `https://www.tiktok.com/@${cleanHandle}/video/${v.video_id || v.aweme_id}`,
+              thumbnail_url: v.cover || v.origin_cover || v.ai_dynamic_cover || '',
+              title_or_caption: v.title || v.content_desc || `TikTok Video by @${cleanHandle}`,
+              views_count: views,
+              likes_count: likes,
+              comments_count: comments,
+              shares_count: shares,
+              engagement_rate: eng,
+              hashtags,
+              published_at: v.create_time ? new Date(v.create_time * 1000).toISOString() : new Date().toISOString(),
+            }
+          })
+        }
+      }
+
+      if (name || (posts && posts.length > 0)) {
+        clearTimeout(timeoutId)
+        return {
+          name,
+          avatar_url,
+          follower_count,
+          posts,
         }
       }
     } else if (parsed.platform === 'instagram') {
@@ -245,7 +294,9 @@ export async function scrapeCompetitorIntelligence(
     ? liveScrapeResult.follower_count
     : 45000 + (absSeed % 480000)
 
-  const avgEngagementRate = Number((2.8 + ((absSeed % 55) / 10)).toFixed(2)) // 2.8% - 8.3%
+  const avgEngagementRate = (liveScrapeResult?.posts && liveScrapeResult.posts.length > 0)
+    ? Number((liveScrapeResult.posts.reduce((acc, p) => acc + p.engagement_rate, 0) / liveScrapeResult.posts.length).toFixed(2))
+    : Number((2.8 + ((absSeed % 55) / 10)).toFixed(2)) // 2.8% - 8.3%
 
   // Profile name
   const readableName = liveScrapeResult?.name || cleanHandle
