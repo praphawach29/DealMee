@@ -221,11 +221,12 @@ export default function SettingsForm({ shop, onNavigateToChannels }: SettingsFor
 
           <select
             name="ai_model"
-            defaultValue={shop.ai_model || 'gemini-2.5-flash'}
+            defaultValue={shop.ai_model || 'gemini-3.8-flash'}
             className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all font-medium"
           >
-            <option value="gemini-2.5-flash">⚡ Gemini 2.5 Flash (แนะนำ - ตอบเร็ว เสถียรสูง เหมาะกับแชทสด ~1.1s)</option>
-            <option value="gemini-3-flash-preview">🚀 Gemini 3 Flash Preview (เจเนอเรชันใหม่ล่าสุด - พลังคิดวิเคราะห์ลึก ก้าวกระโดด)</option>
+            <option value="gemini-3.8-flash">🔥 Gemini 3.8 Flash (รุ่นใหม่ล่าสุด 2026 - สปีดสูง คิดวิเคราะห์ล้ำลึก แนะนำสูงสุด)</option>
+            <option value="gemini-2.5-flash">⚡ Gemini 2.5 Flash (เสถียรสูง ตอบไวมาก ~1.1s)</option>
+            <option value="gemini-3-flash-preview">🚀 Gemini 3 Flash Preview (เจเนอเรชันใหม่ - ฉลาดรอบด้าน)</option>
             <option value="gemini-flash-latest">🔄 Gemini Flash Latest (อัปเดตโมเดลเวอร์ชันล่าสุดโดยอัตโนมัติ)</option>
             <option value="gemini-3.1-pro-preview">🧠 Gemini 3.1 Pro Preview (โมเดลระดับสูง สำหรับงานวิเคราะห์ที่ซับซ้อน)</option>
             <option value="gemini-pro-latest">🌟 Gemini Pro Latest (รุ่น Pro เวอร์ชันล่าสุด)</option>

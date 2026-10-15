@@ -328,7 +328,7 @@ export async function runMerchantCopilotChat({
       }
     }
 
-    const model = shop?.custom_ai_model || shop?.ai_model || process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+    const model = shop?.custom_ai_model || shop?.ai_model || process.env.GEMINI_MODEL || 'gemini-3.8-flash'
 
     const systemPrompt = `คุณคือ "DealMee Copilot" ผู้ช่วย AI อัจฉริยะประจำตัวเจ้าของร้าน (Merchant Copilot) ของร้าน "${shop?.name || 'ร้านค้า'}"
 หน้าที่ของคุณ:
