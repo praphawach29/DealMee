@@ -4,6 +4,9 @@ import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { getCompetitors } from '@/lib/competitors/competitorStore'
 import CompetitorDashboardClient from './CompetitorDashboardClient'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export const metadata = {
   title: 'ส่องร้านคู่แข่ง (Competitor Intelligence) — DealMee AI',
   description: 'วิเคราะห์ราคา คอนเทนต์ไวรัล และแฮชแท็กคู่แข่งบน TikTok, IG, FB เพื่อชิงยอดขายให้ธุรกิจคุณ',

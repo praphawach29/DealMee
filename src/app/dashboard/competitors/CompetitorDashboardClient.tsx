@@ -55,6 +55,32 @@ export default function CompetitorDashboardClient({
   const [isSavingKey, setIsSavingKey] = useState(false)
   const [savedKeySuccess, setSavedKeySuccess] = useState('')
 
+  // Sync when initialCompetitors prop changes
+  React.useEffect(() => {
+    if (initialCompetitors && initialCompetitors.length > 0) {
+      setCompetitors(initialCompetitors)
+      if (!activeAnalysis && initialCompetitors[0]?.profile_data) {
+        setActiveAnalysis(initialCompetitors[0].profile_data)
+      }
+    }
+  }, [initialCompetitors])
+
+  // Automatically refresh competitor list on client mount
+  React.useEffect(() => {
+    if (!shop?.id) return
+    fetch(`/api/competitors?shop_id=${shop.id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.competitors && Array.isArray(data.competitors) && data.competitors.length > 0) {
+          setCompetitors(data.competitors)
+          if (!activeAnalysis && data.competitors[0]?.profile_data) {
+            setActiveAnalysis(data.competitors[0].profile_data)
+          }
+        }
+      })
+      .catch(() => {})
+  }, [shop?.id])
+
   const handleSaveApiKey = async () => {
     setIsSavingKey(true)
     setSavedKeySuccess('')

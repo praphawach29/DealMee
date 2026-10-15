@@ -139,20 +139,76 @@ export async function getCompetitors(shopId: string): Promise<CompetitorRecord[]
       .order('created_at', { ascending: false })
 
     if (!error && dbComps && dbComps.length > 0) {
-      return dbComps.map((c: any) => ({
-        id: c.id,
-        shop_id: c.shop_id,
-        name: c.name,
-        platform: c.platform,
-        target_url: c.target_url,
-        handle: c.handle,
-        avatar_url: c.avatar_url,
-        follower_count: Number(c.follower_count) || 0,
-        avg_engagement_rate: Number(c.avg_engagement_rate) || 0,
-        price_range_min: Number(c.price_range_min) || 0,
-        price_range_max: Number(c.price_range_max) || 0,
-        created_at: c.created_at,
-      }))
+      const compIds = dbComps.map((c: any) => c.id)
+      const { data: allPosts } = await supabase
+        .from('competitor_posts')
+        .select('*')
+        .in('competitor_id', compIds)
+        .order('views_count', { ascending: false })
+
+      return dbComps.map((c: any) => {
+        let aiPlaybook = null
+        try {
+          if (c.notes) {
+            aiPlaybook = typeof c.notes === 'string' ? JSON.parse(c.notes) : c.notes
+          }
+        } catch {}
+
+        const posts = (allPosts || [])
+          .filter((p: any) => p.competitor_id === c.id)
+          .map((p: any) => ({
+            id: p.id,
+            post_url: p.post_url,
+            thumbnail_url: p.thumbnail_url,
+            title_or_caption: p.title_or_caption,
+            views_count: Number(p.views_count) || 0,
+            likes_count: Number(p.likes_count) || 0,
+            comments_count: Number(p.comments_count) || 0,
+            shares_count: Number(p.shares_count) || 0,
+            engagement_rate: Number(p.engagement_rate) || 0,
+            hashtags: p.hashtags || [],
+            published_at: p.published_at,
+          }))
+
+        const profile_data: ScrapedCompetitorProfile = {
+          name: c.name,
+          handle: c.handle || `@${c.name.toLowerCase().replace(/\s+/g, '_')}`,
+          platform: c.platform,
+          target_url: c.target_url,
+          avatar_url: c.avatar_url || '',
+          follower_count: Number(c.follower_count) || 0,
+          avg_engagement_rate: Number(c.avg_engagement_rate) || 0,
+          price_range_min: Number(c.price_range_min) || 0,
+          price_range_max: Number(c.price_range_max) || 0,
+          posts,
+          priceComparison: [],
+          aiPlaybook: aiPlaybook || {
+            pricingStrategyVerdict: 'วิเคราะห์ข้อมูลราคาเสร็จสิ้น',
+            priceAdvantageBullets: ['พร้อมจัดส่งทันทีใน 24 ชั่วโมง'],
+            topViralHooks: [],
+            winningCaptionTemplate: '',
+            recommendedHashtags: [],
+          },
+          is_live_data: true,
+          data_source: 'live_api',
+        }
+
+        return {
+          id: c.id,
+          shop_id: c.shop_id,
+          name: c.name,
+          platform: c.platform,
+          target_url: c.target_url,
+          handle: c.handle,
+          avatar_url: c.avatar_url,
+          follower_count: Number(c.follower_count) || 0,
+          avg_engagement_rate: Number(c.avg_engagement_rate) || 0,
+          price_range_min: Number(c.price_range_min) || 0,
+          price_range_max: Number(c.price_range_max) || 0,
+          profile_data,
+          created_at: c.created_at,
+        }
+      })
     }
 
     // 2. Fallback to settings table
