@@ -121,7 +121,7 @@ export async function generateAiProductDescription(name: string, category?: stri
   }
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
-  const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+  const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
 
   if (!apiKey) {
     return { error: 'ระบบไม่ได้ตั้งค่า GEMINI_API_KEY กรุณาติดต่อแอดมิน' }

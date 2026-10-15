@@ -59,6 +59,7 @@ export async function updateBotSettings(formData: FormData) {
     personality: ((formData.get('personality') as string) || '').trim(),
     greeting_message: ((formData.get('greeting_message') as string) || '').trim(),
     system_prompt: ((formData.get('system_prompt') as string) || '').trim(),
+    ai_model: ((formData.get('ai_model') as string) || 'gemini-2.5-flash').trim(),
     line_token: rawToken.trim(),
     line_secret: rawSecret.trim(),
     facebook_page_id: fbPageId,

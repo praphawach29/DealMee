@@ -16,6 +16,8 @@ import {
   HeartHandshake,
   RefreshCw,
   Share2,
+  Sparkles,
+  Cpu,
 } from 'lucide-react'
 
 interface ShopData {
@@ -23,6 +25,8 @@ interface ShopData {
   name: string
   bot_name: string | null
   description: string | null
+  ai_model?: string | null
+  custom_ai_model?: string | null
   personality: string | null
   greeting_message: string | null
   system_prompt: string | null
@@ -198,6 +202,42 @@ export default function SettingsForm({ shop, onNavigateToChannels }: SettingsFor
             placeholder="ข้อความที่บอทจะส่งทันทีเมื่อลูกค้าแอดไลน์เข้ามาครั้งแรก"
             className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all"
           />
+        </div>
+
+        {/* AI Model Engine Selection */}
+        <div className="space-y-2 pt-3 border-t border-outline-variant/30">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-electric-blue" />
+              <span>โมเดลสมองกล AI (AI Model Engine)</span>
+            </label>
+            <span className="text-[10px] text-electric-blue font-bold px-2 py-0.5 rounded-full bg-electric-blue/10 border border-electric-blue/20">
+              Next-Gen Gemini Active
+            </span>
+          </div>
+          <p className="text-[11px] text-on-surface-variant">
+            เลือกโมเดลที่ใช้ขับเคลื่อนทั้งระบบแชทปิดการขาย (LINE / Messenger) และ DealMee Copilot วิเคราะห์ธุรกิจ
+          </p>
+
+          <select
+            name="ai_model"
+            defaultValue={shop.ai_model || 'gemini-2.5-flash'}
+            className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all font-medium"
+          >
+            <option value="gemini-2.5-flash">⚡ Gemini 2.5 Flash (แนะนำ - ตอบเร็ว เสถียรสูง เหมาะกับแชทสด ~1.1s)</option>
+            <option value="gemini-3-flash-preview">🚀 Gemini 3 Flash Preview (เจเนอเรชันใหม่ล่าสุด - พลังคิดวิเคราะห์ลึก ก้าวกระโดด)</option>
+            <option value="gemini-flash-latest">🔄 Gemini Flash Latest (อัปเดตโมเดลเวอร์ชันล่าสุดโดยอัตโนมัติ)</option>
+            <option value="gemini-3.1-pro-preview">🧠 Gemini 3.1 Pro Preview (โมเดลระดับสูง สำหรับงานวิเคราะห์ที่ซับซ้อน)</option>
+            <option value="gemini-pro-latest">🌟 Gemini Pro Latest (รุ่น Pro เวอร์ชันล่าสุด)</option>
+          </select>
+
+          <div className="bg-surface-container/60 border border-outline-variant/30 rounded-xl p-3 flex items-start gap-2.5 text-[11px] text-on-surface-variant">
+            <Cpu className="w-4 h-4 text-electric-blue shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold text-on-surface">ขุมพลัง Next-Gen Gemini: </span>
+              รองรับการเรียกคำสั่งระบบคลังข้อมูล (Tool Calling) ดึงยอดขาย, สลิปที่รอตรวจ, สต็อกสินค้า และวิเคราะห์คู่แข่งแบบ Real-time โดยตรงจากฐานข้อมูล
+            </div>
+          </div>
         </div>
       </section>
 
