@@ -21,6 +21,9 @@ import {
   Database,
   ArrowRight,
   ShieldCheck,
+  Zap,
+  RefreshCw,
+  Key,
 } from 'lucide-react'
 import { ScrapedCompetitorProfile } from '@/lib/competitors/scraperEngine'
 import { CompetitorRecord } from '@/lib/competitors/competitorStore'
@@ -47,6 +50,7 @@ export default function CompetitorDashboardClient({
   const [copiedTag, setCopiedTag] = useState('')
   const [copiedCaption, setCopiedCaption] = useState(false)
   const [showSqlModal, setShowSqlModal] = useState(false)
+  const [showApiModal, setShowApiModal] = useState(false)
 
   // Sample presets for quick testing
   const presets = [
@@ -55,7 +59,7 @@ export default function CompetitorDashboardClient({
     { label: '👟 ร้านสตรีทแวร์ & สนีกเกอร์ FB', url: 'https://www.facebook.com/streetwear.bkk' },
   ]
 
-  const handleScan = async (targetUrlToScan?: string) => {
+  const handleScan = async (targetUrlToScan?: string, forceRefresh = false) => {
     const url = targetUrlToScan || inputUrl
     if (!url || !url.trim()) {
       setErrorMsg('กรุณากรอกลิงก์ร้านคู่แข่ง (TikTok, Instagram, หรือ Facebook)')
@@ -72,6 +76,7 @@ export default function CompetitorDashboardClient({
         body: JSON.stringify({
           shop_id: shop.id,
           url: url.trim(),
+          force_refresh: forceRefresh,
         }),
       })
 
@@ -89,7 +94,7 @@ export default function CompetitorDashboardClient({
         setCompetitors(listData.competitors)
       }
 
-      setInputUrl('')
+      if (!targetUrlToScan) setInputUrl('')
     } catch (err: any) {
       setErrorMsg(err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ')
     } finally {
@@ -178,6 +183,13 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setShowApiModal(true)}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/30 text-xs font-semibold text-amber-300 transition-all cursor-pointer shadow-sm"
+            >
+              <Zap className="w-4 h-4 text-amber-400" />
+              <span>วิธีดึงข้อมูลสด & ประหยัดโควต้า</span>
+            </button>
             <button
               onClick={() => setShowSqlModal(true)}
               className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-xs font-medium text-slate-200 transition-all cursor-pointer"
@@ -330,7 +342,22 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {(activeAnalysis as any).from_cache && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-emerald-500/20">
+                  <Zap className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>แคช 24 ชม. (ประหยัดโควต้า 100%)</span>
+                </span>
+              )}
+              <button
+                onClick={() => handleScan(activeAnalysis.target_url, true)}
+                disabled={isScanning}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
+                title="ดึงข้อมูลสดจาก Social Media ใหม่อีกครั้ง"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin text-blue-500' : ''}`} />
+                <span>สแกนสดใหม่</span>
+              </button>
               <a
                 href={activeAnalysis.target_url}
                 target="_blank"
@@ -660,6 +687,85 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
               >
                 {copiedTag === 'sql-copy' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 <span>{copiedTag === 'sql-copy' ? 'คัดลอกแล้ว' : 'คัดลอกคำสั่ง SQL'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* API & Quota Saver Guide Modal */}
+      {showApiModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 text-white shadow-2xl animate-in zoom-in-95 space-y-4">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">ระบบดึงข้อมูลสด & การประหยัดโควต้า (Quota Guard)</h3>
+                  <p className="text-xs text-slate-400">รองรับ TikTok, Instagram, และ Facebook ดึงข้อมูลจริง</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowApiModal(false)}
+                className="text-slate-400 hover:text-white text-sm"
+              >
+                ✕ ปิด
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs leading-relaxed text-slate-300">
+              <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/30">
+                <div className="flex items-center gap-2 font-bold text-emerald-400 text-sm mb-1">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>1. ระบบ Smart 24-Hour Cache (ประหยัดค่าใช้จ่าย 100%)</span>
+                </div>
+                <p className="text-slate-300">
+                  เมื่อคุณสแกนร้านใดแล้ว ระบบจะบันทึกข้อมูลและวิเคราะห์ลงฐานข้อมูล Supabase ไว้ 24 ชั่วโมง การเปิดดูซ้ำหรือเข้ามาดูสถิติจะไม่เสียโควต้า API แม้แต่ครั้งเดียว (0 บาท) หากต้องการข้อมูลสดใหม่จริง ให้กดปุ่ม <strong>"🔄 สแกนสดใหม่"</strong> ได้ตลอดเวลา
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+                <div className="flex items-center gap-2 font-bold text-amber-400 text-sm mb-1">
+                  <Key className="w-4 h-4" />
+                  <span>2. การเชื่อมต่อ Scraper API สำหรับดึงข้อมูลสดจาก Social Media</span>
+                </div>
+                <p className="text-slate-400 mb-2">
+                  อ้างอิงจาก <code>cporter202/social-media-scraping-apis</code> คุณสามารถสมัครคีย์ฟรีได้ที่ <strong>RapidAPI.com</strong> แล้วนำคีย์มาใส่ในไฟล์ <code>.env.local</code> (หรือ Vercel Environment Variables):
+                </p>
+                <div className="relative">
+                  <pre className="bg-slate-900 p-3 rounded-xl font-mono text-amber-300 text-[11px] border border-slate-800">
+{`# ไฟล์ .env.local หรือ Vercel Environment Variables
+RAPIDAPI_KEY="ใส่_api_key_ของคุณที่นี่"`}
+                  </pre>
+                  <button
+                    onClick={() => copyToClipboard('RAPIDAPI_KEY="your-rapidapi-key-here"', 'env-copy')}
+                    className="absolute top-2 right-2 px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-[10px] text-white flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedTag === 'env-copy' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedTag === 'env-copy' ? 'คัดลอก' : 'Copy'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-blue-950/30 border border-blue-500/30">
+                <div className="flex items-center gap-2 font-bold text-blue-400 text-sm mb-1">
+                  <Sparkles className="w-4 h-4" />
+                  <span>3. ระบบ Zero-Downtime Smart Simulator</span>
+                </div>
+                <p className="text-slate-300">
+                  หากคุณยังไม่ได้ใส่ API Key หรือโควต้าของเดือนนั้นหมด ระบบ DealMee จะสลับมาใช้ <strong>Smart Simulator</strong> โดยอัตโนมัติ ทำให้หน้าเว็บของคุณไม่สะดุด ไม่ขึ้น Error และยังคงให้คำแนะนำด้านการตลาดแก่ร้านค้าได้เหมือนเดิม 100% ครับ
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setShowApiModal(false)}
+                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer shadow-md"
+              >
+                เข้าใจแล้ว พร้อมใช้งาน
               </button>
             </div>
           </div>

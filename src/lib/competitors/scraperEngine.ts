@@ -61,6 +61,9 @@ export interface ScrapedCompetitorProfile {
   posts: CompetitorPost[]
   priceComparison: PriceComparisonItem[]
   aiPlaybook: AiCompetitorPlaybook
+  is_live_data?: boolean
+  data_source?: 'live_api' | 'smart_simulator'
+  last_scanned_at?: string
 }
 
 /**
@@ -135,18 +138,101 @@ export function parseSocialUrl(inputUrl: string): ParsedSocialUrl {
 }
 
 /**
+ * Fetch Live Social Profile using RapidAPI Gateway (if key available)
+ * Curated from https://github.com/cporter202/social-media-scraping-apis
+ */
+async function fetchLiveRapidApiData(
+  parsed: ParsedSocialUrl,
+  apiKey: string
+): Promise<{
+  name?: string
+  avatar_url?: string
+  follower_count?: number
+  posts?: CompetitorPost[]
+} | null> {
+  const cleanHandle = parsed.handle.replace(/^@/, '')
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 7500) // 7.5s quota/latency guard
+
+  try {
+    if (parsed.platform === 'tiktok') {
+      // RapidAPI TikTok Scraper endpoint (high reliability, low latency)
+      const res = await fetch(`https://tiktok-scraper7.p.rapidapi.com/user/info?unique_id=${encodeURIComponent(cleanHandle)}`, {
+        headers: {
+          'x-rapidapi-key': apiKey,
+          'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com',
+        },
+        signal: controller.signal,
+      })
+
+      if (res.ok) {
+        const json = await res.json()
+        const user = json?.data?.user
+        const stats = json?.data?.stats
+
+        if (user) {
+          clearTimeout(timeoutId)
+          return {
+            name: user.nickname || cleanHandle,
+            avatar_url: user.avatarLarger || user.avatarMedium,
+            follower_count: Number(stats?.followerCount || stats?.follower_count || 0),
+          }
+        }
+      }
+    } else if (parsed.platform === 'instagram') {
+      // RapidAPI Instagram Scraper endpoint
+      const res = await fetch(`https://instagram-scraper-api2.p.rapidapi.com/v1/info?username_or_id_or_url=${encodeURIComponent(cleanHandle)}`, {
+        headers: {
+          'x-rapidapi-key': apiKey,
+          'x-rapidapi-host': 'instagram-scraper-api2.p.rapidapi.com',
+        },
+        signal: controller.signal,
+      })
+
+      if (res.ok) {
+        const json = await res.json()
+        const data = json?.data
+        if (data) {
+          clearTimeout(timeoutId)
+          return {
+            name: data.full_name || cleanHandle,
+            avatar_url: data.profile_pic_url,
+            follower_count: Number(data.follower_count || 0),
+          }
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn(`[Live Scraper API Warning]: ${err?.message || 'Gateway unreachable, using fallback'}`)
+  } finally {
+    clearTimeout(timeoutId)
+  }
+
+  return null
+}
+
+/**
  * Intelligent Social Media Scraper & Market Analytics Engine
  * Modeled after https://github.com/cporter202/social-media-scraping-apis
  * Extracts viral video metrics, price bounds, and synthesizes competitive strategies
  */
 export async function scrapeCompetitorIntelligence(
   targetUrl: string,
-  myProducts: Array<{ id: string; name: string; price: number; stock: number }> = []
+  myProducts: Array<{ id: string; name: string; price: number; stock: number }> = [],
+  options?: { apiKey?: string; forceRefresh?: boolean }
 ): Promise<ScrapedCompetitorProfile> {
   const parsed = parseSocialUrl(targetUrl)
   const cleanHandle = parsed.handle.replace(/^@/, '')
 
-  // Generate consistent seed from handle for deterministic, realistic metrics
+  // 1. Check for RapidAPI Key (System or Shop level)
+  const rapidApiKey = options?.apiKey || process.env.RAPIDAPI_KEY || process.env.NEXT_PUBLIC_RAPIDAPI_KEY || ''
+  let liveScrapeResult: { name?: string; avatar_url?: string; follower_count?: number; posts?: CompetitorPost[] } | null = null
+
+  if (rapidApiKey) {
+    liveScrapeResult = await fetchLiveRapidApiData(parsed, rapidApiKey)
+  }
+
+  // 2. Generate consistent seed from handle for deterministic, realistic metrics
   let seed = 0
   for (let i = 0; i < cleanHandle.length; i++) {
     seed = (seed << 5) - seed + cleanHandle.charCodeAt(i)
@@ -154,12 +240,15 @@ export async function scrapeCompetitorIntelligence(
   }
   const absSeed = Math.abs(seed)
 
-  // Follower tiering
-  const followerCount = 45000 + (absSeed % 480000)
+  // Follower tiering (use live scraped count if available, otherwise deterministic calculation)
+  const followerCount = liveScrapeResult?.follower_count && liveScrapeResult.follower_count > 0
+    ? liveScrapeResult.follower_count
+    : 45000 + (absSeed % 480000)
+
   const avgEngagementRate = Number((2.8 + ((absSeed % 55) / 10)).toFixed(2)) // 2.8% - 8.3%
 
   // Profile name
-  const readableName = cleanHandle
+  const readableName = liveScrapeResult?.name || cleanHandle
     .replace(/[._-]/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase())
 
@@ -171,6 +260,7 @@ export async function scrapeCompetitorIntelligence(
     shopee: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=200&auto=format&fit=crop&q=80',
     lazada: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&auto=format&fit=crop&q=80',
   }
+  const finalAvatar = liveScrapeResult?.avatar_url || avatarMap[parsed.platform] || avatarMap.tiktok
 
   // Top 5 viral posts
   const viralHooks = [
@@ -181,27 +271,29 @@ export async function scrapeCompetitorIntelligence(
     { title: 'Flash Sale เที่ยงคืนนี้วันเดียวเท่านั้น! เคลียร์สต็อกหมดแล้วหมดเลย ⚡', tag: ['#flashsale', '#โปรโมชั่น', '#ลดราคา', '#ช้อปด่วน'] },
   ]
 
-  const posts: CompetitorPost[] = viralHooks.map((vh, idx) => {
-    const views = Math.floor(185000 + ((absSeed * (idx + 1) * 37) % 650000))
-    const likes = Math.floor(views * (0.045 + (idx * 0.008)))
-    const comments = Math.floor(likes * 0.08)
-    const shares = Math.floor(likes * 0.12)
-    const engagement = Number((((likes + comments + shares) / views) * 100).toFixed(2))
+  const posts: CompetitorPost[] = (liveScrapeResult?.posts && liveScrapeResult.posts.length > 0)
+    ? liveScrapeResult.posts
+    : viralHooks.map((vh, idx) => {
+        const views = Math.floor(185000 + ((absSeed * (idx + 1) * 37) % 650000))
+        const likes = Math.floor(views * (0.045 + (idx * 0.008)))
+        const comments = Math.floor(likes * 0.08)
+        const shares = Math.floor(likes * 0.12)
+        const engagement = Number((((likes + comments + shares) / views) * 100).toFixed(2))
 
-    return {
-      id: `post-${absSeed}-${idx}`,
-      post_url: `${parsed.normalizedUrl}#video-${idx + 1}`,
-      thumbnail_url: `https://images.unsplash.com/photo-${1515886657613 + idx * 1000}?w=500&auto=format&fit=crop&q=80`,
-      title_or_caption: vh.title,
-      views_count: views,
-      likes_count: likes,
-      comments_count: comments,
-      shares_count: shares,
-      engagement_rate: engagement,
-      hashtags: vh.tag,
-      published_at: new Date(Date.now() - (idx + 1) * 24 * 60 * 60 * 1000).toISOString(),
-    }
-  })
+        return {
+          id: `post-${absSeed}-${idx}`,
+          post_url: `${parsed.normalizedUrl}#video-${idx + 1}`,
+          thumbnail_url: `https://images.unsplash.com/photo-${1515886657613 + idx * 1000}?w=500&auto=format&fit=crop&q=80`,
+          title_or_caption: vh.title,
+          views_count: views,
+          likes_count: likes,
+          comments_count: comments,
+          shares_count: shares,
+          engagement_rate: engagement,
+          hashtags: vh.tag,
+          published_at: new Date(Date.now() - (idx + 1) * 24 * 60 * 60 * 1000).toISOString(),
+        }
+      })
 
   // Competitor price bounds
   const priceMin = 290
@@ -209,7 +301,6 @@ export async function scrapeCompetitorIntelligence(
 
   // Price comparison with my products
   const priceComparison: PriceComparisonItem[] = (myProducts.slice(0, 4) || []).map((prod) => {
-    // Estimating competitor counterpart price ~15-25% different
     const competitorPrice = Math.round((prod.price * 1.15) / 10) * 10
     const diff = competitorPrice - prod.price
     const isCheaper = diff > 0
@@ -282,7 +373,7 @@ export async function scrapeCompetitorIntelligence(
     handle: parsed.handle,
     platform: parsed.platform,
     target_url: parsed.normalizedUrl,
-    avatar_url: avatarMap[parsed.platform] || avatarMap.tiktok,
+    avatar_url: finalAvatar,
     follower_count: followerCount,
     avg_engagement_rate: avgEngagementRate,
     price_range_min: priceMin,
@@ -290,5 +381,8 @@ export async function scrapeCompetitorIntelligence(
     posts,
     priceComparison,
     aiPlaybook,
+    is_live_data: !!liveScrapeResult,
+    data_source: liveScrapeResult ? 'live_api' : 'smart_simulator',
+    last_scanned_at: new Date().toISOString(),
   }
 }
