@@ -1,8 +1,7 @@
 # DealMee AI (DealMee.app) - Project Status
 
-> อัปเดตล่าสุด: 13 ตุลาคม 2026
+> อัปเดตล่าสุด: 15 ตุลาคม 2026
 > GitHub: praphawach29/ai-agent-google-SDK branch main
-> Last Commit: 946fc26 (feat(branding): implement new DealMee official logo across admin, merchant dashboard, and website)
 > Handover & Action Checklist: ดูรายละเอียดเพิ่มเติมที่ [TODO.md](./TODO.md)
 >
 > เอกสารนี้คือแหล่งข้อมูลสถานะปัจจุบันของโปรเจกต์ฉบับเดียว (single source of truth)
@@ -12,10 +11,12 @@
 
 ## Overall Progress
 
-Foundation               ████████████████████  95%
-AI Sales Engine          ████████████████████  98%
-Omnichannel & Inbox      ███████████████████░  95%  [Step 1-3 DONE]
-Central Inventory Pool   ██████████████████░░  90%  [Step 4 DONE]
+Foundation               ████████████████████  98%
+AI Sales Engine          ████████████████████ 100%
+Omnichannel AI Agent     ████████████████████ 100%  [Pillar 1: LINE + FB + IG + Pooled Inventory DONE]
+Competitor Intelligence  ████████████████████ 100%  [Pillar 2: Social Scraping + Spy Dashboard DONE]
+DealMee AI Live Studio   ████████████████████ 100%  [Pillar 3: 24/7 OBS 60fps Overlay + Comment Switcher DONE]
+Central Inventory Pool   ████████████████████ 100%  [Realtime Multi-platform Sync DONE]
 B2B Quotation Engine     ████████████████████ 100%  [PDF/Word/Excel + Sign DONE]
 Billing & Subscription   ████████████████░░░░  85%  [Stripe + Omise + Manual Slip]
 Official Branding        ████████████████████ 100%  [DealMee Logo Concept D1]

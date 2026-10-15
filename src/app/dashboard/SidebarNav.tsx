@@ -17,6 +17,8 @@ import {
   Blocks,
   MessageSquare,
   ShieldAlert,
+  Radar,
+  Radio,
 } from 'lucide-react'
 
 interface SidebarNavProps {
@@ -103,6 +105,26 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
           >
             <Receipt className="mr-2.5 h-[18px] w-[18px] shrink-0" />
             <span>ออเดอร์</span>
+          </Link>
+          <Link
+            href="/dashboard/competitors"
+            prefetch={true}
+            onMouseEnter={() => handleMouseEnter('/dashboard/competitors')}
+            onClick={() => handleLinkClick('/dashboard/competitors')}
+            className={linkClass('/dashboard/competitors')}
+          >
+            <Radar className="mr-2.5 h-[18px] w-[18px] shrink-0" />
+            <span>ส่องร้านคู่แข่ง</span>
+          </Link>
+          <Link
+            href="/dashboard/live-studio"
+            prefetch={true}
+            onMouseEnter={() => handleMouseEnter('/dashboard/live-studio')}
+            onClick={() => handleLinkClick('/dashboard/live-studio')}
+            className={linkClass('/dashboard/live-studio')}
+          >
+            <Radio className="mr-2.5 h-[18px] w-[18px] shrink-0 text-rose-500" />
+            <span>AI Live Studio</span>
           </Link>
         </>
       )}
