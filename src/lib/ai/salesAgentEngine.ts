@@ -1077,23 +1077,39 @@ async function preparePlanningState({
 
   const db = supabaseClient || supabase
 
-  const geminiKey =
+  let geminiKey =
     (shop?.custom_ai_provider === 'gemini' || shop?.ai_provider === 'gemini' ? (shop.custom_ai_key || shop.ai_key) : '') ||
     process.env.GEMINI_API_KEY ||
     process.env.GEMINI_KEY ||
     process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
     ''
-  const claudeKey =
+  let claudeKey =
     (shop?.custom_ai_provider === 'claude' || shop?.ai_provider === 'claude' ? (shop.custom_ai_key || shop.ai_key) : '') ||
     process.env.CLAUDE_API_KEY ||
     process.env.CLAUDE_KEY ||
     process.env.NEXT_PUBLIC_CLAUDE_API_KEY ||
     ''
-  const openAiKey =
+  let openAiKey =
     (shop?.custom_ai_provider === 'openai' || shop?.ai_provider === 'openai' ? (shop.custom_ai_key || shop.ai_key) : '') ||
     process.env.OPENAI_API_KEY ||
     process.env.NEXT_PUBLIC_OPENAI_API_KEY ||
     ''
+
+  if (!geminiKey || !openAiKey) {
+    try {
+      const { data: globalKeys } = await db.from('settings').select('key, value').in('key', ['gemini_key', 'openai_key', 'claude_key'])
+      if (globalKeys) {
+        for (const k of globalKeys) {
+          if (k.key === 'gemini_key' && !geminiKey) geminiKey = k.value
+          if (k.key === 'openai_key' && !openAiKey) openAiKey = k.value
+          if (k.key === 'claude_key' && !claudeKey) claudeKey = k.value
+        }
+      }
+    } catch (keyErr) {
+      console.warn('[salesAgentEngine] Could not load global keys from settings:', keyErr)
+    }
+  }
+
   const modelName = shop.custom_ai_model || shop.ai_model || process.env.GEMINI_MODEL || 'gemini-3.8-flash'
 
   // 1. Knowledge Base — inlined up to a character budget, with the rest
@@ -1521,29 +1537,22 @@ async function callCurrentStep(state: PlanningState): Promise<ProviderStepResult
   // On the final step, disable tools so the model synthesizes a customer-facing text answer
   const activeToolSet = state.step >= MAX_PLANNING_STEPS - 1 ? [] : routing.toolSet
 
-  // 1. Primary provider based on routing classification
-  if (routing.targetProvider === 'claude' && claudeKey) {
-    const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, turns, claudeKey, activeToolSet, state)
-    if (result) return result
-  } else if (routing.targetProvider === 'openai' && openAiKey) {
-    const result = await callOpenAiApi(systemInstruction, turns, openAiKey, activeToolSet, state)
-    if (result) return result
-  } else if (geminiKey) {
+  // 1. Primary Engine: Gemini 3.8 Flash (High Speed & Accurate Tool Calling)
+  if (geminiKey) {
     const result = await callGeminiApi(systemInstruction, turns, modelName, geminiKey, activeToolSet, state)
     if (result) return result
   }
 
-  // 2. Graceful Fallbacks: If primary provider is unavailable or failed, try other configured providers
-  if (geminiKey && routing.targetProvider !== 'gemini') {
-    const result = await callGeminiApi(systemInstruction, turns, modelName, geminiKey, activeToolSet, state)
-    if (result) return result
-  }
-  if (claudeKey && routing.targetProvider !== 'claude') {
-    const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, turns, claudeKey, activeToolSet, state)
-    if (result) return result
-  }
-  if (openAiKey && routing.targetProvider !== 'openai') {
+  // 2. Disaster Recovery Failover: ChatGPT (OpenAI) if Gemini fails
+  if (openAiKey) {
+    console.warn(`[Failover] Gemini unavailable or failed for shop "${state.shop.name}", failing over to ChatGPT (OpenAI)...`)
     const result = await callOpenAiApi(systemInstruction, turns, openAiKey, activeToolSet, state)
+    if (result) return result
+  }
+
+  // 3. Fallback: Anthropic Claude (if configured)
+  if (claudeKey) {
+    const result = await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, turns, claudeKey, activeToolSet, state)
     if (result) return result
   }
 
@@ -1837,9 +1846,6 @@ async function callGeminiApi(
       'gemini-3.8-flash',
       'gemini-2.5-flash',
       'gemini-3-flash-preview',
-      'gemini-flash-latest',
-      'gemini-3.1-pro-preview',
-      'gemini-pro-latest',
     ].filter(Boolean))
   )
 
@@ -2129,8 +2135,6 @@ async function callOpenAiApi(
     new Set(
       [
         process.env.OPENAI_MODEL,
-        'gpt-6-luna',
-        'gpt-6.1-sol',
         'gpt-4o-mini',
         'gpt-4o',
       ].filter(Boolean)

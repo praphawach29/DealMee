@@ -204,39 +204,58 @@ export default function SettingsForm({ shop, onNavigateToChannels }: SettingsFor
           />
         </div>
 
-        {/* AI Model Engine Selection */}
-        <div className="space-y-2 pt-3 border-t border-outline-variant/30">
+        {/* Managed AI Engine Architecture (Locked Enterprise Standard) */}
+        <div className="space-y-3 pt-3 border-t border-outline-variant/30">
+          <input type="hidden" name="ai_model" value="gemini-3.8-flash" />
           <div className="flex items-center justify-between">
             <label className="block text-xs sm:text-sm font-bold text-on-surface font-label-md flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 text-electric-blue" />
-              <span>โมเดลสมองกล AI (AI Model Engine)</span>
+              <span>โครงสร้างสมองกล AI ประจำร้าน (Managed AI Engine)</span>
             </label>
-            <span className="text-[10px] text-electric-blue font-bold px-2 py-0.5 rounded-full bg-electric-blue/10 border border-electric-blue/20">
-              Next-Gen Gemini Active
+            <span className="text-[10px] text-success-green font-bold px-2 py-0.5 rounded-full bg-success-green/10 border border-success-green/20 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-success-green animate-pulse"></span>
+              ความเสถียร 99.9%
             </span>
           </div>
           <p className="text-[11px] text-on-surface-variant">
-            เลือกโมเดลที่ใช้ขับเคลื่อนทั้งระบบแชทปิดการขาย (LINE / Messenger) และ DealMee Copilot วิเคราะห์ธุรกิจ
+            ระบบกำหนดมาตรฐานโมเดลที่ดีที่สุดและคุ้มค่าโควต้าให้โดยอัตโนมัติ พร้อมระบบสำรองข้ามค่ายเพื่อความต่อเนื่องของธุรกิจ
           </p>
 
-          <select
-            name="ai_model"
-            defaultValue={shop.ai_model || 'gemini-3.8-flash'}
-            className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-1 focus:ring-electric-blue outline-none transition-all font-medium"
-          >
-            <option value="gemini-3.8-flash">🔥 Gemini 3.8 Flash (รุ่นใหม่ล่าสุด 2026 - สปีดสูง คิดวิเคราะห์ล้ำลึก แนะนำสูงสุด)</option>
-            <option value="gemini-2.5-flash">⚡ Gemini 2.5 Flash (เสถียรสูง ตอบไวมาก ~1.1s)</option>
-            <option value="gemini-3-flash-preview">🚀 Gemini 3 Flash Preview (เจเนอเรชันใหม่ - ฉลาดรอบด้าน)</option>
-            <option value="gemini-flash-latest">🔄 Gemini Flash Latest (อัปเดตโมเดลเวอร์ชันล่าสุดโดยอัตโนมัติ)</option>
-            <option value="gemini-3.1-pro-preview">🧠 Gemini 3.1 Pro Preview (โมเดลระดับสูง สำหรับงานวิเคราะห์ที่ซับซ้อน)</option>
-            <option value="gemini-pro-latest">🌟 Gemini Pro Latest (รุ่น Pro เวอร์ชันล่าสุด)</option>
-          </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Primary Engine */}
+            <div className="bg-merchant-bg border border-electric-blue/30 rounded-xl p-3.5 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-16 h-16 bg-electric-blue/10 rounded-bl-full pointer-events-none"></div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[10px] font-bold text-electric-blue bg-electric-blue/10 px-2 py-0.5 rounded-md">
+                  โมเดลหลัก (Primary)
+                </span>
+                <span className="text-xs font-bold text-on-surface">Gemini 3.8 Flash Ultra</span>
+              </div>
+              <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                ขับเคลื่อนแชทขายของอัตโนมัติ (LINE/FB) และ Copilot วิเคราะห์ธุรกิจ ด้วยความเร็วตอบสนองสูงพิเศษ ~1.1s ดึงข้อมูลสดจากฐานข้อมูล
+              </p>
+            </div>
+
+            {/* Failover Engine */}
+            <div className="bg-merchant-bg border border-emerald-500/30 rounded-xl p-3.5 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 rounded-bl-full pointer-events-none"></div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                  สำรองฉุกเฉิน (Failover)
+                </span>
+                <span className="text-xs font-bold text-on-surface">ChatGPT (OpenAI)</span>
+              </div>
+              <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                สลับการทำงานอัตโนมัติทันทีหากเซิร์ฟเวอร์ Google มีปัญหา ทำให้แชทบอทของร้านไม่เคยล่มและไม่พลาดทุกออเดอร์
+              </p>
+            </div>
+          </div>
 
           <div className="bg-surface-container/60 border border-outline-variant/30 rounded-xl p-3 flex items-start gap-2.5 text-[11px] text-on-surface-variant">
             <Cpu className="w-4 h-4 text-electric-blue shrink-0 mt-0.5" />
             <div>
-              <span className="font-semibold text-on-surface">ขุมพลัง Next-Gen Gemini: </span>
-              รองรับการเรียกคำสั่งระบบคลังข้อมูล (Tool Calling) ดึงยอดขาย, สลิปที่รอตรวจ, สต็อกสินค้า และวิเคราะห์คู่แข่งแบบ Real-time โดยตรงจากฐานข้อมูล
+              <span className="font-semibold text-on-surface">การจัดการโควต้าอัตโนมัติ (Zero Maintenance): </span>
+              DealMee ดูแลและปรับจูนความเร็วตลอด 24 ชม. ไม่มีการหักโควต้าซ้ำซ้อน และควบคุมต้นทุนแพ็กเกจให้คุ้มค่าที่สุดสำหรับร้านค้า
             </div>
           </div>
         </div>

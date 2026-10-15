@@ -370,7 +370,7 @@ export async function runMerchantCopilotChat({
     while (currentStep < maxSteps) {
       currentStep++
 
-      const response = await fetch(
+      let response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
@@ -386,6 +386,26 @@ export async function runMerchantCopilotChat({
           }),
         }
       )
+
+      if (!response.ok && model !== 'gemini-2.5-flash') {
+        console.warn(`[MerchantCopilot] ${model} failed, falling back to gemini-2.5-flash...`)
+        response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              system_instruction: { parts: [{ text: systemPrompt }] },
+              contents: turns,
+              tools: toolsPayload,
+              generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 2048,
+              },
+            }),
+          }
+        )
+      }
 
       if (!response.ok) {
         console.error('[MerchantCopilot] Gemini API error:', await response.text())
