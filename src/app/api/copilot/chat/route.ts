@@ -34,7 +34,12 @@ export async function POST(req: NextRequest) {
       history: Array.isArray(history) ? history : [],
     })
 
-    return NextResponse.json(result)
+    return NextResponse.json({
+      reply: result.responseText,
+      responseText: result.responseText,
+      toolCalls: result.toolCallsExecuted,
+      toolCallsExecuted: result.toolCallsExecuted,
+    })
   } catch (err: any) {
     console.error('[Copilot API Error]:', err)
     return NextResponse.json(

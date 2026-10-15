@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getCompetitors } from '@/lib/competitors/competitorStore'
 
 export interface CopilotMessage {
   role: 'user' | 'assistant' | 'system'
@@ -104,6 +105,19 @@ const COPILOT_TOOLS = [
       properties: {},
     },
   },
+  {
+    name: 'get_competitor_insights',
+    description: 'ดึงข้อมูลร้านคู่แข่งที่ส่องไว้ในระบบ (Competitor Intelligence) เช่น ยอดผู้ติดตาม ช่องราคา เรตการมีส่วนร่วม แคปชั่นไวรัล และกลยุทธ์แก้ข้อโต้แย้ง',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        query: {
+          type: 'STRING',
+          description: 'ชื่อร้านคู่แข่ง หรือคำค้นหา เช่น พิมรี่พาย หรือ EVEANDBOY (ถ้าไม่ระบุจะดึงคู่แข่งทั้งหมด)',
+        },
+      },
+    },
+  },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,16 +133,16 @@ async function executeCopilotTool(name: string, args: Record<string, any>, shopI
 
       const { data: orders, error } = await supabase
         .from('orders')
-        .select('id, total_amount, payment_status, created_at, customer_name')
+        .select('id, total, total_amount, status, created_at, customer_name')
         .eq('shop_id', shopId)
         .gte('created_at', sinceDate)
 
       if (error) return { error: error.message }
 
       const totalOrders = orders?.length || 0
-      const paidOrders = orders?.filter((o) => o.payment_status === 'paid') || []
-      const pendingOrders = orders?.filter((o) => o.payment_status === 'pending') || []
-      const totalRevenue = paidOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0)
+      const paidOrders = orders?.filter((o) => (o.status || '').toLowerCase() === 'paid') || []
+      const pendingOrders = orders?.filter((o) => (o.status || '').toLowerCase() === 'pending') || []
+      const totalRevenue = paidOrders.reduce((sum, o) => sum + (Number(o.total_amount) || Number(o.total) || 0), 0)
       const avgOrderValue = paidOrders.length > 0 ? totalRevenue / paidOrders.length : 0
 
       return {
@@ -176,16 +190,19 @@ async function executeCopilotTool(name: string, args: Record<string, any>, shopI
       const limit = Number(args.limit) || 10
       const { data: orders, error } = await supabase
         .from('orders')
-        .select('id, order_no, customer_name, customer_phone, total_amount, product_name, created_at')
+        .select('id, order_no, customer_name, customer_phone, total, total_amount, product_name, status, created_at')
         .eq('shop_id', shopId)
-        .eq('payment_status', 'pending')
+        .ilike('status', 'pending')
         .order('created_at', { ascending: false })
         .limit(limit)
 
       if (error) return { error: error.message }
       return {
         pending_count: orders?.length || 0,
-        orders: orders || [],
+        orders: orders?.map((o) => ({
+          ...o,
+          amount: Number(o.total_amount) || Number(o.total) || 0,
+        })) || [],
       }
     }
 
@@ -251,6 +268,28 @@ async function executeCopilotTool(name: string, args: Record<string, any>, shopI
       }
     }
 
+    if (name === 'get_competitor_insights') {
+      const comps = await getCompetitors(shopId)
+      const q = (args.query || '').trim().toLowerCase()
+      const filtered = q
+        ? comps.filter((c: any) => c.name?.toLowerCase().includes(q) || c.handle?.toLowerCase().includes(q))
+        : comps
+
+      return {
+        total_competitors: filtered.length,
+        competitors: filtered.slice(0, 5).map((c: any) => ({
+          name: c.name,
+          platform: c.platform,
+          followers: c.follower_count,
+          engagement_rate: `${c.avg_engagement_rate}%`,
+          price_range: `${c.price_range_min} - ${c.price_range_max} บาท`,
+          pricing_verdict: c.profile_data?.aiPlaybook?.pricingVerdict || 'ไม่มีข้อมูล',
+          winning_caption: c.profile_data?.aiPlaybook?.winningCaptionDraft || 'ไม่มีข้อมูล',
+          objections: c.profile_data?.aiPlaybook?.objectionHandling || [],
+        })),
+      }
+    }
+
     return { error: `Unknown tool: ${name}` }
   } catch (err: any) {
     console.error(`[MerchantCopilot] Tool execution error for ${name}:`, err)
@@ -274,15 +313,22 @@ export async function runMerchantCopilotChat({
     const supabase = createAdminClient()
     const { data: shop } = await supabase.from('shops').select('*').eq('id', shopId).single()
 
-    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
+    let apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
+    if (!apiKey) {
+      const { data: setting } = await supabase.from('settings').select('value').eq('key', 'gemini_key').maybeSingle()
+      if (setting?.value) {
+        apiKey = setting.value
+      }
+    }
+
     if (!apiKey) {
       return {
-        responseText: 'ขออภัยครับ ยังไม่ได้ตั้งค่า GEMINI_API_KEY ในระบบ',
+        responseText: 'ขออภัยครับ ยังไม่ได้ตั้งค่า GEMINI_API_KEY ในระบบ หรือในตารางการตั้งค่า',
         toolCallsExecuted: [],
       }
     }
 
-    const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+    const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
 
     const systemPrompt = `คุณคือ "DealMee Copilot" ผู้ช่วย AI อัจฉริยะประจำตัวเจ้าของร้าน (Merchant Copilot) ของร้าน "${shop?.name || 'ร้านค้า'}"
 หน้าที่ของคุณ:
@@ -353,41 +399,45 @@ export async function runMerchantCopilotChat({
       const candidate = data.candidates?.[0]
       const parts = candidate?.content?.parts || []
 
-      let stepText = ''
-      let functionCall: any = null
+      const functionCalls = parts
+        .filter((p: any) => !!p.functionCall)
+        .map((p: any) => p.functionCall)
 
-      for (const p of parts) {
-        if (p.text) stepText += p.text
-        if (p.functionCall) functionCall = p.functionCall
-      }
+      const textParts = parts
+        .filter((p: any) => !!p.text)
+        .map((p: any) => p.text)
+        .join('')
 
-      if (!functionCall) {
-        finalAnswer = stepText
+      if (functionCalls.length === 0) {
+        finalAnswer = textParts
         break
       }
 
-      // Execute tool
-      const toolName = functionCall.name
-      const toolArgs = functionCall.args || {}
-      toolCallsExecuted.push(toolName)
-
+      // Record model turn with parts as returned by Gemini
       turns.push({
         role: 'model',
         parts: parts,
       })
 
-      const toolResult = await executeCopilotTool(toolName, toolArgs, shopId)
+      // Execute all tools requested by the model in this turn
+      const functionResponseParts: any[] = []
+      for (const fc of functionCalls) {
+        const toolName = fc.name
+        const toolArgs = fc.args || {}
+        toolCallsExecuted.push(toolName)
+
+        const toolResult = await executeCopilotTool(toolName, toolArgs, shopId)
+        functionResponseParts.push({
+          functionResponse: {
+            name: toolName,
+            response: { result: toolResult },
+          },
+        })
+      }
 
       turns.push({
         role: 'user',
-        parts: [
-          {
-            functionResponse: {
-              name: toolName,
-              response: { result: toolResult },
-            },
-          },
-        ],
+        parts: functionResponseParts,
       })
     }
 
