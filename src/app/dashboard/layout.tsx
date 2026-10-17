@@ -21,6 +21,11 @@ export default async function DashboardLayout({
   }
 
   const shop = await getOrCreateShopForUser(supabase, user)
+  // Accounts not linked to a shop yet set one up first, rather than browsing a
+  // dashboard whose pages expect a shop
+  if (!shop) {
+    redirect('/onboarding')
+  }
 
   const bizType = shop?.business_type || 'retail'
   const features = (shop?.features as Record<string, boolean>) || {}

@@ -15,7 +15,13 @@ const TEMPLATES = [
   { id: 'retail', emoji: '📦', label: 'ร้านค้าทั่วไป', type: 'retail', description: 'ร้านค้าออนไลน์, ขายสินค้าทั่วไป' },
 ]
 
-export default function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ error?: string }>
+}) {
+  const { error } = (await searchParams) || {}
+
   return (
     <div className="min-h-screen bg-merchant-bg py-12 px-4 sm:px-6 lg:px-8 flex justify-center items-center">
       <div className="max-w-3xl w-full">
@@ -38,6 +44,11 @@ export default function OnboardingPage() {
         </div>
 
         <div className="bg-surface rounded-3xl p-6 sm:p-8 shadow-sm border border-outline-variant">
+          {error === 'create_failed' && (
+            <div className="mb-6 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 text-sm font-semibold flex items-center gap-2">
+              <span>⚠️ เกิดข้อผิดพลาด ไม่สามารถสร้างร้านค้าได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง หรือติดต่อแอดมิน</span>
+            </div>
+          )}
           <form action={submitOnboarding} className="space-y-8">
             {/* Step 1 */}
             <div>
