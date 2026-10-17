@@ -81,6 +81,7 @@ export type AgentToolName =
   | 'send_invoice'
   | 'calculate_installment'
   | 'apply_custom_discount'
+  | 'accept_quotation'
   | 'search_products'
   | 'check_stock'
   | 'get_product_image'
@@ -286,15 +287,26 @@ const MASTER_TOOLS = [
   },
   {
     name: 'apply_custom_discount',
-    description: 'ให้ส่วนลดพิเศษกับลูกค้าที่ลังเลเพื่อปิดการขาย ลดได้ไม่เกินโควต้าสูงสุดของร้าน',
+    description: 'ให้ส่วนลดกับออเดอร์ที่รอชำระของลูกค้าเพื่อปิดการขาย ระบบจำกัดไม่เกินเพดานที่ร้านตั้งไว้ และให้ได้ครั้งเดียวต่อออเดอร์ ต้องมีออเดอร์ (take_order) ก่อน',
     parameters: {
       type: 'object',
       properties: {
-        original_price: { type: 'number', description: 'ราคาปกติก่อนลด' },
-        discount_amount: { type: 'number', description: 'จำนวนเงินที่ลดให้ (บาท)' },
-        reason: { type: 'string', description: 'เหตุผลที่ลดให้ เช่น ลูกค้าบอกร้านอื่นถูกกว่า' },
+        discount_amount: { type: 'number', description: 'จำนวนเงินที่ขอลดให้ (บาท) ระบบจะลดไม่เกินเพดานของร้าน' },
+        reason: { type: 'string', description: 'เหตุผลที่ให้ส่วนลด' },
       },
-      required: ['original_price', 'discount_amount', 'reason'],
+      required: ['discount_amount', 'reason'],
+    },
+  },
+  {
+    name: 'accept_quotation',
+    description: 'เมื่อลูกค้ายืนยันตกลงตามใบเสนอราคาที่ออกให้ในแชทนี้ ให้เรียกเพื่อสร้างออเดอร์จากใบเสนอราคาตามยอดในเอกสาร จากนั้นเรียก send_payment_qr',
+    parameters: {
+      type: 'object',
+      properties: {
+        quotation_no: { type: 'string', description: 'เลขที่ใบเสนอราคา เช่น QT-20261017-1234 (ถ้าไม่ระบุ ใช้ใบล่าสุดของแชทนี้)' },
+        payment_method: { type: 'string', description: 'วิธีชำระเงิน เช่น โอนเงิน' },
+      },
+      required: [],
     },
   },
   {
@@ -767,7 +779,7 @@ const SALES_TOOL_NAMES: AgentToolName[] = [
   'search_products', 'check_stock', 'get_product_image',
   'get_upsell_products', 'get_crosssell_products', 'recommend_product_match', 'upsell_suggestion',
   'get_active_promotions', 'apply_custom_discount', 'calculate_installment',
-  'calculate_shipping', 'take_order', 'create_quotation', 'create_official_letter', 'send_payment_qr',
+  'calculate_shipping', 'take_order', 'create_quotation', 'accept_quotation', 'create_official_letter', 'send_payment_qr',
   'get_payment_slip_status', 'send_invoice',
   'save_lead', 'update_customer_note', 'add_customer_tag', 'get_customer_history', 'check_loyalty_points',
   'schedule_followup', 'request_human_agent', 'transfer_to_agent',
@@ -788,7 +800,7 @@ const SUPPORT_TOOL_NAMES: AgentToolName[] = [
 const GENERAL_TOOL_NAMES: AgentToolName[] = [
   'search_knowledge_base', 'request_human_agent', 'transfer_to_agent', 'get_shop_info',
   // Product & document lookup tools
-  'search_products', 'check_stock', 'get_active_promotions', 'create_quotation', 'create_official_letter',
+  'search_products', 'check_stock', 'get_active_promotions', 'create_quotation', 'accept_quotation', 'create_official_letter',
 ]
 
 // Tools that are declared above but have no handler in toolDispatcher.executeTool yet.
@@ -796,7 +808,7 @@ const GENERAL_TOOL_NAMES: AgentToolName[] = [
 // model tell customers a discount was applied or an invoice sent when nothing happened.
 // Keep them hidden until each one is implemented.
 const UNIMPLEMENTED_TOOLS = new Set<string>([
-  'apply_custom_discount', 'calculate_installment', 'check_warranty', 'get_crosssell_products',
+  'calculate_installment', 'check_warranty', 'get_crosssell_products',
   'get_payment_slip_status', 'get_product_image', 'get_return_policy', 'get_shop_info',
   'get_upsell_products', 'recommend_product_match', 'request_review', 'send_invoice',
   'track_parcel', 'upsell_suggestion',

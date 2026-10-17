@@ -719,7 +719,8 @@ export async function executeTool(
   }
 
   if (toolName === 'schedule_followup') {
-    const delayMs = Math.min((args.delay_minutes || 60) * 60 * 1000, 3600000) // cap at 1 hour for safety
+    // Durable now (queued in follow_up_tasks), so allow up to a day
+    const delayMs = Math.min(Math.max(Number(args.delay_minutes) || 60, 5), 24 * 60) * 60 * 1000
     const followupMsg = `👋 สวัสดีค่ะ ไม่ทราบว่าตัดสินใจได้แล้วหรือยังคะ? มีอะไรให้ช่วยแนะนำเพิ่มเติมได้เลยนะคะ 😊`
     return {
       resultForAi: 'ตั้งเวลาส่งข้อความติดตามแล้ว',
@@ -1430,6 +1431,8 @@ export async function executeTool(
         vat_amount: vatAmount,
         total_amount: totalAmount,
         notes: String(args.notes || '').trim(),
+        // Lets accept_quotation check the quotation belongs to the customer accepting it
+        customer_info: { conversation_id: conversationId, line_user_id: userId },
       })
       .select('id')
       .single()
@@ -1474,6 +1477,139 @@ export async function executeTool(
           flexData: flexQuotation,
         },
       ],
+    }
+  }
+
+  if ((toolName as string) === 'accept_quotation') {
+    // Turns a quotation this customer received into a pending order at the quotation's
+    // own (catalog-priced) total, so send_payment_qr can then bill it.
+    const admin = ctx.supabaseAdmin || supabase
+    const docNo = String(args.quotation_no || args.doc_no || '').trim()
+    let docQuery = admin
+      .from('documents')
+      .select('id, doc_no, doc_number, status, items, total_amount, customer_name, customer_phone, customer_address, customer_info')
+      .eq('shop_id', shopId)
+      .eq('doc_type', 'quotation')
+    docQuery = docNo
+      ? docQuery.or(`doc_no.eq.${docNo.replace(/[^A-Za-z0-9-]/g, '')},doc_number.eq.${docNo.replace(/[^A-Za-z0-9-]/g, '')}`)
+      : docQuery.eq('customer_info->>conversation_id', conversationId)
+    const { data: docs } = await docQuery.order('created_at', { ascending: false }).limit(1)
+    const doc = docs?.[0]
+
+    if (!doc) {
+      return { resultForAi: 'ไม่พบใบเสนอราคาที่ระบุ ให้ถามเลขที่ใบเสนอราคา (QT-...) จากลูกค้า', immediateMessages: [] }
+    }
+    if (doc.customer_info?.conversation_id !== conversationId) {
+      return {
+        resultForAi: 'ใบเสนอราคานี้ไม่ได้ออกให้ลูกค้ารายนี้ผ่านแชทนี้ ยืนยันอัตโนมัติไม่ได้ ให้เรียก request_human_agent ให้แอดมินดำเนินการ',
+        immediateMessages: [],
+      }
+    }
+    const quoteNo = doc.doc_no || doc.doc_number
+    if (doc.status === 'accepted' || doc.status === 'converted') {
+      return { resultForAi: `ใบเสนอราคา ${quoteNo} ถูกยืนยันเป็นออเดอร์ไปแล้ว ถ้าลูกค้าต้องการชำระเงิน ให้เรียก send_payment_qr`, immediateMessages: [] }
+    }
+
+    const items: Array<{ name: string; price: number; qty: number }> = Array.isArray(doc.items) ? doc.items : []
+    const totalAmount = Number(doc.total_amount) || 0
+    if (items.length === 0 || totalAmount <= 0) {
+      return { resultForAi: 'ใบเสนอราคานี้ไม่มีรายการหรือยอดเงิน ให้เรียก request_human_agent', immediateMessages: [] }
+    }
+
+    const orderNo = `ORD-${Date.now().toString().slice(-6)}`
+    const itemsText = items.map((it) => `${it.name} x${it.qty}`).join(', ')
+    const { error: orderError } = await supabase.from('orders').insert({
+      shop_id: shopId,
+      order_no: orderNo,
+      conversation_id: conversationId,
+      customer_name: doc.customer_name || args.name,
+      customer_phone: doc.customer_phone || args.phone,
+      address: doc.customer_address || args.address,
+      product_name: itemsText.slice(0, 200),
+      quantity: String(items.reduce((sum, it) => sum + (Number(it.qty) || 0), 0)),
+      total_amount: totalAmount,
+      items_summary: `จากใบเสนอราคา ${quoteNo}: ${itemsText}`,
+      payment_method: args.payment_method || 'promptpay',
+      status: 'pending',
+    })
+    if (orderError) {
+      console.error('[accept_quotation Error]:', orderError)
+      return { resultForAi: 'สร้างออเดอร์จากใบเสนอราคาไม่สำเร็จ ห้ามบอกลูกค้าว่าสำเร็จ ให้เรียก request_human_agent', immediateMessages: [] }
+    }
+
+    await admin
+      .from('documents')
+      .update({ status: 'accepted', accepted_at: new Date().toISOString(), accepted_by: 'line_customer' })
+      .eq('id', doc.id)
+
+    if (shop?.line_token && shop?.features?.admin_notify !== false) {
+      const targetAdmin = shop.admin_line_user_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
+      if (targetAdmin) {
+        fetch('https://api.line.me/v2/bot/message/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${shop.line_token}` },
+          body: JSON.stringify({
+            to: targetAdmin,
+            messages: [{ type: 'text', text: `📄 ลูกค้ายืนยันใบเสนอราคา ${quoteNo}\nสร้างออเดอร์: ${orderNo}\nยอด: ฿${totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}` }],
+          }),
+        }).catch((e) => console.warn('[Admin Quotation Notify Error]:', e))
+      }
+    }
+
+    await updateSalesStage(ctx, 'post_sale')
+    return {
+      resultForAi: `ยืนยันใบเสนอราคา ${quoteNo} และสร้างออเดอร์ ${orderNo} ยอด ${totalAmount.toLocaleString('th-TH')} บาท สำเร็จแล้ว ให้เรียก send_payment_qr ต่อทันทีเพื่อส่ง QR ชำระเงิน`,
+      immediateMessages: [],
+    }
+  }
+
+  if (toolName === 'apply_custom_discount') {
+    // Capped by the shop's own setting (features.max_discount_percent, default 0 = off),
+    // applied once to this customer's pending order so the QR bills the reduced total.
+    const maxPercent = Math.min(Math.max(Number(shop?.features?.max_discount_percent) || 0, 0), 50)
+    if (maxPercent <= 0) {
+      return { resultForAi: 'ร้านไม่ได้เปิดให้บอทลดราคาเอง ห้ามสัญญาส่วนลด ให้แจ้งลูกค้าว่าจะส่งเรื่องให้แอดมินพิจารณา และเรียก request_human_agent ถ้าลูกค้าต้องการ', immediateMessages: [] }
+    }
+    const { data: orders } = await supabase
+      .from('orders')
+      .select('id, order_no, total_amount, note')
+      .eq('shop_id', shopId)
+      .eq('conversation_id', conversationId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1)
+    const order = orders?.[0]
+    if (!order) {
+      return { resultForAi: 'ยังไม่มีออเดอร์ที่รอชำระ ให้เรียก take_order ก่อน แล้วค่อยพิจารณาส่วนลด', immediateMessages: [] }
+    }
+    if (String(order.note || '').includes('[bot-discount:')) {
+      return { resultForAi: `ออเดอร์ ${order.order_no} ได้รับส่วนลดไปแล้ว ลดเพิ่มไม่ได้`, immediateMessages: [] }
+    }
+
+    const total = Number(order.total_amount) || 0
+    const cap = Math.floor((total * maxPercent) / 100)
+    const requested = Math.max(0, Math.floor(Number(args.discount_amount) || 0))
+    const discount = Math.min(requested, cap)
+    if (discount <= 0) {
+      return { resultForAi: `ส่วนลดที่ให้ได้สูงสุดคือ ${cap} บาท (${maxPercent}% ของยอด) ไม่ได้ปรับยอด`, immediateMessages: [] }
+    }
+    const newTotal = total - discount
+    const { error: updateError } = await supabase
+      .from('orders')
+      .update({
+        total_amount: newTotal,
+        note: `${order.note ? `${order.note}\n` : ''}[bot-discount:${discount}] ${String(args.reason || '').slice(0, 120)}`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', order.id)
+      .eq('status', 'pending')
+    if (updateError) {
+      console.error('[apply_custom_discount Error]:', updateError)
+      return { resultForAi: 'ปรับส่วนลดไม่สำเร็จ ห้ามบอกลูกค้าว่าได้ส่วนลด', immediateMessages: [] }
+    }
+    return {
+      resultForAi: `ให้ส่วนลด ${discount} บาทกับออเดอร์ ${order.order_no} แล้ว ยอดใหม่ ${newTotal.toLocaleString('th-TH')} บาท${requested > discount ? ` (ขอ ${requested} บาท แต่ร้านให้ได้สูงสุด ${cap} บาท)` : ''} ถ้าส่ง QR ไปแล้วให้เรียก send_payment_qr ใหม่เพื่อส่ง QR ยอดใหม่`,
+      immediateMessages: [],
     }
   }
 
