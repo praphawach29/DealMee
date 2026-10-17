@@ -93,6 +93,13 @@ export async function POST(
 
       if (!userId) continue
 
+      // LINE redelivers an event when a webhook answers slowly or fails; without this the
+      // same message could create a second order, QR or quotation.
+      if (!(await claimWebhookEvent(event.webhookEventId, shop_id))) {
+        console.log(`[Webhook] Skipping already-processed LINE event ${event.webhookEventId}`)
+        continue
+      }
+
       // Handle Follow Event (Add Friend)
       if (event.type === 'follow') {
         const greeting = await buildFollowGreeting(shop)
@@ -330,7 +337,7 @@ export async function POST(
         const isSlipVerifyActive = features.slip_verify !== false
         if (isSlipVerifyActive) {
           if (replyToken && lineToken) {
-            await sendLineReply(replyToken, 'ได้รับรูปสลิปแล้วค่ะ 📄 กำลังตรวจสอบความถูกต้อง รอสักครู่นะคะ...', lineToken)
+            await sendLineReply(replyToken, 'ได้รับรูปแล้วค่ะ 📄 รอสักครู่นะคะ...', lineToken)
           }
           // Run Slip verification and await so serverless execution context does not freeze before completion
           if (lineToken) {
@@ -482,7 +489,11 @@ async function deliverAgentResult({
       }
 
       if (replyPayload.length > 0) {
-        await sendLineReply(replyToken, replyPayload, lineToken)
+        // The Reply API rejects the whole call above 5 messages, so the customer got nothing
+        await sendLineReply(replyToken, replyPayload.slice(0, LINE_MAX_MESSAGES_PER_CALL), lineToken)
+        for (let i = LINE_MAX_MESSAGES_PER_CALL; i < replyPayload.length; i += LINE_MAX_MESSAGES_PER_CALL) {
+          await sendLinePushMessages(userId, replyPayload.slice(i, i + LINE_MAX_MESSAGES_PER_CALL), lineToken)
+        }
       }
     } else {
       // Fallback Push API if replyToken was already spent
@@ -643,6 +654,28 @@ async function verifySlipAndNotify({
 
     console.log('[SlipVerify] Verification result:', JSON.stringify({ ...verifyResult, data: undefined }))
 
+    // Keep a trace in the Inbox: the image itself isn't stored, so admins otherwise can't
+    // see that the customer sent one
+    if (conv?.id) {
+      await supabase.from('chat_messages').insert({
+        conversation_id: conv.id,
+        shop_id: shopId,
+        sender_type: 'user',
+        sender_name: 'ลูกค้า',
+        message: `[ลูกค้าส่งรูปภาพ${verifyResult.success ? ` — สลิปยอด ${Number(verifyResult.amount || 0).toLocaleString('th-TH')} บาท` : ''}]`,
+        platform: 'line',
+      })
+    }
+
+    // No order waiting for payment and the picture isn't a readable slip: most likely a
+    // product photo or a question, so don't answer it as a failed payment
+    if (!pendingOrder && (verifyResult.manualReview || !verifyResult.success)) {
+      await replyAndLog(
+        'ได้รับรูปภาพแล้วค่ะ 😊 ถ้าสนใจสินค้าในรูป พิมพ์บอกชื่อสินค้าหรือรายละเอียดเพิ่มได้เลยนะคะ\nถ้าเป็นสลิปโอนเงิน แอดมินจะตรวจสอบและแจ้งกลับให้ค่ะ 🙏'
+      )
+      return
+    }
+
     if (verifyResult.manualReview) {
       await sendToManualReview('ร้านยังไม่ได้ตั้งค่าระบบตรวจสลิปอัตโนมัติ', pendingOrder?.order_no)
       return
@@ -781,6 +814,41 @@ async function notifyShopAdmin(shop: Record<string, any>, text: string) {
   const targetAdmin = shop.admin_line_user_id || shop.owner_line_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
   if (!targetAdmin) return
   await sendLinePush(targetAdmin, text, lineToken)
+}
+
+const LINE_MAX_MESSAGES_PER_CALL = 5
+
+/**
+ * Records a LINE webhookEventId; returns false when it was already processed.
+ * Fails open (returns true) if the table is missing or the insert errors for any
+ * other reason, so a database problem never silences the bot.
+ */
+async function claimWebhookEvent(eventId: string | undefined, shopId: string): Promise<boolean> {
+  if (!eventId) return true
+  const { error } = await supabase.from('processed_webhook_events').insert({ event_id: eventId, shop_id: shopId })
+  if (!error) return true
+  if (error.code === '23505') return false
+  console.warn('[Webhook] Could not record webhook event (dedupe skipped):', error.message)
+  return true
+}
+
+/** Push several message objects in one call (max 5) */
+async function sendLinePushMessages(to: string, messages: any[], channelAccessToken: string) {
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${channelAccessToken}`,
+      },
+      body: JSON.stringify({ to, messages }),
+    })
+    if (!res.ok) {
+      console.error('[LINE Push API Error]:', await res.text())
+    }
+  } catch (err) {
+    console.error('[LINE Push Exception]:', err)
+  }
 }
 
 // ─── LINE Messaging Helpers ───────────────────────────────────────────────────
