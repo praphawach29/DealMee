@@ -24,5 +24,12 @@ jobs:
             echo "APP_URL or CRON_SECRET secret is not set; skipping."
             exit 0
           fi
-          curl --fail-with-body -sS -X POST "${APP_URL%/}/api/cron/follow-up" \
-            -H "Authorization: Bearer $CRON_SECRET"
+          # A redirect means APP_URL isn't the exact production origin (e.g. http:// or the
+          # bare domain); curl would otherwise report success without anything running.
+          status=$(curl -sS -o response.json -w "%{http_code}" -X POST "${APP_URL%/}/api/cron/follow-up" \
+            -H "Authorization: Bearer $CRON_SECRET")
+          cat response.json; echo
+          if [ "$status" != "200" ]; then
+            echo "::error::Follow-up endpoint returned HTTP $status. Check that APP_URL is exactly https://app.dealmee.app and CRON_SECRET matches Vercel."
+            exit 1
+          fi
