@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { planLabel } from '@/lib/billing/planLabel'
 import MerchantDashboardClient from './MerchantDashboardClient'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 
@@ -53,7 +54,7 @@ export default async function DashboardPage() {
     usedCount: 0,
     remainingCount: 300,
     period: new Date().toISOString().slice(0, 7),
-    planName: (shop?.plan || 'pro').toUpperCase(),
+    planName: planLabel(shop),
   }
 
   if (currentShopId) {
@@ -99,7 +100,7 @@ export default async function DashboardPage() {
       shopName={shop?.name || 'ร้านค้าของคุณ'}
       botName={shop?.bot_name || 'น้อง DealMee'}
       botStatus={shop?.status || 'active'}
-      plan={(shop?.plan || 'pro').toUpperCase()}
+      plan={planLabel(shop)}
       productsCount={productsCount}
       knowledgeCount={knowledgeCount}
       ordersCount={ordersCount}

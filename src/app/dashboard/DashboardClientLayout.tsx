@@ -21,6 +21,7 @@ interface DashboardClientLayoutProps {
   features?: Record<string, boolean>
   userEmail: string
   isSuperAdmin?: boolean
+  planName?: string
   children: React.ReactNode
 }
 
@@ -29,6 +30,7 @@ export default function DashboardClientLayout({
   features = {},
   userEmail,
   isSuperAdmin = false,
+  planName = 'FREE',
   children,
 }: DashboardClientLayoutProps) {
   const pathname = usePathname()
@@ -196,7 +198,7 @@ export default function DashboardClientLayout({
             <div className="flex items-center gap-2 pl-1 sm:pl-4 sm:border-l border-outline-variant/50">
               <div className="hidden md:block text-right">
                 <p className="font-label-md text-on-surface text-xs font-semibold">{userEmail}</p>
-                <p className="text-[10px] text-outline uppercase tracking-wider font-bold">Pro Plan</p>
+                <p className="text-[10px] text-outline uppercase tracking-wider font-bold">{planName} Plan</p>
               </div>
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 border-primary-fixed bg-surface-container-high flex items-center justify-center font-bold text-primary text-xs shadow-xs shrink-0">
                 {userEmail?.charAt(0).toUpperCase()}

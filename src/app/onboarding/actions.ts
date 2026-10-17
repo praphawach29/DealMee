@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { randomUUID } from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { businessTypeForTemplate } from './templates'
 
 export async function submitOnboarding(formData: FormData) {
   const supabase = await createClient()
@@ -15,8 +16,10 @@ export async function submitOnboarding(formData: FormData) {
   }
 
   const shopName = formData.get('shopName') as string
-  const businessType = formData.get('businessType') as string
   const aiTemplate = formData.get('aiTemplate') as string
+  // Derived from the chosen template on the server; the form's per-template hidden
+  // inputs were disabled and never submitted, leaving business_type empty
+  const businessType = businessTypeForTemplate(aiTemplate)
 
   // Check if user already has a shop linked
   const { data: profile } = await supabase

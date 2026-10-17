@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { SUPER_ADMIN_EMAILS } from '@/app/admin/layout'
 import DashboardClientLayout from './DashboardClientLayout'
+import { planLabel } from '@/lib/billing/planLabel'
 
 export default async function DashboardLayout({
   children,
@@ -32,7 +33,7 @@ export default async function DashboardLayout({
   const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(user.email || '')
 
   return (
-    <DashboardClientLayout bizType={bizType} features={features} userEmail={user.email || ''} isSuperAdmin={isSuperAdmin}>
+    <DashboardClientLayout bizType={bizType} features={features} userEmail={user.email || ''} isSuperAdmin={isSuperAdmin} planName={planLabel(shop)}>
       {children}
     </DashboardClientLayout>
   )
