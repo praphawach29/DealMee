@@ -13,7 +13,7 @@ export interface FollowUpTask {
   shop_id: string
   conversation_id: string | null
   customer_user_id: string
-  task_type: 'qr_recovery' | 'booking_reminder' | 'repurchase_check'
+  task_type: 'qr_recovery' | 'booking_reminder' | 'repurchase_check' | 'scheduled_message'
   reference_id: string | null
   trigger_at: string
   status: 'pending' | 'completed' | 'cancelled' | 'skipped' | 'failed'
@@ -320,6 +320,10 @@ export function generateProactiveMessage({
   const shopName = shop.name || 'ทางร้าน'
 
   switch (task.task_type) {
+    case 'scheduled_message': {
+      const text = String(task.payload?.message || '').trim()
+      return text || `สวัสดีค่ะคุณลูกค้า ${shopName} ยินดีให้บริการนะคะ หากมีคำถามหรือต้องการสอบถามเพิ่มเติม สามารถพิมพ์แจ้งแอดมินได้เลยค่ะ 🙏`
+    }
     case 'qr_recovery': {
       const orderNo = payload.orderNumber ? `#${payload.orderNumber}` : ''
       const amount = payload.amount ? `${Number(payload.amount).toLocaleString('th-TH')} บาท` : ''
@@ -397,15 +401,28 @@ export async function processDueFollowUpTasks(limit = 25): Promise<{
       }
 
       // 3. Pre-flight verification (Do not send if conditions no longer require it)
+      // Tasks that sat in the queue far past their time (e.g. while no scheduler ran) are
+      // stale: a "please pay" or "see you tomorrow" message days late does more harm than good.
+      if (Date.now() - new Date(task.trigger_at).getTime() > 24 * 60 * 60 * 1000) {
+        await supabase
+          .from('follow_up_tasks')
+          .update({ status: 'cancelled', executed_at: nowIso, error_message: 'Expired: more than 24h overdue' })
+          .eq('id', task.id)
+        cancelled++
+        continue
+      }
+
       if (task.task_type === 'qr_recovery' && task.reference_id) {
+        // Orders are keyed by order_no and settled via status (the slip flow sets status='paid')
         const { data: order } = await supabase
           .from('orders')
-          .select('payment_status')
+          .select('status, payment_status')
           .eq('shop_id', task.shop_id)
-          .eq('order_number', task.reference_id)
+          .eq('order_no', task.reference_id)
           .maybeSingle()
 
-        if (order && (order.payment_status === 'paid' || order.payment_status === 'verified')) {
+        const settled = ['paid', 'verified', 'completed', 'shipped', 'cancelled']
+        if (order && (settled.includes(order.status) || settled.includes(order.payment_status))) {
           await supabase
             .from('follow_up_tasks')
             .update({ status: 'cancelled', executed_at: nowIso, error_message: 'Order already paid' })
@@ -498,4 +515,45 @@ export async function processDueFollowUpTasks(limit = 25): Promise<{
   }
 
   return { processed: tasks.length, sent, cancelled, failed }
+}
+
+/**
+ * Queue a free-form message to a customer (e.g. from the schedule_followup tool).
+ * Delivered by processDueFollowUpTasks via the /api/cron/follow-up scheduler.
+ */
+export async function scheduleCustomerMessage({
+  shopId,
+  conversationId,
+  userId,
+  message,
+  delayMs,
+}: {
+  shopId: string
+  conversationId?: string | null
+  userId: string
+  message: string
+  delayMs: number
+}) {
+  try {
+    const supabase = createAdminClient()
+    const triggerAt = new Date(Date.now() + Math.max(0, delayMs)).toISOString()
+    const { error } = await supabase.from('follow_up_tasks').insert({
+      shop_id: shopId,
+      conversation_id: conversationId || null,
+      customer_user_id: userId,
+      task_type: 'scheduled_message',
+      reference_id: conversationId || null,
+      trigger_at: triggerAt,
+      status: 'pending',
+      payload: { message },
+    })
+    if (error) {
+      console.error('[ProactiveFollowUp] Error queueing scheduled message:', error)
+      return { success: false, error: error.message }
+    }
+    return { success: true }
+  } catch (err: any) {
+    console.error('[ProactiveFollowUp] Exception queueing scheduled message:', err)
+    return { success: false, error: err.message }
+  }
 }

@@ -5,7 +5,7 @@ import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 import { buildAutoGreeting, isDefaultGreeting } from '@/lib/businessGreeting'
 import { synthesizeFaqFromConversation } from '@/lib/ai/faqSynthesis'
-import { cancelFollowUpTasks, scheduleRepurchaseFollowUp } from '@/lib/ai/proactiveFollowUp'
+import { cancelFollowUpTasks, scheduleRepurchaseFollowUp, scheduleCustomerMessage } from '@/lib/ai/proactiveFollowUp'
 import { extractGoldenTrajectoryFromOrder } from '@/lib/ai/salesTrajectory'
 
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -482,14 +482,16 @@ async function deliverAgentResult({
     }
   }
 
+  // Queued in follow_up_tasks rather than setTimeout: a serverless function is frozen as
+  // soon as the webhook responds, so in-memory timers never fired.
   for (const scheduled of agentResult.scheduledMessages) {
-    if (!lineToken) continue
-    const { delayMs, message } = scheduled
-    setTimeout(() => {
-      sendLinePush(userId, message.content, lineToken).catch((err) =>
-        console.error('[Webhook] scheduledMessage push failed:', err)
-      )
-    }, delayMs)
+    await scheduleCustomerMessage({
+      shopId,
+      conversationId: conv.id,
+      userId,
+      message: scheduled.message.content,
+      delayMs: scheduled.delayMs,
+    })
   }
 }
 

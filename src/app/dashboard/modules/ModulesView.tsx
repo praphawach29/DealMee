@@ -2,14 +2,15 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { updateShopFeatures } from './actions'
+import { updateShopFeatures, updateBotDiscountCap } from './actions'
 
 interface ModulesViewProps {
   initialFeatures: Record<string, boolean>
   bizType?: string
+  initialDiscountCap?: number
 }
 
-export default function ModulesView({ initialFeatures, bizType = 'retail' }: ModulesViewProps) {
+export default function ModulesView({ initialFeatures, bizType = 'retail', initialDiscountCap = 0 }: ModulesViewProps) {
   const router = useRouter()
   const isBookingDefault = bizType === 'booking' || bizType === 'service'
   const [featureState, setFeatureState] = useState<Record<string, boolean>>({
@@ -23,6 +24,21 @@ export default function ModulesView({ initialFeatures, bizType = 'retail' }: Mod
 
   const [loading, setLoading] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [discountCap, setDiscountCap] = useState<string>(String(initialDiscountCap))
+  const [savingCap, setSavingCap] = useState(false)
+
+  const handleSaveDiscountCap = async () => {
+    setSavingCap(true)
+    const res = await updateBotDiscountCap(Number(discountCap))
+    setSavingCap(false)
+    if (res?.error) {
+      alert(res.error)
+    } else {
+      setToastMessage(res?.success || 'บันทึกแล้ว')
+      setTimeout(() => setToastMessage(null), 3000)
+      router.refresh()
+    }
+  }
 
   const modulesList = [
     {
@@ -168,6 +184,36 @@ export default function ModulesView({ initialFeatures, bizType = 'retail' }: Mod
               </div>
             )
           })}
+        </div>
+      </section>
+
+      {/* Bot discount cap */}
+      <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+        <div>
+          <h2 className="text-base font-bold text-on-surface font-headline-sm">💸 เพดานส่วนลดที่บอทให้ได้เอง</h2>
+          <p className="text-[11px] sm:text-xs text-on-surface-variant mt-0.5">
+            บอทลดราคาให้ลูกค้าที่ลังเลได้ไม่เกินกี่ % ของยอดออเดอร์ (ครั้งเดียวต่อออเดอร์) ใส่ 0 เพื่อปิด — บอทจะส่งเรื่องขอส่วนลดให้แอดมินแทน
+          </p>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <input
+            type="number"
+            min={0}
+            max={50}
+            step={1}
+            value={discountCap}
+            onChange={(e) => setDiscountCap(e.target.value)}
+            className="w-24 rounded-xl border border-outline-variant/60 bg-merchant-bg px-3 py-2 text-sm text-on-surface"
+          />
+          <span className="text-sm text-on-surface-variant">%</span>
+          <button
+            type="button"
+            disabled={savingCap}
+            onClick={handleSaveDiscountCap}
+            className="rounded-xl bg-electric-blue px-4 py-2 text-xs sm:text-sm font-bold text-white disabled:opacity-50"
+          >
+            {savingCap ? 'กำลังบันทึก...' : 'บันทึก'}
+          </button>
         </div>
       </section>
     </div>

@@ -44,6 +44,7 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/api/auth') &&
     !request.nextUrl.pathname.startsWith('/api/webhook') &&
     !request.nextUrl.pathname.startsWith('/api/billing/webhook') &&
+    !request.nextUrl.pathname.startsWith('/api/cron') &&
     !request.nextUrl.pathname.startsWith('/api/test') &&
     !request.nextUrl.pathname.startsWith('/doc') &&
     !request.nextUrl.pathname.startsWith('/api/doc') &&

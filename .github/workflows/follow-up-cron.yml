@@ -1,0 +1,28 @@
+name: Follow-up scheduler
+
+# Delivers queued bot follow-ups (QR payment reminders, booking reminders,
+# scheduled messages) by calling the app's cron endpoint every 5 minutes.
+# Needs repository secrets APP_URL (e.g. https://app.dealmee.app) and CRON_SECRET
+# (same value as the CRON_SECRET env var on Vercel).
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run-follow-ups:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Call follow-up endpoint
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL or CRON_SECRET secret is not set; skipping."
+            exit 0
+          fi
+          curl --fail-with-body -sS -X POST "${APP_URL%/}/api/cron/follow-up" \
+            -H "Authorization: Bearer $CRON_SECRET"
