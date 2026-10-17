@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { getCompetitors } from '@/lib/competitors/competitorStore'
+import { getCompetitorQuota } from '@/lib/billing/competitorQuota'
 import CompetitorDashboardClient from './CompetitorDashboardClient'
 
 export const dynamic = 'force-dynamic'
@@ -28,17 +29,29 @@ export default async function CompetitorsPage() {
 
   let initialCompetitors: any[] = []
   let shopProducts: any[] = []
+  let initialQuota = {
+    total: 3,
+    used: 0,
+    remaining: 3,
+    planName: 'FREE',
+    period: new Date().toISOString().slice(0, 7),
+  }
 
   if (shop?.id) {
-    initialCompetitors = await getCompetitors(shop.id)
+    const [comps, prods, quota] = await Promise.all([
+      getCompetitors(shop.id),
+      supabase
+        .from('products')
+        .select('id, name, price, stock, category, image_url')
+        .eq('shop_id', shop.id)
+        .limit(10)
+        .then((res) => res.data || []),
+      getCompetitorQuota(shop.id),
+    ])
 
-    const { data: prods } = await supabase
-      .from('products')
-      .select('id, name, price, stock, category, image_url')
-      .eq('shop_id', shop.id)
-      .limit(10)
-
-    shopProducts = prods || []
+    initialCompetitors = comps
+    shopProducts = prods
+    initialQuota = quota
   }
 
   return (
@@ -47,6 +60,7 @@ export default async function CompetitorsPage() {
         shop={shop}
         initialCompetitors={initialCompetitors}
         shopProducts={shopProducts}
+        initialQuota={initialQuota}
       />
     </div>
   )

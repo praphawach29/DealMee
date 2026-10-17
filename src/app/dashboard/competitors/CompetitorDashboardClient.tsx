@@ -28,22 +28,42 @@ import {
   BookOpen,
   Send,
   Radio,
+  Clapperboard,
+  Video,
+  Play,
+  Clock,
+  Layers,
+  PackagePlus,
+  AlertTriangle,
 } from 'lucide-react'
-import { ScrapedCompetitorProfile } from '@/lib/competitors/scraperEngine'
+import { ScrapedCompetitorProfile, CompetitorPost } from '@/lib/competitors/scraperEngine'
 import { CompetitorRecord } from '@/lib/competitors/competitorStore'
+import { CompetitorQuotaInfo } from '@/lib/billing/competitorQuota'
+import { ViralVideoScript } from '@/lib/ai/competitorVideoScript'
 
 interface CompetitorDashboardClientProps {
   shop: any
   initialCompetitors: CompetitorRecord[]
   shopProducts: any[]
+  initialQuota?: CompetitorQuotaInfo
 }
 
 export default function CompetitorDashboardClient({
   shop,
   initialCompetitors = [],
   shopProducts = [],
+  initialQuota,
 }: CompetitorDashboardClientProps) {
   const [competitors, setCompetitors] = useState<CompetitorRecord[]>(initialCompetitors)
+  const [quota, setQuota] = useState<CompetitorQuotaInfo>(
+    initialQuota || {
+      total: 3,
+      used: 0,
+      remaining: 3,
+      planName: 'FREE',
+      period: new Date().toISOString().slice(0, 7),
+    }
+  )
   const [inputUrl, setInputUrl] = useState('')
   const [isScanning, setIsScanning] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -62,24 +82,21 @@ export default function CompetitorDashboardClient({
   const [isSyncingKb, setIsSyncingKb] = useState(false)
   const [kbSuccessMsg, setKbSuccessMsg] = useState('')
 
+  // Script Generator Modal State
+  const [selectedPostForScript, setSelectedPostForScript] = useState<CompetitorPost | null>(null)
+  const [selectedProductId, setSelectedProductId] = useState<string>(shopProducts[0]?.id || '')
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false)
+  const [generatedScript, setGeneratedScript] = useState<ViralVideoScript | null>(null)
+  const [scriptViewMode, setScriptViewMode] = useState<'teleprompter' | 'storyboard' | 'caption'>('storyboard')
+  const [copiedTeleprompter, setCopiedTeleprompter] = useState(false)
+  const [copiedScriptStoryboard, setCopiedScriptStoryboard] = useState(false)
+
   const handleSyncKnowledge = async () => {
     if (!activeAnalysis || !shop?.id) return
     setIsSyncingKb(true)
     setKbSuccessMsg('')
 
-    const kbTitle = `กลยุทธ์การขาย & รับมือคู่แข่ง: ${activeAnalysis.name} (${activeAnalysis.handle})`
-    const kbContent = `บทวิเคราะห์ราคาและการแข่งขัน:
-${activeAnalysis.aiPlaybook.pricingStrategyVerdict}
-
-จุดเด่นและแต้มต่อของร้านเราเมื่อเทียบกับ ${activeAnalysis.name}:
-${activeAnalysis.aiPlaybook.priceAdvantageBullets.map((b) => `• ${b}`).join('\n')}
-
-แนวทางปิดการขายและแก้ข้อโต้แย้ง (Objection Handling):
-- เมื่อลูกค้าเปรียบเทียบเรื่องราคา ให้เน้นความคุ้มค่า จัดเซต และพร้อมส่งจากไทยใน 24 ชั่วโมง
-- นำเสนอรับประกันคุณภาพสินค้าและการบริการอย่างรวดเร็ว
-
-แคปชันและข้อความปิดการขายที่แนะนำ:
-${activeAnalysis.aiPlaybook.winningCaptionTemplate}`
+    const kbTitle = `กลยุทธ์รับมือข้อโต้แย้งราคา & ชนะคู่แข่ง: ${activeAnalysis.name} (${activeAnalysis.handle})`
 
     try {
       const res = await fetch('/api/competitors', {
@@ -90,12 +107,13 @@ ${activeAnalysis.aiPlaybook.winningCaptionTemplate}`
           shop_id: shop.id,
           competitor_name: activeAnalysis.name,
           title: kbTitle,
-          content: kbContent,
+          strategy_bullets: activeAnalysis.aiPlaybook.priceAdvantageBullets,
+          verdict: activeAnalysis.aiPlaybook.pricingStrategyVerdict,
         }),
       })
       const data = await res.json()
       if (data.success) {
-        setKbSuccessMsg('บันทึกเข้าคลังความรู้บอทสำเร็จ! แชทบอทเรียนรู้กลยุทธ์นี้แล้ว 🎉')
+        setKbSuccessMsg(data.message || 'บันทึกเข้าคลังความรู้บอทสำเร็จ! แชทบอทพร้อมรับมือข้อโต้แย้งราคาทันที 🎉')
         setTimeout(() => setKbSuccessMsg(''), 5000)
       } else {
         alert(data.error || 'บันทึกไม่สำเร็จ')
@@ -114,6 +132,42 @@ ${activeAnalysis.aiPlaybook.winningCaptionTemplate}`
     router.push(`/dashboard/broadcast?title=${encodeURIComponent(title)}&message=${encodeURIComponent(message)}`)
   }
 
+  // Handle Script Generation
+  const handleOpenScriptModal = (post: CompetitorPost) => {
+    setSelectedPostForScript(post)
+    setGeneratedScript(null)
+    generateScriptForPost(post, selectedProductId)
+  }
+
+  const generateScriptForPost = async (post: CompetitorPost, prodId?: string) => {
+    if (!shop?.id) return
+    setIsGeneratingScript(true)
+
+    try {
+      const res = await fetch('/api/competitors/generate-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shop_id: shop.id,
+          competitor_name: activeAnalysis?.name || 'ร้านคู่แข่ง',
+          video_title: post.title_or_caption,
+          product_id: prodId || selectedProductId || undefined,
+        }),
+      })
+
+      const data = await res.json()
+      if (data.success && data.script) {
+        setGeneratedScript(data.script)
+      } else {
+        alert(data.error || 'ไม่สามารถสร้างสคริปต์วิดีโอได้')
+      }
+    } catch (err: any) {
+      alert(err.message || 'เกิดข้อผิดพลาดในการสร้างสคริปต์')
+    } finally {
+      setIsGeneratingScript(false)
+    }
+  }
+
   // Sync when initialCompetitors prop changes
   React.useEffect(() => {
     if (initialCompetitors && initialCompetitors.length > 0) {
@@ -124,7 +178,7 @@ ${activeAnalysis.aiPlaybook.winningCaptionTemplate}`
     }
   }, [initialCompetitors])
 
-  // Automatically refresh competitor list on client mount
+  // Automatically refresh competitor list and quota on client mount
   React.useEffect(() => {
     if (!shop?.id) return
     fetch(`/api/competitors?shop_id=${shop.id}`)
@@ -135,6 +189,9 @@ ${activeAnalysis.aiPlaybook.winningCaptionTemplate}`
           if (!activeAnalysis && data.competitors[0]?.profile_data) {
             setActiveAnalysis(data.competitors[0].profile_data)
           }
+        }
+        if (data.quota) {
+          setQuota(data.quota)
         }
       })
       .catch(() => {})
@@ -194,6 +251,10 @@ ${activeAnalysis.aiPlaybook.winningCaptionTemplate}`
       })
 
       const data = await res.json()
+      if (data.quota) {
+        setQuota(data.quota)
+      }
+
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'ไม่สามารถสแกนข้อมูลร้านคู่แข่งได้')
       }
@@ -205,6 +266,9 @@ ${activeAnalysis.aiPlaybook.winningCaptionTemplate}`
       const listData = await listRes.json()
       if (listData.competitors) {
         setCompetitors(listData.competitors)
+      }
+      if (listData.quota) {
+        setQuota(listData.quota)
       }
 
       if (!targetUrlToScan) setInputUrl('')
@@ -368,6 +432,77 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
               <span>⚠️ {errorMsg}</span>
             </p>
           )}
+        </div>
+      </div>
+
+      {/* Competitor Intelligence Quota Status Banner */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className={`p-3 rounded-2xl ${
+              quota.remaining > 0
+                ? 'bg-gradient-to-br from-indigo-500/10 to-blue-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20'
+                : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+            }`}>
+              <Radar className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  โควต้าการส่องคู่แข่งประจำเดือน ({quota.period})
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wide bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+                  {quota.planName}
+                </span>
+              </div>
+              <div className="mt-1 flex flex-wrap items-baseline gap-2">
+                <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                  {quota.used} / {quota.total} ครั้ง
+                </span>
+                <span className={`text-xs font-bold ${quota.remaining > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                  • เหลืออีก {quota.remaining} ครั้ง
+                </span>
+                <span className="text-xs text-slate-400">
+                  (ระบบมีแคช 24 ชม. เปิดดูซ้ำหรือเข้ามาวิเคราะห์ซ้ำไม่เสียโควต้า)
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            {quota.remaining <= 2 || quota.planName === 'FREE' ? (
+              <button
+                onClick={() => router.push('/dashboard/billing')}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-white text-xs font-bold shadow-md shadow-orange-500/20 transition-all active:scale-95 cursor-pointer"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>อัปเกรดเพื่อเพิ่มโควต้า</span>
+              </button>
+            ) : (
+              <div className="text-right hidden sm:block">
+                <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">
+                  สถานะการใช้งาน
+                </span>
+                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                  พร้อมใช้งานปกติ
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Progress Track */}
+        <div className="mt-3.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden p-0.5">
+          <div
+            className={`h-full rounded-full transition-all duration-700 ease-out ${
+              quota.remaining === 0
+                ? 'bg-rose-500'
+                : quota.remaining <= 2
+                ? 'bg-amber-500'
+                : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600'
+            }`}
+            style={{ width: `${Math.min(100, Math.round((quota.used / Math.max(1, quota.total)) * 100))}%` }}
+          />
         </div>
       </div>
 
@@ -703,6 +838,26 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
                       ))}
                     </div>
                   </div>
+
+                  {/* Action Bar: View Original & Convert to Script */}
+                  <div className="pt-3.5 mt-3.5 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                    <a
+                      href={post.post_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-slate-500 hover:text-blue-500 flex items-center gap-1.5 transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>เปิดดูคลิปต้นฉบับ</span>
+                    </a>
+                    <button
+                      onClick={() => handleOpenScriptModal(post)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white text-xs font-bold shadow-sm transition-all active:scale-95 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>🎬 ถอดเป็นสคริปต์คลิปของร้านเรา</span>
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -770,6 +925,57 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
                 <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm text-slate-200 leading-relaxed bg-slate-900/90 p-3.5 sm:p-4 rounded-xl border border-slate-800">
                   {activeAnalysis.aiPlaybook.winningCaptionTemplate}
                 </pre>
+              </div>
+
+              {/* Strategic Product Bundling (Beat Single-Item Price War) */}
+              <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50/50 via-purple-50/30 to-blue-50/50 dark:from-indigo-950/30 dark:via-purple-950/20 dark:to-blue-950/30 border border-indigo-200/60 dark:border-indigo-800/40">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="p-2 rounded-xl bg-indigo-600 text-white">
+                    <PackagePlus className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                      กลยุทธ์จัดเซตสินค้า (Bundle Playbook) เพื่อเอาชนะสงครามราคา
+                    </h4>
+                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                      แทนที่จะลดราคาแข่งกับคู่แข่งทีละชิ้นจนเสียกำไร ให้ใช้วิธีจัดเซตดันยอดบิล (Basket Size) ให้สูงกว่า
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mt-3">
+                  <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <span className="text-[11px] font-black uppercase text-indigo-600 dark:text-indigo-400 block mb-1">
+                      สูตรที่ 1: Value Duo Bundle (ซื้อคู่ถูกกว่า)
+                    </span>
+                    <h5 className="text-xs font-bold text-slate-900 dark:text-white mb-1.5">
+                      {shopProducts[0]?.name || 'สินค้าขายดี 1'} + {shopProducts[1]?.name || 'สินค้าเสริม/คู่กัน'}
+                    </h5>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
+                      จับคู่ 2 ชิ้นในราคาพิเศษ ลดเพียง 5-10% แต่แถมสิทธิ์ส่งฟรีทันที ลูกค้าจะรู้สึกคุ้มค่ากว่าสั่งจากร้านคู่แข่งที่ต้องรอสินค้า
+                    </p>
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                      <span className="text-slate-500">ผลลัพธ์: ดัน AOV โต 40%</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">กำไรสุทธิคงเดิม</span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <span className="text-[11px] font-black uppercase text-purple-600 dark:text-purple-400 block mb-1">
+                      สูตรที่ 2: Mystery Gift / Fast Track Bundle
+                    </span>
+                    <h5 className="text-xs font-bold text-slate-900 dark:text-white mb-1.5">
+                      เซตสั่งด่วน 24 ชม. รับของแถมพรีเมียมเฉพาะในแชท
+                    </h5>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
+                      ย้ำจุดขายพร้อมส่งใน 24 ชม. หากลูกค้าสั่งซื้อพร้อมชำระเงินผ่านแชท DealMee รับของแถมพิเศษที่คู่แข่งไม่มีให้
+                    </p>
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                      <span className="text-slate-500">ผลลัพธ์: ปิดการขายเร็วขึ้น 3x</span>
+                      <span className="font-bold text-indigo-600 dark:text-indigo-400">ตัดการเปรียบเทียบราคา</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -962,6 +1168,274 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
                 className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer shadow-md"
               >
                 เข้าใจแล้ว พร้อมใช้งาน
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Viral Video Script Generator Modal */}
+      {selectedPostForScript && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-3xl w-full p-5 sm:p-7 text-white shadow-2xl animate-in zoom-in-95 my-8 space-y-5">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-slate-800 gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 text-white shadow-md shadow-rose-500/20">
+                  <Clapperboard className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base sm:text-lg flex items-center gap-2 text-white">
+                    <span>AI แปลงเป็นสคริปต์คลิปไวรัล 30 วินาที</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                      TikTok / Reels / Shorts
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">
+                    ถอดจุดขายจากคลิป: "{selectedPostForScript.title_or_caption}"
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedPostForScript(null)}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Product Selector Bar */}
+            <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-400 shrink-0">
+                  สินค้าที่ต้องการให้ AI ขาย:
+                </span>
+                <select
+                  value={selectedProductId}
+                  onChange={(e) => {
+                    setSelectedProductId(e.target.value)
+                    generateScriptForPost(selectedPostForScript, e.target.value)
+                  }}
+                  className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-rose-500 cursor-pointer w-full sm:w-auto"
+                >
+                  {shopProducts.length === 0 ? (
+                    <option value="">สินค้าแนะนำของร้านเรา</option>
+                  ) : (
+                    shopProducts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} (฿{Number(p.price).toLocaleString()})
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <button
+                onClick={() => generateScriptForPost(selectedPostForScript, selectedProductId)}
+                disabled={isGeneratingScript}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer disabled:opacity-50 shrink-0"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingScript ? 'animate-spin' : ''}`} />
+                <span>แต่งสคริปต์ใหม่</span>
+              </button>
+            </div>
+
+            {/* Loading State */}
+            {isGeneratingScript && (
+              <div className="py-16 flex flex-col items-center justify-center text-center space-y-3">
+                <div className="w-10 h-10 border-3 border-rose-500/20 border-t-rose-500 rounded-full animate-spin" />
+                <p className="text-sm font-bold text-white">AI Gemini กำลังถอดรหัสจุดขายและเขียนบทวิดีโอ 30 วิ...</p>
+                <p className="text-xs text-slate-400">โครงสร้าง 5 จังหวะ: Hook ➡️ Problem ➡️ Solution ➡️ Offer ➡️ CTA</p>
+              </div>
+            )}
+
+            {/* Script Content */}
+            {!isGeneratingScript && generatedScript && (
+              <div className="space-y-4">
+                {/* Script Title Banner */}
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-rose-950/40 via-purple-950/30 to-slate-950 border border-rose-500/30 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span className="text-sm font-bold text-rose-200">
+                      {generatedScript.title}
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-semibold text-slate-400 shrink-0">
+                    ความยาวรวม: 30 วินาที
+                  </span>
+                </div>
+
+                {/* View Mode Switcher */}
+                <div className="flex items-center border-b border-slate-800 pb-2 gap-2 text-xs">
+                  <button
+                    onClick={() => setScriptViewMode('storyboard')}
+                    className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      scriptViewMode === 'storyboard'
+                        ? 'bg-rose-600 text-white'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <Clapperboard className="w-3.5 h-3.5" />
+                    <span>ไทม์ไลน์ 5 จังหวะ (Storyboard)</span>
+                  </button>
+                  <button
+                    onClick={() => setScriptViewMode('teleprompter')}
+                    className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      scriptViewMode === 'teleprompter'
+                        ? 'bg-rose-600 text-white'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                    <span>หน้าจออ่านอัดคลิป (Teleprompter)</span>
+                  </button>
+                  <button
+                    onClick={() => setScriptViewMode('caption')}
+                    className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      scriptViewMode === 'caption'
+                        ? 'bg-rose-600 text-white'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>แคปชัน & แฮชแท็ก</span>
+                  </button>
+                </div>
+
+                {/* MODE 1: Storyboard Timeline */}
+                {scriptViewMode === 'storyboard' && (
+                  <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                    {[
+                      { key: 'hook', label: '1. HOOK (กระตุกสายตา/หยุดนิ้ว)', seg: generatedScript.hook, badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
+                      { key: 'problem', label: '2. PROBLEM (ชี้ปัญหาที่เคยเจอจากที่อื่น)', seg: generatedScript.problem, badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+                      { key: 'solution', label: '3. SOLUTION (เปิดตัวสินค้าเรา & คุณภาพ)', seg: generatedScript.solution, badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+                      { key: 'offer', label: '4. OFFER (ข้อเสนอสุดคุ้ม & ส่งฟรี)', seg: generatedScript.offer, badgeBg: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' },
+                      { key: 'cta', label: '5. CTA (สั่งให้ทักแชท ปิดการขาย)', seg: generatedScript.cta, badgeBg: 'bg-purple-500/20 text-purple-300 border-purple-500/30' },
+                    ].map(({ key, label, seg, badgeBg }) => (
+                      <div
+                        key={key}
+                        className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2 hover:border-slate-700 transition-all"
+                      >
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-extrabold text-white flex items-center gap-1.5">
+                            {label}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeBg}`}>
+                            ⏱️ {seg.duration}
+                          </span>
+                        </div>
+
+                        {/* Spoken Text */}
+                        <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 text-xs sm:text-sm text-slate-100">
+                          <span className="text-[10px] font-bold text-rose-400 block mb-0.5">🎙️ บทพูด / Voiceover:</span>
+                          "{seg.spokenText}"
+                        </div>
+
+                        {/* Visual Direction */}
+                        <div className="text-[11px] text-slate-400 flex items-start gap-1.5 pl-1">
+                          <span className="font-bold text-slate-500 shrink-0">🎥 มุมกล้อง & แอ็กชัน:</span>
+                          <span>{seg.visualDirection}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* MODE 2: Teleprompter Reader */}
+                {scriptViewMode === 'teleprompter' && (
+                  <div className="space-y-4">
+                    <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-100 space-y-4 max-h-[380px] overflow-y-auto">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-xs text-slate-400">
+                        <span>📱 วางมือถือระดับสายตา แล้วอ่านตามจังหวะเวลา</span>
+                        <span className="text-rose-400 font-bold">30 วินาทีจบ</span>
+                      </div>
+
+                      <div className="space-y-4 font-sans text-base sm:text-lg leading-relaxed">
+                        <div>
+                          <span className="text-xs font-bold text-rose-400 block mb-0.5">[00:00 - 00:03] HOOK:</span>
+                          <p className="font-semibold text-white">{generatedScript.hook.spokenText}</p>
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-amber-400 block mb-0.5">[00:03 - 00:08] PROBLEM:</span>
+                          <p className="font-semibold text-slate-200">{generatedScript.problem.spokenText}</p>
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-emerald-400 block mb-0.5">[00:08 - 00:16] SOLUTION:</span>
+                          <p className="font-semibold text-slate-200">{generatedScript.solution.spokenText}</p>
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-indigo-400 block mb-0.5">[00:16 - 00:23] OFFER:</span>
+                          <p className="font-semibold text-white">{generatedScript.offer.spokenText}</p>
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-purple-400 block mb-0.5">[00:23 - 00:30] CTA:</span>
+                          <p className="font-semibold text-rose-200">{generatedScript.cta.spokenText}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        const allSpoken = `${generatedScript.hook.spokenText}\n\n${generatedScript.problem.spokenText}\n\n${generatedScript.solution.spokenText}\n\n${generatedScript.offer.spokenText}\n\n${generatedScript.cta.spokenText}`
+                        navigator.clipboard.writeText(allSpoken)
+                        setCopiedTeleprompter(true)
+                        setTimeout(() => setCopiedTeleprompter(false), 2500)
+                      }}
+                      className="w-full py-3 rounded-xl bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-[0.99] transition-all"
+                    >
+                      {copiedTeleprompter ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+                      <span>{copiedTeleprompter ? 'คัดลอกบทพูดทั้งหมดเรียบร้อยแล้ว!' : 'คัดลอกบทพูดทั้งหมดสำหรับ Teleprompter'}</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* MODE 3: Caption & Hashtags */}
+                {scriptViewMode === 'caption' && (
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                      <span className="text-xs font-bold text-rose-400 block">แคปชันโพสต์วิดีโอ:</span>
+                      <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm text-slate-200 leading-relaxed bg-slate-900 p-3.5 rounded-xl border border-slate-800">
+                        {generatedScript.caption}
+                      </pre>
+
+                      <span className="text-xs font-bold text-indigo-400 block pt-1">แฮชแท็กติดเทรนด์:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {generatedScript.hashtags.map((h, hIdx) => (
+                          <span
+                            key={hIdx}
+                            className="px-2.5 py-1 rounded-lg bg-indigo-950/60 text-indigo-300 border border-indigo-800 text-xs font-semibold"
+                          >
+                            {h}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        const fullCaption = `${generatedScript.caption}\n\n${generatedScript.hashtags.join(' ')}`
+                        navigator.clipboard.writeText(fullCaption)
+                        setCopiedCaption(true)
+                        setTimeout(() => setCopiedCaption(false), 2500)
+                      }}
+                      className="w-full py-3 rounded-xl bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-[0.99] transition-all"
+                    >
+                      {copiedCaption ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+                      <span>{copiedCaption ? 'คัดลอกแคปชัน & แฮชแท็กแล้ว!' : 'คัดลอกแคปชัน & แฮชแท็กทั้งหมด'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Modal Footer */}
+            <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
+              <span>DealMee AI Short-Form Video Engine</span>
+              <button
+                onClick={() => setSelectedPostForScript(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold cursor-pointer"
+              >
+                ปิดหน้าต่าง
               </button>
             </div>
           </div>

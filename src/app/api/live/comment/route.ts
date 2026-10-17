@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLiveSessionState, processLiveComment, updateLiveBaskets } from '@/lib/live/liveStudioEngine'
+import { requireShop } from '@/lib/auth/requireShop'
 
 /**
  * GET /api/live/comment?shop_id=...
- * Returns current live session state and active product card
+ * Returns current live session state and active product card.
+ * Public on purpose: the OBS overlay page (/live/overlay/[shop_id]) polls it without a login.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -27,12 +29,11 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireShop()
+    if (auth.error) return auth.error
+    const shop_id = auth.shopId
     const body = await req.json()
-    const { shop_id, username, comment_text, platform, action, baskets, title } = body
-
-    if (!shop_id) {
-      return NextResponse.json({ error: 'Missing shop_id' }, { status: 400 })
-    }
+    const { username, comment_text, platform, action, baskets, title } = body
 
     // If request is updating baskets from dashboard
     if (action === 'update_baskets' && Array.isArray(baskets)) {
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
       switched_to_basket: result.switched_to_basket,
       ai_reply: result.ai_reply,
       state: result.state,
+      order: result.order,
     })
   } catch (err: any) {
     console.error('[Live Comment API Error]:', err)
