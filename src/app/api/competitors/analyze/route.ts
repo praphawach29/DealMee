@@ -2,22 +2,27 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { scrapeCompetitorIntelligence, parseSocialUrl } from '@/lib/competitors/scraperEngine'
 import { saveCompetitor } from '@/lib/competitors/competitorStore'
+import { canScanCompetitor, incrementCompetitorQuota, getCompetitorQuota } from '@/lib/billing/competitorQuota'
+import { requireShop } from '@/lib/auth/requireShop'
 
 const supabase = createAdminClient()
 
 /**
  * POST /api/competitors/analyze
- * Body: { shop_id: string, url: string, force_refresh?: boolean }
+ * Body: { url: string, force_refresh?: boolean } (shop comes from the session)
  * Features 24-Hour Smart Cache to save 100% of API Quota on repeat requests
  */
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireShop()
+    if (auth.error) return auth.error
+    const shop_id = auth.shopId
     const body = await req.json()
-    const { shop_id, url, force_refresh } = body
+    const { url, force_refresh } = body
 
-    if (!shop_id || !url) {
+    if (!url) {
       return NextResponse.json(
-        { error: 'Missing required fields: shop_id, url' },
+        { error: 'Missing required field: url' },
         { status: 400 }
       )
     }
@@ -72,18 +77,34 @@ export async function POST(req: NextRequest) {
             last_scanned_at: cachedComp.last_scanned_at,
           }
 
+          const currentQuota = await getCompetitorQuota(shop_id)
+
           return NextResponse.json({
             success: true,
             from_cache: true,
             cache_age_hours: Number(hoursAgo.toFixed(1)),
             competitorId: cachedComp.id,
             data: cachedProfile,
+            quota: currentQuota,
           })
         }
       }
     }
 
-    // 2. Fetch shop products for intelligent price & category comparison
+    // 2. Quota Guard: Check if shop has remaining scan quota for fresh scrapes
+    const { allowed, quota } = await canScanCompetitor(shop_id)
+    if (!allowed) {
+      return NextResponse.json(
+        {
+          error: `โควต้าการส่องคู่แข่งของคุณในเดือนนี้หมดแล้ว (${quota.used}/${quota.total} ครั้ง) กรุณาอัปเกรดแพ็กเกจเพื่อใช้งานต่อ`,
+          quota_exceeded: true,
+          quota,
+        },
+        { status: 403 }
+      )
+    }
+
+    // 3. Fetch shop products for intelligent price & category comparison
     const { data: products } = await supabase
       .from('products')
       .select('id, name, price, stock, category')
@@ -106,20 +127,25 @@ export async function POST(req: NextRequest) {
 
     const rapidApiKey = keySetting?.value || process.env.RAPIDAPI_KEY || ''
 
-    // 3. Run live scraping / competitive intelligence engine
+    // 4. Run live scraping / competitive intelligence engine
     const profile = await scrapeCompetitorIntelligence(url, mappedProducts, {
       apiKey: rapidApiKey,
       forceRefresh: !!force_refresh,
     })
 
-    // 4. Persist competitor profile to Supabase
+    // 5. Persist competitor profile to Supabase
     const saveRes = await saveCompetitor(shop_id, profile)
+
+    // 6. Deduct 1 fresh scan from quota
+    await incrementCompetitorQuota(shop_id)
+    const freshQuota = await getCompetitorQuota(shop_id)
 
     return NextResponse.json({
       success: true,
       from_cache: false,
       competitorId: saveRes.id,
       data: profile,
+      quota: freshQuota,
     })
   } catch (err: any) {
     console.error('[Competitor Analysis API Error]:', err)

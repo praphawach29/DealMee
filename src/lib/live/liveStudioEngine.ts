@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { generatePromptPayQRImage } from '@/lib/billing/manualBilling'
 
 export interface LiveBasketItem {
   basket_no: number
@@ -22,6 +23,22 @@ export interface LiveCommentItem {
   created_at: string
 }
 
+export interface LiveOrderSummary {
+  id: string
+  order_no: string
+  username: string
+  product_name: string
+  product_id?: string
+  basket_no: number
+  quantity: number
+  unit_price: number
+  total_amount: number
+  qr_data_url?: string
+  promptpay_payload?: string
+  checkout_url?: string
+  created_at: string
+}
+
 export interface LiveSessionState {
   shop_id: string
   title: string
@@ -33,13 +50,22 @@ export interface LiveSessionState {
   recent_comments: LiveCommentItem[]
   total_comments: number
   total_cf_orders: number
+  total_cf_revenue: number
+  latest_cf_order?: LiveOrderSummary | null
   updated_at: string
+}
+
+export interface LiveHostPitch {
+  hook15s: string
+  sellingPoints: string[]
+  urgencyClosing: string
+  faqAnswers: { question: string; answer: string }[]
 }
 
 const supabase = createAdminClient()
 
 /**
- * Fallback / In-Memory cache for super-fast OBS overlay response times (< 30ms)
+ * In-Memory cache for super-fast OBS overlay response times (< 30ms)
  */
 const liveStateCache = new Map<string, LiveSessionState>()
 
@@ -83,9 +109,11 @@ export async function getLiveSessionState(shopId: string): Promise<LiveSessionSt
   if (settingData?.value) {
     try {
       state = typeof settingData.value === 'string' ? JSON.parse(settingData.value) : settingData.value
-      // Re-sync product details in case prices/stock changed
       if (defaultBaskets.length > 0 && (!state.baskets || state.baskets.length === 0)) {
         state.baskets = defaultBaskets
+      }
+      if (typeof state.total_cf_revenue !== 'number') {
+        state.total_cf_revenue = 0
       }
     } catch {
       state = createDefaultState(shopId, defaultBaskets)
@@ -125,12 +153,13 @@ function createDefaultState(shopId: string, baskets: LiveBasketItem[]): LiveSess
     ],
     total_comments: 1,
     total_cf_orders: 0,
+    total_cf_revenue: 0,
     updated_at: new Date().toISOString(),
   }
 }
 
 /**
- * Process an incoming live comment and trigger instant OBS overlay actions
+ * Process an incoming live comment and trigger instant OBS overlay actions & orders
  */
 export async function processLiveComment(
   shopId: string,
@@ -144,6 +173,7 @@ export async function processLiveComment(
   action_type: 'basket_switch' | 'cf_order' | 'question' | 'general'
   ai_reply: string
   switched_to_basket?: number
+  order?: LiveOrderSummary | null
 }> {
   const state = await getLiveSessionState(shopId)
   const commentText = (payload.comment_text || '').trim()
@@ -153,22 +183,158 @@ export async function processLiveComment(
   let actionType: 'basket_switch' | 'cf_order' | 'question' | 'general' = 'general'
   let aiReply = ''
   let switchedBasketNo: number | undefined
+  let generatedOrder: LiveOrderSummary | null = null
 
-  // 1. Detect Basket Switch by number (e.g. "ขอดูตะกร้า 2", "ตะกร้า 3", "เบอร์ 1")
-  const basketNumMatch = commentText.match(/(?:ขอดู|ดู|ขอ|เปิด|สลับ|เอา|ตะกร้า)\s*(?:ที่|เบอร์)?\s*([0-9]+)/i)
-  if (basketNumMatch) {
-    const targetNo = parseInt(basketNumMatch[1], 10)
-    const matchedBasket = state.baskets.find((b) => b.basket_no === targetNo)
-    if (matchedBasket) {
-      state.current_basket_no = targetNo
-      state.current_product = matchedBasket
-      actionType = 'basket_switch'
-      switchedBasketNo = targetNo
-      aiReply = `ได้เลยค่ะคุณ ${username}! สลับขึ้นภาพ ${matchedBasket.product_name} (ตะกร้า #${targetNo}) ให้ชมแล้วนะคะ ตอนนี้เหลือเพียง ${matchedBasket.stock} ชิ้นเท่านั้นค่ะ 💖`
+  // 1. Detect CF Order Intent First (e.g. "CF 1", "CF 2 3 ตัว", "CF เสื้อยืด", "รับ 2 ชิ้น", "เอา 1 ตัว")
+  const isCfIntent =
+    /^(?:cf|ซีเอฟ|รับ|เอา|จอง)\b/i.test(commentText) ||
+    /\b(?:cf|ซีเอฟ)\b/i.test(commentText) ||
+    /^(?:รับ|เอา)\s*\d+/i.test(commentText)
+
+  if (isCfIntent) {
+    actionType = 'cf_order'
+    state.total_cf_orders = (state.total_cf_orders || 0) + 1
+
+    let targetBasket: LiveBasketItem | undefined
+    let quantity = 1
+
+    // Extract numbers from comment
+    const numbersMatch = commentText.match(/\d+/g)
+    if (numbersMatch && numbersMatch.length > 0) {
+      const firstNum = parseInt(numbersMatch[0], 10)
+      const foundBasket = state.baskets.find((b) => b.basket_no === firstNum)
+      if (foundBasket) {
+        targetBasket = foundBasket
+        if (numbersMatch.length > 1) {
+          quantity = Math.max(1, parseInt(numbersMatch[1], 10))
+        }
+      } else {
+        // If first number is not a basket number, check if it's quantity with units (e.g. "CF 2 ตัว")
+        if (/ตัว|ชิ้น|อัน|ชุด|ใบ|กล่อง|ขวด|ea|pack/i.test(commentText)) {
+          quantity = Math.max(1, firstNum)
+          targetBasket = state.current_product || state.baskets[0]
+        }
+      }
+    }
+
+    // Match by product name keyword if basket was not found by number
+    if (!targetBasket) {
+      const lower = commentText.toLowerCase()
+      targetBasket = state.baskets.find((b) => {
+        const pName = b.product_name.toLowerCase()
+        return lower.includes(pName) || pName.split(' ').some((part) => part.length >= 3 && lower.includes(part))
+      })
+    }
+
+    // Fallback to currently pinned basket or first basket
+    if (!targetBasket) {
+      targetBasket = state.current_product || state.baskets[0]
+    }
+
+    // Extract unit quantity e.g. "3 ตัว", "2 ชิ้น" if not already set
+    const qtyUnitMatch = commentText.match(/(\d+)\s*(?:ตัว|ชิ้น|อัน|ชุด|ใบ|กล่อง|ขวด)/i)
+    if (qtyUnitMatch) {
+      quantity = Math.max(1, parseInt(qtyUnitMatch[1], 10))
+    }
+
+    const unitPrice = Number(targetBasket?.live_price || 0)
+    const totalAmount = unitPrice * quantity
+    state.total_cf_revenue = (state.total_cf_revenue || 0) + totalAmount
+
+    // Switch current product to the CF'd product
+    if (targetBasket) {
+      state.current_basket_no = targetBasket.basket_no
+      state.current_product = targetBasket
+      switchedBasketNo = targetBasket.basket_no
+    }
+
+    // Generate Order No & Record in Supabase orders table
+    const orderNo = `CF-${Date.now().toString().slice(-6)}`
+    let insertedId = `cf-${Date.now()}`
+    try {
+      const { data: ordRow, error: ordErr } = await supabase.from('orders').insert({
+        shop_id: shopId,
+        order_no: orderNo,
+        customer_name: username,
+        product_name: targetBasket?.product_name || 'สินค้าไลฟ์สด',
+        quantity: quantity,
+        total_amount: totalAmount,
+        status: 'pending',
+        payment_method: 'promptpay',
+        items_summary: `${targetBasket?.product_name || 'สินค้า'} (x${quantity}) - ตะกร้า #${targetBasket?.basket_no || 1}`,
+      }).select('id').maybeSingle()
+
+      if (ordRow?.id) {
+        insertedId = ordRow.id
+      }
+      if (ordErr) {
+        console.warn('[Live Studio Order Insert Warning]:', ordErr.message)
+      }
+    } catch (dbErr) {
+      console.warn('[Live Studio DB Insert Warning]:', dbErr)
+    }
+
+    // Generate PromptPay QR
+    let qrDataUrl = ''
+    let ppPayload = ''
+    try {
+      const { data: shopRow } = await supabase
+        .from('shops')
+        .select('promptpay_number, promptpay_name, name')
+        .eq('id', shopId)
+        .maybeSingle()
+
+      // Only ever build a QR for the shop's own PromptPay number. Without one, skip the QR
+      // rather than fall back to a placeholder that would route the buyer's money elsewhere.
+      const ppId = (shopRow?.promptpay_number || '').trim()
+      if (ppId) {
+        const qrRes = await generatePromptPayQRImage(ppId, totalAmount)
+        qrDataUrl = qrRes.qrDataUrl
+        ppPayload = qrRes.payload
+      } else {
+        console.warn('[Live Studio] Shop has no PromptPay number; CF order created without a payment QR')
+      }
+    } catch (qrErr) {
+      console.warn('[Live Studio QR Generation Warning]:', qrErr)
+    }
+
+    generatedOrder = {
+      id: insertedId,
+      order_no: orderNo,
+      username,
+      product_name: targetBasket?.product_name || 'สินค้าไลฟ์สด',
+      product_id: targetBasket?.product_id,
+      basket_no: targetBasket?.basket_no || 1,
+      quantity,
+      unit_price: unitPrice,
+      total_amount: totalAmount,
+      qr_data_url: qrDataUrl,
+      promptpay_payload: ppPayload,
+      checkout_url: `/checkout/${orderNo}`,
+      created_at: new Date().toISOString(),
+    }
+
+    state.latest_cf_order = generatedOrder
+    aiReply = `🎉 ล็อกสิทธิ์เรียบร้อยค่ะคุณ ${username}! ได้รับ ${targetBasket?.product_name} (ตะกร้า #${targetBasket?.basket_no}) x${quantity} ชิ้น ยอดรวม ฿${totalAmount.toLocaleString()} สรุปบิลและ QR พร้อมเพย์ส่งเข้า DM แล้วนะคะ 📲`
+  }
+
+  // 2. Detect Basket Switch by number (e.g. "ขอดูตะกร้า 2", "ตะกร้า 3", "เบอร์ 1")
+  if (actionType === 'general') {
+    const basketNumMatch = commentText.match(/(?:ขอดู|ดู|ขอ|เปิด|สลับ|ตะกร้า)\s*(?:ที่|เบอร์)?\s*([0-9]+)/i)
+    if (basketNumMatch) {
+      const targetNo = parseInt(basketNumMatch[1], 10)
+      const matchedBasket = state.baskets.find((b) => b.basket_no === targetNo)
+      if (matchedBasket) {
+        state.current_basket_no = targetNo
+        state.current_product = matchedBasket
+        actionType = 'basket_switch'
+        switchedBasketNo = targetNo
+        aiReply = `ได้เลยค่ะคุณ ${username}! สลับขึ้นภาพ ${matchedBasket.product_name} (ตะกร้า #${targetNo}) ให้ชมแล้วนะคะ ตอนนี้เหลือเพียง ${matchedBasket.stock} ชิ้นเท่านั้นค่ะ 💖`
+      }
     }
   }
 
-  // 2. Detect Basket Switch by product keyword (e.g. "ขอดูเสื้อยืดหน่อย", "กางเกงยีนส์มีไหม")
+  // 3. Detect Basket Switch by product keyword (e.g. "ขอดูเสื้อยืดหน่อย", "กางเกงยีนส์มีไหม")
   if (actionType === 'general') {
     const lowerComment = commentText.toLowerCase()
     const matchedByProd = state.baskets.find((b) => {
@@ -188,16 +354,7 @@ export async function processLiveComment(
     }
   }
 
-  // 3. Detect CF Order Intent (e.g. "CF 1", "CF เสื้อยืด", "cf 01")
-  if (actionType === 'general' && /^(cf|ซีเอฟ|รับ|เอา)/i.test(commentText)) {
-    actionType = 'cf_order'
-    state.total_cf_orders += 1
-    const currentProd = state.current_product || state.baskets[0]
-    const prodName = currentProd ? currentProd.product_name : 'สินค้า'
-    aiReply = `🎉 ล็อกสิทธิ์เรียบร้อยค่ะคุณ ${username}! รหัส CF: ${commentText.toUpperCase()} (${prodName}) น้องบอทส่งสรุปยอดพร้อม QR Code เข้ากล่องข้อความทันที แตะชำระเงินได้เลยนะคะ 📲`
-  }
-
-  // 4. General Questions
+  // 4. General Questions & Shipping
   if (actionType === 'general') {
     if (/(ส่งฟรี|ค่าส่ง|ส่งกี่บาท)/i.test(commentText)) {
       actionType = 'question'
@@ -223,7 +380,7 @@ export async function processLiveComment(
   }
 
   state.recent_comments = [newComment, ...(state.recent_comments || []).slice(0, 19)]
-  state.total_comments += 1
+  state.total_comments = (state.total_comments || 0) + 1
   state.updated_at = new Date().toISOString()
 
   // Save to memory cache & persistent store
@@ -243,7 +400,111 @@ export async function processLiveComment(
     action_type: actionType,
     ai_reply: aiReply,
     switched_to_basket: switchedBasketNo,
+    order: generatedOrder,
   }
+}
+
+/**
+ * AI Live Host Teleprompter & Sales Pitch Generator
+ * Uses Gemini API with fallback to high-conversion Thai live sales templates
+ */
+export async function generateHostPitch(
+  product: LiveBasketItem,
+  shopName: string = 'DealMee Live Shop'
+): Promise<LiveHostPitch> {
+  const apiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GEMINI_KEY ||
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+    ''
+
+  const savings = Math.max(0, product.regular_price - product.live_price)
+
+  // Fallback template
+  const fallbackPitch: LiveHostPitch = {
+    hook15s: `สวัสดีค่ะทุกคนในไลฟ์! ใครที่เล็ง "${product.product_name}" อยู่ ฟังทางนี้ด่วนเลยนะคะ! รอบนี้จัดราคาพิเศษเฉพาะไลฟ์สดเหลือเพียง ฿${product.live_price.toLocaleString()} เท่านั้น จากปกติ ฿${product.regular_price.toLocaleString()} ช็อตนี้ใครไม่รีบคว้าบอกเลยว่าหมดแน่นอนค่ะ!`,
+    sellingPoints: [
+      `เกรดคุณภาพพรีเมียม สั่งผลิตและคัดสรรมาอย่างดี การันตีของแท้ 100%`,
+      `ประหยัดทันที ฿${savings.toLocaleString()} เฉพาะคนที่ดูไลฟ์ตอนนี้เท่านั้น`,
+      `สินค้ามีพร้อมส่งด่วนรอบวันนี้ สั่งตอนนี้ได้รับของก่อนใคร ไม่ต้องรอนาน`,
+    ],
+    urgencyClosing: `ในระบบสต็อกแจ้งเตือนว่าเหลือเพียง ${product.stock} ชิ้นสุดท้ายแล้วนะคะ! ใครพิมพ์ CF เข้ามาตอนนี้ ระบบดูดออเดอร์ส่ง QR พร้อมเพย์ล็อกสิทธิ์ให้ทันที ช้าอดหมดโปรนี้นะคะทุกคน!`,
+    faqAnswers: [
+      {
+        question: 'ส่งฟรีกี่วันถึงคะ?',
+        answer: 'จัดส่งด่วนรอบวันนี้เลยค่ะ กทม. 1 วัน ตจว. 1-2 วันได้รับสินค้าถึงหน้าบ้านค่ะ',
+      },
+      {
+        question: 'มีเก็บเงินปลายทางไหมคะ?',
+        answer: 'มีบริการ COD เก็บเงินปลายทางทั่วประเทศค่ะ พิมพ์ CF แล้วแจ้งปลายทางในแชทได้เลยค่ะ',
+      },
+    ],
+  }
+
+  if (!apiKey) {
+    return fallbackPitch
+  }
+
+  const prompt = `คุณคือสุดยอด AI สตรีมเมอร์ไลฟ์สดขายของ (Live Shopping Host) มืออาชีพอับดับ 1 ของไทย สำหรับร้าน "${shopName}"
+จงสร้างสคริปต์พูดสด (Teleprompter Pitch) สำหรับสินค้าบนหน้าจอไลฟ์สด:
+- ชื่อสินค้า: "${product.product_name}"
+- ตะกร้าที่: #${product.basket_no}
+- ราคาปกติ: ฿${product.regular_price}
+- ราคาพิเศษเฉพาะในไลฟ์: ฿${product.live_price} (ประหยัด ฿${savings})
+- สต็อกคงเหลือ: ${product.stock} ชิ้น
+- จุดเด่น: ${product.highlight_tag || 'สินค้าขายดี'}
+
+โปรดส่งออกข้อมูลเฉพาะ JSON ที่มีฟิลด์ดังนี้ (ห้ามใส่ Markdown code block อื่นใดนอกเหนือจาก JSON):
+{
+  "hook15s": "คำพูดเปิดใจ 15 วินาทีแรกที่ดึงดูดคนดูที่กำลังปัดผ่านให้หยุดดู ด้วยน้ำเสียงสนุกสนาน ตื่นเต้น เร่งเร้า",
+  "sellingPoints": ["จุดขายหมัดฮุกข้อ 1", "จุดขายหมัดฮุกข้อ 2", "จุดขายหมัดฮุกข้อ 3"],
+  "urgencyClosing": "ประโยคปิดการขายกระตุ้นให้รีบพิมพ์ CF เดี๋ยวนี้ สร้าง FOMO ก่อนของหมด",
+  "faqAnswers": [
+    { "question": "คำถามที่คนมักถามเกี่ยวกับสินค้านี้", "answer": "คำตอบสั้นกระชับน่าประทับใจ" },
+    { "question": "คำถามเรื่องการจัดส่ง/การชำระเงิน", "answer": "คำตอบชวนให้กดสั่ง" }
+  ]
+}`
+
+  const candidateModels = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-flash-latest']
+
+  for (const model of candidateModels) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              responseMimeType: 'application/json',
+            },
+          }),
+        }
+      )
+
+      if (response.ok) {
+        const json = await response.json()
+        const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text
+        if (rawText) {
+          const parsed = JSON.parse(rawText)
+          if (parsed.hook15s && Array.isArray(parsed.sellingPoints)) {
+            return {
+              hook15s: parsed.hook15s,
+              sellingPoints: parsed.sellingPoints,
+              urgencyClosing: parsed.urgencyClosing || fallbackPitch.urgencyClosing,
+              faqAnswers: Array.isArray(parsed.faqAnswers) ? parsed.faqAnswers : fallbackPitch.faqAnswers,
+            }
+          }
+        }
+      }
+    } catch (_err) {
+      // Continue to next model or fallback
+    }
+  }
+
+  return fallbackPitch
 }
 
 /**

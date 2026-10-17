@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCompetitors, deleteCompetitor } from '@/lib/competitors/competitorStore'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getCompetitorQuota } from '@/lib/billing/competitorQuota'
+import { requireShop } from '@/lib/auth/requireShop'
 
 const supabase = createAdminClient()
 
@@ -9,14 +11,14 @@ const supabase = createAdminClient()
  */
 export async function GET(req: NextRequest) {
   try {
-    const searchParams = req.nextUrl.searchParams
-    const shopId = searchParams.get('shop_id')
+    const auth = await requireShop()
+    if (auth.error) return auth.error
+    const shopId = auth.shopId
 
-    if (!shopId) {
-      return NextResponse.json({ error: 'Missing shop_id query parameter' }, { status: 400 })
-    }
-
-    const competitors = await getCompetitors(shopId)
+    const [competitors, quota] = await Promise.all([
+      getCompetitors(shopId),
+      getCompetitorQuota(shopId),
+    ])
 
     // Check if shop has a saved RapidAPI key
     const { data: keySetting } = await supabase
@@ -33,6 +35,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       competitors,
+      quota,
       has_api_key: hasApiKey,
       masked_api_key: maskedKey,
     })
@@ -47,12 +50,11 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireShop()
+    if (auth.error) return auth.error
+    const shop_id = auth.shopId
     const body = await req.json()
-    const { action, shop_id, rapidapi_key } = body
-
-    if (!shop_id) {
-      return NextResponse.json({ error: 'Missing shop_id' }, { status: 400 })
-    }
+    const { action, rapidapi_key } = body
 
     if (action === 'save_api_key') {
       const trimmedKey = (rapidapi_key || '').trim()
@@ -69,27 +71,86 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'sync_knowledge') {
-      const { title, content, competitor_name } = body
-      if (!title || !content) {
-        return NextResponse.json({ error: 'Missing title or content' }, { status: 400 })
+      const { title, content, competitor_name, strategy_bullets, verdict } = body
+      const compName = competitor_name || 'คู่แข่ง'
+      const finalTitle = title || `กลยุทธ์รับมือข้อโต้แย้งราคาและคู่แข่ง: ${compName}`
+
+      // Synthesize high-converting objection-handling battlecard for the sales AI
+      let finalContent = content
+      if (!finalContent && Array.isArray(strategy_bullets) && strategy_bullets.length > 0) {
+        const bulletsText = strategy_bullets.map((b: string) => `- ${b}`).join('\n')
+        finalContent = `# [แนวทางรับมือข้อโต้แย้งราคาและเปรียบเทียบคู่แข่ง: ${compName}]
+
+## 🎯 คำถามและข้อโต้แย้งที่พบบ่อยจากลูกค้า:
+- "ทำไมร้านเราถึงแพงกว่าร้าน ${compName} หรือร้านอื่น?"
+- "เห็นร้านอื่นขายราคาถูกกว่า มีส่วนลดมั้ย?"
+- "คุณภาพต่างจากร้านดัง/ร้านอื่นยังไงบ้าง?"
+
+## 💡 แนวทางการตอบของ AI (สุภาพ มั่นใจ ไม่พาดพิงเชิงลบ ชูจุดเด่นที่คุ้มค่ากว่า):
+${bulletsText}
+
+${verdict ? `## 📊 กลยุทธ์ภาพรวม:\n${verdict}\n` : ''}
+## 🛡️ จุดขายที่เหนือกว่า (Value Superiority):
+- สินค้าพร้อมส่งด่วนจากไทยใน 24 ชั่วโมง (ไม่ต้องรอพรีออเดอร์ ไม่ต้องลุ้น)
+- คัดสรรเกรดพรีเมียม สัมผัสนุ่ม ทรงสวย คุ้มค่าในระยะยาว
+- รับประกันสินค้าตรงปก 100% มีบริการดูแลเปลี่ยนเคลมทันที
+- สั่งซื้อในแชทมีสิทธิพิเศษและโปรโมชั่นของแถมเฉพาะช่องทางนี้`
+      } else if (!finalContent) {
+        return NextResponse.json({ error: 'Missing title, content, or strategy_bullets' }, { status: 400 })
       }
 
-      const { data: item, error: kbError } = await supabase.from('knowledge_base').insert({
-        shop_id,
-        title,
-        content,
-        category: 'กลยุทธ์คู่แข่ง',
-        source: 'competitor_spy',
-        source_ref: competitor_name || null,
-        status: 'active',
-      }).select('id').single()
+      // Check for existing battlecard for this competitor to prevent duplicate bloat
+      const { data: existing } = await supabase
+        .from('knowledge_base')
+        .select('id')
+        .eq('shop_id', shop_id)
+        .eq('category', 'กลยุทธ์คู่แข่ง')
+        .eq('source_ref', compName)
+        .maybeSingle()
+
+      if (existing) {
+        const { data: updatedItem, error: updateError } = await supabase
+          .from('knowledge_base')
+          .update({
+            title: finalTitle,
+            content: finalContent,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id)
+          .select('id')
+          .single()
+
+        if (updateError) throw updateError
+
+        return NextResponse.json({
+          success: true,
+          message: `อัปเดตกลยุทธ์รับมือ "${compName}" ในคลังความรู้บอทเรียบร้อยแล้ว!`,
+          id: updatedItem?.id,
+          updated: true,
+        })
+      }
+
+      const { data: item, error: kbError } = await supabase
+        .from('knowledge_base')
+        .insert({
+          shop_id,
+          title: finalTitle,
+          content: finalContent,
+          category: 'กลยุทธ์คู่แข่ง',
+          source: 'competitor_spy',
+          source_ref: compName,
+          status: 'active',
+        })
+        .select('id')
+        .single()
 
       if (kbError) throw kbError
 
       return NextResponse.json({
         success: true,
-        message: 'เพิ่มข้อมูลเข้าคลังความรู้บอทเรียบร้อยแล้ว!',
+        message: `เพิ่มกลยุทธ์รับมือ "${compName}" เข้าคลังความรู้บอทเรียบร้อยแล้ว!`,
         id: item?.id,
+        updated: false,
       })
     }
 
@@ -104,12 +165,13 @@ export async function POST(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
   try {
-    const searchParams = req.nextUrl.searchParams
-    const shopId = searchParams.get('shop_id')
-    const competitorId = searchParams.get('id')
+    const auth = await requireShop()
+    if (auth.error) return auth.error
+    const shopId = auth.shopId
+    const competitorId = req.nextUrl.searchParams.get('id')
 
-    if (!shopId || !competitorId) {
-      return NextResponse.json({ error: 'Missing shop_id or id parameter' }, { status: 400 })
+    if (!competitorId) {
+      return NextResponse.json({ error: 'Missing id parameter' }, { status: 400 })
     }
 
     const deleted = await deleteCompetitor(shopId, competitorId)
