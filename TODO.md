@@ -1,9 +1,18 @@
 # DealMee AI - Project Handover & TODO List
 
-> **บันทึกล่าสุด:** 14 ตุลาคม 2026 (11:05 น.)  
+> **บันทึกล่าสุด:** 17 ตุลาคม 2026 (ดูหัวข้อ "อัปเดต 17 ตุลาคม 2026" ด้านล่าง)  
 > **Repository:** `praphawach29/ai-agent-google-SDK` (Branch: `main`)  
 > **Last Commit:** `49829a7` - *feat(facebook): add product cards carousel and media sending for Messenger*  
 > **Status:** Production Build Passed (`npm run build` ✓, TypeScript 0 errors ✓)
+
+---
+
+## 🆕 อัปเดต 17 ตุลาคม 2026 — Bot Sales Hardening (PR #1–#9)
+
+- รายการสิ่งที่แก้ทั้งหมด: [PROJECT_STATUS.md › Bot Sales Hardening](./PROJECT_STATUS.md)
+- **แผนงานถัดไป (เรียงลำดับแล้ว):** [docs/plans/2026-10-17-bot-sales-and-onboarding-next-steps.md](./docs/plans/2026-10-17-bot-sales-and-onboarding-next-steps.md)
+- ตั้งค่าที่ต้องคงไว้: `CRON_SECRET` ใน Vercel = GitHub secret `CRON_SECRET`, GitHub secret `APP_URL=https://app.dealmee.app`, `GEMINI_MODEL=gemini-3.8-flash`
+- รอเจ้าของระบบตัดสินใจ: ระยะเวลายกเลิกออเดอร์ค้างจ่าย, พฤติกรรมเมื่อหมดช่วงทดลอง, ช่วงทดลองเป็นแพ็กเกจไหน, ราคาแพ็กเกจหลังเห็นต้นทุน AI จริง
 
 ---
 

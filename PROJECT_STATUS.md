@@ -1,6 +1,7 @@
 # DealMee AI (DealMee.app) - Project Status
 
-> อัปเดตล่าสุด: 15 ตุลาคม 2026
+> อัปเดตล่าสุด: 17 ตุลาคม 2026 (Bot Sales Hardening — PR #1–#9)
+> แผนงานถัดไปของบอทขาย & onboarding: [docs/plans/2026-10-17-bot-sales-and-onboarding-next-steps.md](./docs/plans/2026-10-17-bot-sales-and-onboarding-next-steps.md)
 > GitHub: praphawach29/ai-agent-google-SDK branch main
 > Handover & Action Checklist: ดูรายละเอียดเพิ่มเติมที่ [TODO.md](./TODO.md)
 >
@@ -175,7 +176,7 @@ POST /api/webhook/[shop_id]
 1. Read rawBody (for HMAC)
 2. Parse JSON + validate events
 3. Fetch shop from Supabase
-4. Verify X-Line-Signature (HMAC-SHA256) -> 403 if invalid [NEW Phase 1]
+4. Verify X-Line-Signature (HMAC-SHA256, constant-time) -> 403 if invalid OR missing when the shop has a Channel Secret [17 ต.ค. 2026]
 5. Find/Create Conversation
 6. Save user message -> chat_messages
 7. Check status=human -> skip AI
@@ -197,19 +198,30 @@ Quota Gate [NEW Phase 2]:
     - เกินโควต้า -> ส่งข้อความแจ้งลูกค้า ไม่เรียก AI Provider (ประหยัดค่าใช้จ่าย) ไม่รัน Tool Dispatcher
   ตอบสำเร็จ -> incrementUsage() เพิ่ม messages_used +1 และ tokens_used ตาม usage จริงจาก Provider (atomic RPC)
 
-Slip Verification Flow (Image Handler):
-  ลูกค้าส่งรูปสลิป -> LINE Webhook (event.message.type=image)
+Slip Verification Flow (Image Handler) [ปรับใหม่ 17 ต.ค. 2026 — PR #2]:
+  ลูกค้าส่งรูป -> LINE Webhook (event.message.type=image)
     ↓
   Reply: "กำลังตรวจสอบ..."
     ↓
-  verifySlipAndNotify() runs in background (non-blocking):
+  verifySlipAndNotify():
     1. Download image from LINE API
-    2. Convert to base64
-    3. POST to EasySlip API /v1/verify
-    4. Parse: amount, receiver, date, ref
-    5. UPDATE orders.payment_status = 'paid'
-    6. LINE Push success/fail message
-  Fallback: if EASYSLIP_API_KEY not set -> mock approval
+    2. หาออเดอร์ pending ของ "ลูกค้าคนนี้" เท่านั้น (conversation เดียวกัน) — ไม่หยิบออเดอร์ของคนอื่นอีกต่อไป
+    3. verifySlip() ผ่าน EasySlip / Thunder / SlipOK
+       - ไม่มี API key หรือ provider=mock -> manualReview (ไม่อนุมัติอัตโนมัติอีกต่อไป)
+    4. ต้องผ่านครบ: ยอดตรง (±1 บาท), บัญชีผู้รับเป็นของร้าน (checkSlipReceiver เทียบเลขที่ถูกปิดบางส่วน), เลขอ้างอิงไม่ซ้ำ ([slip-ref:...] ใน orders.note)
+    5. ผ่าน -> UPDATE orders.status='paid' (เฉพาะถ้ายัง pending) + แจ้งลูกค้า + แจ้งแอดมิน
+    6. ไม่ผ่าน/ตัดสินไม่ได้ -> แจ้งลูกค้าว่ารอแอดมินตรวจ + แจ้งเตือนแอดมินทาง LINE (ไม่เปลี่ยนสถานะออเดอร์)
+
+Order / QR / Quotation pricing [17 ต.ค. 2026 — PR #3, #4]:
+  - take_order: ราคา = ราคาในตาราง products × จำนวน + ค่าส่งตามตั้งค่าร้าน (src/lib/ai/catalogPricing.ts); ไม่พบสินค้า/สต๊อกไม่พอ -> ไม่สร้างออเดอร์
+  - send_payment_qr: ยอดดึงจากออเดอร์ pending ของลูกค้าคนนั้น (หรือมัดจำการจอง) ไม่ใช้ยอดจาก AI
+  - create_quotation: ราคาต่อรายการจาก products, ไม่มีส่วนลดจาก AI; accept_quotation แปลงใบเสนอราคาของแชทนั้นเป็นออเดอร์
+  - apply_custom_discount: ลดได้ครั้งเดียวต่อออเดอร์ ไม่เกิน features.max_discount_percent (ตั้งที่หน้าเครื่องมือ & ทักษะ AI, ค่าเริ่มต้น 0 = ปิด)
+
+Follow-up queue [17 ต.ค. 2026 — PR #4, #5]:
+  follow_up_tasks (qr_recovery / booking_reminder / repurchase_check / scheduled_message)
+  <- GitHub Actions .github/workflows/follow-up-cron.yml ทุก 5 นาที -> POST /api/cron/follow-up (Bearer CRON_SECRET)
+  งานที่เลยเวลาเกิน 24 ชม. ถูกยกเลิก ไม่ส่งย้อนหลัง
 
 ---
 
@@ -251,6 +263,26 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 
 ---
 
+## Completed Features [Bot Sales Hardening — 17 ตุลาคม 2026]
+
+ตรวจทานบอทขายอัตโนมัติ (ตอบคำถาม / ออเดอร์ / ใบเสนอราคา / ตรวจสลิป) และการสมัครใช้งาน แล้วแก้ตามลำดับความเสี่ยง — merge และทดสอบบน production แล้วทั้งหมด
+
+| PR | เรื่อง |
+|---|---|
+| #1 | API ส่องคู่แข่ง & AI Live ใช้ร้านจาก session (`requireShop`), ตัดเบอร์พร้อมเพย์ placeholder `0812345678` ใน CF ไลฟ์, RLS ของ competitors/live_* จำกัดตามร้าน |
+| #2 | ตรวจสลิปเข้มงวด (เจ้าของออเดอร์ / ยอด / บัญชีผู้รับ / สลิปซ้ำ / ไม่อนุมัติเมื่อไม่มีคีย์), บังคับตรวจลายเซ็น LINE |
+| #3 | ราคา ค่าส่ง สต๊อก ยอด QR คำนวณจากฐานข้อมูล; ซ่อนเครื่องมือที่ไม่มีโค้ด (เดิมตอบ "ดำเนินการเรียบร้อย" ทั้งที่ไม่ได้ทำ) |
+| #4 | `accept_quotation` (ใบเสนอราคา -> ออเดอร์ -> QR), ส่วนลดมีเพดาน, คิวข้อความติดตามแทน `setTimeout`, ปลด `/api/cron` ออกจาก login proxy |
+| #5 | ตัวเรียก cron ล้มเหลวชัดเจนเมื่อได้ HTTP ≠ 200 |
+| #6 | ส่งเฉพาะคลังความรู้ที่เกี่ยวข้อง (~6,000 ตัวอักษร) ลด token ส่วนนี้ ~80%; ปิดช่องรั่วที่ใส่ใบเสนอราคาของลูกค้าคนอื่นลง prompt; นับ thinking tokens และอัปเดตราคา AI |
+| #7 | เครื่องมือขายหลักมีทุกข้อความ (เดิม "ขอ QR" / "สั่งออเดอร์ 2 ชิ้น" ไม่มีเครื่องมือ); ChatGPT failover เป็น GPT-5.6 Luna |
+| #8 | `shopHelper` หาร้านผ่าน `users.workspace_id` อย่างเดียว, onboarding สร้างร้านด้วย service client |
+| #9 | onboarding บันทึก `business_type` (เดิม hidden input ถูก disabled), ป้ายแพ็กเกจแสดงตามจริง (TRIAL/FREE/…) แทน "PRO PLAN" ตายตัว |
+
+การตั้งค่านอกโค้ดที่ทำแล้ว: `CRON_SECRET` (Vercel + GitHub), `APP_URL` (GitHub), `GEMINI_MODEL=gemini-3.8-flash`, Channel Secret ครบทุกร้านที่เชื่อม LINE, migration `20261017000000_scope_competitor_live_rls.sql` รันแล้ว
+
+สิ่งที่ยังเหลือ -> [docs/plans/2026-10-17-bot-sales-and-onboarding-next-steps.md](./docs/plans/2026-10-17-bot-sales-and-onboarding-next-steps.md)
+
 ## Completed Features [Cost Infrastructure: Prompt Caching + Margin Dashboard]
 
 เกิดจากการวิเคราะห์ต้นทุน AI เทียบกับราคาแพ็กเกจ (พบว่า Starter/Pro/Agency อาจขาดทุนถ้าลูกค้าใช้เต็มโควต้า):
@@ -260,7 +292,7 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 - [x] Gemini 3.6 Flash ใช้ implicit caching อัตโนมัติอยู่แล้ว (ไม่ต้องแก้โค้ด) — โครงสร้าง prompt เดิมที่วางของ dynamic ไว้ท้ายสุดเอื้อต่อ caching อยู่แล้ว
 - [x] `src/lib/billing/aiPricing.ts`: ราคาจริงต่อ 1M token ต่อ provider (ตรวจสอบผ่าน web search เพราะเป็นโมเดลหลัง knowledge cutoff) + สูตรคำนวณต้นทุน Claude แบบแยก cache read/write
 - [x] `/admin/margin` (Margin Dashboard ใหม่): สรุปรายได้เทียบต้นทุน AI ประมาณการ ทั้งแบบรวมต่อแพ็กเกจและรายร้านค้า (เรียงจากขาดทุนมากสุด) — **หมายเหตุ: ไม่มีข้อมูลย้อนหลังก่อนวันที่ฟีเจอร์นี้ขึ้น และเป็นตัวเลขประมาณการ ไม่ใช่ invoice จริง**
-- [ ] **ยังไม่ได้แก้**: `classifyMessageComplexity()` ไม่เคยส่ง `targetProvider: 'openai'` เลย — GPT-5.6 ตั้งค่าไว้แต่ไม่ถูกเรียกใช้จริงในโค้ดปัจจุบัน (พบระหว่างการวิเคราะห์นี้ ยังไม่ได้แก้ตามที่แจ้งผู้ใช้ไว้)
+- [x] GPT-5.6 Luna ถูกใช้จริงแล้วในฐานะ failover ลำดับแรก (PR #7, 17 ต.ค. 2026) — `targetProvider` จาก router ยังไม่ถูกใช้ ดูแผนข้อ 1.9
 
 ## AI Agent Architecture Upgrade — Master Plan
 
@@ -364,7 +396,7 @@ Chat Playground (ทดสอบก่อนใช้งานจริง):
 
 | จุดที่ต่างจากไฟล์ในเรโป | ผลกระทบ |
 |---|---|
-| `shops` ไม่มีคอลัมน์ `user_id` | `shopHelper.ts` เขียนโค้ดให้ query `.eq('user_id', ...)` เป็นทางเลือกแรก แต่ query นี้ error เงียบๆ ทุกครั้ง แล้ว fallback ไปใช้ `public.users.workspace_id` แทนโดยอัตโนมัติ (ใช้งานได้ แต่โค้ด path แรกตายเปล่า ควรลบทิ้งหรือแก้ schema ให้ตรง) |
+| `shops` ไม่มีคอลัมน์ `user_id` และ `owner_id` | **แก้แล้ว 17 ต.ค. 2026 (PR #8):** `shopHelper.ts` หาร้านผ่าน `users.workspace_id` อย่างเดียว ไม่ fallback ไปร้านแรกในตารางอีก (เดิมอาจส่งร้านของคนอื่นให้บัญชีที่ยังไม่ผูกร้าน); บัญชีที่ไม่มีร้านถูกพาไป `/onboarding` ซึ่งสร้างร้านด้วย service client |
 | `products` ไม่มีคอลัมน์ `status` เลย | ทุก query ที่ทำ `.eq('status','active')` บน products error เงียบๆ — แก้ไปแล้วในโค้ด (ลบ filter ออก) แต่ไฟล์ schema เดิมยังเข้าใจผิดว่ามีคอลัมน์นี้ |
 | `products.stock` เป็น `TEXT` ไม่ใช่ตัวเลข (ดีฟอลต์ `'มี'`) | Dashboard เขียนเป็นเลขที่แปลงเป็น string (`"30"`, `"0"`) ผ่าน `parseInt`, โค้ด AI/webhook เทียบเป็นตัวเลขได้พอดีเพราะ JS coerce string อัตโนมัติ แต่ฝั่ง Postgres/PostgREST (`.gt('stock', 0)`) เป็นการเทียบ string แบบ lexicographic ซึ่งบังเอิญถูกต้องกับข้อมูลปัจจุบัน แต่เปราะบางในกรณี edge case |
 
@@ -411,9 +443,10 @@ SUPABASE_SERVICE_ROLE_KEY=         # upload Supabase Storage + billing webhooks 
 GEMINI_API_KEY=                    # Primary AI
 CLAUDE_API_KEY=                    # High-Persuasion (ต่อรองราคา)
 OPENAI_API_KEY=                    # Fallback
-EASYSLIP_API_KEY=                  # Slip Verification [Phase 1]
-GEMINI_MODEL=gemini-3.6-flash      # optional
-OPENAI_MODEL=gpt-5.6-luna          # optional (fast/cheap tier — only used as final fallback)
+EASYSLIP_API_KEY=                  # Slip Verification [Phase 1] — ไม่มีคีย์ = สลิปทุกใบส่งให้แอดมินตรวจ
+GEMINI_MODEL=gemini-3.8-flash      # ใช้กับร้านที่ไม่ได้ตั้ง ai_model (ห้ามใช้ gemini-2.0-flash — ถูกปิดแล้ว)
+OPENAI_MODEL=                      # optional — ว่าง = gpt-5.6-luna แล้ว gpt-4o-mini (failover)
+CRON_SECRET=                       # [17 ต.ค. 2026] ต้องตรงกับ GitHub repo secret CRON_SECRET (ตัวเรียก follow-up)
 STRIPE_SECRET_KEY=                 # [Phase 2] Stripe subscription billing
 STRIPE_WEBHOOK_SECRET=             # [Phase 2] Stripe webhook signature verification
 OMISE_SECRET_KEY=                  # [Phase 2] Omise/Opn Payments PromptPay charges
