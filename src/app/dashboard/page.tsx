@@ -4,6 +4,7 @@ import MerchantDashboardClient from './MerchantDashboardClient'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 
 import { getLinePushQuotaInfo } from '@/lib/billing/pushQuota'
+import type { SetupChecklistItem } from './components/SetupChecklistCard'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -95,8 +96,51 @@ export default async function DashboardPage() {
     pushQuotaInfo = quotaInfo
   }
 
+  // "Ready to sell" checklist, derived from what the shop has actually configured
+  const features = (shop?.features as Record<string, any>) || {}
+  const setupChecklist: SetupChecklistItem[] = shop
+    ? [
+        {
+          key: 'line',
+          label: 'เชื่อม LINE OA',
+          hint: 'ใส่ Channel Access Token และ Channel Secret แล้วตั้ง Webhook URL ใน LINE Developers',
+          done: Boolean(shop.line_token && shop.line_secret),
+          href: '/dashboard/settings?tab=channels',
+        },
+        {
+          key: 'products',
+          label: 'เพิ่มสินค้า',
+          hint: 'บอทสร้างออเดอร์และใบเสนอราคาได้เฉพาะสินค้าที่อยู่ในระบบ',
+          done: productsCount > 0,
+          href: '/dashboard/products',
+        },
+        {
+          key: 'payment',
+          label: 'ใส่บัญชีรับเงิน (พร้อมเพย์หรือธนาคาร)',
+          hint: 'ใช้สร้าง QR และตรวจว่าสลิปโอนเข้าบัญชีร้านจริง',
+          done: Boolean(shop.promptpay_number || shop.payment_promptpay || shop.bank_account_number || shop.payment_bank_account),
+          href: '/dashboard/settings?tab=payment',
+        },
+        {
+          key: 'admin_line',
+          label: 'ผูก LINE ของแอดมินเพื่อรับแจ้งเตือน',
+          hint: 'รับแจ้งเตือนออเดอร์ใหม่ การชำระเงิน และสลิปที่รอตรวจ',
+          done: Boolean(shop.owner_line_id || features.admin_line_user_id),
+          href: '/dashboard/settings?tab=channels',
+        },
+        {
+          key: 'knowledge',
+          label: 'ใส่คลังความรู้อย่างน้อย 5 ข้อ',
+          hint: 'เช่น การจัดส่ง การรับประกัน การคืนสินค้า เวลาทำการ',
+          done: knowledgeCount >= 5,
+          href: '/dashboard/knowledge',
+        },
+      ]
+    : []
+
   return (
     <MerchantDashboardClient
+      setupChecklist={setupChecklist}
       shopName={shop?.name || 'ร้านค้าของคุณ'}
       botName={shop?.bot_name || 'น้อง DealMee'}
       botStatus={shop?.status || 'active'}

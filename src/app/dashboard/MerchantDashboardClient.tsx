@@ -17,6 +17,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import ChatPlaygroundModal from './components/ChatPlaygroundModal'
+import SetupChecklistCard, { type SetupChecklistItem } from './components/SetupChecklistCard'
 import { PushQuotaInfo } from '@/lib/billing/pushQuota'
 
 export interface MerchantDashboardProps {
@@ -32,6 +33,7 @@ export interface MerchantDashboardProps {
   latestKnowledgeTitle: string
   latestKnowledgeDate: string
   pushQuotaInfo?: PushQuotaInfo
+  setupChecklist?: SetupChecklistItem[]
 }
 
 export default function MerchantDashboardClient({
@@ -46,6 +48,7 @@ export default function MerchantDashboardClient({
   totalMessages,
   latestKnowledgeTitle,
   latestKnowledgeDate,
+  setupChecklist = [],
   pushQuotaInfo = {
     totalQuota: 300,
     usedCount: 0,
@@ -100,6 +103,8 @@ export default function MerchantDashboardClient({
             </button>
           </div>
         </div>
+
+        <SetupChecklistCard items={setupChecklist} />
 
         {/* 4 Real Metric KPI Bento Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 relative z-10">
