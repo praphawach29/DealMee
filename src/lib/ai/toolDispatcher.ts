@@ -5,6 +5,7 @@ import type { AgentToolName } from './salesAgentEngine'
 import { t, type CustomerLanguage } from '@/lib/i18n/customerMessages'
 import { scheduleQrFollowUp, scheduleBookingReminder } from '@/lib/ai/proactiveFollowUp'
 import { buildLineFlexQuotationMessage, buildLineFlexOfficialLetterMessage } from '@/lib/line/flexHelper'
+import { resolveCatalogProduct, describeUnresolved, parseQuantity, computeShippingFee } from '@/lib/ai/catalogPricing'
 
 const QR_BUCKET = 'qr-codes'
 
@@ -459,67 +460,152 @@ export async function executeTool(
 
   // ── 💳 PAYMENT TOOLS ─────────────────────────────────────────────────
   if (toolName === 'send_payment_qr') {
-    const { amount, order_summary } = args
     const promptpayId = shop.promptpay_id || shop.promptpay_number
     if (!promptpayId) {
       return { resultForAi: 'ร้านยังไม่ได้ตั้งค่าพร้อมเพย์ ยังส่ง QR ไม่ได้ ให้เสนอช่องทางโอนธนาคารแทน', immediateMessages: [] }
     }
+
+    // The QR amount always comes from a record the system created (this customer's pending
+    // order, or the deposit of their booking) — never from the model's `amount` argument.
+    let amount = 0
+    let effectiveOrderNo = ''
+    let summary = ''
+    if (conversationId) {
+      let orderQuery = supabaseAdmin
+        .from('orders')
+        .select('order_no, total_amount, product_name, quantity')
+        .eq('shop_id', shopId)
+        .eq('conversation_id', conversationId)
+        .eq('status', 'pending')
+      if (args.order_id) orderQuery = orderQuery.eq('order_no', String(args.order_id).trim())
+      const { data: orders } = await orderQuery.order('created_at', { ascending: false }).limit(1)
+      const order = orders?.[0]
+      if (order) {
+        amount = Number(order.total_amount) || 0
+        effectiveOrderNo = order.order_no
+        summary = `${order.product_name || ''} x${order.quantity || 1} (${order.order_no})`
+      } else {
+        const { data: bookings } = await supabaseAdmin
+          .from('bookings')
+          .select('booking_no, deposit_amount, service_name')
+          .eq('shop_id', shopId)
+          .eq('metadata->>conversation_id', conversationId)
+          .gt('deposit_amount', 0)
+          .neq('status', 'cancelled')
+          .order('created_at', { ascending: false })
+          .limit(1)
+        const booking = bookings?.[0]
+        if (booking) {
+          amount = Number(booking.deposit_amount) || 0
+          effectiveOrderNo = booking.booking_no
+          summary = `มัดจำ ${booking.service_name || ''} (${booking.booking_no})`
+        }
+      }
+    }
+
+    if (amount <= 0) {
+      return {
+        resultForAi: 'ยังไม่มีออเดอร์ที่รอชำระของลูกค้ารายนี้ จึงยังส่ง QR ไม่ได้ ให้เก็บข้อมูลให้ครบแล้วเรียก take_order ก่อน ห้ามบอกยอดชำระเอง',
+        immediateMessages: [],
+      }
+    }
+    if (args.amount !== undefined && Math.abs(Number(args.amount) - amount) > 1) {
+      console.warn(`[send_payment_qr] Model asked for ${args.amount}, using recorded amount ${amount} for ${effectiveOrderNo}`)
+    }
+
     // The QR image and the amount beside it are pushed verbatim: the model
     // can't produce an image, and a paraphrased total or account number is a
     // payment sent to the wrong place.
     const qrPublicUrl = await generateAndUploadQR(supabaseAdmin, amount, promptpayId, shopId)
-    const effectiveOrderNo = args.order_id || `QR-${Date.now().toString().slice(-6)}`
     scheduleQrFollowUp({
       shopId,
       conversationId,
       userId,
       orderNumber: effectiveOrderNo,
-      amount: Number(amount) || 0,
+      amount,
       customerName: args.name || args.customer_name,
     }).catch((err) => console.error('[scheduleQrFollowUp Error]:', err))
 
     if (qrPublicUrl) {
-      const caption = `📋 ${t('qrAmount', lang)}: ${Number(amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} ${t('currencyBaht', lang)}${order_summary ? `\n${order_summary}` : ''}\n\n✅ ${t('qrScanHint', lang)}\n📲 ${t('qrSlipHint', lang)}`
+      const caption = `📋 ${t('qrAmount', lang)}: ${amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} ${t('currencyBaht', lang)}${summary ? `\n${summary}` : ''}\n\n✅ ${t('qrScanHint', lang)}\n📲 ${t('qrSlipHint', lang)}`
       return {
-        resultForAi: `ส่งรูป QR PromptPay พร้อมยอด ${amount} บาท และวิธีชำระให้ลูกค้าไปแล้ว ห้ามพิมพ์ยอดหรือวิธีชำระซ้ำ ให้ตอบสั้นๆ เช่น ชวนสแกนแล้วส่งสลิปกลับมา`,
+        resultForAi: `ส่งรูป QR PromptPay พร้อมยอด ${amount} บาท (ตามระบบ เลขที่ ${effectiveOrderNo}) และวิธีชำระให้ลูกค้าไปแล้ว ห้ามพิมพ์ยอดหรือวิธีชำระซ้ำ ให้ตอบสั้นๆ เช่น ชวนสแกนแล้วส่งสลิปกลับมา`,
         immediateMessages: [
           { type: 'image', content: qrPublicUrl },
           { type: 'text', content: caption },
         ],
       }
     }
-    const fallback = `💳 ${t('orderPaymentHeading', lang)}\n${formatPaymentInstructions(shop, Number(amount), lang)}`
+    const fallback = `💳 ${t('orderPaymentHeading', lang)}\n${formatPaymentInstructions(shop, amount, lang)}`
     return { resultForAi: 'สร้าง QR ไม่สำเร็จ ส่งเลขพร้อมเพย์และยอดให้ลูกค้าไปแล้ว ห้ามพิมพ์เลขบัญชีหรือยอดซ้ำ ให้ตอบสั้นๆ ต่อท้ายพอ', immediateMessages: [{ type: 'text', content: fallback }] }
   }
 
   if (toolName === 'take_order') {
+    // Price, stock and shipping come from the shop's catalog and settings. The
+    // model's total_price is only compared, never trusted.
+    const qty = parseQuantity(args.qty)
+    if (!qty) {
+      return { resultForAi: 'จำนวนสินค้าไม่ถูกต้อง ให้ถามลูกค้าว่าต้องการกี่ชิ้น แล้วเรียก take_order ใหม่', immediateMessages: [] }
+    }
+    const resolution = await resolveCatalogProduct(supabaseAdmin || supabase, shopId, String(args.product || ''))
+    if (resolution.status !== 'found') {
+      return { resultForAi: `ยังสร้างออเดอร์ไม่ได้: ${describeUnresolved(String(args.product || ''), resolution)}`, immediateMessages: [] }
+    }
+    const product = resolution.product
+    if (product.stock !== null && product.stock < qty) {
+      return {
+        resultForAi: product.stock <= 0
+          ? `ยังสร้างออเดอร์ไม่ได้: ${product.name} หมดสต๊อก ให้แจ้งลูกค้าและเสนอสินค้าอื่น`
+          : `ยังสร้างออเดอร์ไม่ได้: ${product.name} เหลือเพียง ${product.stock} ชิ้น แต่ลูกค้าสั่ง ${qty} ชิ้น ให้ถามลูกค้าว่าจะรับ ${product.stock} ชิ้นไหม`,
+        immediateMessages: [],
+      }
+    }
+
+    const subtotal = product.price * qty
+    const isCod = /ปลายทาง|cod/i.test(String(args.payment_method || ''))
+    const { fee: shippingFee } = computeShippingFee(shop, String(args.address || ''), subtotal)
+    const totalAmount = subtotal + shippingFee
+    const modelTotal = Number(args.total_price)
+    const priceNote = Number.isFinite(modelTotal) && Math.abs(modelTotal - totalAmount) > 1
+      ? ` [หมายเหตุ: ยอดที่คุณคำนวณ ${modelTotal} บาทไม่ตรงกับระบบ ให้ใช้ยอดตามระบบเท่านั้น ห้ามบอกยอดอื่น]`
+      : ''
+    const pricedArgs = { ...args, product: product.name, qty, total_price: totalAmount }
+
     // orders.order_no defaults to 'ORD-000' and nothing was overriding it, so
     // every order the bot took shared one number: indistinguishable in the
     // dashboard, and check_order_status had nothing real to look up. Same
     // shape as the booking side's BK- number, which did generate one.
     const orderNo = `ORD-${Date.now().toString().slice(-6)}`
-    await supabase.from('orders').insert({
+    const { error: orderError } = await supabase.from('orders').insert({
       shop_id: shopId,
       order_no: orderNo,
       conversation_id: conversationId,
       customer_name: args.name,
       customer_phone: args.phone,
-      product_name: args.product,
-      quantity: args.qty,
+      product_name: product.name,
+      quantity: String(qty),
       variants: args.variants,
       address: args.address,
       payment_method: args.payment_method,
-      total_amount: args.total_price,
+      total_amount: totalAmount,
       tax_invoice: args.tax_invoice,
+      items_summary: `${product.name} x${qty} @ ${product.price} + ค่าส่ง ${shippingFee}${isCod ? ' (COD)' : ''}`,
       status: 'pending',
     })
+    if (orderError) {
+      console.error('[take_order Error]:', orderError)
+      return {
+        resultForAi: 'บันทึกออเดอร์ไม่สำเร็จเพราะระบบขัดข้อง ห้ามบอกลูกค้าว่าสั่งซื้อสำเร็จ ให้ขออภัยและเรียก request_human_agent',
+        immediateMessages: [],
+      }
+    }
     // Schedule proactive QR/Payment follow-up task
     scheduleQrFollowUp({
       shopId,
       conversationId,
       userId,
       orderNumber: orderNo,
-      amount: Number(args.total_price) || 0,
+      amount: totalAmount,
       customerName: args.name,
     }).catch((err) => console.error('[scheduleQrFollowUp Error]:', err))
 
@@ -527,12 +613,12 @@ export async function executeTool(
     // dedicated AI tool call needed for this. Imported lazily to avoid a
     // circular import at module-load time (customerMemory <-> engine).
     const { recordCustomerOrder } = await import('@/lib/customerMemory')
-    await recordCustomerOrder(shopId, userId, Number(args.total_price) || 0)
+    await recordCustomerOrder(shopId, userId, totalAmount)
 
     // Central Stock Deduction: Deduct from central pooled inventory across channels
     try {
       const { deductCentralStockOnOrder } = await import('@/lib/marketplace/inventoryManager')
-      await deductCentralStockOnOrder(shopId, args.product, Number(args.qty) || 1, 'line', orderNo)
+      await deductCentralStockOnOrder(shopId, product.name, qty, 'line', orderNo)
     } catch (stockErr) {
       console.error('[Central Stock Deduction Error]:', stockErr)
     }
@@ -545,8 +631,8 @@ export async function executeTool(
     if (shop?.line_token && shop?.features?.admin_notify !== false) {
       const targetAdmin = shop.admin_line_user_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
       if (targetAdmin) {
-        const orderTotal = Number(args.total_price || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })
-        const adminMsg = `🛒 มีออเดอร์ใหม่เข้ามา!\nเลขที่: ${orderNo}\nลูกค้า: ${args.name || 'ลูกค้า'}\nสินค้า: ${args.product} x${args.qty || 1}\nยอดรวม: ฿${orderTotal} บาท`
+        const orderTotal = totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })
+        const adminMsg = `🛒 มีออเดอร์ใหม่เข้ามา!\nเลขที่: ${orderNo}\nลูกค้า: ${args.name || 'ลูกค้า'}\nสินค้า: ${product.name} x${qty}\nยอดรวม: ฿${orderTotal} บาท`
         fetch('https://api.line.me/v2/bot/message/push', {
           method: 'POST',
           headers: {
@@ -561,9 +647,9 @@ export async function executeTool(
       }
     }
 
-    const confirmMsg = formatOrderCloseSummary(shop, args, orderNo, lang)
+    const confirmMsg = formatOrderCloseSummary(shop, pricedArgs, orderNo, lang)
     return {
-      resultForAi: `สร้างออเดอร์สำเร็จแล้วจริง เลขที่ออเดอร์: ${orderNo} และส่งสรุปออเดอร์พร้อมข้อมูลชำระเงินให้ลูกค้าไปแล้วครบถ้วน ห้ามพิมพ์สรุปหรือเลขบัญชีซ้ำ ให้ตอบสั้นๆ เช่น ขอบคุณ ย้ำเลขที่ออเดอร์ และชวนส่งสลิปกลับมา`,
+      resultForAi: `สร้างออเดอร์สำเร็จแล้วจริง เลขที่ออเดอร์: ${orderNo} ยอดรวมตามระบบ ${totalAmount.toLocaleString('th-TH')} บาท (สินค้า ${subtotal.toLocaleString('th-TH')} + ค่าส่ง ${shippingFee.toLocaleString('th-TH')})${priceNote} และส่งสรุปออเดอร์พร้อมข้อมูลชำระเงินให้ลูกค้าไปแล้วครบถ้วน ห้ามพิมพ์สรุปหรือเลขบัญชีซ้ำ ให้ตอบสั้นๆ เช่น ขอบคุณ ย้ำเลขที่ออเดอร์ และชวนส่งสลิปกลับมา`,
       immediateMessages: [{ type: 'text', content: confirmMsg }],
     }
   }
@@ -848,7 +934,7 @@ export async function executeTool(
       booking_type: serviceRecord?.booking_type || args.booking_type || 'service',
       resource_label: args.resource_label || args.resource || serviceRecord?.resource_label || serviceRecord?.staff_name || null,
       guest_count: guestCount,
-      deposit_amount: serviceRecord?.deposit_amount || args.deposit_amount || 0,
+      deposit_amount: Number(serviceRecord?.deposit_amount) || 0,
       booking_date: bookingDate,
       booking_time: bookingTime,
       status: 'confirmed',
@@ -1224,122 +1310,15 @@ export async function executeTool(
     }
   }
 
-function detectThaiShippingZone(address: string): 'bkk' | 'remote' | 'upcountry' {
-  const addr = address.toLowerCase()
-
-  // 1. Remote areas, Islands, Southern Border Provinces (พื้นที่ห่างไกล / เกาะ / 3 จังหวัดชายแดน)
-  const remoteKeywords = [
-    'ยะลา', 'ปัตตานี', 'นราธิวาส', 'แม่ฮ่องสอน', 'เกาะ', 'samui', 'phangan', 'tao', 'chang', 'lanta', 'lipe',
-    'อุ้มผาง', 'ท่าสองยาง', 'เวียงแก่น', 'เฉลิมพระเกียรติ', 'บ่อเกลือ', 'ปาย', 'ปางมะผ้า', 'ขุนยวม', 'แม่สะเรียง',
-    '95000', '95110', '95120', '95130', '95140', '95150',
-    '94000', '94110', '94120', '94130', '94140', '94150',
-    '96000', '96110', '96120', '96130', '96140', '96150',
-    '58000', '58110', '58120', '58130', '84280', '84320', '84330'
-  ]
-
-  // 2. Bangkok & Vicinity (กทม. และ 5 จังหวัดปริมณฑล)
-  const bkkKeywords = [
-    'กรุงเทพ', 'กทม', 'bangkok', 'นนทบุรี', 'ปทุมธานี', 'สมุทรปราการ', 'สมุทรสาคร', 'นครปฐม',
-    '10100', '10110', '10120', '10140', '10150', '10160', '10170', '10200', '10210', '10220', '10230', '10240', '10250', '10260', '10270', '10280', '10290', '10300', '10310', '10320', '10330', '10400', '10500', '10510', '10520', '10530', '10540', '10560', '10600', '10700', '10800', '10900',
-    '11000', '11110', '11120', '11130', '11140', '11150',
-    '12000', '12110', '12120', '12130', '12140', '12150', '12160', '12170',
-    '73000', '73110', '73120', '74000', '74110', '74120'
-  ]
-
-  if (remoteKeywords.some((k) => addr.includes(k))) {
-    return 'remote'
-  }
-  if (bkkKeywords.some((k) => addr.includes(k))) {
-    return 'bkk'
-  }
-  return 'upcountry'
-}
 
   if ((toolName as string) === 'calculate_shipping') {
     const addressInput = String(args.province || args.address || '').trim()
-    const feeType = shop.shipping_fee_type || 'flat'
-
-    let rate = Number(shop.shipping_fee_amount || 40)
-    let rateDesc = 'เหมาจ่ายอัตราเดียวทั่วประเทศ'
-    let zoneName = 'ทั่วไป'
-
-    if (feeType === 'free') {
-      rate = 0
-      rateDesc = 'ส่งฟรีทุกออเดอร์'
-    } else if (feeType === 'zone') {
-      const zone = detectThaiShippingZone(addressInput)
-
-      if (zone === 'bkk') {
-        rate = Number(shop.shipping_zone_bkk || 40)
-        rateDesc = 'อัตราสำหรับ กทม. และปริมณฑล'
-        zoneName = 'กทม. และปริมณฑล'
-      } else if (zone === 'remote') {
-        rate = Number(shop.shipping_zone_remote || 100)
-        rateDesc = 'อัตราสำหรับพื้นที่ห่างไกล / เกาะพิเศษ'
-        zoneName = 'พื้นที่ห่างไกล / เกาะ'
-      } else {
-        rate = Number(shop.shipping_zone_upcountry || 60)
-        rateDesc = 'อัตราสำหรับต่างจังหวัด'
-        zoneName = 'ต่างจังหวัด'
-      }
-    }
-
-    const freeThreshold = Number(shop.free_shipping_threshold || 0)
+    // Same calculation take_order uses, so the quoted fee and the order total agree
+    const { fee: rate, zoneName, freeThreshold } = computeShippingFee(shop, addressInput, 0)
     const freeNote = freeThreshold > 0 ? ` (ส่งฟรีเมื่อซื้อครบ ${freeThreshold.toLocaleString()} บาท)` : ''
 
     return {
       resultForAi: `ผลการคำนวณค่าจัดส่งปลายทาง (${addressInput || 'ไม่ระบุพื้นที่'}): พื้นที่ "${zoneName}" อัตราค่าจัดส่งคือ ${rate} บาท${freeNote}`,
-      immediateMessages: [],
-    }
-  }
-
-  if ((toolName as string) === 'take_order') {
-    const customerName = String(args.customer_name || args.name || args.customer || '').trim() || 'ลูกค้า'
-    const customerPhone = String(args.customer_phone || args.phone || args.mobile || args.tel || '').trim()
-    const shippingAddress = String(args.shipping_address || args.address || args.location || '').trim()
-    const rawProd = String(args.product_name || args.item_name || args.items || args.product || args.item || args.title || '').trim()
-    const productName = rawProd && rawProd !== 'สินค้า' ? rawProd : 'กางเกงยีนส์ขาบอร์ด'
-    const quantityStr = String(args.quantity || args.qty || '1')
-    const itemsSummary = String(args.items_summary || args.details || '').trim() || `${productName} (${quantityStr} ชิ้น)`
-    const totalAmount = Number(args.total_amount || args.total || args.price || args.amount || 0) || 590
-    const paymentMethod = String(args.payment_method || 'promptpay')
-
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-    const randNum = Math.floor(1000 + Math.random() * 9000)
-    const orderNo = `ORD-${dateStr}-${randNum}`
-
-    const admin = ctx.supabaseAdmin || supabase
-    const { data: newOrder, error: orderErr } = await admin
-      .from('orders')
-      .insert({
-        shop_id: shopId,
-        order_no: orderNo,
-        customer_name: customerName,
-        phone: customerPhone,
-        customer_phone: customerPhone,
-        address: shippingAddress,
-        product_name: productName,
-        items_summary: itemsSummary,
-        quantity: quantityStr,
-        total_amount: totalAmount,
-        status: 'pending',
-        payment_status: 'pending',
-        payment_method: paymentMethod,
-        conversation_id: conversationId,
-        customer_user_id: userId,
-      })
-      .select('id, order_no')
-      .single()
-
-    if (orderErr) {
-      console.error('[take_order Error]:', orderErr)
-    }
-
-    const { recordCustomerOrder } = await import('@/lib/customerMemory')
-    recordCustomerOrder(shopId, userId, totalAmount).catch(() => {})
-
-    return {
-      resultForAi: `สร้างคำสั่งซื้อสำเร็จเรียบร้อยแล้ว!\n- เลขที่ออเดอร์: ${orderNo}\n- ลูกค้า: ${customerName}\n- ยอดรวม: ${totalAmount.toLocaleString()} บาท\n- สถานะ: รอชำระเงิน\n\nให้สรุปเลขที่ออเดอร์ (${orderNo}) และยอดโอนชำระเงินให้ลูกค้าทราบ`,
       immediateMessages: [],
     }
   }
@@ -1383,10 +1362,33 @@ function detectThaiShippingZone(address: string): 'bkk' | 'remote' | 'upcountry'
 
     if (itemsList.length === 0) {
       return {
-        resultForAi: 'กรุณาระบุรายการสินค้า ราคา และจำนวน ที่ต้องการให้ออกใบเสนอราคา',
+        resultForAi: 'กรุณาระบุรายการสินค้าและจำนวน ที่ต้องการให้ออกใบเสนอราคา',
         immediateMessages: [],
       }
     }
+
+    // Each line's price comes from the catalog; a line that doesn't map to exactly
+    // one catalog product stops the quotation instead of using the model's price.
+    const pricedItems: Array<{ name: string; price: number; qty: number }> = []
+    const problems: string[] = []
+    for (const item of itemsList) {
+      const qty = parseQuantity(item.qty)
+      const res = await resolveCatalogProduct(ctx.supabaseAdmin || supabase, shopId, item.name)
+      if (res.status !== 'found') {
+        problems.push(describeUnresolved(item.name, res))
+      } else if (!qty) {
+        problems.push(`จำนวนของ "${item.name}" ไม่ถูกต้อง`)
+      } else {
+        pricedItems.push({ name: res.product.name, price: res.product.price, qty })
+      }
+    }
+    if (problems.length > 0) {
+      return {
+        resultForAi: `ยังออกใบเสนอราคาไม่ได้: ${problems.join(' / ')} ถ้าเป็นสินค้าหรือบริการที่ไม่มีในระบบ ให้เรียก request_human_agent ให้แอดมินออกใบเสนอราคาเอง`,
+        immediateMessages: [],
+      }
+    }
+    itemsList = pricedItems
 
     const { data: shopData } = await supabase
       .from('shops')
@@ -1401,7 +1403,8 @@ function detectThaiShippingZone(address: string): 'bkk' | 'remote' | 'upcountry'
       subtotal += (it.price || 0) * (it.qty || 1)
     })
 
-    const discountAmount = Number(args.discount_amount || 0)
+    // Discounts on quotations are set by the merchant in the dashboard, not by the model
+    const discountAmount = 0
     const afterDiscount = Math.max(0, subtotal - discountAmount)
     const vatAmount = vatEnabled ? Math.round(afterDiscount * 0.07 * 100) / 100 : 0
     const totalAmount = afterDiscount + vatAmount
