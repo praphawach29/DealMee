@@ -241,11 +241,11 @@ const MASTER_TOOLS = [
   // ── 💳 Payment ──────────────────────────────────────────────────────────────
   {
     name: 'send_payment_qr',
-    description: 'ส่ง QR Code PromptPay ของออเดอร์ที่รอชำระ (หรือมัดจำการจอง) ให้ลูกค้าสแกนจ่าย ยอดเงินระบบดึงจากออเดอร์เอง ต้องเรียก take_order ให้สำเร็จก่อน',
+    description: 'ส่ง QR Code PromptPay ของออเดอร์ที่รอชำระ (หรือมัดจำการจอง) ให้ลูกค้าสแกนจ่าย ยอดเงินระบบดึงจากออเดอร์เอง เรียกได้ทันทีเมื่อลูกค้าขอ QR/ขอวิธีโอน โดยไม่ต้องถามเลขออเดอร์ ถ้ายังไม่มีออเดอร์ระบบจะบอกให้ take_order ก่อน',
     parameters: {
       type: 'object',
       properties: {
-        order_id: { type: 'string', description: 'เลขที่ออเดอร์ เช่น ORD-123456 (ถ้าไม่ระบุ ใช้ออเดอร์ที่รอชำระล่าสุดของลูกค้า)' },
+        order_id: { type: 'string', description: 'เลขที่ออเดอร์ เช่น ORD-123456 ไม่ต้องถามลูกค้า ถ้าไม่ระบุระบบใช้ออเดอร์ที่รอชำระล่าสุดของลูกค้ารายนี้เอง' },
         amount: { type: 'number', description: 'ยอดที่คาดว่าต้องชำระ (ใช้เทียบเท่านั้น ระบบใช้ยอดจากออเดอร์จริง)' },
       },
       required: [],
@@ -815,8 +815,18 @@ const UNIMPLEMENTED_TOOLS = new Set<string>([
   'track_parcel', 'upsell_suggestion',
 ])
 
+// Offered on every message whatever the intent guess: keyword routing missed plain
+// requests like "ขอ QR หน่อย" or "สั่งออเดอร์ 2 ชิ้น", leaving the model without the
+// tool it needed and free to type totals or account numbers itself.
+const CORE_SALES_TOOL_NAMES: AgentToolName[] = [
+  'search_products', 'check_stock', 'take_order', 'send_payment_qr', 'accept_quotation',
+  'apply_custom_discount', 'create_quotation', 'calculate_shipping',
+  'search_knowledge_base', 'request_human_agent',
+]
+
 function filterTools(names: AgentToolName[]) {
-  return MASTER_TOOLS.filter((t) => names.includes(t.name as AgentToolName) && !UNIMPLEMENTED_TOOLS.has(t.name))
+  const wanted = new Set<string>([...names, ...CORE_SALES_TOOL_NAMES])
+  return MASTER_TOOLS.filter((t) => wanted.has(t.name) && !UNIMPLEMENTED_TOOLS.has(t.name))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2159,8 +2169,8 @@ async function callOpenAiApi(
     new Set(
       [
         process.env.OPENAI_MODEL,
+        'gpt-5.6-luna',
         'gpt-4o-mini',
-        'gpt-4o',
       ].filter(Boolean)
     )
   ) as string[]
@@ -2176,9 +2186,12 @@ async function callOpenAiApi(
         body: JSON.stringify({
           model,
           messages: buildOpenAiMessages(systemInstruction, turns),
-          tools: toOpenAITools(toolSet),
-          tool_choice: 'auto',
-          max_tokens: MAX_OUTPUT_TOKENS,
+          ...(toolSet.length > 0 ? { tools: toOpenAITools(toolSet), tool_choice: 'auto' } : {}),
+          // GPT-5.x rejects max_tokens and only allows function tools in Chat Completions
+          // with reasoning turned off; older models (gpt-4o-mini) take the classic params.
+          ...(/^gpt-5/.test(model)
+            ? { max_completion_tokens: MAX_OUTPUT_TOKENS, reasoning_effort: 'none' }
+            : { max_tokens: MAX_OUTPUT_TOKENS }),
         }),
       })
 
