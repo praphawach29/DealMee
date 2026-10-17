@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { planLabel } from '@/lib/billing/planLabel'
 import { redirect } from 'next/navigation'
 
 export default async function ProfilePage() {
@@ -84,7 +85,7 @@ export default async function ProfilePage() {
             </div>
           </div>
           <span className="px-3 py-1 text-xs font-bold rounded-lg bg-electric-blue text-white shadow-xs shrink-0">
-            PRO PLAN
+            {planLabel(shop)} PLAN
           </span>
         </div>
 
