@@ -31,6 +31,8 @@ export interface SlipVerifyResult {
   receiverName?: string
   receiverAccount?: string
   isAmountMatched?: boolean
+  /** True when no real verification ran (mock provider or no API key); a human must check the slip */
+  manualReview?: boolean
   rawMessage?: string
   statusCode?: number
   data?: any
@@ -86,20 +88,16 @@ export async function verifySlip(options: SlipVerifyOptions): Promise<SlipVerify
   const { imageBase64, mimeType = 'image/jpeg', shopSettings, expectedAmount } = options
   const { provider, apiKey, branchId } = resolveSlipProviderAndKey(shopSettings)
 
-  // 1. Mock mode or missing API key fallback
+  // 1. Mock mode or missing API key: nothing was actually verified, so never report the
+  // slip as valid. Any image would otherwise mark an order as paid.
   if (provider === 'mock' || !apiKey) {
-    console.warn(`[SlipVerify] Provider '${provider}' or missing API key — falling back to mock approval`)
+    console.warn(`[SlipVerify] Provider '${provider}' has no usable API key — sending slip to manual review`)
     return {
-      success: true,
-      provider: provider === 'mock' ? 'mock' : `${provider} (mock-auto)`,
-      amount: expectedAmount || 0,
-      transRef: `MOCK-${Date.now().toString().slice(-8)}`,
-      date: new Date().toISOString().split('T')[0],
-      time: new Date().toTimeString().split(' ')[0],
-      receiverName: 'ร้านค้า (โหมดจำลอง)',
-      isAmountMatched: true,
-      rawMessage: 'อนุมัติอัตโนมัติ (โหมดทดสอบ/ไม่มี API Key)',
-      statusCode: 200,
+      success: false,
+      manualReview: true,
+      provider: provider === 'mock' ? 'mock' : `${provider} (no-key)`,
+      rawMessage: 'ระบบตรวจสลิปอัตโนมัติยังไม่ได้ตั้งค่า รอแอดมินตรวจสอบ',
+      statusCode: 503,
     }
   }
 
@@ -284,4 +282,69 @@ export async function verifySlip(options: SlipVerifyOptions): Promise<SlipVerify
       statusCode: 500,
     }
   }
+}
+
+// ─── Receiver check ──────────────────────────────────────────────────────────
+
+function collectStrings(value: unknown, out: string[]) {
+  if (typeof value === 'string') out.push(value)
+  else if (Array.isArray(value)) value.forEach((v) => collectStrings(v, out))
+  else if (value && typeof value === 'object') Object.values(value).forEach((v) => collectStrings(v, out))
+}
+
+/** Slip account numbers arrive masked, e.g. "xxx-x-x5678-x" or "xxx-xxx-5678". */
+function maskedMatches(masked: string, full: string): boolean {
+  const m = masked.replace(/[^0-9xX*]/g, '').toLowerCase().replace(/\*/g, 'x')
+  const visible = m.replace(/x/g, '')
+  if (visible.length < 3) return false
+  if (m.length === full.length) {
+    for (let i = 0; i < m.length; i++) {
+      if (m[i] !== 'x' && m[i] !== full[i]) return false
+    }
+    return true
+  }
+  // Different layouts (e.g. +66 vs 0 prefix): fall back to the longest visible digit run
+  const runs = m.split('x').filter((r) => r.length >= 4)
+  return runs.length > 0 && runs.some((r) => full.includes(r))
+}
+
+function normalizeAccountIds(ids: Array<string | null | undefined>): string[] {
+  const out = new Set<string>()
+  for (const id of ids) {
+    const digits = String(id || '').replace(/\D/g, '')
+    if (digits.length < 6) continue
+    out.add(digits)
+    if (digits.startsWith('66') && digits.length === 11) out.add(`0${digits.slice(2)}`)
+  }
+  return [...out]
+}
+
+/**
+ * Checks the slip's receiver against the shop's own PromptPay / bank accounts.
+ * 'unknown' means it could not be decided (no receiver data, or the shop has no
+ * accounts configured) and the slip should go to a human instead of auto-approval.
+ */
+export function checkSlipReceiver(
+  result: SlipVerifyResult,
+  shopAccountIds: Array<string | null | undefined>
+): 'match' | 'mismatch' | 'unknown' {
+  const data = result.data || {}
+  // Thunder only returns matchedAccount when the slip went to an account registered with it
+  if (result.provider === 'thunder' && data.matchedAccount) return 'match'
+
+  const shopIds = normalizeAccountIds(shopAccountIds)
+  if (shopIds.length === 0) return 'unknown'
+
+  const candidates: string[] = []
+  collectStrings(data.receiver, candidates)
+  if (result.receiverAccount) candidates.push(result.receiverAccount)
+  // Keep only account-number-shaped strings (masked or not); skips names and short bank codes like "004"
+  const accountLike = candidates.filter((c) => {
+    const cleaned = c.replace(/[^0-9xX*]/g, '')
+    return cleaned.length >= 6 && cleaned.replace(/[xX*]/g, '').length >= 3
+  })
+  if (accountLike.length === 0) return 'unknown'
+
+  const matched = accountLike.some((c) => shopIds.some((id) => maskedMatches(c, id)))
+  return matched ? 'match' : 'mismatch'
 }

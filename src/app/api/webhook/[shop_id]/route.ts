@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createHmac } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 import { processSalesAgentChat, type AgentResult } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
@@ -10,7 +10,7 @@ import { extractGoldenTrajectoryFromOrder } from '@/lib/ai/salesTrajectory'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildLineFlexProductCarousel } from '@/lib/line/flexHelper'
-import { verifySlip } from '@/lib/slip/verifySlip'
+import { verifySlip, checkSlipReceiver } from '@/lib/slip/verifySlip'
 
 const supabase = createAdminClient()
 
@@ -19,8 +19,9 @@ function verifyLineSignature(rawBody: string, signature: string, secret: string)
   if (!signature || !secret) return false
   const cleanSecret = secret.trim()
   const cleanSignature = signature.trim()
-  const hash = createHmac('SHA256', cleanSecret).update(rawBody).digest('base64')
-  return hash === cleanSignature
+  const hash = Buffer.from(createHmac('SHA256', cleanSecret).update(rawBody).digest('base64'))
+  const given = Buffer.from(cleanSignature)
+  return hash.length === given.length && timingSafeEqual(hash, given)
 }
 
 
@@ -73,14 +74,16 @@ export async function POST(
     const features = (shop.features as Record<string, boolean>) || {}
     const isAutoReplyEnabled = features.auto_reply !== false
 
-    // 2. Verify LINE Signature (reject fake webhooks)
+    // 2. Verify LINE Signature (reject fake webhooks). A missing signature is rejected too:
+    // otherwise anyone could post fake events simply by leaving the header out.
     const lineSignature = req.headers.get('x-line-signature') || ''
-    if (lineSecret && lineSignature) {
-      const isValid = verifyLineSignature(rawBody, lineSignature, lineSecret)
-      if (!isValid) {
-        console.error(`[Security] Invalid LINE signature for shop ${shop_id}`)
+    if (lineSecret) {
+      if (!verifyLineSignature(rawBody, lineSignature, lineSecret)) {
+        console.error(`[Security] Missing or invalid LINE signature for shop ${shop_id}`)
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
       }
+    } else {
+      console.warn(`[Security] Shop ${shop_id} has no LINE Channel Secret; webhook signature cannot be verified`)
     }
 
     // Process each LINE event
@@ -516,15 +519,44 @@ async function verifySlipAndNotify({
     const imageBase64 = Buffer.from(imageBuffer).toString('base64')
     const contentType = imageRes.headers.get('content-type') || 'image/jpeg'
 
-    // 2. Find conversation for this user
-    const { data: conv } = await supabase
+    const botName = (shop.bot_name && !/botify/i.test(shop.bot_name)) ? shop.bot_name : 'น้อง DealMee'
+
+    // 2. Find this customer's conversation
+    const { data: convRows } = await supabase
       .from('conversations')
-      .select('id')
+      .select('id, customer_name')
       .eq('shop_id', shopId)
       .eq('user_id', userId)
-      .maybeSingle()
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+    const conv = convRows?.[0] || null
 
-    // 3. Find most recent pending order for this customer/shop
+    const replyAndLog = async (text: string) => {
+      await sendLinePush(userId, text, lineToken)
+      if (conv?.id) {
+        await supabase.from('chat_messages').insert({
+          conversation_id: conv.id,
+          shop_id: shopId,
+          sender_type: 'bot',
+          sender_name: botName,
+          message: text,
+        })
+      }
+    }
+
+    // A slip that couldn't be confirmed automatically goes to a human: tell the customer
+    // it's being checked and alert the shop admin, but never mark anything paid.
+    const sendToManualReview = async (reason: string, orderNo?: string) => {
+      await replyAndLog(
+        `ได้รับสลิปแล้วค่ะ 🙏 ระบบยังยืนยันอัตโนมัติไม่ได้ (${reason})\nแอดมินจะตรวจสอบและแจ้งกลับโดยเร็วที่สุดนะคะ`
+      )
+      await notifyShopAdmin(
+        shop,
+        `⚠️ สลิปรอตรวจสอบ\nลูกค้า: ${conv?.customer_name || userId}\n${orderNo ? `ออเดอร์: ${orderNo}\n` : ''}เหตุผล: ${reason}\nกรุณาตรวจสอบใน Inbox ก่อนยืนยันออเดอร์`
+      )
+    }
+
+    // 3. Only this customer's own pending order may be settled by their slip
     let pendingOrder: any = null
     if (conv?.id) {
       const { data: ords } = await supabase
@@ -535,21 +567,7 @@ async function verifySlipAndNotify({
         .eq('status', 'pending')
         .order('created_at', { ascending: false })
         .limit(1)
-      if (ords && ords.length > 0) {
-        pendingOrder = ords[0]
-      }
-    }
-    if (!pendingOrder) {
-      const { data: ords } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('shop_id', shopId)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-        .limit(1)
-      if (ords && ords.length > 0) {
-        pendingOrder = ords[0]
-      }
+      pendingOrder = ords?.[0] || null
     }
 
     const expectedAmount = pendingOrder ? Number(pendingOrder.total_amount) : undefined
@@ -563,88 +581,146 @@ async function verifySlipAndNotify({
       expectedAmount,
     })
 
-    console.log('[SlipVerify] Verification result:', JSON.stringify(verifyResult))
+    console.log('[SlipVerify] Verification result:', JSON.stringify({ ...verifyResult, data: undefined }))
 
-    if (verifyResult.success) {
-      const amountVal = Number(verifyResult.amount || expectedAmount || 0)
-      const amountThai = amountVal.toLocaleString('th-TH', { minimumFractionDigits: 2 })
-
-      // 5. Update pending order to 'paid'
-      if (pendingOrder) {
-        await supabase
-          .from('orders')
-          .update({
-            status: 'paid',
-            note: (pendingOrder.note ? `${pendingOrder.note}\n` : '') + `[ตรวจสลิปผ่านโดย ${verifyResult.provider}]: ยอด ${amountThai} บ. (LINE-Image:${messageId})`,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', pendingOrder.id)
-
-        await cancelFollowUpTasks({
-          shopId,
-          referenceId: pendingOrder.order_no,
-          taskType: 'qr_recovery',
-        })
-
-        await scheduleRepurchaseFollowUp({
-          shopId,
-          userId,
-          orderNumber: pendingOrder.order_no,
-          productSummary: pendingOrder.product_name,
-          daysDelay: 21,
-        })
-
-        // Extract Golden Trajectory from this winning order
-        extractGoldenTrajectoryFromOrder({
-          shopId,
-          orderId: pendingOrder.id,
-          conversationId: pendingOrder.conversation_id,
-          revenue: amountVal,
-        }).catch((err) => console.error('[SalesTrajectory Error]:', err))
-      }
-
-      const orderRefText = pendingOrder?.order_no ? `\n📦 ออเดอร์: ${pendingOrder.order_no}` : ''
-      const successMsg =
-        `✅ ตรวจสอบสลิปสำเร็จค่ะ!\n` +
-        `💰 ยอดโอน: ${amountThai} บาท\n` +
-        `👤 ผู้รับ: ${verifyResult.receiverName || shop.promptpay_name || 'ร้านค้า'}\n` +
-        (verifyResult.date ? `📅 วันที่: ${verifyResult.date} ${verifyResult.time || ''}\n` : '') +
-        (verifyResult.transRef ? `📋 อ้างอิง: ${verifyResult.transRef}\n` : '') +
-        orderRefText +
-        `\n\nออเดอร์ได้รับการยืนยันเรียบร้อยแล้วค่ะ 🎉 ขอบพระคุณที่ใช้บริการนะคะ 🙏`
-
-      await sendLinePush(userId, successMsg, lineToken)
-
-      if (conv?.id) {
-        await supabase.from('chat_messages').insert({
-          conversation_id: conv.id,
-          shop_id: shopId,
-          sender_type: 'bot',
-          sender_name: (shop.bot_name && !/botify/i.test(shop.bot_name)) ? shop.bot_name : 'น้อง DealMee',
-          message: successMsg,
-        })
-      }
-    } else {
-      const reason = verifyResult.rawMessage ?? 'ไม่สามารถอ่านข้อมูลสลิปได้'
-      const failMsg =
-        `❌ ตรวจสอบสลิปไม่สำเร็จค่ะ (${reason})\n\nกรุณาตรวจสอบ:\n• ถ่ายหน้าจอสลิปให้ชัดเจน ไม่ตัดขอบหรือ QR Code\n• ต้องเป็นสลิปโอนเงินจริงจากธนาคาร\n• ยอดเงินตรงกับยอดในออเดอร์\n\nหากท่านโอนเงินเรียบร้อยแล้ว สามารถแจ้งแอดมินให้ตรวจสอบได้เลยนะคะ 🙏`
-
-      await sendLinePush(userId, failMsg, lineToken)
-
-      if (conv?.id) {
-        await supabase.from('chat_messages').insert({
-          conversation_id: conv.id,
-          shop_id: shopId,
-          sender_type: 'bot',
-          sender_name: (shop.bot_name && !/botify/i.test(shop.bot_name)) ? shop.bot_name : 'น้อง DealMee',
-          message: failMsg,
-        })
-      }
+    if (verifyResult.manualReview) {
+      await sendToManualReview('ร้านยังไม่ได้ตั้งค่าระบบตรวจสลิปอัตโนมัติ', pendingOrder?.order_no)
+      return
     }
+
+    if (!verifyResult.success) {
+      const reason = verifyResult.rawMessage ?? 'ไม่สามารถอ่านข้อมูลสลิปได้'
+      await replyAndLog(
+        `❌ ตรวจสอบสลิปไม่สำเร็จค่ะ (${reason})\n\nกรุณาตรวจสอบ:\n• ถ่ายหน้าจอสลิปให้ชัดเจน ไม่ตัดขอบหรือ QR Code\n• ต้องเป็นสลิปโอนเงินจริงจากธนาคาร\n• ยอดเงินตรงกับยอดในออเดอร์\n\nหากท่านโอนเงินเรียบร้อยแล้ว สามารถแจ้งแอดมินให้ตรวจสอบได้เลยนะคะ 🙏`
+      )
+      return
+    }
+
+    const slipAmount = Number(verifyResult.amount || 0)
+    const amountThai = slipAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })
+
+    if (!pendingOrder) {
+      await sendToManualReview(`ไม่พบออเดอร์ที่รอชำระของลูกค้ารายนี้ (ยอดในสลิป ${amountThai} บาท)`)
+      return
+    }
+
+    // 5. The slip must cover this order's total
+    if (expectedAmount !== undefined && Math.abs(slipAmount - expectedAmount) > 1) {
+      const expectedThai = expectedAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })
+      await replyAndLog(
+        `❌ ยอดในสลิป (${amountThai} บาท) ไม่ตรงกับยอดออเดอร์ ${pendingOrder.order_no} (${expectedThai} บาท) ค่ะ\nรบกวนตรวจสอบยอดโอนอีกครั้ง หรือรอแอดมินติดต่อกลับนะคะ 🙏`
+      )
+      await notifyShopAdmin(
+        shop,
+        `⚠️ ยอดสลิปไม่ตรง\nออเดอร์: ${pendingOrder.order_no}\nยอดออเดอร์: ${expectedThai} บาท\nยอดในสลิป: ${amountThai} บาท`
+      )
+      return
+    }
+
+    // 6. The money must have gone to this shop's own account
+    const receiverCheck = checkSlipReceiver(verifyResult, [
+      shop.promptpay_number,
+      shop.payment_promptpay,
+      shop.bank_account_number,
+      shop.payment_bank_account,
+    ])
+    if (receiverCheck === 'mismatch') {
+      await replyAndLog(
+        `❌ บัญชีผู้รับในสลิปไม่ตรงกับบัญชีของร้านค่ะ\nกรุณาตรวจสอบว่าโอนเข้าบัญชีร้านถูกต้อง หรือรอแอดมินติดต่อกลับนะคะ 🙏`
+      )
+      await notifyShopAdmin(
+        shop,
+        `⚠️ สลิปโอนเข้าบัญชีอื่น\nออเดอร์: ${pendingOrder.order_no}\nผู้รับในสลิป: ${verifyResult.receiverName || '-'}`
+      )
+      return
+    }
+    if (receiverCheck === 'unknown') {
+      await sendToManualReview('ตรวจบัญชีผู้รับอัตโนมัติไม่ได้', pendingOrder.order_no)
+      return
+    }
+
+    // 7. A slip can settle only one order
+    const transRef = (verifyResult.transRef || '').trim()
+    if (!transRef) {
+      await sendToManualReview('สลิปไม่มีเลขอ้างอิงธุรกรรม', pendingOrder.order_no)
+      return
+    }
+    const { data: reused } = await supabase
+      .from('orders')
+      .select('order_no')
+      .eq('shop_id', shopId)
+      .ilike('note', `%[slip-ref:${transRef}]%`)
+      .limit(1)
+    if (reused && reused.length > 0) {
+      await replyAndLog(`❌ สลิปนี้ถูกใช้ยืนยันออเดอร์ ${reused[0].order_no} ไปแล้วค่ะ กรุณาส่งสลิปของการโอนครั้งนี้นะคะ 🙏`)
+      await notifyShopAdmin(shop, `⚠️ มีการส่งสลิปซ้ำ\nสลิปเคยใช้กับ: ${reused[0].order_no}\nส่งมาอีกครั้งสำหรับ: ${pendingOrder.order_no}`)
+      return
+    }
+
+    // 8. Mark the order paid (only if it is still pending)
+    const { data: updatedRows, error: updateError } = await supabase
+      .from('orders')
+      .update({
+        status: 'paid',
+        note: (pendingOrder.note ? `${pendingOrder.note}\n` : '') +
+          `[ตรวจสลิปผ่านโดย ${verifyResult.provider}]: ยอด ${amountThai} บ. [slip-ref:${transRef}] (LINE-Image:${messageId})`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', pendingOrder.id)
+      .eq('status', 'pending')
+      .select('id')
+
+    if (updateError || !updatedRows || updatedRows.length === 0) {
+      console.error('[SlipVerify] Could not mark order paid:', updateError)
+      await sendToManualReview('บันทึกสถานะการชำระเงินไม่สำเร็จ', pendingOrder.order_no)
+      return
+    }
+
+    await cancelFollowUpTasks({
+      shopId,
+      referenceId: pendingOrder.order_no,
+      taskType: 'qr_recovery',
+    })
+
+    await scheduleRepurchaseFollowUp({
+      shopId,
+      userId,
+      orderNumber: pendingOrder.order_no,
+      productSummary: pendingOrder.product_name,
+      daysDelay: 21,
+    })
+
+    // Extract Golden Trajectory from this winning order
+    extractGoldenTrajectoryFromOrder({
+      shopId,
+      orderId: pendingOrder.id,
+      conversationId: pendingOrder.conversation_id,
+      revenue: slipAmount,
+    }).catch((err) => console.error('[SalesTrajectory Error]:', err))
+
+    await replyAndLog(
+      `✅ ตรวจสอบสลิปสำเร็จค่ะ!\n` +
+      `💰 ยอดโอน: ${amountThai} บาท\n` +
+      `👤 ผู้รับ: ${verifyResult.receiverName || shop.promptpay_name || 'ร้านค้า'}\n` +
+      (verifyResult.date ? `📅 วันที่: ${verifyResult.date} ${verifyResult.time || ''}\n` : '') +
+      `📋 อ้างอิง: ${transRef}\n` +
+      `📦 ออเดอร์: ${pendingOrder.order_no}` +
+      `\n\nออเดอร์ได้รับการยืนยันเรียบร้อยแล้วค่ะ 🎉 ขอบพระคุณที่ใช้บริการนะคะ 🙏`
+    )
+    await notifyShopAdmin(shop, `💰 ลูกค้าชำระเงินแล้ว\nออเดอร์: ${pendingOrder.order_no}\nยอด: ${amountThai} บาท (ตรวจสลิปผ่าน)`)
   } catch (err) {
     console.error('[SlipVerify Exception]:', err)
     await sendLinePush(userId, '❌ ระบบตรวจสลิปขัดข้องชั่วคราวค่ะ กรุณาแจ้งแอดมินนะคะ 🙏', lineToken)
   }
+}
+
+/** Push a text alert to the shop admin's LINE, when the shop has one configured */
+async function notifyShopAdmin(shop: Record<string, any>, text: string) {
+  const lineToken = shop?.line_token ? String(shop.line_token).trim() : ''
+  if (!lineToken || shop?.features?.admin_notify === false) return
+  const targetAdmin = shop.admin_line_user_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
+  if (!targetAdmin) return
+  await sendLinePush(targetAdmin, text, lineToken)
 }
 
 // ─── LINE Messaging Helpers ───────────────────────────────────────────────────
