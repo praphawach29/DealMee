@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { selectRelevantKnowledge } from '@/lib/ai/knowledgeSelect'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildBusinessPromptContext } from '@/lib/businessGreeting'
 import { getCurrentPeriod } from '@/lib/billing/usage'
@@ -135,7 +136,7 @@ export interface AgentUsage {
   completionTokens: number
   totalTokens: number
   provider: AiProvider
-  /** Claude prompt-caching only — stays undefined for Gemini/OpenAI. */
+  /** Cached input tokens (Claude prompt caching, Gemini cachedContentTokenCount). */
   cacheReadTokens?: number
   cacheWriteTokens?: number
 }
@@ -782,13 +783,13 @@ const SALES_TOOL_NAMES: AgentToolName[] = [
   'calculate_shipping', 'take_order', 'create_quotation', 'accept_quotation', 'create_official_letter', 'send_payment_qr',
   'get_payment_slip_status', 'send_invoice',
   'save_lead', 'update_customer_note', 'add_customer_tag', 'get_customer_history', 'check_loyalty_points',
-  'schedule_followup', 'request_human_agent', 'transfer_to_agent',
+  'schedule_followup', 'request_human_agent', 'transfer_to_agent', 'search_knowledge_base',
   'get_shop_info', 'request_review', 'get_return_policy',
 ]
 
 const BOOKING_TOOL_NAMES: AgentToolName[] = [
   'check_available_slots', 'book_appointment', 'reschedule_booking', 'check_booking', 'cancel_booking',
-  'get_active_promotions', 'update_customer_note', 'send_payment_qr', 'get_shop_info',
+  'get_active_promotions', 'update_customer_note', 'send_payment_qr', 'get_shop_info', 'search_knowledge_base',
 ]
 
 const SUPPORT_TOOL_NAMES: AgentToolName[] = [
@@ -1149,25 +1150,9 @@ async function preparePlanningState({
     .order('created_at', { ascending: true })
     .limit(KNOWLEDGE_INLINE_MAX_ITEMS)
 
+  // The knowledge block is built after the chat history below, so it can be
+  // narrowed to the entries relevant to what this customer is asking about.
   let knowledgeContext = ''
-  if (knowledgeItems && knowledgeItems.length > 0) {
-    const inlined: string[] = []
-    let budget = KNOWLEDGE_INLINE_MAX_CHARS
-    for (const item of knowledgeItems) {
-      const block = `Q: ${item.title}\nA: ${item.content}`
-      if (block.length > budget) break
-      inlined.push(block)
-      budget -= block.length
-    }
-
-    const omitted = knowledgeItems.length - inlined.length
-    knowledgeContext =
-      `\n\n[คลังข้อมูลความรู้ของร้าน]\n` +
-      inlined.join('\n\n') +
-      (omitted > 0
-        ? `\n\n(ยังมีข้อมูลอีก ${omitted} ข้อที่ไม่ได้แสดงตรงนี้ ถ้าลูกค้าถามเรื่องที่ไม่มีข้างบน ให้เรียก search_knowledge_base ค้นหาก่อนตอบว่าไม่รู้)`
-        : '')
-  }
 
   // 2. Products
   const features = (shop.features as Record<string, boolean>) || {}
@@ -1273,6 +1258,18 @@ async function preparePlanningState({
     }
   }
 
+  // Knowledge base: inline only the entries related to this conversation
+  // (whole KB when it is small); everything else via search_knowledge_base.
+  if (knowledgeItems && knowledgeItems.length > 0) {
+    const { blocks, omitted } = selectRelevantKnowledge(knowledgeItems, userQuery, recentCustomerMessages)
+    knowledgeContext =
+      `\n\n[คลังข้อมูลความรู้ของร้าน (เฉพาะส่วนที่เกี่ยวข้อง)]\n` +
+      blocks.join('\n\n') +
+      (omitted > 0
+        ? `\n\n(ยังมีข้อมูลอีก ${omitted} ข้อที่ไม่ได้แสดงตรงนี้ ถ้าลูกค้าถามเรื่องที่ไม่มีข้างบน ให้เรียก search_knowledge_base ค้นหาก่อนตอบว่าไม่รู้)`
+        : '')
+  }
+
   // 4. Payment Info
   const promptpayId = shop.promptpay_id || shop.promptpay_number
   let paymentInfo = ''
@@ -1343,12 +1340,15 @@ async function preparePlanningState({
       .from('documents')
       .select('doc_number, doc_no, doc_type, customer_name, customer_phone, total_amount, status, items, notes, created_at')
       .eq('shop_id', shop.id)
+      // Only this conversation's documents: listing the shop's latest documents put other
+      // customers' names, phone numbers and totals into every customer's prompt.
+      .eq('customer_info->>conversation_id', conversationId)
       .order('created_at', { ascending: false })
       .limit(6)
 
     if (myDocuments && myDocuments.length > 0) {
       documentStateContext =
-        `\n\n[ใบเสนอราคาและใบแจ้งหนี้ล่าสุดของร้านค้า]\n` +
+        `\n\n[ใบเสนอราคาและใบแจ้งหนี้ของลูกค้ารายนี้]\n` +
         myDocuments.map((d: any) => {
           const no = d.doc_number || d.doc_no || 'DOC'
           const typeStr = d.doc_type === 'invoice' ? 'ใบแจ้งหนี้ (Invoice)' : d.doc_type === 'sales_order' ? 'ใบสั่งขาย (Sales Order)' : 'ใบเสนอราคา (Quotation)'
@@ -1468,7 +1468,7 @@ async function preparePlanningState({
 - ถ้ายังขาดวิธีชำระเงิน ให้เสนอทางเลือกจากข้อมูลร้าน เช่น พร้อมเพย์/โอนธนาคาร/เก็บปลายทาง แล้วถามให้ลูกค้าเลือก ก่อนเรียก take_order
 - ห้ามสรุปว่ารับออเดอร์แล้วถ้ายังไม่ได้เรียก take_order หรือข้อมูลลูกค้ายังไม่ครบ ให้ถามเฉพาะข้อมูลที่ขาดแทน
 - ถ้าไม่มีข้อมูล ให้แจ้งลูกค้าให้รอแอดมินหรือเรียก request_human_agent
-${knowledgeContext}${productsContext}
+${productsContext}
 ${buildBusinessPromptContext(shop, bookingPromptTemplates)}${bookingContext}
 ${paymentInfo}`
 
@@ -1499,7 +1499,7 @@ ${paymentInfo}`
   const goldenClosersContext = formatGoldenClosersPromptContext(goldenTrajectories)
 
   const dynamicSystemPrompt = `${salesStageContext}${goldenClosersContext ? `\n\n${goldenClosersContext}` : ''}
-${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}
+${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}
 ${historyContext}`
 
   const systemInstruction = `${staticSystemPrompt}\n${dynamicSystemPrompt}`
@@ -1953,7 +1953,8 @@ async function callGeminiApi(
       const usage: AgentUsage | undefined = usageMeta
         ? {
             promptTokens: usageMeta.promptTokenCount || 0,
-            completionTokens: usageMeta.candidatesTokenCount || 0,
+            // Thinking tokens are billed as output, so they belong in the cost
+            completionTokens: (usageMeta.candidatesTokenCount || 0) + (usageMeta.thoughtsTokenCount || 0),
             totalTokens: usageMeta.totalTokenCount || 0,
             provider: 'gemini',
             cacheReadTokens: usageMeta.cachedContentTokenCount || 0,
