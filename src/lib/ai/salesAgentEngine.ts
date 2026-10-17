@@ -239,14 +239,14 @@ const MASTER_TOOLS = [
   // ── 💳 Payment ──────────────────────────────────────────────────────────────
   {
     name: 'send_payment_qr',
-    description: 'ส่ง QR Code PromptPay ให้ลูกค้าสแกนจ่าย ใช้เมื่อลูกค้าพร้อมชำระเงินหรือตกลงซื้อแล้ว',
+    description: 'ส่ง QR Code PromptPay ของออเดอร์ที่รอชำระ (หรือมัดจำการจอง) ให้ลูกค้าสแกนจ่าย ยอดเงินระบบดึงจากออเดอร์เอง ต้องเรียก take_order ให้สำเร็จก่อน',
     parameters: {
       type: 'object',
       properties: {
-        amount: { type: 'number', description: 'ยอดเงินรวมที่ต้องชำระ (บาท)' },
-        order_summary: { type: 'string', description: 'สรุปรายการสินค้า เช่น "สินค้า A x2"' },
+        order_id: { type: 'string', description: 'เลขที่ออเดอร์ เช่น ORD-123456 (ถ้าไม่ระบุ ใช้ออเดอร์ที่รอชำระล่าสุดของลูกค้า)' },
+        amount: { type: 'number', description: 'ยอดที่คาดว่าต้องชำระ (ใช้เทียบเท่านั้น ระบบใช้ยอดจากออเดอร์จริง)' },
       },
-      required: ['amount'],
+      required: [],
     },
   },
   {
@@ -347,7 +347,7 @@ const MASTER_TOOLS = [
   // ── 🛒 Order ─────────────────────────────────────────────────────────────────
   {
     name: 'take_order',
-    description: 'สรุปและสร้างออเดอร์ใหม่เมื่อลูกค้าให้ข้อมูลครบถ้วนและตกลงซื้อแล้ว',
+    description: 'สรุปและสร้างออเดอร์ใหม่เมื่อลูกค้าให้ข้อมูลครบถ้วนและตกลงซื้อแล้ว ระบบคำนวณราคา ค่าส่ง และตรวจสต๊อกจากข้อมูลร้านเอง ให้ใช้ชื่อสินค้าตามที่ search_products คืนมา',
     parameters: {
       type: 'object',
       properties: {
@@ -791,8 +791,19 @@ const GENERAL_TOOL_NAMES: AgentToolName[] = [
   'search_products', 'check_stock', 'get_active_promotions', 'create_quotation', 'create_official_letter',
 ]
 
+// Tools that are declared above but have no handler in toolDispatcher.executeTool yet.
+// executeTool answers unknown tools with a generic "done", so offering these let the
+// model tell customers a discount was applied or an invoice sent when nothing happened.
+// Keep them hidden until each one is implemented.
+const UNIMPLEMENTED_TOOLS = new Set<string>([
+  'apply_custom_discount', 'calculate_installment', 'check_warranty', 'get_crosssell_products',
+  'get_payment_slip_status', 'get_product_image', 'get_return_policy', 'get_shop_info',
+  'get_upsell_products', 'recommend_product_match', 'request_review', 'send_invoice',
+  'track_parcel', 'upsell_suggestion',
+])
+
 function filterTools(names: AgentToolName[]) {
-  return MASTER_TOOLS.filter((t) => names.includes(t.name as AgentToolName))
+  return MASTER_TOOLS.filter((t) => names.includes(t.name as AgentToolName) && !UNIMPLEMENTED_TOOLS.has(t.name))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
