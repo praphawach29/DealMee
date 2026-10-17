@@ -363,7 +363,7 @@ export async function runMerchantCopilotChat({
     ]
 
     const toolCallsExecuted: string[] = []
-    let maxSteps = 4
+    const maxSteps = 4
     let currentStep = 0
     let finalAnswer = ''
 

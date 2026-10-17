@@ -176,6 +176,64 @@ export async function POST(
         // 4. Check if Admin Takeover is active OR Auto-Reply is disabled
         const cleanText = userText.trim()
         const lowerText = cleanText.toLowerCase()
+
+        // 3.1 Handle Admin Instant Linking Command (e.g. /admin-link ADM-123456)
+        if (cleanText.startsWith('/admin-link') || cleanText.startsWith('/link-admin')) {
+          const parts = cleanText.split(/\s+/)
+          const code = parts[1]?.trim()
+          const expectedCode = shop.features?.admin_link_code
+
+          if (expectedCode && code && code.toUpperCase() === String(expectedCode).toUpperCase()) {
+            let adminName = 'แอดมิน'
+            if (lineToken) {
+              try {
+                const pRes = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
+                  headers: { Authorization: `Bearer ${lineToken}` },
+                })
+                if (pRes.ok) {
+                  const pData = await pRes.json()
+                  if (pData.displayName) adminName = pData.displayName
+                }
+              } catch {}
+            }
+
+            const updatedFeatures = {
+              ...((shop.features as Record<string, any>) || {}),
+              admin_line_user_id: userId,
+              admin_line_name: adminName,
+              admin_notify: true,
+              admin_link_code: null,
+            }
+
+            await supabase
+              .from('shops')
+              .update({
+                owner_line_id: userId,
+                features: updatedFeatures,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', shop_id)
+
+            if (replyToken && lineToken) {
+              await sendLineReply(
+                replyToken,
+                `🎉 ยืนยันเชื่อมต่อแอดมินสำเร็จแล้วค่ะคุณ ${adminName}!\n\nระบบ DealMee ได้ผูกบัญชี LINE นี้เป็นแอดมินของร้าน "${shop.name || 'ร้านค้า'}" เรียบร้อยแล้วค่ะ\n\nต่อไปนี้น้องบอทจะส่งแจ้งเตือนมาที่นี่ทันทีเมื่อมี:\n• ออเดอร์ใหม่เข้ามา 🛒\n• ลูกค้าชำระเงิน / ตรวจสลิป 💰\n• ตรวจพบสลิปผิดปกติ ⚠️\n• ลูกค้าขอคุยกับแอดมิน 🔔`,
+                lineToken
+              )
+            }
+            continue
+          } else {
+            if (replyToken && lineToken) {
+              await sendLineReply(
+                replyToken,
+                '❌ รหัสเชื่อมต่อแอดมินไม่ถูกต้อง หรือหมดอายุแล้วค่ะ\nกรุณากดรับรหัสหรือสแกน QR Code ใหม่จากหน้า Dashboard ตั้งค่าร้านค้านะคะ 🙏',
+                lineToken
+              )
+            }
+            continue
+          }
+        }
+
         const isPauseCommand = ['/pause', '/stop', '/admin', '/human'].includes(lowerText) ||
           cleanText === 'ขอคุยกับแอดมิน' || cleanText === 'ขอคุยกับเจ้าหน้าที่' || cleanText === 'ติดต่อเจ้าหน้าที่'
 
@@ -720,7 +778,7 @@ async function verifySlipAndNotify({
 async function notifyShopAdmin(shop: Record<string, any>, text: string) {
   const lineToken = shop?.line_token ? String(shop.line_token).trim() : ''
   if (!lineToken || shop?.features?.admin_notify === false) return
-  const targetAdmin = shop.admin_line_user_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
+  const targetAdmin = shop.admin_line_user_id || shop.owner_line_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
   if (!targetAdmin) return
   await sendLinePush(targetAdmin, text, lineToken)
 }

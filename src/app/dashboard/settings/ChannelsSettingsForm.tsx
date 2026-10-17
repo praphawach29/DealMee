@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { updateChannelSettings } from './actions'
+import AdminLineNotificationCard from './AdminLineNotificationCard'
 import {
   Save,
   CheckCircle2,
@@ -28,6 +29,8 @@ interface ShopChannelData {
   id: string
   line_token?: string | null
   line_secret?: string | null
+  owner_line_id?: string | null
+  features?: any
   facebook_page_id?: string | null
   facebook_page_token?: string | null
   facebook_verify_token?: string | null
@@ -470,6 +473,16 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
             <p className="text-[11px] text-outline leading-relaxed">
               นำ URL นี้ไปใส่ใน LINE Developers Console → Messaging API → Webhook URL แล้วเปิด Verify
             </p>
+          </div>
+
+          {/* การแจ้งเตือนแอดมิน LINE OA (1-Click & QR Code Link) */}
+          <div className="pt-2 border-t border-outline-variant/30">
+            <AdminLineNotificationCard
+              lineToken={shop.line_token}
+              initialIsLinked={Boolean(shop.owner_line_id || shop.features?.admin_line_user_id)}
+              initialAdminName={shop.features?.admin_line_name}
+              initialAdminUserId={shop.owner_line_id || shop.features?.admin_line_user_id}
+            />
           </div>
         </div>
       </section>

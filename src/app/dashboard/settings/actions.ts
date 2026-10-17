@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
+import qrcode from 'qrcode'
 import {
   startSalesAgentPlanning,
   continueSalesAgentPlanning,
@@ -637,4 +638,184 @@ export async function getPlaygroundQuotaStatus() {
     console.error('[getPlaygroundQuotaStatus] Exception:', err)
     return null
   }
+}
+
+/** Get QR code, Deep link, and status for Admin LINE instant linking */
+export async function getAdminLinkDataAction() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'กรุณาเข้าสู่ระบบ' }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop) return { error: 'ไม่พบข้อมูลร้านค้า' }
+
+  const isLinked = Boolean(shop.owner_line_id || shop.features?.admin_line_user_id)
+  const adminName = shop.features?.admin_line_name || null
+  const adminUserId = shop.owner_line_id || shop.features?.admin_line_user_id || null
+
+  let basicId = ''
+  if (shop.line_token) {
+    try {
+      const res = await fetch('https://api.line.me/v2/bot/info', {
+        headers: { Authorization: `Bearer ${shop.line_token}` },
+        next: { revalidate: 3600 },
+      })
+      if (res.ok) {
+        const info = await res.json()
+        basicId = (info.basicId || '').replace(/^@/, '')
+      }
+    } catch {}
+  }
+
+  // Generate or retrieve current active link code (e.g. ADM-7492)
+  let code = shop.features?.admin_link_code
+  if (!code || isLinked) {
+    code = 'ADM-' + Math.floor(1000 + Math.random() * 9000)
+    const updatedFeatures = {
+      ...(shop.features || {}),
+      admin_link_code: code,
+    }
+    await supabase.from('shops').update({
+      features: updatedFeatures,
+      updated_at: new Date().toISOString(),
+    }).eq('id', shop.id)
+  }
+
+  const cleanBasicId = basicId || shop.line_bot_id || '971njcnv'
+  // LINE Official Account deep link that pre-fills message
+  const deepLink = `https://line.me/R/oaMessage/@${cleanBasicId}/?${encodeURIComponent('/admin-link ' + code)}`
+
+  let qrDataUrl = ''
+  try {
+    qrDataUrl = await qrcode.toDataURL(deepLink, {
+      width: 280,
+      margin: 2,
+      color: { dark: '#0F172A', light: '#FFFFFF' },
+    })
+  } catch (e) {
+    console.warn('[getAdminLinkDataAction] QR generation error:', e)
+  }
+
+  return {
+    success: true,
+    isLinked,
+    adminName,
+    adminUserId,
+    code,
+    deepLink,
+    qrDataUrl,
+    basicId: cleanBasicId,
+  }
+}
+
+/** Unlink Admin LINE account */
+export async function unlinkAdminAction() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'กรุณาเข้าสู่ระบบ' }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop) return { error: 'ไม่พบข้อมูลร้านค้า' }
+
+  const updatedFeatures = {
+    ...(shop.features || {}),
+    admin_line_user_id: null,
+    admin_line_name: null,
+    admin_notify: false,
+    admin_link_code: null,
+  }
+
+  const { error } = await supabase.from('shops').update({
+    owner_line_id: null,
+    features: updatedFeatures,
+    updated_at: new Date().toISOString(),
+  }).eq('id', shop.id)
+
+  if (error) return { error: `ยกเลิกไม่สำเร็จ: ${error.message}` }
+  revalidatePath('/dashboard/settings')
+  return { success: 'ยกเลิกการเชื่อมต่อแอดมินเรียบร้อยแล้ว' }
+}
+
+/** Send test alert to Admin LINE account */
+export async function sendTestAdminNotificationAction() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'กรุณาเข้าสู่ระบบ' }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop) return { error: 'ไม่พบข้อมูลร้านค้า' }
+
+  const targetAdmin = shop.owner_line_id || shop.features?.admin_line_user_id
+  if (!targetAdmin) return { error: 'ยังไม่ได้เชื่อมต่อบัญชีแอดมิน' }
+  if (!shop.line_token) return { error: 'ร้านค้ายังไม่ได้เชื่อมต่อ LINE Token' }
+
+  const text = `🔔 [ทดสอบการแจ้งเตือนแอดมิน]\nระบบ DealMee ได้เชื่อมต่อกับ LINE ของคุณเรียบร้อยแล้วค่ะ!\n\nต่อไปนี้เมื่อมี:\n• ออเดอร์ใหม่เข้ามา 🛒\n• ลูกค้าชำระเงินและตรวจสลิปผ่าน 💰\n• สลิปยอดไม่ตรงหรือผิดปกติ ⚠️\n• ลูกค้าขอคุยกับแอดมินคนจริง 👤\n\nระบบจะส่งข้อความแจ้งเตือนมาที่นี่ทันทีค่ะ ✨`
+
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${shop.line_token}`,
+      },
+      body: JSON.stringify({
+        to: targetAdmin,
+        messages: [{ type: 'text', text }],
+      }),
+    })
+
+    if (res.ok) {
+      return { success: 'ส่งข้อความทดสอบเข้า LINE เรียบร้อยแล้ว!' }
+    } else {
+      const errText = await res.text()
+      return { error: `ส่งไม่สำเร็จ: ${errText}` }
+    }
+  } catch (err: any) {
+    return { error: `เกิดข้อผิดพลาด: ${err.message}` }
+  }
+}
+
+/** Save manually entered LINE User ID */
+export async function saveManualAdminLineIdAction(lineUserId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'กรุณาเข้าสู่ระบบ' }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop) return { error: 'ไม่พบข้อมูลร้านค้า' }
+
+  const cleaned = (lineUserId || '').trim()
+  if (!cleaned.startsWith('U') || cleaned.length !== 33) {
+    return { error: 'LINE User ID ต้องขึ้นต้นด้วยตัว U และมีความยาว 33 ตัวอักษร' }
+  }
+
+  let adminName = 'แอดมิน'
+  if (shop.line_token) {
+    try {
+      const pRes = await fetch(`https://api.line.me/v2/bot/profile/${cleaned}`, {
+        headers: { Authorization: `Bearer ${shop.line_token}` },
+      })
+      if (pRes.ok) {
+        const pData = await pRes.json()
+        if (pData.displayName) adminName = pData.displayName
+      }
+    } catch {}
+  }
+
+  const updatedFeatures = {
+    ...(shop.features || {}),
+    admin_line_user_id: cleaned,
+    admin_line_name: adminName,
+    admin_notify: true,
+  }
+
+  const { error } = await supabase.from('shops').update({
+    owner_line_id: cleaned,
+    features: updatedFeatures,
+    updated_at: new Date().toISOString(),
+  }).eq('id', shop.id)
+
+  if (error) return { error: `บันทึกไม่สำเร็จ: ${error.message}` }
+  revalidatePath('/dashboard/settings')
+  return { success: `เชื่อมต่อแอดมิน (${adminName}) เรียบร้อยแล้ว` }
 }
