@@ -31,9 +31,6 @@ export async function updateBotSettings(formData: FormData) {
     return { error: 'ไม่สามารถสร้างหรือค้นหาข้อมูลร้านค้าได้' }
   }
 
-  const rawToken = (formData.get('line_token') as string) || ''
-  const rawSecret = (formData.get('line_secret') as string) || ''
-
   const qrRecoveryEnabled = formData.get('qr_recovery_enabled') === 'true' || formData.get('qr_recovery_enabled') === 'on'
   const qrRecoveryDelayMins = Number(formData.get('qr_recovery_delay_mins')) || 20
   const bookingReminderEnabled = formData.get('booking_reminder_enabled') === 'true' || formData.get('booking_reminder_enabled') === 'on'
@@ -48,34 +45,17 @@ export async function updateBotSettings(formData: FormData) {
     repurchase_delay_days: repurchaseDelayDays,
   }
 
-  const fbPageId = ((formData.get('facebook_page_id') as string) || '').trim()
-  const fbPageToken = ((formData.get('facebook_page_token') as string) || '').trim()
-  const fbVerifyToken = ((formData.get('facebook_verify_token') as string) || '').trim()
-  const fbAppSecret = ((formData.get('facebook_app_secret') as string) || '').trim()
-
-  const updateData = {
-    name: ((formData.get('name') as string) || '').trim(),
-    bot_name: ((formData.get('bot_name') as string) || '').trim(),
-    description: ((formData.get('description') as string) || '').trim(),
-    personality: ((formData.get('personality') as string) || '').trim(),
-    greeting_message: ((formData.get('greeting_message') as string) || '').trim(),
-    system_prompt: ((formData.get('system_prompt') as string) || '').trim(),
-    ai_model: ((formData.get('ai_model') as string) || 'gemini-2.5-flash').trim(),
-    line_token: rawToken.trim(),
-    line_secret: rawSecret.trim(),
-    facebook_page_id: fbPageId,
-    facebook_page_token: fbPageToken,
-    facebook_verify_token: fbVerifyToken,
-    facebook_app_secret: fbAppSecret,
-    company_name: ((formData.get('company_name') as string) || '').trim(),
-    company_tax_id: ((formData.get('company_tax_id') as string) || '').trim(),
-    company_address: ((formData.get('company_address') as string) || '').trim(),
-    company_phone: ((formData.get('company_phone') as string) || '').trim(),
-    company_email: ((formData.get('company_email') as string) || '').trim(),
-    company_logo_url: ((formData.get('company_logo_url') as string) || '').trim(),
-    vat_enabled: formData.get('vat_enabled') === 'true' || formData.get('vat_enabled') === 'on',
+  // Only the fields the bot-settings form submits. This action used to also write
+  // line_token/line_secret, Facebook credentials, company details and vat_enabled from
+  // inputs this form doesn't have, so saving the bot tab wiped them to empty strings.
+  // Channels, company and payment details have their own actions.
+  const text = (key: string) => ((formData.get(key) as string) || '').trim()
+  const updateData: Record<string, unknown> = {
     follow_up_config: followUpConfig,
     updated_at: new Date().toISOString(),
+  }
+  for (const key of ['name', 'bot_name', 'description', 'personality', 'greeting_message', 'system_prompt', 'ai_model']) {
+    if (formData.has(key)) updateData[key] = text(key)
   }
 
   const { error } = await supabase
@@ -87,48 +67,8 @@ export async function updateBotSettings(formData: FormData) {
     return { error: `บันทึกไม่สำเร็จ: ${error.message}` }
   }
 
-  // Synchronize Facebook channel account in channel_accounts table
-  if (fbPageId) {
-    await supabase.from('channel_accounts').upsert(
-      {
-        shop_id: shop.id,
-        platform: 'facebook',
-        account_name: `Facebook Page (${fbPageId})`,
-        account_id: fbPageId,
-        is_active: true,
-        credentials: {
-          page_access_token: fbPageToken,
-          verify_token: fbVerifyToken,
-          app_secret: fbAppSecret,
-        },
-        webhook_secret: fbVerifyToken,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'shop_id,platform,account_id' }
-    )
-  }
-
-  // Synchronize LINE channel account in channel_accounts table
-  if (rawToken.trim()) {
-    await supabase.from('channel_accounts').upsert(
-      {
-        shop_id: shop.id,
-        platform: 'line',
-        account_name: 'LINE Official Account',
-        account_id: 'default',
-        is_active: true,
-        credentials: {
-          token: rawToken.trim(),
-          secret: rawSecret.trim(),
-        },
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'shop_id,platform,account_id' }
-    )
-  }
-
   revalidatePath('/dashboard/settings')
-  return { success: 'บันทึกการตั้งค่าบอทและช่องทางแชทเรียบร้อยแล้ว!' }
+  return { success: 'บันทึกการตั้งค่าบอทเรียบร้อยแล้ว!' }
 }
 
 export async function updateChannelSettings(formData: FormData) {
@@ -150,6 +90,14 @@ export async function updateChannelSettings(formData: FormData) {
 
   const lineToken = ((formData.get('line_token') as string) || '').trim()
   const lineSecret = ((formData.get('line_secret') as string) || '').trim()
+  // Without the secret the webhook can't verify LINE's signature, so anyone could post
+  // fake customer messages to this shop's bot
+  if (lineToken && !lineSecret) {
+    return { error: 'กรุณาใส่ Channel Secret คู่กับ Channel Access Token (ใช้ตรวจว่าข้อความมาจาก LINE จริง)' }
+  }
+  if (lineSecret && !/^[0-9a-f]{32}$/i.test(lineSecret)) {
+    return { error: 'Channel Secret ไม่ถูกต้อง ต้องเป็นตัวอักษร 0-9 และ a-f จำนวน 32 ตัว (ดูที่ LINE Developers → Basic settings)' }
+  }
   const fbPageId = ((formData.get('facebook_page_id') as string) || '').trim()
   const fbPageToken = ((formData.get('facebook_page_token') as string) || '').trim()
   const fbVerifyToken = ((formData.get('facebook_verify_token') as string) || '').trim()

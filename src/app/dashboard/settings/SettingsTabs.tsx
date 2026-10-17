@@ -7,8 +7,13 @@ import ChannelsSettingsForm from './ChannelsSettingsForm'
 import CompanySettingsForm from './CompanySettingsForm'
 import PaymentShippingForm from './PaymentShippingForm'
 
-export default function SettingsTabs({ shop }: { shop: any }) {
-  const [activeTab, setActiveTab] = useState<'bot' | 'channels' | 'company' | 'payment'>('bot')
+type SettingsTab = 'bot' | 'channels' | 'company' | 'payment'
+const TABS: SettingsTab[] = ['bot', 'channels', 'company', 'payment']
+
+export default function SettingsTabs({ shop, initialTab }: { shop: any; initialTab?: string }) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    TABS.includes(initialTab as SettingsTab) ? (initialTab as SettingsTab) : 'bot'
+  )
 
   return (
     <div className="space-y-5 sm:space-y-6">
