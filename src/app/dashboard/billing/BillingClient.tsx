@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { effectivePlanKey, TRIAL_MESSAGE_LIMIT } from '@/lib/billing/trial'
 import Link from 'next/link'
 import { PlanItem } from '@/app/admin/actions'
 import { PlatformBillingSettings } from '@/lib/billing/manualBilling'
@@ -42,8 +43,11 @@ export default function BillingClient({
   const [portalLoading, setPortalLoading] = useState(false)
   const [portalError, setPortalError] = useState<string | null>(null)
 
-  const currentPlanKey = shop.plan_key || shop.plan || 'free'
-  const currentPlan = plans.find((p) => p.key === currentPlanKey)
+  const currentPlanKey = effectivePlanKey(shop)
+  // A running trial has no `plans` row; show it with the trial's own message allowance
+  const currentPlan = currentPlanKey === 'trial'
+    ? ({ ...(plans.find((p) => p.key === 'pro') || {}), key: 'trial', name: 'Trial', messages: TRIAL_MESSAGE_LIMIT } as PlanItem)
+    : plans.find((p) => p.key === currentPlanKey)
 
   const isUnlimitedMsg = (currentPlan?.messages ?? 0) < 0
   const isUnlimitedTokens = (currentPlan?.tokens ?? 0) < 0

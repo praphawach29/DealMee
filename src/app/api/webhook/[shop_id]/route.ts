@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { salesAutomationEnabled } from '@/lib/billing/trial'
+import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { processSalesAgentChat, type AgentResult } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
@@ -520,7 +522,10 @@ async function deliverAgentResult({
 
   // Skip tool logging + usage increment entirely if the AI never actually
   // ran (quota exceeded) — the customer already got the quota message above.
-  if (agentResult.quotaExceeded) return
+  if (agentResult.quotaExceeded) {
+    await notifyQuotaExhausted(shop).catch((err) => console.error('[Webhook] quota alert failed:', err))
+    return
+  }
 
   if (agentResult.usage) {
     incrementUsage(shopId, agentResult.usage).catch((err) =>
@@ -625,6 +630,19 @@ async function verifySlipAndNotify({
         shop,
         `⚠️ สลิปรอตรวจสอบ\nลูกค้า: ${conv?.customer_name || userId}\n${orderNo ? `ออเดอร์: ${orderNo}\n` : ''}เหตุผล: ${reason}\nกรุณาตรวจสอบใน Inbox ก่อนยืนยันออเดอร์`
       )
+    }
+
+    // Free plan (incl. ended trials): slips go to the admin without automatic checks
+    if (!salesAutomationEnabled(shop)) {
+      if (conv?.id) {
+        await supabase.from('chat_messages').insert({
+          conversation_id: conv.id, shop_id: shopId, sender_type: 'user', sender_name: 'ลูกค้า',
+          message: '[ลูกค้าส่งรูปภาพ]', platform: 'line',
+        })
+      }
+      await replyAndLog('ได้รับรูปภาพแล้วค่ะ 🙏 แอดมินจะตรวจสอบและแจ้งกลับให้โดยเร็วนะคะ')
+      await notifyShopAdmin(shop, `📷 ลูกค้า ${conv?.customer_name || userId} ส่งรูปภาพ/สลิปเข้ามา กรุณาตรวจสอบใน Inbox\n(แพ็กเกจ Free: ระบบตรวจสลิปอัตโนมัติยังไม่เปิดใช้งาน — อัปเกรดเพื่อให้บอทตรวจสลิปและยืนยันออเดอร์ให้อัตโนมัติ)`)
+      return
     }
 
     // 3. Only this customer's own pending order may be settled by their slip

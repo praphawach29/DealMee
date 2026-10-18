@@ -76,7 +76,8 @@ export async function updateShopPlan(shopId: string, newPlan: string) {
 
   const { error } = await supabase
     .from('shops')
-    .update({ plan: newPlan, package_name: newPlan, updated_at: new Date().toISOString() })
+    // plan_key drives quotas and the trial check, so it has to move with plan
+    .update({ plan: newPlan, plan_key: newPlan, package_name: newPlan, updated_at: new Date().toISOString() })
     .eq('id', shopId)
 
   if (error) {

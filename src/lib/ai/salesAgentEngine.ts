@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { effectivePlanKey, salesAutomationEnabled, SALES_AUTOMATION_TOOLS, SALES_LOCKED_PROMPT, TRIAL_MESSAGE_LIMIT } from '@/lib/billing/trial'
 import { selectRelevantKnowledge } from '@/lib/ai/knowledgeSelect'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildBusinessPromptContext } from '@/lib/businessGreeting'
@@ -1016,25 +1017,25 @@ export interface QuotaStatus {
  */
 export async function getQuotaStatus(shop: any): Promise<QuotaStatus> {
   const admin = createAdminClient()
-  const planKey = shop.plan_key || shop.plan || 'free'
+  // 'trial' while a trial runs, 'free' once it has ended (see src/lib/billing/trial.ts)
+  const planKey = effectivePlanKey(shop)
 
-  const { data: planRow } = await admin
-    .from('plans')
-    .select('key, messages')
-    .eq('key', planKey)
-    .maybeSingle()
+  const { data: planRow } = planKey === 'trial'
+    ? { data: null }
+    : await admin.from('plans').select('key, messages').eq('key', planKey).maybeSingle()
 
-  let messageLimit = planRow ? Number(planRow.messages) : null
+  let messageLimit = planKey === 'trial' ? TRIAL_MESSAGE_LIMIT : planRow ? Number(planRow.messages) : null
 
   // Fallback for shops whose plan isn't in the `plans` table yet (defaults)
   if (messageLimit === null) {
-    const defaults: Record<string, number> = { free: 500, starter: 3000, pro: 10000, agency: 30000, byok: -1 }
-    messageLimit = defaults[planKey] ?? 500
+    const defaults: Record<string, number> = { free: 100, starter: 3000, pro: 10000, agency: 30000, byok: -1 }
+    messageLimit = defaults[planKey] ?? 100
   }
 
   // Expired subscription (past plan_expires_at) falls back to free-tier limit
-  if (shop.plan_expires_at && new Date(shop.plan_expires_at) < new Date() && planKey !== 'free') {
-    messageLimit = 500
+  if (shop.plan_expires_at && new Date(shop.plan_expires_at) < new Date() && planKey !== 'free' && planKey !== 'trial') {
+    const { data: freeRow } = await admin.from('plans').select('messages').eq('key', 'free').maybeSingle()
+    messageLimit = freeRow ? Number(freeRow.messages) : 100
   }
 
   const isUnlimited = messageLimit === -1
@@ -1512,13 +1513,18 @@ ${paymentInfo}`
 ${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}
 ${historyContext}`
 
-  const systemInstruction = `${staticSystemPrompt}\n${dynamicSystemPrompt}`
+  // Free plan (incl. ended trials): sales automation is locked and orders go to the admin
+  const salesLocked = !salesAutomationEnabled(shop)
+  const systemInstruction = `${staticSystemPrompt}\n${dynamicSystemPrompt}${salesLocked ? SALES_LOCKED_PROMPT : ''}`
 
   // 6. Route
   const routing = classifyMessageComplexity(userQuery, {
     recentCustomerMessages,
     isVip: isVipCustomer,
   })
+  if (salesLocked) {
+    routing.toolSet = routing.toolSet.filter((t) => !SALES_AUTOMATION_TOOLS.has(t.name))
+  }
   console.log(
     `[DealMee Brain™] "${userQuery}" | ${routing.complexity} (score ${routing.complexityScore}) | ${routing.targetProvider.toUpperCase()} | Tools: ${routing.toolSet.length}${isVipCustomer ? ' | VIP customer' : ''} | Stage: ${initialSalesStage}`
   )
@@ -1549,7 +1555,7 @@ ${historyContext}`
       executor,
       toolCtx,
       staticSystemPrompt,
-      dynamicSystemPrompt,
+      dynamicSystemPrompt: `${dynamicSystemPrompt}${salesLocked ? SALES_LOCKED_PROMPT : ''}`,
       systemInstruction,
       modelName,
       geminiKey,

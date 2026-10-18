@@ -4,6 +4,7 @@ import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { SUPER_ADMIN_EMAILS } from '@/app/admin/layout'
 import DashboardClientLayout from './DashboardClientLayout'
 import { planLabel } from '@/lib/billing/planLabel'
+import TrialBanner from './components/TrialBanner'
 
 export default async function DashboardLayout({
   children,
@@ -34,6 +35,7 @@ export default async function DashboardLayout({
 
   return (
     <DashboardClientLayout bizType={bizType} features={features} userEmail={user.email || ''} isSuperAdmin={isSuperAdmin} planName={planLabel(shop)}>
+      <TrialBanner shop={shop} />
       {children}
     </DashboardClientLayout>
   )
