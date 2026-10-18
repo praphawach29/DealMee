@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
+import { verifyShopeePushSignature } from '@/lib/marketplace/webhookSignature'
 
 const supabase = createAdminClient()
 
@@ -30,7 +31,12 @@ export async function POST(
 ) {
   try {
     const { shop_id } = await params
-    const rawBody = await req.json().catch(() => ({}))
+    // The signature covers the exact bytes received, so read the body as text first
+    const rawText = await req.text()
+    let rawBody: any = {}
+    try {
+      rawBody = JSON.parse(rawText)
+    } catch {}
 
     const { data: shop } = await supabase
       .from('shops')
@@ -40,6 +46,27 @@ export async function POST(
 
     if (!shop) {
       return NextResponse.json({ error: 'Shop not found' }, { status: 404 })
+    }
+
+    // Only Shopee, holding the shop's partner key, can produce this signature. Without it
+    // anyone with the URL could create conversations and spend the shop's AI quota.
+    const partnerKey = String(shop.shopee_partner_key || '').trim()
+    if (!partnerKey) {
+      console.error(`[Shopee Webhook] Shop ${shop_id} has no Shopee partner key; rejecting unverifiable webhook`)
+      return NextResponse.json({ error: 'Shopee app not configured' }, { status: 401 })
+    }
+    // Shopee signs the callback URL as registered, whichever of our hosts that names
+    const path = `${req.nextUrl.pathname}${req.nextUrl.search}`
+    const hosts = [req.headers.get('x-forwarded-host'), req.headers.get('host'), req.nextUrl.host]
+    const callbackUrls = [
+      req.nextUrl.href,
+      ...hosts.filter(Boolean).map((h) => `https://${h}${path}`),
+      process.env.NEXT_PUBLIC_APP_URL ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}${path}` : '',
+      `https://app.dealmee.app${path}`,
+    ]
+    if (!verifyShopeePushSignature(rawText, req.headers.get('authorization'), partnerKey, callbackUrls)) {
+      console.error(`[Shopee Webhook] Invalid signature for shop ${shop_id}`)
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }
 
     // Extract message from standard Shopee Open Platform push payload
