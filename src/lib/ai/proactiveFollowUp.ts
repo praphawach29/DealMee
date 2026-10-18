@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { sendFacebookMessage } from '@/lib/facebook/messengerHelper'
 
 export interface FollowUpConfig {
   qr_recovery_enabled?: boolean
@@ -353,8 +354,87 @@ export function generateProactiveMessage({
   }
 }
 
+// Meta lets a Page message a person freely only within 24 hours of that person's last message
+const MESSENGER_WINDOW_MS = 24 * 60 * 60 * 1000
+
+type DeliveryOutcome = { status: 'sent' } | { status: 'skipped' | 'failed'; reason: string }
+
+async function facebookPageToken(supabase: ReturnType<typeof createAdminClient>, shop: Record<string, any>): Promise<string> {
+  const direct = (shop.facebook_page_token || '').trim()
+  if (direct) return direct
+  const { data: channelAcc } = await supabase
+    .from('channel_accounts')
+    .select('credentials')
+    .eq('shop_id', shop.id)
+    .eq('platform', 'facebook')
+    .eq('is_active', true)
+    .maybeSingle()
+  const creds = (channelAcc?.credentials || {}) as Record<string, string>
+  return (creds.page_access_token || creds.token || '').trim()
+}
+
 /**
- * Process all due follow-up tasks and send LINE push messages
+ * Sends a follow-up on the channel the conversation came from. Messenger and
+ * Instagram only allow a Page-initiated message within 24 hours of the
+ * customer's last message; after that only a booking reminder may go out, on
+ * Messenger, under the CONFIRMED_EVENT_UPDATE tag. Anything else is skipped
+ * rather than sent against Meta's policy.
+ */
+async function deliverFollowUp(
+  supabase: ReturnType<typeof createAdminClient>,
+  task: FollowUpTask,
+  shop: Record<string, any>,
+  platform: string,
+  text: string
+): Promise<DeliveryOutcome> {
+  if (platform === 'line') {
+    if (!shop.line_token) return { status: 'failed', reason: 'LINE Token not found' }
+    const pushRes = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${shop.line_token.trim()}`,
+      },
+      body: JSON.stringify({
+        to: task.customer_user_id,
+        messages: [{ type: 'text', text }],
+      }),
+    })
+    return pushRes.ok ? { status: 'sent' } : { status: 'failed', reason: await pushRes.text() }
+  }
+
+  if (platform === 'facebook' || platform === 'instagram') {
+    const token = await facebookPageToken(supabase, shop)
+    if (!token) return { status: 'failed', reason: 'Facebook Page Access Token not found' }
+
+    const { data: lastUserMsg } = await supabase
+      .from('chat_messages')
+      .select('created_at')
+      .eq('conversation_id', task.conversation_id)
+      .eq('sender_type', 'user')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const lastAt = lastUserMsg?.created_at ? new Date(lastUserMsg.created_at).getTime() : 0
+    const withinWindow = Date.now() - lastAt < MESSENGER_WINDOW_MS
+
+    let options: Parameters<typeof sendFacebookMessage>[3]
+    if (!withinWindow) {
+      if (platform === 'facebook' && task.task_type === 'booking_reminder') {
+        options = { messagingType: 'MESSAGE_TAG', tag: 'CONFIRMED_EVENT_UPDATE' }
+      } else {
+        return { status: 'skipped', reason: `Outside the ${platform} 24-hour messaging window` }
+      }
+    }
+    const result = await sendFacebookMessage(task.customer_user_id, text, token, options)
+    return result.success ? { status: 'sent' } : { status: 'failed', reason: result.error || 'Facebook send failed' }
+  }
+
+  return { status: 'skipped', reason: `No follow-up delivery for ${platform}` }
+}
+
+/**
+ * Process all due follow-up tasks and send them on the customer's own channel
  */
 export async function processDueFollowUpTasks(limit = 25): Promise<{
   processed: number
@@ -387,17 +467,28 @@ export async function processDueFollowUpTasks(limit = 25): Promise<{
       // 2. Fetch shop details with line token
       const { data: shop } = await supabase
         .from('shops')
-        .select('id, name, line_token, follow_up_config, personality')
+        .select('id, name, line_token, facebook_page_token, follow_up_config, personality')
         .eq('id', task.shop_id)
         .single()
 
-      if (!shop || !shop.line_token) {
+      if (!shop) {
         await supabase
           .from('follow_up_tasks')
-          .update({ status: 'failed', error_message: 'Shop or LINE Token not found' })
+          .update({ status: 'failed', error_message: 'Shop not found' })
           .eq('id', task.id)
         failed++
         continue
+      }
+
+      // Tasks without a conversation predate multi-channel follow-ups and were all LINE
+      let platform = 'line'
+      if (task.conversation_id) {
+        const { data: conv } = await supabase
+          .from('conversations')
+          .select('platform')
+          .eq('id', task.conversation_id)
+          .maybeSingle()
+        platform = conv?.platform || 'line'
       }
 
       // 3. Pre-flight verification (Do not send if conditions no longer require it)
@@ -433,11 +524,12 @@ export async function processDueFollowUpTasks(limit = 25): Promise<{
       }
 
       if (task.task_type === 'booking_reminder' && task.reference_id) {
+        // reference_id holds the booking number (scheduleBookingReminder is given bookingNo)
         const { data: booking } = await supabase
           .from('bookings')
           .select('status')
           .eq('shop_id', task.shop_id)
-          .eq('id', task.reference_id)
+          .eq('booking_no', task.reference_id)
           .maybeSingle()
 
         if (booking && (booking.status === 'cancelled' || booking.status === 'rejected')) {
@@ -453,27 +545,22 @@ export async function processDueFollowUpTasks(limit = 25): Promise<{
       // 4. Generate message text
       const messageText = generateProactiveMessage({ task, shop })
 
-      // 5. Send LINE push message
-      const pushRes = await fetch('https://api.line.me/v2/bot/message/push', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${shop.line_token.trim()}`,
-        },
-        body: JSON.stringify({
-          to: task.customer_user_id,
-          messages: [{ type: 'text', text: messageText }],
-        }),
-      })
-
-      if (!pushRes.ok) {
-        const errText = await pushRes.text()
-        console.error(`[ProactiveFollowUp] LINE Push failed for task ${task.id}:`, errText)
+      // 5. Send on the conversation's own channel
+      const outcome = await deliverFollowUp(supabase, task, shop, platform, messageText)
+      if (outcome.status !== 'sent') {
+        if (outcome.status === 'failed') {
+          console.error(`[ProactiveFollowUp] ${platform} send failed for task ${task.id}:`, outcome.reason)
+        }
         await supabase
           .from('follow_up_tasks')
-          .update({ status: 'failed', error_message: errText })
+          .update({
+            status: outcome.status === 'skipped' ? 'cancelled' : 'failed',
+            executed_at: nowIso,
+            error_message: outcome.reason,
+          })
           .eq('id', task.id)
-        failed++
+        if (outcome.status === 'skipped') cancelled++
+        else failed++
         continue
       }
 
@@ -481,8 +568,10 @@ export async function processDueFollowUpTasks(limit = 25): Promise<{
       if (task.conversation_id) {
         await supabase.from('chat_messages').insert({
           conversation_id: task.conversation_id,
+          shop_id: task.shop_id,
           sender_type: 'bot',
           message: messageText,
+          platform,
         })
 
         await supabase
