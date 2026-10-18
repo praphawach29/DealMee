@@ -14,6 +14,7 @@ import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 import { settleSlipImage } from '@/lib/slip/settleSlip'
+import { scheduleCustomerMessage } from '@/lib/ai/proactiveFollowUp'
 
 const supabase = createAdminClient()
 
@@ -477,6 +478,17 @@ async function processMessengerEntries({
               await sendFacebookLinkButtons(senderPsid, im.content, im.links || [], pageToken)
             }
           }
+        }
+
+        // Messages the AI asked to send later (schedule_followup), delivered by the follow-up cron
+        for (const scheduled of agentResult.scheduledMessages) {
+          await scheduleCustomerMessage({
+            shopId: shop_id,
+            conversationId: conv.id,
+            userId: senderPsid,
+            message: scheduled.message.content,
+            delayMs: scheduled.delayMs,
+          })
         }
 
         // Bill message usage
