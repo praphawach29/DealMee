@@ -4,6 +4,7 @@ import { notifyShopAdmin } from '@/lib/billing/ownerAlerts'
 import { cancelFollowUpTasks, scheduleRepurchaseFollowUp } from '@/lib/ai/proactiveFollowUp'
 import { extractGoldenTrajectoryFromOrder } from '@/lib/ai/salesTrajectory'
 import { verifySlip, checkSlipReceiver } from './verifySlip'
+import { readSlipQr, type SlipQr } from './readSlipQr'
 
 export type SlipPlatform = 'line' | 'facebook' | 'instagram'
 
@@ -61,12 +62,17 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
     }
   }
 
+  // Read from the slip's own mini-QR further down, before any paid check
+  let slipQr: SlipQr | null = null
+
   // A slip that couldn't be confirmed automatically goes to a human: tell the customer
   // it's being checked and alert the shop admin, but never mark anything paid.
   const sendToManualReview = async (reason: string, orderNo?: string) => {
     await replyAndLog(`ได้รับสลิปแล้วค่ะ 🙏 ระบบยังยืนยันอัตโนมัติไม่ได้ (${reason})\nแอดมินจะตรวจสอบและแจ้งกลับโดยเร็วที่สุดนะคะ`)
-    await notifyShopAdmin(shop, `⚠️ สลิปรอตรวจสอบ\nลูกค้า: ${customerLabel}\n${orderNo ? `ออเดอร์: ${orderNo}\n` : ''}เหตุผล: ${reason}\nกรุณาตรวจสอบใน Inbox ก่อนยืนยันออเดอร์`)
+    await notifyShopAdmin(shop, `⚠️ สลิปรอตรวจสอบ\nลูกค้า: ${customerLabel}\n${orderNo ? `ออเดอร์: ${orderNo}\n` : ''}${slipQr ? `เลขอ้างอิงสลิป: ${slipQr.transRef}\n` : ''}เหตุผล: ${reason}\nกรุณาตรวจสอบใน Inbox ก่อนยืนยันออเดอร์`)
   }
+
+  const notPaymentReply = 'ได้รับรูปภาพแล้วค่ะ 😊 ถ้าสนใจสินค้าในรูป พิมพ์บอกชื่อสินค้าหรือรายละเอียดเพิ่มได้เลยนะคะ\nถ้าเป็นสลิปโอนเงิน แอดมินจะตรวจสอบและแจ้งกลับให้ค่ะ 🙏'
 
   // Free plan (incl. ended trials): slips go to the admin without automatic checks
   if (!salesAutomationEnabled(shop)) {
@@ -90,6 +96,29 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
     pendingOrder = ords?.[0] || null
   }
 
+  // Free local pre-check: Thai bank slips carry a mini-QR with the transaction reference
+  slipQr = await readSlipQr(image.base64)
+  console.log('[SlipVerify] Slip QR:', slipQr ? JSON.stringify(slipQr) : 'none')
+
+  // No slip QR and no order waiting for payment: almost always a product photo or a
+  // question, so answer it without spending a paid slip check
+  if (!slipQr && !pendingOrder) {
+    await logCustomerImage()
+    await replyAndLog(notPaymentReply)
+    return
+  }
+
+  // A slip that already settled an order is refused before the paid check runs
+  if (slipQr) {
+    const used = await findSlipUse(shopId, slipQr.transRef)
+    if (used) {
+      await logCustomerImage(' — สลิปที่เคยใช้แล้ว')
+      await replyAndLog(`❌ สลิปนี้ถูกใช้ยืนยันออเดอร์ ${used.orderNo || 'อื่น'} ไปแล้วค่ะ กรุณาส่งสลิปของการโอนครั้งนี้นะคะ 🙏`)
+      await notifyShopAdmin(shop, `⚠️ มีการส่งสลิปซ้ำ\nลูกค้า: ${customerLabel}\nสลิปเคยใช้กับ: ${used.orderNo || '-'}\nส่งมาอีกครั้งสำหรับ: ${pendingOrder?.order_no || '-'}`)
+      return
+    }
+  }
+
   const expectedAmount = pendingOrder ? Number(pendingOrder.total_amount) : undefined
   const verifyResult = await verifySlip({
     imageBase64: image.base64,
@@ -105,7 +134,7 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
   // No order waiting for payment and the picture isn't a readable slip: most likely a
   // product photo or a question, so don't answer it as a failed payment
   if (!pendingOrder && (verifyResult.manualReview || !verifyResult.success)) {
-    await replyAndLog('ได้รับรูปภาพแล้วค่ะ 😊 ถ้าสนใจสินค้าในรูป พิมพ์บอกชื่อสินค้าหรือรายละเอียดเพิ่มได้เลยนะคะ\nถ้าเป็นสลิปโอนเงิน แอดมินจะตรวจสอบและแจ้งกลับให้ค่ะ 🙏')
+    await replyAndLog(notPaymentReply)
     return
   }
 
@@ -153,7 +182,7 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
   }
 
   // A slip can settle only one order
-  const transRef = (verifyResult.transRef || '').trim()
+  const transRef = (verifyResult.transRef || slipQr?.transRef || '').trim()
   if (!transRef) {
     await sendToManualReview('สลิปไม่มีเลขอ้างอิงธุรกรรม', pendingOrder.order_no)
     return
@@ -217,6 +246,41 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
 }
 
 /**
+ * Looks up whether a slip's transaction reference already settled an order, in
+ * payment_slips or, for slips settled before that table existed, orders.note.
+ */
+async function findSlipUse(shopId: string, transRef: string): Promise<{ orderNo: string | null } | null> {
+  const supabase = createAdminClient()
+  const legacyOrderNo = await findLegacySlipOrder(shopId, transRef)
+  if (legacyOrderNo) return { orderNo: legacyOrderNo }
+
+  const { data: existing } = await supabase
+    .from('payment_slips')
+    .select('order_id')
+    .eq('shop_id', shopId)
+    .eq('trans_ref', transRef)
+    .maybeSingle()
+  if (!existing) return null
+  return { orderNo: await orderNoFor(existing.order_id) }
+}
+
+async function findLegacySlipOrder(shopId: string, transRef: string): Promise<string | null> {
+  const { data: legacy } = await createAdminClient()
+    .from('orders')
+    .select('order_no')
+    .eq('shop_id', shopId)
+    .ilike('note', `%[slip-ref:${transRef}]%`)
+    .limit(1)
+  return legacy?.[0]?.order_no || null
+}
+
+async function orderNoFor(orderId: string | null | undefined): Promise<string | null> {
+  if (!orderId) return null
+  const { data: ord } = await createAdminClient().from('orders').select('order_no').eq('id', orderId).maybeSingle()
+  return ord?.order_no || null
+}
+
+/**
  * Reserves a slip's transaction reference for one order. The unique
  * (shop_id, trans_ref) index in payment_slips makes this safe against two
  * deliveries of the same slip racing each other. Slips settled before the table
@@ -227,13 +291,8 @@ async function claimSlip(args: {
 }): Promise<{ status: 'claimed' | 'untracked' } | { status: 'used'; orderNo: string | null }> {
   const supabase = createAdminClient()
 
-  const { data: legacy } = await supabase
-    .from('orders')
-    .select('order_no')
-    .eq('shop_id', args.shopId)
-    .ilike('note', `%[slip-ref:${args.transRef}]%`)
-    .limit(1)
-  if (legacy && legacy.length > 0) return { status: 'used', orderNo: legacy[0].order_no }
+  const legacyOrderNo = await findLegacySlipOrder(args.shopId, args.transRef)
+  if (legacyOrderNo) return { status: 'used', orderNo: legacyOrderNo }
 
   const { error } = await supabase.from('payment_slips').insert({
     shop_id: args.shopId,
@@ -245,18 +304,8 @@ async function claimSlip(args: {
   })
   if (!error) return { status: 'claimed' }
   if (error.code === '23505') {
-    const { data: existing } = await supabase
-      .from('payment_slips')
-      .select('order_id')
-      .eq('shop_id', args.shopId)
-      .eq('trans_ref', args.transRef)
-      .maybeSingle()
-    let orderNo: string | null = null
-    if (existing?.order_id) {
-      const { data: ord } = await supabase.from('orders').select('order_no').eq('id', existing.order_id).maybeSingle()
-      orderNo = ord?.order_no || null
-    }
-    return { status: 'used', orderNo }
+    const used = await findSlipUse(args.shopId, args.transRef)
+    return { status: 'used', orderNo: used?.orderNo ?? null }
   }
   // Table missing or another database problem: the note check above still guards reuse
   console.warn('[SlipVerify] payment_slips insert failed, relying on order note check:', error.message)
