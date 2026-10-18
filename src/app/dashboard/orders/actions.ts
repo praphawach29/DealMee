@@ -1,6 +1,8 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { restockOrder } from '@/lib/marketplace/inventoryManager'
+import { cancelFollowUpTasks } from '@/lib/ai/proactiveFollowUp'
 import { revalidatePath } from 'next/cache'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 
@@ -47,12 +49,24 @@ export async function createSampleOrder() {
 export async function updateOrderStatus(orderId: string, newStatus: string) {
   const supabase = await createClient()
 
+  const { data: before } = await supabase
+    .from('orders')
+    .select('shop_id, order_no, status')
+    .eq('id', orderId)
+    .maybeSingle()
+
   const { error } = await supabase
     .from('orders')
     .update({ status: newStatus, updated_at: new Date().toISOString() })
     .eq('id', orderId)
 
   if (error) return { error: error.message }
+
+  // Cancelling an unpaid order gives back the stock it reserved and stops its reminders
+  if (newStatus === 'cancelled' && before?.status === 'pending' && before.order_no && before.shop_id) {
+    await restockOrder(before.shop_id, before.order_no)
+    await cancelFollowUpTasks({ shopId: before.shop_id, referenceId: before.order_no, taskType: 'qr_recovery' })
+  }
 
   revalidatePath('/dashboard/orders')
   revalidatePath('/dashboard')

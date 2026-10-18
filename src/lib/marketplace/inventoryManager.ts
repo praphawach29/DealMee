@@ -363,3 +363,42 @@ export async function getMarketplaceStockLogs(shopId: string, limit: number = 25
     created_at: item.created_at,
   }))
 }
+
+/**
+ * Puts back the stock an order took when it was created (take_order deducts at
+ * order time, before payment). Driven by the stock log written by
+ * deductCentralStockOnOrder, and idempotent: an order is restocked at most once.
+ */
+export async function restockOrder(shopId: string, orderNo: string): Promise<{ restocked: number }> {
+  const supabase = createAdminClient()
+  const ref = `(#${orderNo})`
+
+  const { data: logs } = await supabase
+    .from('marketplace_stock_logs')
+    .select('product_id, change_amount, reason')
+    .eq('shop_id', shopId)
+    .like('reason', `%${ref}%`)
+
+  if (!logs || logs.length === 0) return { restocked: 0 }
+  if (logs.some((l: any) => String(l.reason || '').startsWith('คืนสต็อก'))) return { restocked: 0 }
+
+  let restocked = 0
+  for (const log of logs) {
+    const qty = -Number(log.change_amount || 0)
+    if (!log.product_id || qty <= 0) continue
+    const { data: prod } = await supabase.from('products').select('stock').eq('id', log.product_id).maybeSingle()
+    if (!prod) continue
+    const newStock = (parseInt(prod.stock || '0', 10) || 0) + qty
+    await supabase.from('products').update({ stock: newStock, last_stock_sync: new Date().toISOString() }).eq('id', log.product_id)
+    await supabase.from('marketplace_stock_logs').insert({
+      shop_id: shopId,
+      product_id: log.product_id,
+      platform: 'manual',
+      change_amount: qty,
+      balance_after: newStock,
+      reason: `คืนสต็อกจากออเดอร์ที่ถูกยกเลิก ${ref}`,
+    })
+    restocked += qty
+  }
+  return { restocked }
+}
