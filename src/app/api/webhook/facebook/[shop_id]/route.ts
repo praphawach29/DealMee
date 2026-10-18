@@ -8,6 +8,7 @@ import {
   fetchFacebookUserProfile,
   sendFacebookProductCarousel,
   sendFacebookImage,
+  sendFacebookLinkButtons,
 } from '@/lib/facebook/messengerHelper'
 import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage } from '@/lib/billing/usage'
@@ -471,6 +472,9 @@ async function processMessengerEntries({
               await sendFacebookImage(senderPsid, im.content, pageToken)
             } else if (im.type === 'text' && im.content) {
               await sendFacebookMessage(senderPsid, im.content, pageToken)
+            } else if (im.type === 'flex' && im.content) {
+              // LINE Flex cards (quotations, official letters) can't render here: send their links as buttons
+              await sendFacebookLinkButtons(senderPsid, im.content, im.links || [], pageToken)
             }
           }
         }

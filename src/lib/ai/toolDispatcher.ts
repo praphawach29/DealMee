@@ -26,6 +26,11 @@ export interface CustomerMessage {
   type: 'text' | 'image' | 'flex'
   content: string
   flexData?: Record<string, any>
+  /**
+   * The card's buttons in a channel-neutral form, so channels without LINE Flex
+   * (Messenger, Instagram) can still give the customer the document links.
+   */
+  links?: Array<{ label: string; url: string }>
 }
 
 export interface ToolExecutionResult {
@@ -1509,6 +1514,11 @@ export async function executeTool(
           type: 'flex',
           content: `📄 ใบเสนอราคา ${docNumber} ยอดรวม ฿${totalAmount.toLocaleString()} บาท`,
           flexData: flexQuotation,
+          links: [
+            { label: 'ดูใบเสนอราคา', url: docUrl },
+            { label: 'ดาวน์โหลด Word', url: wordUrl },
+            { label: 'ดาวน์โหลด Excel', url: excelUrl },
+          ],
         },
       ],
     }
@@ -1737,6 +1747,10 @@ export async function executeTool(
           type: 'flex',
           content: `📜 หนังสือราชการ: ${subject} (${docNumber})`,
           flexData: flexLetter,
+          links: [
+            { label: 'ดูเอกสาร', url: docUrl },
+            { label: 'ดาวน์โหลด Word', url: wordUrl },
+          ],
         },
       ],
     }
