@@ -143,6 +143,12 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
     return
   }
 
+  // Every provider was unreachable or erroring: that says nothing about the slip itself
+  if (!verifyResult.success && (verifyResult.statusCode ?? 500) >= 500) {
+    await sendToManualReview('ระบบตรวจสลิปขัดข้องชั่วคราว', pendingOrder?.order_no)
+    return
+  }
+
   if (!verifyResult.success) {
     const reason = verifyResult.rawMessage ?? 'ไม่สามารถอ่านข้อมูลสลิปได้'
     await replyAndLog(
