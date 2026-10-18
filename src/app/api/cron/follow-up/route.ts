@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processDueFollowUpTasks } from '@/lib/ai/proactiveFollowUp'
 import { expirePendingOrders } from '@/lib/orders/expirePendingOrders'
+import { sendTrialReminders } from '@/lib/billing/ownerAlerts'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // Allow up to 60s for batch processing
@@ -27,12 +28,14 @@ async function handleFollowUpCron(req: NextRequest) {
 
     const result = await processDueFollowUpTasks(30)
     const orders = await expirePendingOrders()
+    const trialReminders = await sendTrialReminders()
 
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
       ...result,
       orders,
+      trialReminders,
     })
   } catch (err: any) {
     console.error('[FollowUpCron] Exception during cron job:', err)

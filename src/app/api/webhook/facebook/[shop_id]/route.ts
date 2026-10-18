@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   verifyFacebookSignature,
@@ -314,6 +315,9 @@ export async function POST(
           conversationId: conv.id,
           supabaseClient: supabase,
         })
+        if (agentResult.quotaExceeded) {
+          notifyQuotaExhausted(shop).catch((err) => console.error('[FB Webhook] quota alert failed:', err))
+        }
 
         const aiReplyText = agentResult?.text?.trim() || ''
 

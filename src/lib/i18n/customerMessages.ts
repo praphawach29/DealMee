@@ -30,8 +30,8 @@ export function detectCustomerLanguage(text: string): CustomerLanguage {
 type Catalog = Record<CustomerLanguage, string>
 
 const QUOTA_EXCEEDED: Catalog = {
-  th: 'ขออภัยค่ะ ร้านค้าใช้ข้อความครบตามแพ็กเกจในเดือนนี้แล้ว กรุณาติดต่อทางร้านหรือรออัปเกรดแพ็กเกจเพื่อใช้งานต่อค่ะ',
-  en: "Sorry — this shop has used up its message quota for the month. Please contact the shop directly, or try again once the plan is upgraded.",
+  th: 'ขอบคุณที่ทักมานะคะ 🙏 แอดมินได้รับข้อความแล้ว จะรีบตอบกลับโดยเร็วที่สุดค่ะ',
+  en: 'Thanks for your message! 🙏 Our team has received it and will get back to you shortly.',
 }
 
 const PLANNING_ACK: Catalog = {

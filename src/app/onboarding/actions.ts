@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { TRIAL_DAYS } from '@/lib/billing/trial'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { randomUUID } from 'crypto'
@@ -42,7 +43,10 @@ export async function submitOnboarding(formData: FormData) {
         id: shopId,
         name: shopName,
         business_type: businessType,
-        ai_template: aiTemplate
+        ai_template: aiTemplate,
+        plan: 'trial',
+        plan_key: 'trial',
+        trial_expires_at: new Date(Date.now() + TRIAL_DAYS * 86_400_000).toISOString(),
       })
 
     if (insertError) {

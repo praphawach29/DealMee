@@ -1,0 +1,48 @@
+import Link from 'next/link'
+import { trialStatus, TRIAL_MESSAGE_LIMIT } from '@/lib/billing/trial'
+
+/**
+ * Trial countdown shown across the dashboard. In the last 3 days and after the
+ * trial ends it turns into an upgrade prompt, since that is when sales automation
+ * is about to stop (or has stopped).
+ */
+export default function TrialBanner({ shop }: { shop: { plan?: string | null; plan_key?: string | null; trial_expires_at?: string | null } }) {
+  const trial = trialStatus(shop)
+  if (!trial.isTrial) return null
+
+  if (trial.expired) {
+    return (
+      <div className="mb-4 rounded-2xl border border-rose-300/60 bg-rose-50 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-rose-800">ช่วงทดลองหมดแล้ว — ร้านใช้แพ็กเกจ Free อยู่</p>
+          <p className="text-[11px] sm:text-xs text-rose-700 mt-0.5">
+            บอทยังตอบคำถามลูกค้าได้ แต่การรับออเดอร์ ส่ง QR และตรวจสลิปอัตโนมัติหยุดไว้ ออเดอร์ใหม่จะส่งให้แอดมินดูแลเอง
+          </p>
+        </div>
+        <Link href="/dashboard/billing" className="shrink-0 text-center text-xs font-bold px-4 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700">
+          อัปเกรดเพื่อเปิดใช้งานอีกครั้ง
+        </Link>
+      </div>
+    )
+  }
+
+  const urgent = trial.daysLeft <= 3
+  return (
+    <div className={`mb-4 rounded-2xl border p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 ${urgent ? 'border-amber-300/60 bg-amber-50' : 'border-sky-200 bg-sky-50/70'}`}>
+      <div className="min-w-0 flex-1">
+        <p className={`text-sm font-bold ${urgent ? 'text-amber-800' : 'text-sky-800'}`}>
+          ช่วงทดลองใช้ฟรี เหลืออีก {trial.daysLeft} วัน
+        </p>
+        <p className={`text-[11px] sm:text-xs mt-0.5 ${urgent ? 'text-amber-700' : 'text-sky-700'}`}>
+          ใช้ได้ทุกฟีเจอร์ระดับ Pro สูงสุด {TRIAL_MESSAGE_LIMIT} ข้อความ AI
+          {urgent ? ' — อัปเกรดก่อนหมดเวลา เพื่อให้บอทรับออเดอร์และตรวจสลิปต่อได้ไม่สะดุด' : ''}
+        </p>
+      </div>
+      {urgent && (
+        <Link href="/dashboard/billing" className="shrink-0 text-center text-xs font-bold px-4 py-2 rounded-xl bg-amber-500 text-white hover:bg-amber-600">
+          ดูแพ็กเกจ
+        </Link>
+      )}
+    </div>
+  )
+}
