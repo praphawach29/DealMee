@@ -24,6 +24,7 @@ export interface SlipVerifyResult {
   success: boolean
   provider: string
   amount?: number
+  /** The bank's transaction reference; undefined when the provider didn't return one */
   transRef?: string
   date?: string
   time?: string
@@ -196,7 +197,7 @@ async function verifyWithProvider(attempt: ProviderAttempt, options: SlipVerifyO
       if (res.ok && (json.success === true || json.status === 200)) {
         const data = json.data || {}
         const amount = Number(data.amountInSlip ?? data.amount ?? data.totalAmount ?? 0)
-        const transRef = data.transRef || data.ref1 || data.transactionId || `THD-${Date.now()}`
+        const transRef = data.transRef || data.ref1 || data.transactionId || undefined
         const receiverName = data.matchedAccount?.nameTh || data.receiver?.name || data.receiver?.displayName || ''
         const receiverAccount = data.matchedAccount?.bankNumber || data.receiver?.account?.value || ''
         const isMatched = data.isAmountMatched ?? (expectedAmount ? Math.abs(amount - expectedAmount) <= 1.0 : true)
@@ -255,7 +256,7 @@ async function verifyWithProvider(attempt: ProviderAttempt, options: SlipVerifyO
       if (res.ok && (json.success === true || json.status === 200)) {
         const data = json.data || {}
         const amount = Number(data.amount ?? 0)
-        const transRef = data.transRef || `SOK-${Date.now()}`
+        const transRef = data.transRef || undefined
         const isMatched = expectedAmount ? Math.abs(amount - expectedAmount) <= 1.0 : true
 
         return {
@@ -310,7 +311,7 @@ async function verifyWithProvider(attempt: ProviderAttempt, options: SlipVerifyO
     if (res.ok && json.status === 200) {
       const data = json.data || {}
       const amount = Number(data.amount?.amount ?? 0)
-      const transRef = data.transRef || data.ref1 || `ESL-${Date.now()}`
+      const transRef = data.transRef || data.ref1 || undefined
       const receiverName = data.receiver?.displayName || ''
       const receiverAccount = data.receiver?.account?.value || ''
       const isMatched = expectedAmount ? Math.abs(amount - expectedAmount) <= 1.0 : true
