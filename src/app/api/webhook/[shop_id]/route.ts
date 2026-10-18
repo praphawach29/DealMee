@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { processSalesAgentChat, type AgentResult } from '@/lib/ai/salesAgentEngine'
@@ -13,6 +13,9 @@ import { buildLineFlexProductCarousel } from '@/lib/line/flexHelper'
 import { settleSlipImage } from '@/lib/slip/settleSlip'
 
 const supabase = createAdminClient()
+
+// LINE gets its 200 immediately; this bounds the after() work (AI planning, slip checks)
+export const maxDuration = 60
 
 // ─── LINE Signature Verification ─────────────────────────────────────────────
 function verifyLineSignature(rawBody: string, signature: string, secret: string): boolean {
@@ -86,276 +89,296 @@ export async function POST(
       console.warn(`[Security] Shop ${shop_id} has no LINE Channel Secret; webhook signature cannot be verified`)
     }
 
-    // Process each LINE event
-    for (const event of events) {
-      const userId = event.source?.userId
-      const replyToken = event.replyToken
-
-      if (!userId) continue
-
-      // LINE redelivers an event when a webhook answers slowly or fails; without this the
-      // same message could create a second order, QR or quotation.
-      if (!(await claimWebhookEvent(event.webhookEventId, shop_id))) {
-        console.log(`[Webhook] Skipping already-processed LINE event ${event.webhookEventId}`)
-        continue
+    // Answer LINE right away and do the real work afterwards. The AI can take several
+    // planning steps; holding the webhook open that long made LINE time out and redeliver.
+    after(async () => {
+      try {
+        await processLineEvents({ events, shop, shopId: shop_id, lineToken, features, isAutoReplyEnabled })
+      } catch (err) {
+        console.error('[LINE Webhook] Background processing failed:', err)
       }
+    })
 
-      // Handle Follow Event (Add Friend)
-      if (event.type === 'follow') {
-        const greeting = await buildFollowGreeting(shop)
-        if (replyToken && lineToken) {
-          await sendLineReply(replyToken, greeting, lineToken)
-        }
-        continue
+    return NextResponse.json({ status: 'success' })
+  } catch (error: any) {
+    console.error('[LINE Webhook Error]:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
+// ─── Event processing (runs in after(), once LINE has its 200) ────────────────
+
+async function processLineEvents({
+  events, shop, shopId: shop_id, lineToken, features, isAutoReplyEnabled,
+}: {
+  events: any[]
+  shop: Record<string, any>
+  shopId: string
+  lineToken: string | undefined
+  features: Record<string, boolean>
+  isAutoReplyEnabled: boolean
+}) {
+  // Process each LINE event
+  for (const event of events) {
+    const userId = event.source?.userId
+    const replyToken = event.replyToken
+
+    if (!userId) continue
+
+    // LINE redelivers an event when a webhook answers slowly or fails; without this the
+    // same message could create a second order, QR or quotation.
+    if (!(await claimWebhookEvent(event.webhookEventId, shop_id))) {
+      console.log(`[Webhook] Skipping already-processed LINE event ${event.webhookEventId}`)
+      continue
+    }
+
+    // Handle Follow Event (Add Friend)
+    if (event.type === 'follow') {
+      const greeting = await buildFollowGreeting(shop)
+      if (replyToken && lineToken) {
+        await sendLineReply(replyToken, greeting, lineToken)
       }
+      continue
+    }
 
-      // Handle Message Event (Text)
-      if (event.type === 'message' && event.message?.type === 'text') {
-        const userText = event.message.text
+    // Handle Message Event (Text)
+    if (event.type === 'message' && event.message?.type === 'text') {
+      const userText = event.message.text
 
-        // 2. Find or Create Conversation
-        let { data: conv } = await supabase
+      // 2. Find or Create Conversation
+      let { data: conv } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('shop_id', shop_id)
+        .eq('platform', 'line')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (!conv) {
+        const { data: legacyConv } = await supabase
           .from('conversations')
           .select('*')
           .eq('shop_id', shop_id)
-          .eq('platform', 'line')
           .eq('user_id', userId)
           .maybeSingle()
+        if (legacyConv) conv = legacyConv
+      }
 
-        if (!conv) {
-          const { data: legacyConv } = await supabase
-            .from('conversations')
-            .select('*')
-            .eq('shop_id', shop_id)
-            .eq('user_id', userId)
-            .maybeSingle()
-          if (legacyConv) conv = legacyConv
-        }
-
-        if (!conv) {
-          const { data: newConv } = await supabase
-            .from('conversations')
-            .insert({
-              shop_id,
-              user_id: userId,
-              platform_sender_id: userId,
-              customer_name: `ลูกค้า LINE (${userId.substring(0, 6)})`,
-              platform: 'line',
-              last_message: userText,
-              status: 'ai',
-              ai_mode: 'auto',
-            })
-            .select()
-            .single()
-
-          conv = newConv
-        } else {
-          await supabase
-            .from('conversations')
-            .update({
-              last_message: userText,
-              last_message_at: new Date().toISOString(),
-            })
-            .eq('id', conv.id)
-        }
-
-        if (!conv) continue
-
-        // Customer Memory Graph: create/touch the durable cross-conversation
-        // profile for this customer before anything else runs, so it's
-        // guaranteed to exist by the time any tool call below needs it.
-        await upsertCustomerProfile(shop_id, userId, conv.customer_name)
-
-        // 3. Save incoming customer message to chat_messages
-        const { data: savedUserMsg } = await supabase
-          .from('chat_messages')
+      if (!conv) {
+        const { data: newConv } = await supabase
+          .from('conversations')
           .insert({
-            conversation_id: conv.id,
             shop_id,
-            sender_type: 'user',
-            sender_name: 'ลูกค้า',
-            message: userText,
+            user_id: userId,
+            platform_sender_id: userId,
+            customer_name: `ลูกค้า LINE (${userId.substring(0, 6)})`,
             platform: 'line',
+            last_message: userText,
+            status: 'ai',
+            ai_mode: 'auto',
           })
-          .select('id')
+          .select()
           .single()
 
-        // 4. Check if Admin Takeover is active OR Auto-Reply is disabled
-        const cleanText = userText.trim()
-        const lowerText = cleanText.toLowerCase()
+        conv = newConv
+      } else {
+        await supabase
+          .from('conversations')
+          .update({
+            last_message: userText,
+            last_message_at: new Date().toISOString(),
+          })
+          .eq('id', conv.id)
+      }
 
-        // 3.1 Handle Admin Instant Linking Command (e.g. /admin-link ADM-123456)
-        if (cleanText.startsWith('/admin-link') || cleanText.startsWith('/link-admin')) {
-          const parts = cleanText.split(/\s+/)
-          const code = parts[1]?.trim()
-          const expectedCode = shop.features?.admin_link_code
+      if (!conv) continue
 
-          if (expectedCode && code && code.toUpperCase() === String(expectedCode).toUpperCase()) {
-            let adminName = 'แอดมิน'
-            if (lineToken) {
-              try {
-                const pRes = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
-                  headers: { Authorization: `Bearer ${lineToken}` },
-                })
-                if (pRes.ok) {
-                  const pData = await pRes.json()
-                  if (pData.displayName) adminName = pData.displayName
-                }
-              } catch {}
-            }
+      // Customer Memory Graph: create/touch the durable cross-conversation
+      // profile for this customer before anything else runs, so it's
+      // guaranteed to exist by the time any tool call below needs it.
+      await upsertCustomerProfile(shop_id, userId, conv.customer_name)
 
-            const updatedFeatures = {
-              ...((shop.features as Record<string, any>) || {}),
-              admin_line_user_id: userId,
-              admin_line_name: adminName,
-              admin_notify: true,
-              admin_link_code: null,
-            }
+      // 3. Save incoming customer message to chat_messages
+      const { data: savedUserMsg } = await supabase
+        .from('chat_messages')
+        .insert({
+          conversation_id: conv.id,
+          shop_id,
+          sender_type: 'user',
+          sender_name: 'ลูกค้า',
+          message: userText,
+          platform: 'line',
+        })
+        .select('id')
+        .single()
 
-            await supabase
-              .from('shops')
-              .update({
-                owner_line_id: userId,
-                features: updatedFeatures,
-                updated_at: new Date().toISOString(),
+      // 4. Check if Admin Takeover is active OR Auto-Reply is disabled
+      const cleanText = userText.trim()
+      const lowerText = cleanText.toLowerCase()
+
+      // 3.1 Handle Admin Instant Linking Command (e.g. /admin-link ADM-123456)
+      if (cleanText.startsWith('/admin-link') || cleanText.startsWith('/link-admin')) {
+        const parts = cleanText.split(/\s+/)
+        const code = parts[1]?.trim()
+        const expectedCode = shop.features?.admin_link_code
+
+        if (expectedCode && code && code.toUpperCase() === String(expectedCode).toUpperCase()) {
+          let adminName = 'แอดมิน'
+          if (lineToken) {
+            try {
+              const pRes = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
+                headers: { Authorization: `Bearer ${lineToken}` },
               })
-              .eq('id', shop_id)
-
-            if (replyToken && lineToken) {
-              await sendLineReply(
-                replyToken,
-                `🎉 ยืนยันเชื่อมต่อแอดมินสำเร็จแล้วค่ะคุณ ${adminName}!\n\nระบบ DealMee ได้ผูกบัญชี LINE นี้เป็นแอดมินของร้าน "${shop.name || 'ร้านค้า'}" เรียบร้อยแล้วค่ะ\n\nต่อไปนี้น้องบอทจะส่งแจ้งเตือนมาที่นี่ทันทีเมื่อมี:\n• ออเดอร์ใหม่เข้ามา 🛒\n• ลูกค้าชำระเงิน / ตรวจสลิป 💰\n• ตรวจพบสลิปผิดปกติ ⚠️\n• ลูกค้าขอคุยกับแอดมิน 🔔`,
-                lineToken
-              )
-            }
-            continue
-          } else {
-            if (replyToken && lineToken) {
-              await sendLineReply(
-                replyToken,
-                '❌ รหัสเชื่อมต่อแอดมินไม่ถูกต้อง หรือหมดอายุแล้วค่ะ\nกรุณากดรับรหัสหรือสแกน QR Code ใหม่จากหน้า Dashboard ตั้งค่าร้านค้านะคะ 🙏',
-                lineToken
-              )
-            }
-            continue
+              if (pRes.ok) {
+                const pData = await pRes.json()
+                if (pData.displayName) adminName = pData.displayName
+              }
+            } catch {}
           }
-        }
 
-        const isPauseCommand = ['/pause', '/stop', '/admin', '/human'].includes(lowerText) ||
-          cleanText === 'ขอคุยกับแอดมิน' || cleanText === 'ขอคุยกับเจ้าหน้าที่' || cleanText === 'ติดต่อเจ้าหน้าที่'
+          const updatedFeatures = {
+            ...((shop.features as Record<string, any>) || {}),
+            admin_line_user_id: userId,
+            admin_line_name: adminName,
+            admin_notify: true,
+            admin_link_code: null,
+          }
 
-        if (isPauseCommand) {
-          console.log(`[Webhook] Explicit pause command detected for ${userId}`)
-          const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString()
-          await supabase.from('conversations').update({ 
-            status: 'human', 
-            ai_mode: 'manual', 
-            paused_until: pausedUntil 
-          }).eq('id', conv.id)
+          await supabase
+            .from('shops')
+            .update({
+              owner_line_id: userId,
+              features: updatedFeatures,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', shop_id)
+
           if (replyToken && lineToken) {
-            await sendLineReply(replyToken, 'รับเรื่องเรียบร้อยแล้วค่ะ น้องบอทได้หยุดการตอบชั่วคราวและประสานงานเจ้าหน้าที่แอดมินให้แล้วนะคะ สักครู่จะมีเจ้าหน้าที่เข้ามาดูแลค่ะ 😊', lineToken)
+            await sendLineReply(
+              replyToken,
+              `🎉 ยืนยันเชื่อมต่อแอดมินสำเร็จแล้วค่ะคุณ ${adminName}!\n\nระบบ DealMee ได้ผูกบัญชี LINE นี้เป็นแอดมินของร้าน "${shop.name || 'ร้านค้า'}" เรียบร้อยแล้วค่ะ\n\nต่อไปนี้น้องบอทจะส่งแจ้งเตือนมาที่นี่ทันทีเมื่อมี:\n• ออเดอร์ใหม่เข้ามา 🛒\n• ลูกค้าชำระเงิน / ตรวจสลิป 💰\n• ตรวจพบสลิปผิดปกติ ⚠️\n• ลูกค้าขอคุยกับแอดมิน 🔔`,
+              lineToken
+            )
+          }
+          continue
+        } else {
+          if (replyToken && lineToken) {
+            await sendLineReply(
+              replyToken,
+              '❌ รหัสเชื่อมต่อแอดมินไม่ถูกต้อง หรือหมดอายุแล้วค่ะ\nกรุณากดรับรหัสหรือสแกน QR Code ใหม่จากหน้า Dashboard ตั้งค่าร้านค้านะคะ 🙏',
+              lineToken
+            )
           }
           continue
         }
+      }
 
-        if (conv.status === 'human') {
-          // Check if Smart Auto-Pause timer (1 hour) has expired OR if last chat was >1 hour ago (e.g. overnight)
-          const now = new Date()
-          const isPauseExpired = conv.paused_until
-            ? now > new Date(conv.paused_until)
-            : (conv.last_message_at ? (now.getTime() - new Date(conv.last_message_at).getTime() > 60 * 60 * 1000) : true)
-          const isExplicitReset = cleanText.startsWith('/ai') || isPauseExpired
+      const isPauseCommand = ['/pause', '/stop', '/admin', '/human'].includes(lowerText) ||
+        cleanText === 'ขอคุยกับแอดมิน' || cleanText === 'ขอคุยกับเจ้าหน้าที่' || cleanText === 'ติดต่อเจ้าหน้าที่'
 
-          if (isExplicitReset) {
-            console.log(`[Webhook] Auto-resuming AI mode for ${userId} (1-Hour Auto-Pause expired or explicit reset)`)
-            await supabase.from('conversations').update({ 
-              status: 'ai', 
-              ai_mode: 'auto', 
-              paused_until: null 
-            }).eq('id', conv.id)
-            conv.status = 'ai'
-            conv.ai_mode = 'auto'
-            if (cleanText.startsWith('/ai') && replyToken && lineToken) {
-              await sendLineReply(replyToken, 'น้องบอท AI กลับมาพร้อมดูแลคุณลูกค้าต่อแล้วค่ะ มีอะไรให้ช่วยสอบถามได้เลยนะคะ ✨', lineToken)
-              continue
-            }
-          } else {
-            console.log(`[Webhook] Skipping AI reply for ${userId} (Admin Takeover active)`)
+      if (isPauseCommand) {
+        console.log(`[Webhook] Explicit pause command detected for ${userId}`)
+        const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+        await supabase.from('conversations').update({ 
+          status: 'human', 
+          ai_mode: 'manual', 
+          paused_until: pausedUntil 
+        }).eq('id', conv.id)
+        if (replyToken && lineToken) {
+          await sendLineReply(replyToken, 'รับเรื่องเรียบร้อยแล้วค่ะ น้องบอทได้หยุดการตอบชั่วคราวและประสานงานเจ้าหน้าที่แอดมินให้แล้วนะคะ สักครู่จะมีเจ้าหน้าที่เข้ามาดูแลค่ะ 😊', lineToken)
+        }
+        continue
+      }
+
+      if (conv.status === 'human') {
+        // Check if Smart Auto-Pause timer (1 hour) has expired OR if last chat was >1 hour ago (e.g. overnight)
+        const now = new Date()
+        const isPauseExpired = conv.paused_until
+          ? now > new Date(conv.paused_until)
+          : (conv.last_message_at ? (now.getTime() - new Date(conv.last_message_at).getTime() > 60 * 60 * 1000) : true)
+        const isExplicitReset = cleanText.startsWith('/ai') || isPauseExpired
+
+        if (isExplicitReset) {
+          console.log(`[Webhook] Auto-resuming AI mode for ${userId} (1-Hour Auto-Pause expired or explicit reset)`)
+          await supabase.from('conversations').update({ 
+            status: 'ai', 
+            ai_mode: 'auto', 
+            paused_until: null 
+          }).eq('id', conv.id)
+          conv.status = 'ai'
+          conv.ai_mode = 'auto'
+          if (cleanText.startsWith('/ai') && replyToken && lineToken) {
+            await sendLineReply(replyToken, 'น้องบอท AI กลับมาพร้อมดูแลคุณลูกค้าต่อแล้วค่ะ มีอะไรให้ช่วยสอบถามได้เลยนะคะ ✨', lineToken)
             continue
           }
-        }
-
-        if (!isAutoReplyEnabled) {
-          console.log(`[Webhook] Skipping AI reply for shop ${shop_id} (Auto-Reply feature disabled)`)
+        } else {
+          console.log(`[Webhook] Skipping AI reply for ${userId} (Admin Takeover active)`)
           continue
         }
+      }
 
-        // Show LINE thinking / loading animation immediately while AI generates response
-        if (lineToken) {
-          sendLineLoadingAnimation(userId, lineToken).catch(() => {})
-        }
+      if (!isAutoReplyEnabled) {
+        console.log(`[Webhook] Skipping AI reply for shop ${shop_id} (Auto-Reply feature disabled)`)
+        continue
+      }
 
-        // 5. Call AI Sales Agent Engine (Synchronous execution — runs all planning steps
-        // including tool calls and returns final answer, while LINE Thinking Indicator is active)
-        const agentResult = await processSalesAgentChat({
+      // 5. Call AI Sales Agent Engine (runs all planning steps including tool calls)
+      // with LINE's loading animation showing until the answer is ready
+      const agentResult = await withLineLoading(userId, lineToken, () =>
+        processSalesAgentChat({
           shop,
           userQuery: userText,
           userId,
           conversationId: conv.id,
           supabaseClient: supabase,
         })
+      )
 
-        // If in Copilot mode: do not send to user directly, instead save as ai_suggested_reply
-        if (conv.ai_mode === 'copilot') {
-          console.log(`[Webhook] Conversation is in Copilot mode for ${userId}. Saving draft suggestion.`)
-          if (savedUserMsg?.id && agentResult.text) {
-            await supabase.from('chat_messages').update({
-              ai_suggested_reply: agentResult.text,
-            }).eq('id', savedUserMsg.id)
-          }
-          continue
+      // If in Copilot mode: do not send to user directly, instead save as ai_suggested_reply
+      if (conv.ai_mode === 'copilot') {
+        console.log(`[Webhook] Conversation is in Copilot mode for ${userId}. Saving draft suggestion.`)
+        if (savedUserMsg?.id && agentResult.text) {
+          await supabase.from('chat_messages').update({
+            ai_suggested_reply: agentResult.text,
+          }).eq('id', savedUserMsg.id)
         }
-
-        await deliverAgentResult({
-          agentResult,
-          conv,
-          shop,
-          shopId: shop_id,
-          userId,
-          userText,
-          lineToken,
-          replyToken,
-          useReplyForText: true,
-        })
+        continue
       }
 
-      // Handle Message Event (Image) - For Slip Verification
-      if (event.type === 'message' && event.message?.type === 'image') {
-        const messageId = event.message.id
-        console.log(`[Webhook] Received image ${messageId} from ${userId}`)
+      await deliverAgentResult({
+        agentResult,
+        conv,
+        shop,
+        shopId: shop_id,
+        userId,
+        userText,
+        lineToken,
+        replyToken,
+        useReplyForText: true,
+      })
+    }
 
-        const isSlipVerifyActive = features.slip_verify !== false
-        if (isSlipVerifyActive) {
-          if (replyToken && lineToken) {
-            await sendLineReply(replyToken, 'ได้รับรูปแล้วค่ะ 📄 รอสักครู่นะคะ...', lineToken)
-          }
-          // Run Slip verification and await so serverless execution context does not freeze before completion
-          if (lineToken) {
-            await verifySlipAndNotify({ messageId, userId, lineToken, shopId: shop_id, shop })
-              .catch(err => console.error('[SlipVerify Error]', err))
-          }
-        } else {
-          if (replyToken && lineToken) {
-            await sendLineReply(replyToken, 'ได้รับรูปภาพเรียบร้อยแล้วค่ะ แอดมินจะเข้ามาตรวจสอบให้นะคะ 😊', lineToken)
-          }
+    // Handle Message Event (Image) - For Slip Verification
+    if (event.type === 'message' && event.message?.type === 'image') {
+      const messageId = event.message.id
+      console.log(`[Webhook] Received image ${messageId} from ${userId}`)
+
+      const isSlipVerifyActive = features.slip_verify !== false
+      if (isSlipVerifyActive) {
+        if (replyToken && lineToken) {
+          await sendLineReply(replyToken, 'ได้รับรูปแล้วค่ะ 📄 รอสักครู่นะคะ...', lineToken)
+        }
+        if (lineToken) {
+          await withLineLoading(userId, lineToken, () =>
+            verifySlipAndNotify({ messageId, userId, lineToken, shopId: shop_id, shop })
+          ).catch(err => console.error('[SlipVerify Error]', err))
+        }
+      } else {
+        if (replyToken && lineToken) {
+          await sendLineReply(replyToken, 'ได้รับรูปภาพเรียบร้อยแล้วค่ะ แอดมินจะเข้ามาตรวจสอบให้นะคะ 😊', lineToken)
         }
       }
     }
-
-    return NextResponse.json({ status: 'success' })
-  } catch (error: any) {
-    console.error('[LINE Webhook Error]:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
@@ -490,7 +513,11 @@ async function deliverAgentResult({
 
       if (replyPayload.length > 0) {
         // The Reply API rejects the whole call above 5 messages, so the customer got nothing
-        await sendLineReply(replyToken, replyPayload.slice(0, LINE_MAX_MESSAGES_PER_CALL), lineToken)
+        const firstBatch = replyPayload.slice(0, LINE_MAX_MESSAGES_PER_CALL)
+        if (!(await sendLineReply(replyToken, firstBatch, lineToken))) {
+          // Reply tokens expire; a long AI run can outlive one, so push instead of going silent
+          await sendLinePushMessages(userId, firstBatch, lineToken)
+        }
         for (let i = LINE_MAX_MESSAGES_PER_CALL; i < replyPayload.length; i += LINE_MAX_MESSAGES_PER_CALL) {
           await sendLinePushMessages(userId, replyPayload.slice(i, i + LINE_MAX_MESSAGES_PER_CALL), lineToken)
         }
@@ -642,12 +669,15 @@ async function sendLinePushMessages(to: string, messages: any[], channelAccessTo
 
 // ─── LINE Messaging Helpers ───────────────────────────────────────────────────
 
-/** Send Reply via LINE Reply API (1 replyToken = 1 use only, up to 5 message objects per replyToken, consuming ZERO push quota) */
-async function sendLineReply(replyToken: string, payload: string | any[], channelAccessToken: string) {
+/**
+ * Send Reply via LINE Reply API (1 replyToken = 1 use only, up to 5 message objects per replyToken, consuming ZERO push quota).
+ * Returns false when LINE rejected the reply (e.g. an expired token).
+ */
+async function sendLineReply(replyToken: string, payload: string | any[], channelAccessToken: string): Promise<boolean> {
   try {
     const rawMessages = typeof payload === 'string' ? [{ type: 'text', text: payload }] : payload
     const messages = (rawMessages || []).filter(Boolean)
-    if (messages.length === 0) return
+    if (messages.length === 0) return true
 
     const res = await fetch('https://api.line.me/v2/bot/message/reply', {
       method: 'POST',
@@ -662,9 +692,12 @@ async function sendLineReply(replyToken: string, payload: string | any[], channe
     })
     if (!res.ok) {
       console.error('[LINE Reply API Error]:', await res.text())
+      return false
     }
+    return true
   } catch (err) {
     console.error('[LINE Reply Exception]:', err)
+    return false
   }
 }
 
@@ -718,7 +751,27 @@ async function sendLineImagePush(to: string, imageUrl: string, channelAccessToke
   }
 }
 
-/** Start LINE Chat Loading Animation (Thinking Indicator for up to 20s) */
+const LINE_LOADING_SECONDS = 20
+
+/**
+ * Runs `work` with LINE's loading animation showing. The animation lasts at most
+ * LINE_LOADING_SECONDS, so it is restarted shortly before it runs out; LINE also
+ * hides it as soon as a message reaches the chat.
+ */
+async function withLineLoading<T>(chatId: string, channelAccessToken: string | undefined, work: () => Promise<T>): Promise<T> {
+  if (!channelAccessToken) return work()
+  sendLineLoadingAnimation(chatId, channelAccessToken).catch(() => {})
+  const timer = setInterval(() => {
+    sendLineLoadingAnimation(chatId, channelAccessToken).catch(() => {})
+  }, (LINE_LOADING_SECONDS - 5) * 1000)
+  try {
+    return await work()
+  } finally {
+    clearInterval(timer)
+  }
+}
+
+/** Start LINE Chat Loading Animation (Thinking Indicator) */
 async function sendLineLoadingAnimation(chatId: string, channelAccessToken: string) {
   try {
     const res = await fetch('https://api.line.me/v2/bot/chat/loading/start', {
@@ -729,7 +782,7 @@ async function sendLineLoadingAnimation(chatId: string, channelAccessToken: stri
       },
       body: JSON.stringify({
         chatId,
-        loadingSeconds: 20,
+        loadingSeconds: LINE_LOADING_SECONDS,
       }),
     })
     if (!res.ok) {
