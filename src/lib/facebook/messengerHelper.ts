@@ -425,3 +425,63 @@ export async function sendFacebookImage(
     return { success: false, error: err?.message || 'Exception sending image' }
   }
 }
+
+// Messenger's button template limits
+const BUTTON_TEMPLATE_MAX_TEXT = 640
+const BUTTON_TEMPLATE_MAX_BUTTONS = 3
+const BUTTON_TITLE_MAX = 20
+
+/**
+ * Send text with up to three link buttons (Messenger button template), the
+ * Messenger stand-in for a LINE Flex card such as a quotation. Falls back to
+ * plain text with the links written out if the template is rejected.
+ */
+export async function sendFacebookLinkButtons(
+  recipientPsid: string,
+  text: string,
+  links: Array<{ label: string; url: string }>,
+  pageAccessToken: string
+): Promise<SendMessageResult> {
+  const cleanToken = pageAccessToken.trim()
+  if (!cleanToken || !recipientPsid || !text) {
+    return { success: false, error: 'Missing token, recipient, or text' }
+  }
+  const usable = links.filter((l) => l.url).slice(0, BUTTON_TEMPLATE_MAX_BUTTONS)
+  const asPlainText = () =>
+    sendFacebookMessage(recipientPsid, [text, ...links.map((l) => `${l.label}: ${l.url}`)].join('\n'), cleanToken)
+  if (usable.length === 0) return asPlainText()
+
+  try {
+    const response = await fetch(`${GRAPH_API_BASE}/me/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cleanToken}`,
+      },
+      body: JSON.stringify({
+        recipient: { id: recipientPsid },
+        messaging_type: 'RESPONSE',
+        message: {
+          attachment: {
+            type: 'template',
+            payload: {
+              template_type: 'button',
+              text: text.slice(0, BUTTON_TEMPLATE_MAX_TEXT),
+              buttons: usable.map((l) => ({ type: 'web_url', url: l.url, title: l.label.slice(0, BUTTON_TITLE_MAX) })),
+            },
+          },
+        },
+      }),
+    })
+
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      console.error('[Facebook Button Template Error]:', data)
+      return asPlainText()
+    }
+    return { success: true, messageId: data.message_id }
+  } catch (err: any) {
+    console.error('[Facebook Button Template Exception]:', err)
+    return asPlainText()
+  }
+}
