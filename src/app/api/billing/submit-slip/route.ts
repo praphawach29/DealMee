@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
+import { readSlipQr } from '@/lib/slip/readSlipQr'
 import {
   getPlatformBillingSettings,
   verifySlipWithEasySlip,
@@ -80,7 +81,8 @@ export async function POST(req: NextRequest) {
 
       if (easySlipResult.success && easySlipResult.data) {
         const slipData = easySlipResult.data
-        slipRef = slipData.transRef || slipData.ref1 || null
+        // The slip's own mini-QR is the fallback when the provider returns no reference
+        slipRef = slipData.transRef || slipData.ref1 || (await readSlipQr(base64))?.transRef || null
         const slipAmount = Number(slipData.amount?.amount || 0)
 
         // Validate amount (allow small rounding delta of 1 THB)
@@ -99,7 +101,10 @@ export async function POST(req: NextRequest) {
           (platformSettings.account_name &&
             receiverName.toLowerCase().includes(platformSettings.account_name.toLowerCase()))
 
-        if (isAmountMatch && isReceiverMatch) {
+        if (isAmountMatch && isReceiverMatch && !slipRef) {
+          // Without a reference the duplicate check below can't run, so a person must look
+          easySlipMessage = 'สลิปไม่มีเลขอ้างอิงธุรกรรม รอแอดมินตรวจสอบ'
+        } else if (isAmountMatch && isReceiverMatch) {
           autoVerified = true
         } else {
           easySlipMessage = !isAmountMatch
