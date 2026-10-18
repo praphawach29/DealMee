@@ -156,7 +156,7 @@ export async function sendFacebookTypingIndicator(
 
   try {
     const url = `${GRAPH_API_BASE}/me/messages`
-    await fetch(url, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -167,9 +167,41 @@ export async function sendFacebookTypingIndicator(
         sender_action: action,
       }),
     })
+    if (!res.ok) {
+      console.log(`[Facebook Typing Indicator Note] ${action}:`, res.status, await res.text())
+    }
   } catch (err) {
     // Non-blocking indicator failure can be safely ignored
     console.log('[Facebook Typing Indicator Note]:', err)
+  }
+}
+
+// Messenger drops the typing bubble after about 20 seconds on its own
+const TYPING_REFRESH_MS = 15_000
+
+/**
+ * Runs `work` with Messenger's typing bubble showing, the counterpart of LINE's
+ * loading animation: marks the message seen, keeps the bubble alive for long AI
+ * runs, and clears it when the work fails (a sent message clears it otherwise).
+ */
+export async function withFacebookTyping<T>(
+  recipientPsid: string,
+  pageAccessToken: string | undefined,
+  work: () => Promise<T>
+): Promise<T> {
+  if (!pageAccessToken) return work()
+  await sendFacebookTypingIndicator(recipientPsid, pageAccessToken, 'mark_seen')
+  sendFacebookTypingIndicator(recipientPsid, pageAccessToken, 'typing_on').catch(() => {})
+  const timer = setInterval(() => {
+    sendFacebookTypingIndicator(recipientPsid, pageAccessToken, 'typing_on').catch(() => {})
+  }, TYPING_REFRESH_MS)
+  try {
+    return await work()
+  } catch (err) {
+    sendFacebookTypingIndicator(recipientPsid, pageAccessToken, 'typing_off').catch(() => {})
+    throw err
+  } finally {
+    clearInterval(timer)
   }
 }
 
