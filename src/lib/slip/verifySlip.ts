@@ -81,16 +81,67 @@ export function resolveSlipProviderAndKey(shopSettings?: SlipShopConfig): {
   return { provider, apiKey, branchId, isShopCustomKey }
 }
 
+type RealSlipProvider = Exclude<SlipProvider, 'mock'>
+
+interface ProviderAttempt {
+  provider: RealSlipProvider
+  apiKey: string
+  branchId: string
+  /** The shop's own key rather than the platform's */
+  isShopCustomKey: boolean
+}
+
+const PLATFORM_KEY_ENV: Record<RealSlipProvider, string> = {
+  easyslip: 'EASYSLIP_API_KEY',
+  thunder: 'THUNDER_API_KEY',
+  slipok: 'SLIPOK_API_KEY',
+}
+
 /**
- * Main verify function
+ * The configured provider first, then every other provider the platform holds a
+ * key for, so one provider being down or out of quota doesn't stop slip checks.
+ */
+function buildProviderChain(shopSettings?: SlipShopConfig): ProviderAttempt[] {
+  const primary = resolveSlipProviderAndKey(shopSettings)
+  if (primary.provider === 'mock') return []
+
+  const chain: ProviderAttempt[] = []
+  if (primary.apiKey) chain.push({ ...primary, provider: primary.provider })
+
+  for (const provider of Object.keys(PLATFORM_KEY_ENV) as RealSlipProvider[]) {
+    if (provider === primary.provider) continue
+    const apiKey = (process.env[PLATFORM_KEY_ENV[provider]] || '').trim()
+    if (!apiKey) continue
+    chain.push({ provider, apiKey, branchId: process.env.SLIPOK_BRANCH_ID || '1', isShopCustomKey: false })
+  }
+  return chain
+}
+
+/**
+ * Whether a failed check should be retried with the next provider. Only failures
+ * of the provider itself qualify (unreachable, 5xx, and for platform keys a
+ * rejected key or exhausted quota); a verdict about the slip (fake, unreadable,
+ * not found) stands, since asking another provider would only pay twice for it.
+ * A shop's own key that is rejected or out of quota is the shop's to fix, so it
+ * doesn't spill over onto the platform's keys.
+ */
+function shouldTryNextProvider(result: SlipVerifyResult, attempt: ProviderAttempt): boolean {
+  const status = result.statusCode ?? 500
+  if (status >= 500) return true
+  if (attempt.isShopCustomKey) return false
+  return status === 401 || status === 402 || status === 403 || status === 429
+}
+
+/**
+ * Main verify function: runs the provider chain until a provider gives a verdict.
  */
 export async function verifySlip(options: SlipVerifyOptions): Promise<SlipVerifyResult> {
-  const { imageBase64, mimeType = 'image/jpeg', shopSettings, expectedAmount } = options
-  const { provider, apiKey, branchId } = resolveSlipProviderAndKey(shopSettings)
+  const chain = buildProviderChain(options.shopSettings)
 
-  // 1. Mock mode or missing API key: nothing was actually verified, so never report the
+  // Mock mode or no usable API key: nothing was actually verified, so never report the
   // slip as valid. Any image would otherwise mark an order as paid.
-  if (provider === 'mock' || !apiKey) {
+  if (chain.length === 0) {
+    const { provider } = resolveSlipProviderAndKey(options.shopSettings)
     console.warn(`[SlipVerify] Provider '${provider}' has no usable API key — sending slip to manual review`)
     return {
       success: false,
@@ -100,6 +151,22 @@ export async function verifySlip(options: SlipVerifyOptions): Promise<SlipVerify
       statusCode: 503,
     }
   }
+
+  let result: SlipVerifyResult | null = null
+  for (const [i, attempt] of chain.entries()) {
+    result = await verifyWithProvider(attempt, options)
+    if (result.success || !shouldTryNextProvider(result, attempt)) return result
+    const next = chain[i + 1]
+    if (next) {
+      console.warn(`[SlipVerify] ${attempt.provider} failed (${result.statusCode}: ${result.rawMessage}) — trying ${next.provider}`)
+    }
+  }
+  return result!
+}
+
+async function verifyWithProvider(attempt: ProviderAttempt, options: SlipVerifyOptions): Promise<SlipVerifyResult> {
+  const { imageBase64, mimeType = 'image/jpeg', expectedAmount } = options
+  const { provider, apiKey, branchId } = attempt
 
   const dataUrl = `data:${mimeType};base64,${imageBase64}`
 
