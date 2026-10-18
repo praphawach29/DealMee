@@ -79,25 +79,16 @@ export type AgentToolName =
   | 'send_payment_qr'
   | 'take_order'
   | 'check_order_status'
-  | 'get_payment_slip_status'
-  | 'send_invoice'
-  | 'calculate_installment'
   | 'apply_custom_discount'
   | 'accept_quotation'
   | 'search_products'
   | 'check_stock'
-  | 'get_product_image'
-  | 'get_upsell_products'
-  | 'get_crosssell_products'
-  | 'recommend_product_match'
-  | 'upsell_suggestion'
   | 'check_available_slots'
   | 'book_appointment'
   | 'reschedule_booking'
   | 'check_booking'
   | 'cancel_booking'
   | 'calculate_shipping'
-  | 'track_parcel'
   | 'save_lead'
   | 'update_customer_note'
   | 'add_customer_tag'
@@ -111,11 +102,6 @@ export type AgentToolName =
   | 'request_human_agent'
   | 'transfer_to_agent'
   | 'schedule_followup'
-  // New tools
-  | 'get_shop_info'
-  | 'check_warranty'
-  | 'request_review'
-  | 'get_return_policy'
 
 export interface AgentToolCall {
   name: AgentToolName
@@ -253,41 +239,6 @@ const MASTER_TOOLS = [
     },
   },
   {
-    name: 'get_payment_slip_status',
-    description: 'ตรวจสอบสถานะการชำระเงินและสลิปโอนเงินของออเดอร์',
-    parameters: {
-      type: 'object',
-      properties: {
-        order_id: { type: 'string', description: 'รหัสออเดอร์ เช่น ORD-000123' },
-      },
-      required: ['order_id'],
-    },
-  },
-  {
-    name: 'send_invoice',
-    description: 'สร้างและส่งลิงก์ชำระเงิน (Invoice/Payment Link) ให้ลูกค้าสำหรับออเดอร์ที่สร้างแล้ว',
-    parameters: {
-      type: 'object',
-      properties: {
-        order_id: { type: 'string', description: 'รหัสออเดอร์' },
-      },
-      required: ['order_id'],
-    },
-  },
-  {
-    name: 'calculate_installment',
-    description: 'คำนวณยอดผ่อนชำระรายเดือน สำหรับลูกค้าที่ต้องการซื้อแบบผ่อน',
-    parameters: {
-      type: 'object',
-      properties: {
-        principal: { type: 'number', description: 'ยอดจัด (ราคาสินค้าลบเงินดาวน์)' },
-        months: { type: 'number', description: 'จำนวนเดือนที่ผ่อน เช่น 6, 12, 24' },
-        interest_rate: { type: 'number', description: 'ดอกเบี้ยต่อเดือน เช่น 0.89' },
-      },
-      required: ['principal', 'months', 'interest_rate'],
-    },
-  },
-  {
     name: 'apply_custom_discount',
     description: 'ให้ส่วนลดกับออเดอร์ที่รอชำระของลูกค้าเพื่อปิดการขาย ระบบจำกัดไม่เกินเพดานที่ร้านตั้งไว้ และให้ได้ครั้งเดียวต่อออเดอร์ ต้องมีออเดอร์ (take_order) ก่อน',
     parameters: {
@@ -361,21 +312,31 @@ const MASTER_TOOLS = [
   // ── 🛒 Order ─────────────────────────────────────────────────────────────────
   {
     name: 'take_order',
-    description: 'สรุปและสร้างออเดอร์ใหม่เมื่อลูกค้าให้ข้อมูลครบถ้วนและตกลงซื้อแล้ว ระบบคำนวณราคา ค่าส่ง และตรวจสต๊อกจากข้อมูลร้านเอง ให้ใช้ชื่อสินค้าตามที่ search_products คืนมา',
+    description: 'สรุปและสร้างออเดอร์ใหม่เมื่อลูกค้าให้ข้อมูลครบถ้วนและตกลงซื้อแล้ว ระบบคำนวณราคา ค่าส่ง และตรวจสต๊อกจากข้อมูลร้านเอง ให้ใช้ชื่อสินค้าตามที่ search_products คืนมา ถ้าลูกค้าสั่งหลายสินค้า ให้ใส่ทุกรายการใน items ในออเดอร์เดียว (ห้ามแยกเป็นหลายออเดอร์)',
     parameters: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'ชื่อลูกค้า' },
         phone: { type: 'string', description: 'เบอร์โทรติดต่อ' },
-        product: { type: 'string', description: 'ชื่อสินค้าที่สั่ง' },
-        qty: { type: 'string', description: 'จำนวน' },
-        variants: { type: 'string', description: 'สี, ขนาด หรือตัวเลือกอื่นๆ ถ้าไม่มีใส่ "-"' },
+        items: {
+          type: 'array',
+          description: 'รายการสินค้าทั้งหมดที่ลูกค้าสั่งในออเดอร์นี้ (สินค้าเดียวก็ใส่ 1 รายการ)',
+          items: {
+            type: 'object',
+            properties: {
+              product: { type: 'string', description: 'ชื่อสินค้า' },
+              qty: { type: 'number', description: 'จำนวน' },
+              variants: { type: 'string', description: 'สี, ขนาด หรือตัวเลือกอื่นๆ ถ้าไม่มีใส่ "-"' },
+            },
+            required: ['product', 'qty'],
+          },
+        },
         address: { type: 'string', description: 'ที่อยู่จัดส่งครบถ้วน' },
         payment_method: { type: 'string', description: 'วิธีชำระเงิน เช่น โอนเงิน, เก็บปลายทาง' },
         total_price: { type: 'number', description: 'ยอดรวมทั้งหมดที่ต้องชำระ (บาท)' },
         tax_invoice: { type: 'string', description: 'ต้องการใบกำกับภาษีหรือไม่' },
       },
-      required: ['name', 'phone', 'product', 'qty', 'address', 'payment_method', 'total_price'],
+      required: ['name', 'phone', 'items', 'address', 'payment_method', 'total_price'],
     },
   },
   {
@@ -387,18 +348,6 @@ const MASTER_TOOLS = [
         order_id: { type: 'string', description: 'รหัสออเดอร์ เช่น ORD-000123' },
       },
       required: ['order_id'],
-    },
-  },
-  {
-    name: 'track_parcel',
-    description: 'เช็คสถานะพัสดุด้วยเลข Tracking Number โดยรองรับ Kerry, Flash, ไปรษณีย์ไทย, J&T',
-    parameters: {
-      type: 'object',
-      properties: {
-        tracking_no: { type: 'string', description: 'เลขพัสดุ (Tracking Number)' },
-        carrier: { type: 'string', description: 'ขนส่ง เช่น kerry, flash, thaipost, jandt (optional)' },
-      },
-      required: ['tracking_no'],
     },
   },
   {
@@ -437,61 +386,6 @@ const MASTER_TOOLS = [
         product_name: { type: 'string', description: 'ชื่อสินค้าที่ต้องการเช็ค สามารถใช้ชื่อย่อได้' },
       },
       required: ['product_name'],
-    },
-  },
-  {
-    name: 'get_product_image',
-    description: 'ดึงลิงก์รูปภาพของสินค้าเพื่อนำไปแสดงให้ลูกค้าดู เมื่อลูกค้าขอดูรูปสินค้า',
-    parameters: {
-      type: 'object',
-      properties: {
-        product_name: { type: 'string', description: 'ชื่อสินค้าที่ต้องการดูรูป' },
-      },
-      required: ['product_name'],
-    },
-  },
-  {
-    name: 'get_upsell_products',
-    description: 'แนะนำสินค้าสเปคดีกว่า ราคาสูงกว่าในหมวดเดียวกัน เพื่อ Upsell',
-    parameters: {
-      type: 'object',
-      properties: {
-        base_product_name: { type: 'string', description: 'ชื่อสินค้าที่ลูกค้ากำลังดูอยู่' },
-      },
-      required: ['base_product_name'],
-    },
-  },
-  {
-    name: 'get_crosssell_products',
-    description: 'แนะนำสินค้าหมวดอื่นที่ควรซื้อคู่กัน เช่น อุปกรณ์เสริม อะไหล่',
-    parameters: {
-      type: 'object',
-      properties: {
-        base_product_name: { type: 'string', description: 'ชื่อสินค้าหลัก' },
-      },
-      required: ['base_product_name'],
-    },
-  },
-  {
-    name: 'recommend_product_match',
-    description: 'แนะนำสินค้าที่เข้าชุดกันหรือใช้งานร่วมกันได้ เช่น ซื้อเสื้อ แนะนำกางเกงที่เข้ากัน',
-    parameters: {
-      type: 'object',
-      properties: {
-        base_product_name: { type: 'string', description: 'ชื่อสินค้าหลักที่ลูกค้าสนใจ' },
-      },
-      required: ['base_product_name'],
-    },
-  },
-  {
-    name: 'upsell_suggestion',
-    description: 'ค้นหาสินค้าที่ควรนำเสนอ Upsell/Cross-sell จากสินค้าที่ลูกค้ากำลังสนใจ',
-    parameters: {
-      type: 'object',
-      properties: {
-        base_product: { type: 'string', description: 'ชื่อสินค้าหลักที่ลูกค้าสนใจ' },
-      },
-      required: ['base_product'],
     },
   },
 
@@ -685,40 +579,6 @@ const MASTER_TOOLS = [
   },
 
   // ── ✨ NEW Tools (Added in dealmee-saas-web) ────────────────────────────────────
-  {
-    name: 'get_shop_info',
-    description: 'ดึงข้อมูลทั่วไปของร้านค้า เช่น เวลาเปิด-ปิด ที่อยู่ ช่องทางติดต่อ เมื่อลูกค้าถามเกี่ยวกับร้าน',
-    parameters: { type: 'object', properties: {}, required: [] },
-  },
-  {
-    name: 'check_warranty',
-    description: 'ตรวจสอบสถานะการรับประกันสินค้าของลูกค้า',
-    parameters: {
-      type: 'object',
-      properties: {
-        order_id: { type: 'string', description: 'รหัสออเดอร์ หรือเลขที่ใบเสร็จ' },
-        product_name: { type: 'string', description: 'ชื่อสินค้าที่ต้องการเช็คประกัน' },
-      },
-      required: [],
-    },
-  },
-  {
-    name: 'request_review',
-    description: 'ส่งคำขอให้ลูกค้าเขียนรีวิวหลังจากได้รับสินค้าแล้ว เพื่อสร้าง Social Proof',
-    parameters: {
-      type: 'object',
-      properties: {
-        order_id: { type: 'string', description: 'รหัสออเดอร์ที่ต้องการขอรีวิว' },
-        platform: { type: 'string', description: 'แพลตฟอร์มที่ต้องการรีวิว เช่น LINE, Google, Facebook' },
-      },
-      required: [],
-    },
-  },
-  {
-    name: 'get_return_policy',
-    description: 'ดึงนโยบายการคืนสินค้าและเงินคืนของร้านค้า เมื่อลูกค้าถามเรื่องการคืนสินค้า',
-    parameters: { type: 'object', properties: {}, required: [] },
-  },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -778,43 +638,26 @@ function toOpenAITools(tools: typeof MASTER_TOOLS) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SALES_TOOL_NAMES: AgentToolName[] = [
-  'search_products', 'check_stock', 'get_product_image',
-  'get_upsell_products', 'get_crosssell_products', 'recommend_product_match', 'upsell_suggestion',
-  'get_active_promotions', 'apply_custom_discount', 'calculate_installment',
-  'calculate_shipping', 'take_order', 'create_quotation', 'accept_quotation', 'create_official_letter', 'send_payment_qr',
-  'get_payment_slip_status', 'send_invoice',
+  'search_products', 'check_stock', 'get_active_promotions', 'apply_custom_discount', 'calculate_shipping',
+  'take_order', 'create_quotation', 'accept_quotation', 'create_official_letter', 'send_payment_qr',
   'save_lead', 'update_customer_note', 'add_customer_tag', 'get_customer_history', 'check_loyalty_points',
   'schedule_followup', 'request_human_agent', 'transfer_to_agent', 'search_knowledge_base',
-  'get_shop_info', 'request_review', 'get_return_policy',
 ]
 
 const BOOKING_TOOL_NAMES: AgentToolName[] = [
   'check_available_slots', 'book_appointment', 'reschedule_booking', 'check_booking', 'cancel_booking',
-  'get_active_promotions', 'update_customer_note', 'send_payment_qr', 'get_shop_info', 'search_knowledge_base',
+  'get_active_promotions', 'update_customer_note', 'send_payment_qr', 'search_knowledge_base',
 ]
 
 const SUPPORT_TOOL_NAMES: AgentToolName[] = [
-  'check_order_status', 'track_parcel', 'get_payment_slip_status',
-  'search_knowledge_base', 'request_human_agent', 'update_customer_note', 'add_customer_tag',
-  'transfer_to_agent', 'check_warranty', 'get_return_policy',
+  'check_order_status', 'search_knowledge_base', 'request_human_agent', 'update_customer_note', 'add_customer_tag',
+  'transfer_to_agent',
 ]
 
 const GENERAL_TOOL_NAMES: AgentToolName[] = [
-  'search_knowledge_base', 'request_human_agent', 'transfer_to_agent', 'get_shop_info',
-  // Product & document lookup tools
-  'search_products', 'check_stock', 'get_active_promotions', 'create_quotation', 'accept_quotation', 'create_official_letter',
+  'search_knowledge_base', 'request_human_agent', 'transfer_to_agent', 'search_products', 'check_stock',
+  'get_active_promotions', 'create_quotation', 'accept_quotation', 'create_official_letter',
 ]
-
-// Tools that are declared above but have no handler in toolDispatcher.executeTool yet.
-// executeTool answers unknown tools with a generic "done", so offering these let the
-// model tell customers a discount was applied or an invoice sent when nothing happened.
-// Keep them hidden until each one is implemented.
-const UNIMPLEMENTED_TOOLS = new Set<string>([
-  'calculate_installment', 'check_warranty', 'get_crosssell_products',
-  'get_payment_slip_status', 'get_product_image', 'get_return_policy', 'get_shop_info',
-  'get_upsell_products', 'recommend_product_match', 'request_review', 'send_invoice',
-  'track_parcel', 'upsell_suggestion',
-])
 
 // Offered on every message whatever the intent guess: keyword routing missed plain
 // requests like "ขอ QR หน่อย" or "สั่งออเดอร์ 2 ชิ้น", leaving the model without the
@@ -827,7 +670,7 @@ const CORE_SALES_TOOL_NAMES: AgentToolName[] = [
 
 function filterTools(names: AgentToolName[]) {
   const wanted = new Set<string>([...names, ...CORE_SALES_TOOL_NAMES])
-  return MASTER_TOOLS.filter((t) => wanted.has(t.name) && !UNIMPLEMENTED_TOOLS.has(t.name))
+  return MASTER_TOOLS.filter((t) => wanted.has(t.name))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -929,7 +772,6 @@ export function classifyMessageComplexity(
 ): {
   complexity: ComplexityLevel
   complexityScore: number
-  targetProvider: AiProvider
   toolSet: typeof MASTER_TOOLS
   reason: string
 } {
@@ -964,17 +806,9 @@ export function classifyMessageComplexity(
     : filterTools(GENERAL_TOOL_NAMES)
 
   if (isHighComplexity) {
-    // Fixed dead-code bug (ROADMAP_AI_AGENT.md §4 step 1): targetProvider
-    // could previously be 'openai' from nowhere else in the codebase, since
-    // this function never actually returned it — GPT-5.6 was configured but
-    // unreachable. Now: Claude first, GPT-5.6 as a real fallback if Claude
-    // has no key configured, Gemini only as the last resort.
-    const claudeAvailable = !!(process.env.CLAUDE_API_KEY || process.env.CLAUDE_KEY)
-    const openAiAvailable = !!(process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY)
     return {
       complexity: 'HIGH',
       complexityScore,
-      targetProvider: claudeAvailable ? 'claude' : openAiAvailable ? 'openai' : 'gemini',
       toolSet,
       reason: `Complexity score ${complexityScore} (>= ${HIGH_COMPLEXITY_THRESHOLD}) → High-persuasion routing`,
     }
@@ -983,7 +817,6 @@ export function classifyMessageComplexity(
   return {
     complexity: 'LOW',
     complexityScore,
-    targetProvider: 'gemini',
     toolSet,
     reason: `Complexity score ${complexityScore} (< ${HIGH_COMPLEXITY_THRESHOLD}) → Standard FAQ/product/booking/support query`,
   }
@@ -1526,7 +1359,7 @@ ${historyContext}`
     routing.toolSet = routing.toolSet.filter((t) => !SALES_AUTOMATION_TOOLS.has(t.name))
   }
   console.log(
-    `[DealMee Brain™] "${userQuery}" | ${routing.complexity} (score ${routing.complexityScore}) | ${routing.targetProvider.toUpperCase()} | Tools: ${routing.toolSet.length}${isVipCustomer ? ' | VIP customer' : ''} | Stage: ${initialSalesStage}`
+    `[DealMee Brain™] "${userQuery}" | ${routing.complexity} (score ${routing.complexityScore}) | Tools: ${routing.toolSet.length}${isVipCustomer ? ' | VIP customer' : ''} | Stage: ${initialSalesStage}`
   )
 
   const language = detectCustomerLanguage(userQuery)
@@ -2040,9 +1873,8 @@ async function callClaudeApi(
     new Set(
       [
         process.env.CLAUDE_MODEL,
-        'claude-3-5-sonnet-20241022',
-        'claude-3-5-haiku-20241022',
-        'claude-3-haiku-20240307',
+        'claude-sonnet-5-5',
+        'claude-haiku-5-5',
       ].filter(Boolean)
     )
   ) as string[]

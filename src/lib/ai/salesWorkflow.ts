@@ -136,7 +136,6 @@ export function determineNextSalesStage({
     executedToolNames.includes('search_products') ||
     executedToolNames.includes('check_stock') ||
     executedToolNames.includes('get_active_promotions') ||
-    executedToolNames.includes('recommend_product_match') ||
     hasProductQuery
   ) {
     return 'showcase'
