@@ -29,6 +29,12 @@ async function pushToOwner(shop: Shop, text: string): Promise<boolean> {
   }
 }
 
+/** Order/slip alerts to the shop admin; skipped when the shop turned admin notifications off. */
+export async function notifyShopAdmin(shop: Shop, text: string): Promise<void> {
+  if (shop?.features?.admin_notify === false) return
+  await pushToOwner(shop, text)
+}
+
 async function setFeatureFlag(shopId: string, key: string, value: unknown) {
   const admin = createAdminClient()
   // Re-read so a settings save made in between isn't overwritten with a stale copy

@@ -5,7 +5,7 @@ import type { AgentToolName } from './salesAgentEngine'
 import { t, type CustomerLanguage } from '@/lib/i18n/customerMessages'
 import { scheduleQrFollowUp, scheduleBookingReminder } from '@/lib/ai/proactiveFollowUp'
 import { buildLineFlexQuotationMessage, buildLineFlexOfficialLetterMessage } from '@/lib/line/flexHelper'
-import { resolveCatalogProduct, describeUnresolved, parseQuantity, computeShippingFee } from '@/lib/ai/catalogPricing'
+import { resolveCatalogProduct, describeUnresolved, parseQuantity, computeShippingFee, type CatalogProduct } from '@/lib/ai/catalogPricing'
 
 const QR_BUCKET = 'qr-codes'
 
@@ -427,7 +427,7 @@ export function formatOrderCloseSummary(
     t('orderSummaryTitle', lang),
     '',
     `${t('orderNo', lang)}: ${orderNo}`,
-    `${t('orderItem', lang)}: ${cleanLineValue(args.product)} x${cleanLineValue(args.qty)}`,
+    `${t('orderItem', lang)}: ${args.items_text ? cleanLineValue(args.items_text) : `${cleanLineValue(args.product)} x${cleanLineValue(args.qty)}`}`,
     `${t('orderTotal', lang)}: ${total.toLocaleString('th-TH')} ${t('currencyBaht', lang)}`,
     '',
     t('orderDeliveryHeading', lang),
@@ -543,25 +543,56 @@ export async function executeTool(
   if (toolName === 'take_order') {
     // Price, stock and shipping come from the shop's catalog and settings. The
     // model's total_price is only compared, never trusted.
-    const qty = parseQuantity(args.qty)
-    if (!qty) {
-      return { resultForAi: 'จำนวนสินค้าไม่ถูกต้อง ให้ถามลูกค้าว่าต้องการกี่ชิ้น แล้วเรียก take_order ใหม่', immediateMessages: [] }
-    }
-    const resolution = await resolveCatalogProduct(supabaseAdmin || supabase, shopId, String(args.product || ''))
-    if (resolution.status !== 'found') {
-      return { resultForAi: `ยังสร้างออเดอร์ไม่ได้: ${describeUnresolved(String(args.product || ''), resolution)}`, immediateMessages: [] }
-    }
-    const product = resolution.product
-    if (product.stock !== null && product.stock < qty) {
-      return {
-        resultForAi: product.stock <= 0
-          ? `ยังสร้างออเดอร์ไม่ได้: ${product.name} หมดสต๊อก ให้แจ้งลูกค้าและเสนอสินค้าอื่น`
-          : `ยังสร้างออเดอร์ไม่ได้: ${product.name} เหลือเพียง ${product.stock} ชิ้น แต่ลูกค้าสั่ง ${qty} ชิ้น ให้ถามลูกค้าว่าจะรับ ${product.stock} ชิ้นไหม`,
-        immediateMessages: [],
-      }
+    // One order may hold several products (`items`); older calls send a single product/qty
+    const requested: Array<{ product: string; qty: unknown; variants?: string }> =
+      Array.isArray(args.items) && args.items.length > 0
+        ? args.items.map((it: any) => ({ product: String(it?.product || it?.name || ''), qty: it?.qty, variants: it?.variants }))
+        : [{ product: String(args.product || ''), qty: args.qty, variants: args.variants }]
+    if (requested.length > 20) {
+      return { resultForAi: 'รายการสินค้ามากเกินไปสำหรับออเดอร์เดียว ให้เรียก request_human_agent', immediateMessages: [] }
     }
 
-    const subtotal = product.price * qty
+    const lines: Array<{ product: CatalogProduct; qty: number; variants?: string }> = []
+    const problems: string[] = []
+    for (const req of requested) {
+      const qty = parseQuantity(req.qty)
+      if (!qty) {
+        problems.push(`จำนวนของ "${req.product || 'สินค้า'}" ไม่ถูกต้อง ให้ถามลูกค้าว่าต้องการกี่ชิ้น`)
+        continue
+      }
+      const resolution = await resolveCatalogProduct(supabaseAdmin || supabase, shopId, req.product)
+      if (resolution.status !== 'found') {
+        problems.push(describeUnresolved(req.product, resolution))
+        continue
+      }
+      const variants = req.variants && req.variants !== '-' ? req.variants : undefined
+      const same = lines.find((l) => l.product.id === resolution.product.id && l.variants === variants)
+      if (same) same.qty += qty
+      else lines.push({ product: resolution.product, qty, variants })
+    }
+
+    // Stock is per product, whatever the variant
+    const qtyByProduct = new Map<string, { product: CatalogProduct; qty: number }>()
+    for (const l of lines) {
+      const cur = qtyByProduct.get(l.product.id)
+      qtyByProduct.set(l.product.id, { product: l.product, qty: (cur?.qty || 0) + l.qty })
+    }
+    for (const { product, qty } of qtyByProduct.values()) {
+      if (product.stock !== null && product.stock < qty) {
+        problems.push(product.stock <= 0
+          ? `${product.name} หมดสต๊อก ให้แจ้งลูกค้าและเสนอสินค้าอื่น`
+          : `${product.name} เหลือเพียง ${product.stock} ชิ้น แต่ลูกค้าสั่ง ${qty} ชิ้น ให้ถามลูกค้าว่าจะรับ ${product.stock} ชิ้นไหม`)
+      }
+    }
+    if (problems.length > 0 || lines.length === 0) {
+      return { resultForAi: `ยังสร้างออเดอร์ไม่ได้: ${problems.join(' / ') || 'ไม่มีรายการสินค้า'} แล้วเรียก take_order ใหม่พร้อมสินค้าทุกรายการ`, immediateMessages: [] }
+    }
+
+    const lineLabel = (l: { product: CatalogProduct; qty: number; variants?: string }) =>
+      `${l.product.name}${l.variants ? ` (${l.variants})` : ''} x${l.qty}`
+    const itemsText = lines.map(lineLabel).join(', ')
+    const totalQty = lines.reduce((sum, l) => sum + l.qty, 0)
+    const subtotal = lines.reduce((sum, l) => sum + l.product.price * l.qty, 0)
     const isCod = /ปลายทาง|cod/i.test(String(args.payment_method || ''))
     const { fee: shippingFee } = computeShippingFee(shop, String(args.address || ''), subtotal)
     const totalAmount = subtotal + shippingFee
@@ -569,7 +600,7 @@ export async function executeTool(
     const priceNote = Number.isFinite(modelTotal) && Math.abs(modelTotal - totalAmount) > 1
       ? ` [หมายเหตุ: ยอดที่คุณคำนวณ ${modelTotal} บาทไม่ตรงกับระบบ ให้ใช้ยอดตามระบบเท่านั้น ห้ามบอกยอดอื่น]`
       : ''
-    const pricedArgs = { ...args, product: product.name, qty, total_price: totalAmount }
+    const pricedArgs = { ...args, product: itemsText, qty: totalQty, items_text: itemsText, total_price: totalAmount }
 
     // orders.order_no defaults to 'ORD-000' and nothing was overriding it, so
     // every order the bot took shared one number: indistinguishable in the
@@ -582,14 +613,14 @@ export async function executeTool(
       conversation_id: conversationId,
       customer_name: args.name,
       customer_phone: args.phone,
-      product_name: product.name,
-      quantity: String(qty),
-      variants: args.variants,
+      product_name: itemsText.slice(0, 200),
+      quantity: String(totalQty),
+      variants: lines.map((l) => l.variants).filter(Boolean).join(', ') || args.variants,
       address: args.address,
       payment_method: args.payment_method,
       total_amount: totalAmount,
       tax_invoice: args.tax_invoice,
-      items_summary: `${product.name} x${qty} @ ${product.price} + ค่าส่ง ${shippingFee}${isCod ? ' (COD)' : ''}`,
+      items_summary: `${lines.map((l) => `${lineLabel(l)} @ ${l.product.price}`).join(', ')} + ค่าส่ง ${shippingFee}${isCod ? ' (COD)' : ''}`,
       status: 'pending',
     })
     if (orderError) {
@@ -618,7 +649,10 @@ export async function executeTool(
     // Central Stock Deduction: Deduct from central pooled inventory across channels
     try {
       const { deductCentralStockOnOrder } = await import('@/lib/marketplace/inventoryManager')
-      await deductCentralStockOnOrder(shopId, product.name, qty, 'line', orderNo)
+      // By id: deducting by name matched the first product whose name merely contained it
+      for (const { product, qty } of qtyByProduct.values()) {
+        await deductCentralStockOnOrder(shopId, product.id, qty, 'line', orderNo)
+      }
     } catch (stockErr) {
       console.error('[Central Stock Deduction Error]:', stockErr)
     }
@@ -632,7 +666,7 @@ export async function executeTool(
       const targetAdmin = shop.admin_line_user_id || shop.owner_line_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
       if (targetAdmin) {
         const orderTotal = totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })
-        const adminMsg = `🛒 มีออเดอร์ใหม่เข้ามา!\nเลขที่: ${orderNo}\nลูกค้า: ${args.name || 'ลูกค้า'}\nสินค้า: ${product.name} x${qty}\nยอดรวม: ฿${orderTotal} บาท`
+        const adminMsg = `🛒 มีออเดอร์ใหม่เข้ามา!\nเลขที่: ${orderNo}\nลูกค้า: ${args.name || 'ลูกค้า'}\nสินค้า: ${itemsText}\nยอดรวม: ฿${orderTotal} บาท`
         fetch('https://api.line.me/v2/bot/message/push', {
           method: 'POST',
           headers: {
@@ -1724,9 +1758,8 @@ export async function executeTool(
     updateSalesStage(ctx, 'closing').catch(() => {})
   }
 
-  // Any tool without a live DB-backed implementation (get_product_image,
-  // get_upsell_products, calculate_installment, etc.) — the AI is expected
-  // to answer from context/text alone; dispatch is a no-op.
+  // Every tool offered to the model has a handler above; anything else (an old or
+  // hallucinated tool name) is a no-op and the model answers from context.
   return NO_OP
 }
 

@@ -12,6 +12,7 @@ import {
 import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
+import { settleSlipImage } from '@/lib/slip/settleSlip'
 
 const supabase = createAdminClient()
 
@@ -166,6 +167,15 @@ export async function POST(
         const senderPsid = event.sender?.id
         const recipientPageId = event.recipient?.id
         const rawMessage = event.message?.text || event.postback?.payload || event.postback?.title
+
+        // A picture with no text: most often a payment slip, checked the same way as on LINE
+        const imageAttachment = (event.message?.attachments || []).find((a: any) => a?.type === 'image' && a?.payload?.url)
+        if (senderPsid && imageAttachment && !event.message?.text) {
+          if (pageToken && isAutoReplyEnabled && (await claimMessengerEvent(event.message?.mid, shop_id))) {
+            await handleMessengerImage({ shop, shopId: shop_id, platform: targetPlatform, psid: senderPsid, url: imageAttachment.payload.url, mid: event.message?.mid, pageToken })
+          }
+          continue
+        }
 
         if (!senderPsid || !rawMessage) {
           continue
@@ -445,5 +455,65 @@ export async function POST(
   } catch (error: any) {
     console.error('[Facebook Webhook Error]:', error)
     return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
+  }
+}
+
+/**
+ * Records a Messenger message id so a redelivered image isn't checked (and
+ * possibly settled) twice. Fails open when the table is unavailable.
+ */
+async function claimMessengerEvent(mid: string | undefined, shopId: string): Promise<boolean> {
+  if (!mid) return true
+  const { error } = await supabase.from('processed_webhook_events').insert({ event_id: `fb:${mid}`, shop_id: shopId })
+  if (!error) return true
+  if (error.code === '23505') return false
+  console.warn('[FB Webhook] Could not record event (dedupe skipped):', error.message)
+  return true
+}
+
+const MAX_SLIP_IMAGE_BYTES = 8 * 1024 * 1024
+
+async function handleMessengerImage(args: {
+  shop: Record<string, any>
+  shopId: string
+  platform: 'facebook' | 'instagram'
+  psid: string
+  url: string
+  mid?: string
+  pageToken: string
+}) {
+  const { shop, shopId, platform, psid, url, mid, pageToken } = args
+  const send = async (text: string) => { await sendFacebookMessage(psid, text, pageToken) }
+  try {
+    // Attachment URLs point at Meta's CDN; anything else is not something we fetch
+    const host = new URL(url).hostname
+    if (!/(^|\.)(fbcdn\.net|fbsbx\.com|cdninstagram\.com|facebook\.com)$/.test(host)) {
+      console.warn('[FB SlipVerify] Ignoring image from unexpected host:', host)
+      await send('ได้รับรูปภาพแล้วค่ะ แอดมินจะเข้ามาตรวจสอบให้นะคะ 😊')
+      return
+    }
+    const res = await fetch(url)
+    const size = Number(res.headers.get('content-length') || 0)
+    if (!res.ok || size > MAX_SLIP_IMAGE_BYTES) {
+      await send('❌ ไม่สามารถเปิดรูปที่ส่งมาได้ค่ะ กรุณาส่งใหม่อีกครั้งนะคะ')
+      return
+    }
+    const buffer = Buffer.from(await res.arrayBuffer())
+    if (buffer.byteLength > MAX_SLIP_IMAGE_BYTES) {
+      await send('❌ รูปมีขนาดใหญ่เกินไปค่ะ กรุณาส่งภาพหน้าจอสลิปแทนนะคะ')
+      return
+    }
+    await settleSlipImage({
+      shop,
+      shopId,
+      platform,
+      userId: psid,
+      image: { base64: buffer.toString('base64'), mimeType: res.headers.get('content-type') || 'image/jpeg' },
+      imageRef: mid || 'unknown',
+      sendToCustomer: send,
+    })
+  } catch (err) {
+    console.error('[FB SlipVerify Exception]:', err)
+    await send('❌ ระบบตรวจสลิปขัดข้องชั่วคราวค่ะ กรุณาแจ้งแอดมินนะคะ 🙏').catch(() => {})
   }
 }
