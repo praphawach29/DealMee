@@ -173,6 +173,28 @@ export const KNOWLEDGE_INLINE_MAX_ITEMS = 150
 export const KNOWLEDGE_INLINE_MAX_CHARS = 50000
 
 /**
+ * The whole system prompt is resent on every planning step, so per-message
+ * context is capped: a long bot reply (product lists, order summaries) in the
+ * history or a pasted product description otherwise rides along several times
+ * per customer message. The full text stays in the database and the tools.
+ */
+export const HISTORY_LINE_MAX_CHARS = 500
+export const PRODUCT_DESCRIPTION_MAX_CHARS = 150
+
+/**
+ * Gemini 3 thinks before answering and bills it as output; left unset it
+ * defaults to a high level, which was most of a turn's tokens and latency for
+ * routine sales chat. GEMINI_THINKING_LEVEL overrides it ('default' sends no
+ * setting at all).
+ */
+const GEMINI_THINKING_LEVEL = process.env.GEMINI_THINKING_LEVEL || 'low'
+
+function clipForPrompt(text: string | null | undefined, max: number): string {
+  const t = String(text || '')
+  return t.length > max ? `${t.slice(0, max)}…` : t
+}
+
+/**
  * Everything a planning step needs, carried across steps so the webhook
  * route can pause after step 0 (to send a LINE ack once it knows the plan
  * needs more than one AI call) and resume the rest in the background — the
@@ -277,7 +299,7 @@ const MASTER_TOOLS = [
           items: {
             type: 'object',
             properties: {
-              name: { type: 'string', description: 'ชื่อสินค้าหรือแพ็กเกจ เช่น CheckMee แพ็กเกจ Pro / Standard' },
+              name: { type: 'string', description: 'ชื่อสินค้าหรือแพ็กเกจตามแคตตาล็อกของร้าน' },
               qty: { type: 'number', description: 'จำนวน เช่น 1' },
               price: { type: 'number', description: 'ราคาต่อหน่วย (บาท)' },
             },
@@ -1013,7 +1035,7 @@ async function preparePlanningState({
         `\n\n[แคตตาล็อกสินค้าของร้าน]\n` +
         products.map((p) => {
           const stockStr = p.stock !== null && p.stock !== undefined ? `${p.stock} ชิ้น` : 'มีพร้อมส่ง'
-          const descStr = p.description ? ` (${p.description})` : ''
+          const descStr = p.description ? ` (${clipForPrompt(p.description, PRODUCT_DESCRIPTION_MAX_CHARS)})` : ''
           return `- ${p.name}${descStr} [หมวดหมู่: ${p.category || 'ทั่วไป'}]: ${Number(p.price || 0).toLocaleString()} บาท (คงเหลือ: ${stockStr})`
         }).join('\n')
     }
@@ -1083,7 +1105,7 @@ async function preparePlanningState({
     const recent = conversationHistory.slice(-10)
     historyContext =
       `\n\n[ประวัติบทสนทนาล่าสุด]\n` +
-      recent.map((m) => `${m.sender === 'user' ? 'ลูกค้า' : 'AI'}: ${m.text}`).join('\n')
+      recent.map((m) => `${m.sender === 'user' ? 'ลูกค้า' : 'AI'}: ${clipForPrompt(m.text, HISTORY_LINE_MAX_CHARS)}`).join('\n')
     recentCustomerMessages = recent.filter((m) => m.sender === 'user').map((m) => m.text)
   } else {
     const { data: recentMessages } = await db
@@ -1097,7 +1119,7 @@ async function preparePlanningState({
       const ordered = [...recentMessages].reverse()
       historyContext =
         `\n\n[ประวัติบทสนทนาล่าสุด]\n` +
-        ordered.map((m) => `${m.sender_type === 'user' ? 'ลูกค้า' : 'AI'}: ${m.message}`).join('\n')
+        ordered.map((m) => `${m.sender_type === 'user' ? 'ลูกค้า' : 'AI'}: ${clipForPrompt(m.message, HISTORY_LINE_MAX_CHARS)}`).join('\n')
       recentCustomerMessages = ordered.filter((m) => m.sender_type === 'user').map((m) => m.message)
     }
   }
@@ -1262,7 +1284,7 @@ async function preparePlanningState({
   * **ห้ามผัดวันประกันพรุ่ง และห้ามถามคำถามซ้ำวนไปวนมาจนไม่ได้ออกเอกสารเด็ดขาด** กฎออกใบเสนอราคามีความสำคัญสูงสุดเหนือการซักถามทั่วไป
   * นำชื่อลูกค้าและเบอร์โทรที่ลูกค้าให้มาใส่ใน "customer_name" และ "customer_phone" ทันที
   * หากลูกค้าเอ่ยชื่อแพ็กเกจหรือบริการ (เช่น "แพ็คเกจ Pro 1 ชิ้น", "แพ็กเกจ Starter", "แพ็กเกจ มาตรฐาน"):
-    - ให้ดึงราคาจากคลังความรู้ หากเป็นชื่อที่ลูกค้าเรียกเอง เช่น "แพ็กเกจ Pro" ซึ่งในคลังอาจมี "มาตรฐาน (Standard)" หรือเทียบเท่า ให้จับคู่กับแพ็กเกจที่เหมาะสม (เช่น "CheckMee แพ็กเกจ Pro (Standard)" ราคา 1,800 บาท หรือประเมินตามความเหมาะสม) แล้วใส่ในรายการ items และออกใบเสนอราคาทันที!
+    - ใส่ชื่อใน items ให้ตรงกับรายการใน [แคตตาล็อกสินค้าของร้าน] ที่ใกล้เคียงที่สุด (ระบบดึงราคาจากแคตตาล็อกเอง) แล้วออกใบเสนอราคาทันที ถ้าไม่มีรายการนั้นในแคตตาล็อก ให้ถามลูกค้าว่าหมายถึงรายการไหนในแคตตาล็อก
     - ในข้อความตอบกลับ ให้แจ้งสรุปว่าระบบได้ออกใบเสนอราคาให้เรียบร้อยแล้ว แตะดู PDF หรือดาวน์โหลด Word/Excel ได้ทันที และหากต้องการปรับเปลี่ยนจำนวนพนักงานหรือสเปกเพิ่มเติม สามารถแจ้งเพื่อปรับปรุงใบเสนอราคาได้ตลอดเวลา
 - เมื่อลูกค้าขอหนังสือราชการ (เช่น "ออกหนังสือราชการ...", "ร่างบันทึกข้อความ...") ให้เรียกใช้เครื่องมือ "create_official_letter" ทันที เพื่อร่างหนังสือราชการภายนอกตามระเบียบงานสารบรรณ พร้อมตราครุฑ ลิงก์ดู A4 และปุ่มดาวน์โหลดไฟล์ Word (.docx)
 - กฎเด็ดขาด: ขณะที่ออกใบเสนอราคาหรือหนังสือราชการ **ห้ามแนะนำสินค้าทั่วไปที่ไม่เกี่ยวข้อง (เช่น เสื้อผ้า กางเกง) เด็ดขาด**
@@ -1361,6 +1383,14 @@ ${historyContext}`
   console.log(
     `[DealMee Brain™] "${userQuery}" | ${routing.complexity} (score ${routing.complexityScore}) | Tools: ${routing.toolSet.length}${isVipCustomer ? ' | VIP customer' : ''} | Stage: ${initialSalesStage}`
   )
+
+  // Prompt size by section, to see what each planning step resends (staticTotal includes products and booking)
+  const sectionSizes: Record<string, number> = {
+    staticTotal: staticSystemPrompt.length, products: productsContext.length, booking: bookingContext.length,
+    knowledge: knowledgeContext.length, history: historyContext.length, golden: goldenClosersContext.length,
+    customer: customerProfileContext.length, state: bookingStateContext.length + orderStateContext.length + documentStateContext.length,
+  }
+  console.log(`[Prompt size] ${systemInstruction.length} chars: ` + Object.entries(sectionSizes).map(([k, v]) => `${k} ${v}`).join(', '))
 
   const language = detectCustomerLanguage(userQuery)
 
@@ -1736,6 +1766,7 @@ async function callGeminiApi(
             // Gemini 3.x reasons before answering and those thinking tokens are
             // billed against maxOutputTokens too.
             maxOutputTokens: MAX_OUTPUT_TOKENS,
+            ...(GEMINI_THINKING_LEVEL !== 'default' ? { thinkingConfig: { thinkingLevel: GEMINI_THINKING_LEVEL } } : {}),
           },
         }),
       })
@@ -1809,6 +1840,13 @@ async function callGeminiApi(
             cacheReadTokens: usageMeta.cachedContentTokenCount || 0,
           }
         : undefined
+      if (usageMeta) {
+        console.log(
+          `[Gemini usage] step ${state?.step ?? '?'} ${model}: prompt ${usageMeta.promptTokenCount || 0}` +
+          ` (cached ${usageMeta.cachedContentTokenCount || 0}), thinking ${usageMeta.thoughtsTokenCount || 0},` +
+          ` output ${usageMeta.candidatesTokenCount || 0}, tools ${toolSet.length}`
+        )
+      }
 
       if (truncated) {
         console.warn(
