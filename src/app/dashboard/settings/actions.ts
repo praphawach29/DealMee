@@ -31,27 +31,13 @@ export async function updateBotSettings(formData: FormData) {
     return { error: 'ไม่สามารถสร้างหรือค้นหาข้อมูลร้านค้าได้' }
   }
 
-  const qrRecoveryEnabled = formData.get('qr_recovery_enabled') === 'true' || formData.get('qr_recovery_enabled') === 'on'
-  const qrRecoveryDelayMins = Number(formData.get('qr_recovery_delay_mins')) || 20
-  const bookingReminderEnabled = formData.get('booking_reminder_enabled') === 'true' || formData.get('booking_reminder_enabled') === 'on'
-  const repurchaseEnabled = formData.get('repurchase_enabled') === 'true' || formData.get('repurchase_enabled') === 'on'
-  const repurchaseDelayDays = Number(formData.get('repurchase_delay_days')) || 21
-
-  const followUpConfig = {
-    qr_recovery_enabled: qrRecoveryEnabled,
-    qr_recovery_delay_mins: qrRecoveryDelayMins,
-    booking_reminder_enabled: bookingReminderEnabled,
-    repurchase_enabled: repurchaseEnabled,
-    repurchase_delay_days: repurchaseDelayDays,
-  }
-
   // Only the fields the bot-settings form submits. This action used to also write
   // line_token/line_secret, Facebook credentials, company details and vat_enabled from
   // inputs this form doesn't have, so saving the bot tab wiped them to empty strings.
   // Channels, company and payment details have their own actions.
   const text = (key: string) => ((formData.get(key) as string) || '').trim()
+  // follow_up_config is edited on /dashboard/modules
   const updateData: Record<string, unknown> = {
-    follow_up_config: followUpConfig,
     updated_at: new Date().toISOString(),
   }
   for (const key of ['name', 'bot_name', 'description', 'personality', 'greeting_message', 'system_prompt', 'ai_model']) {

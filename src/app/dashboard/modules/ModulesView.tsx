@@ -2,15 +2,24 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { updateShopFeatures, updateBotDiscountCap } from './actions'
+import { updateShopFeatures, updateBotDiscountCap, updateFollowUpConfig, updatePendingOrderExpiry } from './actions'
+import { PENDING_ORDER_EXPIRY_OPTIONS } from '@/lib/orders/pendingOrderExpiry'
 
 interface ModulesViewProps {
   initialFeatures: Record<string, boolean>
   bizType?: string
   initialDiscountCap?: number
+  initialFollowUp?: Record<string, any>
+  initialOrderExpiryHours?: number
 }
 
-export default function ModulesView({ initialFeatures, bizType = 'retail', initialDiscountCap = 0 }: ModulesViewProps) {
+export default function ModulesView({
+  initialFeatures,
+  bizType = 'retail',
+  initialDiscountCap = 0,
+  initialFollowUp = {},
+  initialOrderExpiryHours = 24,
+}: ModulesViewProps) {
   const router = useRouter()
   const isBookingDefault = bizType === 'booking' || bizType === 'service'
   const [featureState, setFeatureState] = useState<Record<string, boolean>>({
@@ -26,6 +35,51 @@ export default function ModulesView({ initialFeatures, bizType = 'retail', initi
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [discountCap, setDiscountCap] = useState<string>(String(initialDiscountCap))
   const [savingCap, setSavingCap] = useState(false)
+
+  // Automatic follow-up messages (shops.follow_up_config); a missing value means on, as the scheduler treats it
+  const [followUp, setFollowUp] = useState({
+    qr_recovery_enabled: initialFollowUp.qr_recovery_enabled !== false,
+    qr_recovery_delay_mins: Number(initialFollowUp.qr_recovery_delay_mins) || 20,
+    booking_reminder_enabled: initialFollowUp.booking_reminder_enabled !== false,
+    repurchase_enabled: initialFollowUp.repurchase_enabled !== false,
+    repurchase_delay_days: Number(initialFollowUp.repurchase_delay_days) || 21,
+  })
+  const [savingFollowUp, setSavingFollowUp] = useState(false)
+  const [orderExpiryHours, setOrderExpiryHours] = useState<number>(initialOrderExpiryHours)
+  const [savingExpiry, setSavingExpiry] = useState(false)
+
+  const showToast = (text: string) => {
+    setToastMessage(text)
+    setTimeout(() => setToastMessage(null), 3000)
+  }
+
+  const saveFollowUp = async (patch: Partial<typeof followUp>) => {
+    const previous = followUp
+    setFollowUp({ ...followUp, ...patch })
+    setSavingFollowUp(true)
+    const res = await updateFollowUpConfig(patch)
+    setSavingFollowUp(false)
+    if (res?.error) {
+      setFollowUp(previous)
+      alert(res.error)
+    } else {
+      showToast(res?.success || 'บันทึกแล้ว')
+    }
+  }
+
+  const saveOrderExpiry = async (hours: number) => {
+    const previous = orderExpiryHours
+    setOrderExpiryHours(hours)
+    setSavingExpiry(true)
+    const res = await updatePendingOrderExpiry(hours)
+    setSavingExpiry(false)
+    if (res?.error) {
+      setOrderExpiryHours(previous)
+      alert(res.error)
+    } else {
+      showToast(res?.success || 'บันทึกแล้ว')
+    }
+  }
 
   const handleSaveDiscountCap = async () => {
     setSavingCap(true)
@@ -215,6 +269,106 @@ export default function ModulesView({ initialFeatures, bizType = 'retail', initi
             {savingCap ? 'กำลังบันทึก...' : 'บันทึก'}
           </button>
         </div>
+      </section>
+
+      {/* Automatic follow-up messages */}
+      <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
+        <div>
+          <h2 className="text-base font-bold text-on-surface font-headline-sm">⏰ ข้อความติดตามลูกค้าอัตโนมัติ</h2>
+          <p className="text-[11px] sm:text-xs text-on-surface-variant mt-0.5">
+            บอททักลูกค้าเองตามจังหวะ ปิดแล้วข้อความที่ตั้งเวลาไว้จะถูกยกเลิกด้วย
+          </p>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5">
+          {[
+              {
+                key: 'qr_recovery_enabled' as const,
+                title: '💳 ทวงถามการโอนเงิน',
+                desc: 'ลูกค้าได้ QR แล้วยังไม่ส่งสลิป บอทจะทักเตือนอย่างสุภาพ (หยุดเองเมื่อสลิปผ่าน)',
+                delay: {
+                  key: 'qr_recovery_delay_mins' as const,
+                  label: 'ทักหลังส่ง QR',
+                  options: [[15, '15 นาที'], [20, '20 นาที (แนะนำ)'], [30, '30 นาที'], [60, '1 ชั่วโมง']] as [number, string][],
+                },
+              },
+              {
+                key: 'booking_reminder_enabled' as const,
+                title: '📅 เตือนก่อนถึงคิวนัด',
+                desc: 'ส่งข้อความเตือนล่วงหน้า 1 วัน และ 3 ชั่วโมงก่อนเวลานัด ลดการไม่มาตามนัด',
+              },
+              {
+                key: 'repurchase_enabled' as const,
+                title: '💚 ทักถามความพึงพอใจ & ชวนซื้อซ้ำ',
+                desc: 'หลังลูกค้าได้รับสินค้า บอทจะทักถามผลตอบรับและเสนอโปรเพื่อกลับมาซื้อซ้ำ',
+                delay: {
+                  key: 'repurchase_delay_days' as const,
+                  label: 'ทักหลังสั่งซื้อ',
+                  options: [[14, '14 วัน'], [21, '21 วัน (แนะนำ)'], [30, '30 วัน']] as [number, string][],
+                },
+              },
+            ].map((item) => {
+            const on = followUp[item.key]
+            return (
+              <div key={item.key} className="bg-merchant-bg border border-outline-variant/40 rounded-xl p-3.5 space-y-2.5 flex flex-col">
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="font-bold text-on-surface text-xs sm:text-sm leading-tight">{item.title}</h3>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={on}
+                    aria-label={item.title}
+                    disabled={savingFollowUp}
+                    onClick={() => saveFollowUp({ [item.key]: !on })}
+                    className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-200 cursor-pointer disabled:opacity-50 shrink-0 ${on ? 'bg-electric-blue' : 'bg-slate-300'}`}
+                  >
+                    <div className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${on ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+                <p className="text-[11px] sm:text-xs text-on-surface-variant leading-relaxed flex-1">{item.desc}</p>
+                {item.delay && (
+                  <label className={`flex items-center gap-2 text-[11px] text-on-surface-variant ${on ? '' : 'opacity-50'}`}>
+                    <span>{item.delay.label}</span>
+                    <select
+                      value={followUp[item.delay.key]}
+                      disabled={!on || savingFollowUp}
+                      onChange={(e) => saveFollowUp({ [item.delay!.key]: Number(e.target.value) })}
+                      className="px-2 py-1 text-xs rounded-lg border border-outline-variant bg-surface text-on-surface outline-none"
+                    >
+                      {item.delay.options.map(([value, text]) => (
+                        <option key={value} value={value}>{text}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* Cancel unpaid orders */}
+      <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+        <div>
+          <h2 className="text-base font-bold text-on-surface font-headline-sm">🗑️ ยกเลิกออเดอร์ค้างชำระอัตโนมัติ</h2>
+          <p className="text-[11px] sm:text-xs text-on-surface-variant mt-0.5">
+            ออเดอร์ที่ลูกค้าไม่ชำระภายในเวลาที่กำหนดจะถูกยกเลิก คืนสต็อกสินค้า และหยุดข้อความทวงถามการโอนเงิน
+          </p>
+        </div>
+        <label className="flex items-center gap-2.5 text-sm text-on-surface-variant">
+          <span>ยกเลิกเมื่อไม่ชำระภายใน</span>
+          <select
+            value={orderExpiryHours}
+            disabled={savingExpiry}
+            onChange={(e) => saveOrderExpiry(Number(e.target.value))}
+            className="rounded-xl border border-outline-variant/60 bg-merchant-bg px-3 py-2 text-sm text-on-surface disabled:opacity-50"
+          >
+            {PENDING_ORDER_EXPIRY_OPTIONS.map((h) => (
+              <option key={h} value={h}>
+                {h === 0 ? 'ไม่ยกเลิกอัตโนมัติ' : h === 24 ? '24 ชั่วโมง (ค่าเริ่มต้น)' : `${h} ชั่วโมง`}
+              </option>
+            ))}
+          </select>
+        </label>
       </section>
     </div>
   )

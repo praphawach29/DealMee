@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { updateBotSettings } from './actions'
 import ChatPlaygroundModal from '../components/ChatPlaygroundModal'
@@ -11,9 +12,6 @@ import {
   Bot,
   Brain,
   Bell,
-  QrCode,
-  Calendar,
-  HeartHandshake,
   RefreshCw,
   Share2,
   Sparkles,
@@ -44,13 +42,6 @@ interface ShopData {
   company_email?: string | null
   company_logo_url?: string | null
   vat_enabled?: boolean | null
-  follow_up_config?: {
-    qr_recovery_enabled?: boolean
-    qr_recovery_delay_mins?: number
-    booking_reminder_enabled?: boolean
-    repurchase_enabled?: boolean
-    repurchase_delay_days?: number
-  } | null
 }
 
 interface SettingsFormProps {
@@ -300,124 +291,16 @@ export default function SettingsForm({ shop, onNavigateToChannels }: SettingsFor
         </div>
       </section>
 
-      {/* Section: Proactive Sales Follow-up & Recovery */}
-      <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 sm:space-y-5">
-        <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-3.5 sm:pb-4">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
-            <Bell className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-base sm:text-lg font-bold text-on-surface font-headline-sm flex items-center gap-2">
-              <span>ระบบติดตามลูกค้าเชิงรุก (Proactive Sales Follow-up)</span>
-              <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-900/60 dark:text-amber-200 dark:border-amber-700 px-2 py-0.5 rounded-full font-bold">
-                AI Auto-Closing
-              </span>
-            </h2>
-            <p className="text-[11px] sm:text-xs text-on-surface-variant">
-              ให้ AI ทักตามลูกค้าอัตโนมัติเมื่อขอ QR แล้วยังไม่โอน, เตือนคิวนัดหมาย และทักกระตุ้นการซื้อซ้ำ
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Card 1: QR Payment Follow-up */}
-          <div className="p-4 rounded-xl border border-outline-variant/50 bg-surface-container-lowest space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <QrCode className="w-4 h-4 text-amber-600 shrink-0" />
-                <span className="text-xs sm:text-sm font-bold text-on-surface">ทักตามสลิป QR Code ค้างชำระ</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="qr_recovery_enabled"
-                  value="true"
-                  defaultChecked={shop.follow_up_config?.qr_recovery_enabled !== false}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
-              </label>
-            </div>
-            <p className="text-[11px] text-on-surface-variant leading-relaxed">
-              เมื่อส่ง QR ให้ลูกค้าแล้ว หากยังไม่ส่งสลิป บอทจะทักเตือนอย่างสุภาพและแจ้งรอบจัดส่งของวันเพื่อกระตุ้นการโอน (ยกเลิกอัตโนมัติเมื่อสลิปผ่าน)
-            </p>
-            <div className="flex items-center gap-2 pt-1">
-              <span className="text-[11px] font-medium text-outline">หน่วงเวลาทัก:</span>
-              <select
-                name="qr_recovery_delay_mins"
-                defaultValue={shop.follow_up_config?.qr_recovery_delay_mins || 20}
-                className="px-2.5 py-1 text-xs rounded-lg border border-outline-variant bg-surface text-on-surface outline-none"
-              >
-                <option value={15}>15 นาที</option>
-                <option value={20}>20 นาที (แนะนำ)</option>
-                <option value={30}>30 นาที</option>
-                <option value={60}>1 ชั่วโมง</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Card 2: Booking Reminders */}
-          <div className="p-4 rounded-xl border border-outline-variant/50 bg-surface-container-lowest space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-blue-600 shrink-0" />
-                <span className="text-xs sm:text-sm font-bold text-on-surface">ส่งข้อความเตือนนัดหมาย</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="booking_reminder_enabled"
-                  value="true"
-                  defaultChecked={shop.follow_up_config?.booking_reminder_enabled !== false}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
-              </label>
-            </div>
-            <p className="text-[11px] text-on-surface-variant leading-relaxed">
-              ส่งข้อความแจ้งเตือนอัตโนมัติล่วงหน้า 24 ชม. และ 3 ชม. ก่อนถึงเวลา เพื่อลดอัตราการไม่มาตามนัด (No-show)
-            </p>
-            <div className="text-[11px] text-outline pt-1">
-              ✨ ส่งเตือนอัตโนมัติ: ล่วงหน้า 1 วัน และ 3 ชม.
-            </div>
-          </div>
-
-          {/* Card 3: Repurchase & Feedback Follow-up */}
-          <div className="p-4 rounded-xl border border-outline-variant/50 bg-surface-container-lowest space-y-3 md:col-span-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <HeartHandshake className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="text-xs sm:text-sm font-bold text-on-surface">ทักถามความพึงพอใจ & เสนอโปรซื้อซ้ำ</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="repurchase_enabled"
-                  value="true"
-                  defaultChecked={shop.follow_up_config?.repurchase_enabled !== false}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
-              </label>
-            </div>
-            <p className="text-[11px] text-on-surface-variant leading-relaxed">
-              หลังลูกค้าได้รับสินค้าหรือใช้บริการเรียบร้อย บอทจะทักถามผลตอบรับ และมอบข้อเสนอพิเศษเพื่อกระตุ้นให้กลับมาซื้อซ้ำ
-            </p>
-            <div className="flex items-center gap-2 pt-1">
-              <span className="text-[11px] font-medium text-outline">ส่งข้อความหลังสั่งซื้อ:</span>
-              <select
-                name="repurchase_delay_days"
-                defaultValue={shop.follow_up_config?.repurchase_delay_days || 21}
-                className="px-2.5 py-1 text-xs rounded-lg border border-outline-variant bg-surface text-on-surface outline-none"
-              >
-                <option value={14}>14 วัน</option>
-                <option value={21}>21 วัน (แนะนำ)</option>
-                <option value={30}>30 วัน</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* Follow-up messages moved to the tools page */}
+      <Link
+        href="/dashboard/modules"
+        className="block bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-5 shadow-sm hover:border-electric-blue/40 transition-colors"
+      >
+        <span className="text-sm font-bold text-on-surface">⏰ ข้อความติดตามลูกค้าอัตโนมัติ</span>
+        <span className="block text-[11px] sm:text-xs text-on-surface-variant mt-0.5">
+          ย้ายไปอยู่ที่หน้า &quot;เครื่องมือ&quot; แล้ว ทั้งทวงถามการโอนเงิน เตือนคิวนัด และชวนซื้อซ้ำ →
+        </span>
+      </Link>
 
       {/* Omnichannel Callout Card */}
       <div className="bg-gradient-to-r from-emerald-500/10 via-blue-500/10 to-purple-500/10 border border-outline-variant/50 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

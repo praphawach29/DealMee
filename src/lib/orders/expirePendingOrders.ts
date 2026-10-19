@@ -1,9 +1,9 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { restockOrder } from '@/lib/marketplace/inventoryManager'
 import { cancelFollowUpTasks } from '@/lib/ai/proactiveFollowUp'
+import { DEFAULT_PENDING_ORDER_EXPIRY_HOURS } from './pendingOrderExpiry'
 
-/** Default hours an unpaid order stays open; a shop can override with features.pending_order_expiry_hours */
-export const DEFAULT_PENDING_ORDER_EXPIRY_HOURS = 24
+export { DEFAULT_PENDING_ORDER_EXPIRY_HOURS }
 
 /**
  * Cancels orders still pending past their shop's expiry window, returns the stock
@@ -14,13 +14,21 @@ export async function expirePendingOrders(limit = 50): Promise<{ checked: number
   // Nothing can expire sooner than 1 hour, so only look at orders at least that old
   const cutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString()
 
-  const { data: orders } = await supabase
+  // Shops that switched automatic cancelling off (0 hours) are left out of the query,
+  // so their pending orders can't fill the batch and hold back everyone else's
+  const { data: optedOut } = await supabase
+    .from('shops')
+    .select('id')
+    .filter('features->>pending_order_expiry_hours', 'eq', '0')
+  const optedOutIds = (optedOut || []).map((s: any) => s.id)
+
+  let query = supabase
     .from('orders')
     .select('id, shop_id, order_no, created_at, note')
     .eq('status', 'pending')
     .lt('created_at', cutoff)
-    .order('created_at', { ascending: true })
-    .limit(limit)
+  if (optedOutIds.length > 0) query = query.not('shop_id', 'in', `(${optedOutIds.join(',')})`)
+  const { data: orders } = await query.order('created_at', { ascending: true }).limit(limit)
 
   if (!orders || orders.length === 0) return { checked: 0, expired: 0 }
 
@@ -29,7 +37,7 @@ export async function expirePendingOrders(limit = 50): Promise<{ checked: number
   const expiryHours = new Map<string, number>()
   for (const s of shops || []) {
     const h = Number((s.features as Record<string, any>)?.pending_order_expiry_hours)
-    expiryHours.set(s.id, Number.isFinite(h) && h >= 1 ? h : DEFAULT_PENDING_ORDER_EXPIRY_HOURS)
+    expiryHours.set(s.id, h === 0 ? Infinity : Number.isFinite(h) && h >= 1 ? h : DEFAULT_PENDING_ORDER_EXPIRY_HOURS)
   }
 
   let expired = 0
