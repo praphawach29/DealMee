@@ -52,6 +52,20 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformBillingSettings = {
   company_email: 'billing@dealmee.app',
 }
 
+/** billing_payments.plan_key of a wallet top-up (credits the wallet instead of changing the plan) */
+export const WALLET_TOPUP_PLAN_KEY = 'wallet_topup'
+export const MIN_TOPUP_AMOUNT = 100
+export const MAX_TOPUP_AMOUNT = 100_000
+
+/**
+ * False while the platform's PromptPay is still the seeded placeholder: money
+ * sent to it would go to a stranger, so top-ups stay closed until the owner sets it.
+ */
+export function isPlatformPromptPayConfigured(settings: Pick<PlatformBillingSettings, 'promptpay_id'>): boolean {
+  const digits = (settings.promptpay_id || '').replace(/[^0-9]/g, '')
+  return digits.length >= 10 && digits !== DEFAULT_PLATFORM_SETTINGS.promptpay_id
+}
+
 /**
  * Fetch platform owner's billing settings from database
  */

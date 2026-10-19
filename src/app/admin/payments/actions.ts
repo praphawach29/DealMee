@@ -30,7 +30,6 @@ async function assertSuperAdmin() {
     SUPER_ADMIN_EMAILS.includes(user.email || '') ||
     user.email === 'admin@dealmee.app' ||
     user.email === 'admin@botify.ai' ||
-    user.email?.includes('superadmin') ||
     user.email === 'jack291625@gmail.com'
 
   if (!isSuperAdmin) {

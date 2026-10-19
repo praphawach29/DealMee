@@ -100,7 +100,7 @@ export default function PlansManagement({
         {plans.map((plan) => {
           const shopCount = shopsCountByPlan[plan.key] || 0
           const isUnlimitedMsg = plan.messages < 0
-          const isUnlimitedTokens = plan.tokens < 0
+          const isUnlimitedSlips = plan.slips < 0
 
           return (
             <div
@@ -137,9 +137,9 @@ export default function PlansManagement({
                     </strong>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-on-surface-variant">โควต้า Token:</span>
+                    <span className="text-on-surface-variant">ตรวจสลิปอัตโนมัติ:</span>
                     <strong className="font-mono">
-                      {isUnlimitedTokens ? 'ไม่จำกัด' : `${(plan.tokens / 1000000).toFixed(1)}M Tokens`}
+                      {isUnlimitedSlips ? 'ไม่จำกัด' : `${plan.slips.toLocaleString()} ครั้ง`}
                     </strong>
                   </div>
                 </div>
@@ -249,12 +249,12 @@ export default function PlansManagement({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-200 mb-1.5 font-label-md">
-                    โควต้า Tokens (-1 คือไม่จำกัด)
+                    ตรวจสลิป / เดือน (-1 คือไม่จำกัด)
                   </label>
                   <input
                     type="number"
-                    value={editingPlan.tokens}
-                    onChange={(e) => setEditingPlan({ ...editingPlan, tokens: Number(e.target.value) })}
+                    value={editingPlan.slips}
+                    onChange={(e) => setEditingPlan({ ...editingPlan, slips: Number(e.target.value) })}
                     required
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-white placeholder-slate-400 text-xs sm:text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none font-mono transition-colors"
                   />
