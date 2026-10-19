@@ -682,6 +682,10 @@ const GENERAL_TOOL_NAMES: AgentToolName[] = [
   'get_active_promotions', 'create_quotation', 'accept_quotation', 'create_official_letter',
 ]
 
+const ROUTED_TOOL_NAMES: AgentToolName[] = [
+  ...new Set([...SALES_TOOL_NAMES, ...BOOKING_TOOL_NAMES, ...SUPPORT_TOOL_NAMES, ...GENERAL_TOOL_NAMES]),
+]
+
 // Offered on every message whatever the intent guess: keyword routing missed plain
 // requests like "ขอ QR หน่อย" or "สั่งออเดอร์ 2 ชิ้น", leaving the model without the
 // tool it needed and free to type totals or account numbers itself.
@@ -721,21 +725,6 @@ const HESITATION_AND_OBJECTION_KEYWORDS = [
   // Delivery & Payment hesitation
   'ส่งกี่วัน', 'ส่งช้าไหม', 'ของจะพังไหม', 'กลัวไม่ตรงปก', 'มีเก็บเงินปลายทางไหม', 'เก็บปลายทางได้ไหม', 'กี่วันถึง',
 ]
-
-const ORDER_INTENT_KEYWORDS = [
-  'เอาเลย', 'เอาค่ะ', 'เอาครับ', 'เอาตัวนี้', 'เอาชิ้นนี้', 'รับตัวนี้', 'รับค่ะ', 'รับครับ',
-  'ซื้อเลย', 'สั่งเลย', 'สั่งซื้อ', 'สั่งค่ะ', 'สั่งครับ', 'จัดมา', 'จองไว้', 'โอนเลย',
-  'พร้อมโอน', 'พร้อมจ่าย', 'ชำระเงิน', 'เก็บปลายทาง', 'cod', 'checkout', 'buy now', 'order now',
-  'ใบเสนอราคา', 'ขอใบเสนอราคา', 'ออกใบเสนอราคา', 'quotation', 'หนังสือราชการ', 'บันทึกข้อความ', 'ร่างหนังสือราชการ',
-]
-
-function hasOrderIntent(text: string): boolean {
-  return ORDER_INTENT_KEYWORDS.some((k) => text.includes(k)) || /(?:เอา|รับ|ซื้อ|สั่ง)\s*\d+\s*(?:ตัว|ชิ้น|อัน|คู่|ใบ|ชุด)?/.test(text)
-}
-
-function hasCheckoutDetails(text: string): boolean {
-  return /(ชื่อ|เบอร์|โทร|ที่อยู่|จัดส่ง|ถนน|ซอย|แขวง|ตำบล|เขต|อำเภอ|จังหวัด|กทม|กรุงเทพ|\d{9,10})/.test(text)
-}
 
 /** Complexity score threshold at/above which a message is routed HIGH (high-persuasion model). */
 export const HIGH_COMPLEXITY_THRESHOLD = 3
@@ -798,21 +787,6 @@ export function classifyMessageComplexity(
   toolSet: typeof MASTER_TOOLS
   reason: string
 } {
-  const text = userQuery.toLowerCase().trim()
-
-  const bookingKeywords = ['จอง', 'นัด', 'จองคิว', 'นัดหมาย', 'ว่างไหม', 'ว่าง', 'โต๊ะ', 'คิว', 'รอบ', 'เลื่อนนัด', 'ยกเลิกนัด']
-  const supportKeywords = ['ออเดอร์', 'พัสดุ', 'tracking', 'ส่งแล้ว', 'ยังไม่ได้รับ', 'คืนสินค้า', 'ประกัน', 'ชำรุด']
-  const hasPartySize = /\d+\s*(คน|ท่าน)/.test(text)
-  const hasDateOrTime = /(วันนี้|พรุ่งนี้|มะรืน|\d{1,2}[:.]\d{2}|\d{1,2}\s*โมง|เช้า|กลางวัน|เย็น|ค่ำ)/.test(text)
-  const hasBookingShape = hasPartySize && hasDateOrTime
-
-  const isBooking = bookingKeywords.some((k) => text.includes(k)) || hasBookingShape
-  const isSupport = supportKeywords.some((k) => text.includes(k))
-  const recentOrderIntent = (options.recentCustomerMessages || [])
-    .slice(-5)
-    .some((msg) => hasOrderIntent(msg.toLowerCase()))
-  const isOrderIntent = hasOrderIntent(text) || (recentOrderIntent && hasCheckoutDetails(text))
-
   const complexityScore = computeComplexityScore({
     userQuery,
     recentCustomerMessages: options.recentCustomerMessages,
@@ -820,13 +794,11 @@ export function classifyMessageComplexity(
   })
   const isHighComplexity = complexityScore >= HIGH_COMPLEXITY_THRESHOLD
 
-  const toolSet = isBooking
-    ? filterTools(BOOKING_TOOL_NAMES)
-    : isSupport
-    ? filterTools(SUPPORT_TOOL_NAMES)
-    : isOrderIntent || isHighComplexity
-    ? filterTools(SALES_TOOL_NAMES)
-    : filterTools(GENERAL_TOOL_NAMES)
+  // One tool set for every message: the shop's Gemini prompt cache holds the
+  // tools, so a set chosen per message meant a separate cache (and separate
+  // storage bill) for each kind of question. Unused declarations ride in the
+  // cache at a tenth of the input price.
+  const toolSet = filterTools(ROUTED_TOOL_NAMES)
 
   if (isHighComplexity) {
     return {
