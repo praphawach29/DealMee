@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/utils/supabase/client'
 import { PLAN_GRACE_DAYS, planLapsed } from '@/lib/billing/trial'
 import { PlanItem } from '@/app/admin/actions'
 import { PlatformBillingSettings } from '@/lib/billing/manualBilling'
@@ -122,6 +123,28 @@ export default function BillingClient({
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [portalLoading, setPortalLoading] = useState(false)
   const [pendingPurchase, setPendingPurchase] = useState<PendingPurchase | null>(null)
+
+  // Keep the balance, plan and payments current without a reload: Realtime pushes
+  // wallet and payment changes (an admin approving a top-up, a renewal), and the
+  // page also refreshes when the tab comes back into view and every 30s while it is open
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') router.refresh()
+    }
+    const supabase = createClient()
+    const channel = supabase
+      .channel(`billing:${shop.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shop_wallets', filter: `shop_id=eq.${shop.id}` }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'billing_payments', filter: `shop_id=eq.${shop.id}` }, refresh)
+      .subscribe()
+    const timer = window.setInterval(refresh, 30_000)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refresh)
+      supabase.removeChannel(channel)
+    }
+  }, [shop.id, router])
 
   const currentPlanKey = limits.planKey
   const currentPlan = plans.find((p) => p.key === currentPlanKey)
