@@ -1,8 +1,11 @@
 'use client'
 
 import React from 'react'
-import { comparisonRows } from './data'
+import { comparisonRows, packagesData } from './data'
 import { Check, Minus } from 'lucide-react'
+
+const priceOf = (key: string) =>
+  `฿${(packagesData.find((p) => p.key === key)?.price ?? 0).toLocaleString('th-TH')}/30 วัน`
 
 export default function PricingComparison() {
   const categories = Array.from(new Set(comparisonRows.map((r) => r.category)))
@@ -35,19 +38,19 @@ export default function PricingComparison() {
                 <th className="py-4 px-6 w-2/5">ฟีเจอร์</th>
                 <th className="py-4 px-4 text-center w-[15%] text-slate-900 font-bold">
                   Starter
-                  <div className="text-xs font-normal text-slate-500 normal-case mt-0.5">฿599/ด.</div>
+                  <div className="text-xs font-normal text-slate-500 normal-case mt-0.5">{priceOf('starter')}</div>
                 </th>
                 <th className="py-4 px-4 text-center w-[15%] text-blue-600 bg-blue-50/50 font-bold">
                   Pro ⭐
-                  <div className="text-xs font-bold text-blue-600 normal-case mt-0.5">฿1,290/ด.</div>
+                  <div className="text-xs font-bold text-blue-600 normal-case mt-0.5">{priceOf('pro')}</div>
                 </th>
                 <th className="py-4 px-4 text-center w-[15%] text-slate-900 font-bold">
                   Business
-                  <div className="text-xs font-normal text-slate-500 normal-case mt-0.5">฿2,490/ด.</div>
+                  <div className="text-xs font-normal text-slate-500 normal-case mt-0.5">{priceOf('agency')}</div>
                 </th>
                 <th className="py-4 px-4 text-center w-[15%] text-slate-900 font-bold">
-                  Enterprise
-                  <div className="text-xs font-normal text-slate-500 normal-case mt-0.5">฿4,990/ด.</div>
+                  BYOK
+                  <div className="text-xs font-normal text-slate-500 normal-case mt-0.5">{priceOf('byok')}</div>
                 </th>
               </tr>
             </thead>
@@ -90,17 +93,17 @@ export default function PricingComparison() {
 
                         {/* Pro (Highlighted) */}
                         <td className="py-3.5 px-4 text-center font-medium text-slate-900 bg-blue-50/30">
-                          {renderCellValue(row.standard)}
+                          {renderCellValue(row.pro)}
                         </td>
 
                         {/* Business */}
                         <td className="py-3.5 px-4 text-center font-medium text-slate-700">
-                          {renderCellValue(row.elite)}
+                          {renderCellValue(row.agency)}
                         </td>
 
-                        {/* Enterprise */}
+                        {/* BYOK */}
                         <td className="py-3.5 px-4 text-center font-medium text-slate-700">
-                          {renderCellValue(row.enterprise)}
+                          {renderCellValue(row.byok)}
                         </td>
                       </tr>
                     ))}

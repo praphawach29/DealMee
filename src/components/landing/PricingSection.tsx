@@ -2,81 +2,12 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { Check, X } from 'lucide-react'
+import { Check, X, Wallet } from 'lucide-react'
+import { packagesData, addonPacks, freePlan } from './data'
 
-interface PricingPlan {
-  id: string
-  name: string
-  price: number
-  description: string
-  featured?: boolean
-  msgLimit: number
-  productLimit: number
-  aiCredits: number
-  broadcast: boolean
-  analytics: boolean
-  slipCheck: boolean
-  quotation: boolean
-}
-
-const pricingPlans: PricingPlan[] = [
-  {
-    id: 'starter',
-    name: 'Starter',
-    price: 599,
-    description: 'เหมาะสำหรับร้านค้าเริ่มต้น เริ่มขายผ่าน LINE OA',
-    featured: false,
-    msgLimit: 1000,
-    productLimit: 50,
-    aiCredits: 500,
-    broadcast: false,
-    analytics: false,
-    slipCheck: true,
-    quotation: false,
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    price: 1290,
-    description: 'ยอดนิยมสำหรับร้านค้าที่มียอดสั่งซื้อต่อเนื่องทุกวัน',
-    featured: true,
-    msgLimit: 5000,
-    productLimit: 200,
-    aiCredits: 2500,
-    broadcast: true,
-    analytics: true,
-    slipCheck: true,
-    quotation: true,
-  },
-  {
-    id: 'business',
-    name: 'Business',
-    price: 2490,
-    description: 'สำหรับธุรกิจที่เติบโต แชทเยอะ และมีทีมงานช่วยดูแล',
-    featured: false,
-    msgLimit: 15000,
-    productLimit: 1000,
-    aiCredits: 8000,
-    broadcast: true,
-    analytics: true,
-    slipCheck: true,
-    quotation: true,
-  },
-  {
-    id: 'enterprise',
-    name: 'Enterprise',
-    price: 4990,
-    description: 'โซลูชันองค์กร ไม่จำกัดข้อความ และซัพพอร์ตแบบ VIP',
-    featured: false,
-    msgLimit: -1,
-    productLimit: -1,
-    aiCredits: 25000,
-    broadcast: true,
-    analytics: true,
-    slipCheck: true,
-    quotation: true,
-  },
-]
+const formatTHB = (n: number) => n.toLocaleString('th-TH')
+const messagePacks = addonPacks.filter((a) => a.kind === 'messages')
+const slipPacks = addonPacks.filter((a) => a.kind === 'slips')
 
 export default function PricingSection() {
   return (
@@ -93,13 +24,17 @@ export default function PricingSection() {
           <p className="text-white/60 text-sm sm:text-base max-w-lg mx-auto leading-relaxed">
             เริ่มต้นง่าย คุ้มค่า คืนทุนเร็ว ขยายได้ตามการเติบโตของร้านคุณ
           </p>
+          <div className="mt-5 inline-flex items-start sm:items-center gap-2 text-left bg-white/[0.06] border border-white/10 rounded-2xl sm:rounded-full px-4 py-2 text-xs sm:text-sm text-white/80">
+            <Wallet className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5 sm:mt-0" />
+            <span>เติมเงินเข้ากระเป๋า (Wallet) ผ่าน PromptPay แล้วซื้อแพ็กเกจจากยอดคงเหลือ ต่ออายุอัตโนมัติทุก 30 วัน</span>
+          </div>
         </div>
 
         {/* 4 Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
-          {pricingPlans.map((p) => (
+          {packagesData.map((p) => (
             <div
-              key={p.id}
+              key={p.key}
               className={`rounded-2xl p-6 border transition-all duration-300 relative flex flex-col ${
                 p.featured
                   ? 'bg-blue-950/40 border-cyan-400 lg:scale-[1.03] z-10 shadow-xl shadow-cyan-500/10'
@@ -115,8 +50,8 @@ export default function PricingSection() {
               <div className="text-sm font-bold text-white/70 mb-2">{p.name}</div>
               
               <div className="text-3xl sm:text-4xl font-bold text-amber-400 mb-0.5 font-mono">
-                ฿{p.price.toLocaleString('th-TH')}
-                <span className="text-xs text-white/40 font-normal font-sans ml-1">/เดือน</span>
+                ฿{formatTHB(p.price)}
+                <span className="text-xs text-white/40 font-normal font-sans ml-1">/30 วัน</span>
               </div>
 
               <div className="text-xs text-white/50 mb-5 pb-4 border-b border-white/[0.08] min-h-[2.5rem] leading-relaxed">
@@ -128,35 +63,23 @@ export default function PricingSection() {
                 <li className="flex items-center gap-2 text-white/80">
                   <span className="text-cyan-400">💬</span>
                   <span>
-                    {p.msgLimit === -1 ? 'ไม่จำกัดข้อความ' : `${p.msgLimit.toLocaleString()} ข้อความ/เดือน`}
+                    {p.msgLimit === -1
+                      ? 'ข้อความไม่จำกัด (ใช้ Key ของร้าน)'
+                      : `${formatTHB(p.msgLimit)} ข้อความ/เดือน`}
                   </span>
                 </li>
                 <li className="flex items-center gap-2 text-white/80">
-                  <span className="text-cyan-400">📦</span>
-                  <span>
-                    {p.productLimit === -1 ? 'สินค้าไม่จำกัด' : `สินค้า ${p.productLimit.toLocaleString()} รายการ`}
-                  </span>
+                  <span className="text-cyan-400">🧾</span>
+                  <span>ตรวจสลิปอัตโนมัติ {formatTHB(p.slipLimit)} ครั้ง/เดือน</span>
                 </li>
-                <li className="flex items-center gap-2 text-white/80">
-                  <span className="text-cyan-400">⚡</span>
-                  <span>เครดิต AI {p.aiCredits.toLocaleString('th-TH')}/เดือน</span>
-                </li>
-                <li className={`flex items-center gap-2 ${p.slipCheck ? 'text-white/80' : 'text-white/30'}`}>
-                  {p.slipCheck ? <Check className="w-4 h-4 text-emerald-400" /> : <X className="w-4 h-4 text-white/20" />}
-                  <span>ตรวจสลิปอัตโนมัติ 100%</span>
-                </li>
-                <li className={`flex items-center gap-2 ${p.broadcast ? 'text-white/80' : 'text-white/30'}`}>
-                  {p.broadcast ? <Check className="w-4 h-4 text-emerald-400" /> : <X className="w-4 h-4 text-white/20" />}
-                  <span>Broadcast ข้อความหาลูกค้า</span>
-                </li>
-                <li className={`flex items-center gap-2 ${p.analytics ? 'text-white/80' : 'text-white/30'}`}>
-                  {p.analytics ? <Check className="w-4 h-4 text-emerald-400" /> : <X className="w-4 h-4 text-white/20" />}
-                  <span>รายงาน & Analytics ยอดขาย</span>
-                </li>
-                <li className={`flex items-center gap-2 ${p.quotation ? 'text-white/80' : 'text-white/30'}`}>
-                  {p.quotation ? <Check className="w-4 h-4 text-emerald-400" /> : <X className="w-4 h-4 text-white/20" />}
-                  <span>ออกใบเสนอราคา B2B PDF</span>
-                </li>
+                <PlanFeature on={p.features.order_taking} label="รับออเดอร์ & PromptPay QR" />
+                <PlanFeature on={p.features.quotation_b2b} label="ออกใบเสนอราคา B2B PDF" />
+                <PlanFeature on={p.features.booking_system} label="ระบบจองคิว & แจ้งเตือนลูกค้า" />
+                {p.features.own_api_key ? (
+                  <PlanFeature on label="ใช้ Gemini API Key ของร้าน" />
+                ) : (
+                  <PlanFeature on={p.features.priority_support} label="ซัพพอร์ตแบบเร่งด่วน" />
+                )}
               </ul>
 
               <Link
@@ -167,17 +90,39 @@ export default function PricingSection() {
                     : 'bg-white/[0.08] text-white/90 border-white/15 hover:bg-blue-600 hover:border-blue-600'
                 }`}
               >
-                {p.id === 'enterprise' ? 'ติดต่อสอบถาม' : 'เลือกแผนนี้'}
+                เลือกแผนนี้
               </Link>
             </div>
           ))}
         </div>
 
+        {/* Add-on packs */}
+        <div className="max-w-3xl mx-auto rounded-2xl bg-white/[0.04] border border-white/10 p-4 sm:p-5 mb-6 text-xs sm:text-sm text-white/70 leading-relaxed">
+          <div className="font-bold text-white mb-1.5">➕ แพ็กเสริม (ใช้ได้ 90 วัน เมื่อโควตาประจำเดือนหมด)</div>
+          <div>
+            ข้อความ AI:{' '}
+            {messagePacks.map((a) => `${formatTHB(a.quantity)} ข้อความ ฿${formatTHB(a.price)}`).join(' · ')}
+          </div>
+          <div>
+            ตรวจสลิป:{' '}
+            {slipPacks.map((a) => `${formatTHB(a.quantity)} ครั้ง ฿${formatTHB(a.price)}`).join(' · ')}
+          </div>
+        </div>
+
         {/* Footnote */}
-        <p className="text-center text-white/40 text-xs">
-          * ราคา API แยกตามการใช้งานจริง (~175-500 บาท/เดือน) | สัญญาขั้นต่ำ 3 เดือน | ปรับเปลี่ยนหรือยกเลิกได้ทุกเมื่อ
+        <p className="text-center text-white/40 text-xs leading-relaxed">
+          * เริ่มต้นฟรี {formatTHB(freePlan.msgLimit)} ข้อความ AI/เดือน (ไม่มีตรวจสลิปอัตโนมัติ) | ชำระด้วยการเติมเงิน PromptPay เข้ากระเป๋า | เปลี่ยนแพ็กเกจได้ทุกเมื่อ คืนเครดิตวันที่เหลือ
         </p>
       </div>
     </section>
+  )
+}
+
+function PlanFeature({ on, label }: { on: boolean; label: string }) {
+  return (
+    <li className={`flex items-center gap-2 ${on ? 'text-white/80' : 'text-white/30'}`}>
+      {on ? <Check className="w-4 h-4 text-emerald-400" /> : <X className="w-4 h-4 text-white/20" />}
+      <span>{label}</span>
+    </li>
   )
 }

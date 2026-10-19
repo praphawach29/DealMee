@@ -35,33 +35,31 @@ export type Scenario = {
   messages: ChatMessage[]
 }
 
+// Mirrors the `plans` table (keys, prices, monthly allowances)
+export type PlanKey = 'starter' | 'pro' | 'agency' | 'byok'
+
 export type PackageTier = {
-  id: string
-  key: 'starter' | 'standard' | 'elite' | 'enterprise'
+  key: PlanKey
   name: string
-  price: number
-  msgLimit: number // -1 = unlimited
-  productLimit: number // -1 = unlimited
-  aiCredits: number
+  price: number // THB per 30 days, paid from the prepaid wallet
+  msgLimit: number // -1 = unlimited (BYOK uses the shop's own Gemini key)
+  slipLimit: number // automatic slip checks per month
   description: string
   featured?: boolean
   badge?: string
   features: {
-    ai_chat: boolean
-    line_oa: boolean
     order_taking: boolean
-    shipping_calc: boolean
-    slip_check: boolean
     quotation_b2b: boolean
-    customer_memory: boolean
     booking_system: boolean
-    proactive_followup: boolean
-    broadcast: boolean
-    analytics: boolean
-    custom_prompt: boolean
+    own_api_key: boolean
     priority_support: boolean
-    api_erp: boolean
   }
+}
+
+export type AddonPack = {
+  kind: 'messages' | 'slips'
+  quantity: number
+  price: number
 }
 
 export type FeatureRow = {
@@ -69,7 +67,7 @@ export type FeatureRow = {
   label: string
   description?: string
   starter: string | boolean
-  standard: string | boolean
-  elite: string | boolean
-  enterprise: string | boolean
+  pro: string | boolean
+  agency: string | boolean
+  byok: string | boolean
 }
