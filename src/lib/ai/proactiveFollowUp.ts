@@ -480,6 +480,21 @@ export async function processDueFollowUpTasks(limit = 25): Promise<{
         continue
       }
 
+      // The shop switched this kind of message off after it was queued
+      const config: FollowUpConfig = shop.follow_up_config || {}
+      const switchedOff =
+        (task.task_type === 'qr_recovery' && config.qr_recovery_enabled === false) ||
+        (task.task_type === 'booking_reminder' && config.booking_reminder_enabled === false) ||
+        (task.task_type === 'repurchase_check' && config.repurchase_enabled === false)
+      if (switchedOff) {
+        await supabase
+          .from('follow_up_tasks')
+          .update({ status: 'cancelled', executed_at: nowIso, error_message: 'Switched off by the shop' })
+          .eq('id', task.id)
+        cancelled++
+        continue
+      }
+
       // Tasks without a conversation predate multi-channel follow-ups and were all LINE
       let platform = 'line'
       if (task.conversation_id) {
