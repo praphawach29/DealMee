@@ -41,6 +41,7 @@ export interface PaymentShippingShopData {
   cod_fee_type?: string | null
   cod_fee_amount?: number | null
   features?: {
+    slip_verify?: boolean
     slip_verification?: {
       enabled?: boolean
       provider?: string
@@ -125,7 +126,7 @@ export default function PaymentShippingForm({ shop }: { shop: PaymentShippingSho
   }, [shop.bank_name, shop.payment_bank_name, paymentShipping?.bank_name, shop.shipping_provider])
 
   const slipConfig = shop.features?.slip_verification
-  const [slipEnabled, setSlipEnabled] = useState<boolean>(slipConfig?.enabled ?? true)
+  const [slipEnabled, setSlipEnabled] = useState<boolean>(shop.features?.slip_verify ?? true)
   const [slipProvider, setSlipProvider] = useState<string>(slipConfig?.provider || 'easyslip')
   const [showApiKey, setShowApiKey] = useState(false)
 

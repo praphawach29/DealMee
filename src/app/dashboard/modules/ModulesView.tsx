@@ -16,7 +16,7 @@ export default function ModulesView({ initialFeatures, bizType = 'retail', initi
   const [featureState, setFeatureState] = useState<Record<string, boolean>>({
     auto_reply: initialFeatures?.auto_reply ?? true,
     booking_system: initialFeatures?.booking_system ?? isBookingDefault,
-    slip_verify: initialFeatures?.slip_verify ?? false,
+    slip_verify: initialFeatures?.slip_verify ?? true,
     product_recommend: initialFeatures?.product_recommend ?? true,
     admin_notify: initialFeatures?.admin_notify ?? true,
     official_letters: initialFeatures?.official_letters ?? false,

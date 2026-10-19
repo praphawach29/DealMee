@@ -257,6 +257,8 @@ export async function updatePaymentShippingSettings(formData: FormData) {
   const currentFeatures = (shop.features && typeof shop.features === 'object') ? shop.features : {}
   const updatedFeatures = {
     ...currentFeatures,
+    // The switch the webhooks read (also on the modules page)
+    slip_verify: slip_verify_enabled,
     slip_verification: {
       enabled: slip_verify_enabled,
       provider: slip_provider,
