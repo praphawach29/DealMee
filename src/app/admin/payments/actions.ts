@@ -66,8 +66,7 @@ export async function getPaymentsList(statusFilter?: string) {
       created_at,
       shops:shop_id (
         name,
-        bot_name,
-        promptpay_id
+        bot_name
       )
     `
     )
