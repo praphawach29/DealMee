@@ -8,6 +8,7 @@ import {
   getPlatformBillingSettings,
 } from '@/lib/billing/manualBilling'
 import { SUPER_ADMIN_EMAILS } from '@/app/admin/layout'
+import { canCarryAlerts, notifyPlatformOwner } from '@/lib/billing/platformAlerts'
 
 async function assertSuperAdmin() {
   const supabase = await createClient()
@@ -185,4 +186,58 @@ export async function updatePlatformSettingsAction(
   revalidatePath('/admin/payment-settings')
   revalidatePath('/dashboard/billing')
   return { success: true }
+}
+
+export interface AlertShopOption {
+  id: string
+  name: string
+  ready: boolean
+}
+
+/** Shops with a LINE OA, for choosing which one sends top-up alerts; ready = admin LINE linked */
+export async function listAlertShopsAction(): Promise<AlertShopOption[]> {
+  await assertSuperAdmin()
+  const { data } = await createAdminClient()
+    .from('shops')
+    .select('*')
+    .not('line_token', 'is', null)
+    .order('created_at', { ascending: true })
+    .limit(200)
+  return (data || [])
+    .filter((s: any) => String(s.line_token || '').trim())
+    .map((s: any) => ({ id: s.id, name: s.name || 'ไม่ระบุชื่อร้าน', ready: canCarryAlerts(s) }))
+}
+
+/** Saves which shop's LINE OA carries top-up alerts (null turns them off) */
+export async function updatePlatformAlertShopAction(shopId: string | null) {
+  await assertSuperAdmin()
+  const admin = createAdminClient()
+  const { data: existing } = await admin.from('platform_billing_settings').select('id').limit(1).maybeSingle()
+  if (!existing?.id) {
+    return { success: false, error: 'บันทึกข้อมูลบัญชีรับเงินก่อน แล้วค่อยตั้งค่าการแจ้งเตือน' }
+  }
+  const { error } = await admin
+    .from('platform_billing_settings')
+    .update({ notify_shop_id: shopId || null, updated_at: new Date().toISOString() })
+    .eq('id', existing.id)
+  if (error) {
+    const missingColumn = /notify_shop_id/.test(error.message)
+    return {
+      success: false,
+      error: missingColumn ? 'ยังไม่ได้รัน SQL สำหรับการแจ้งเตือน (migration 20261022000000_platform_alert_shop.sql)' : error.message,
+    }
+  }
+  revalidatePath('/admin/payment-settings')
+  return { success: true }
+}
+
+export async function sendTestPlatformAlertAction(shopId: string) {
+  await assertSuperAdmin()
+  const sent = await notifyPlatformOwner(
+    '🔔 ทดสอบการแจ้งเตือน DealMee\nเมื่อร้านค้าเติมเงินเข้ากระเป๋า คุณจะได้รับข้อความแบบนี้ที่ LINE นี้',
+    shopId
+  )
+  return sent
+    ? { success: true }
+    : { success: false, error: 'ส่งไม่สำเร็จ ตรวจว่าร้านนี้เชื่อม LINE OA และผูก LINE แอดมินไว้แล้ว' }
 }

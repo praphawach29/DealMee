@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { readSlipQr } from '@/lib/slip/readSlipQr'
+import { notifyPlatformOwner, APP_URL } from '@/lib/billing/platformAlerts'
 import {
   getPlatformBillingSettings,
   isPlatformPromptPayConfigured,
@@ -21,6 +22,8 @@ import {
  */
 
 export const runtime = 'nodejs'
+
+const baht = (n: number) => `฿${n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 export async function POST(req: NextRequest) {
   try {
@@ -205,6 +208,12 @@ export async function POST(req: NextRequest) {
 
       if (!verifyError && verifyResult?.success) {
         verifiedReceiptNo = verifyResult.receipt_number
+        const balance = Number(verifyResult.balance || 0)
+        after(() =>
+          notifyPlatformOwner(
+            `💰 เติมเงินสำเร็จ\nร้าน: ${shop.name || '-'}\nยอด: ${baht(billedAmount)}\nยอดคงเหลือในกระเป๋า: ${baht(balance)}\nใบเสร็จ: ${verifiedReceiptNo || '-'}`
+          )
+        )
         return NextResponse.json({
           success: true,
           autoVerified: true,
@@ -226,6 +235,12 @@ export async function POST(req: NextRequest) {
     }
 
     // 6. Otherwise, remains pending for admin review
+    after(() =>
+      notifyPlatformOwner(
+        `⏳ สลิปเติมเงินรอตรวจ\nร้าน: ${shop.name || '-'}\nยอด: ${baht(billedAmount)}${withheldAmount > 0 ? ` (หัก ณ ที่จ่าย ${baht(withheldAmount)})` : ''}\nเหตุผล: ${easySlipMessage || 'ระบบตรวจสลิปอัตโนมัติไม่ได้'}\nตรวจและอนุมัติ: ${APP_URL}/admin/payments`
+      )
+    )
+
     return NextResponse.json({
       success: true,
       autoVerified: false,
