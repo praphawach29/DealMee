@@ -7,7 +7,7 @@ import {
   PlatformBillingSettings,
   getPlatformBillingSettings,
 } from '@/lib/billing/manualBilling'
-import { SUPER_ADMIN_EMAILS } from '@/app/admin/layout'
+import { isSuperAdminEmail } from '@/lib/auth/superAdmin'
 import qrcode from 'qrcode'
 import { notifyPlatformOwner } from '@/lib/billing/platformAlerts'
 import {
@@ -27,20 +27,7 @@ async function assertSuperAdmin() {
     throw new Error('กรุณาเข้าสู่ระบบ')
   }
 
-  const { data: dbUser } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  const isSuperAdmin =
-    dbUser?.role === 'superadmin' ||
-    SUPER_ADMIN_EMAILS.includes(user.email || '') ||
-    user.email === 'admin@dealmee.app' ||
-    user.email === 'admin@botify.ai' ||
-    user.email === 'jack291625@gmail.com'
-
-  if (!isSuperAdmin) {
+  if (!isSuperAdminEmail(user.email)) {
     throw new Error('สิทธิ์การเข้าถึงถูกปฏิเสธ (Super Admin Only)')
   }
 

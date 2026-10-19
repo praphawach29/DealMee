@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect, notFound } from 'next/navigation'
 import ReceiptDocument, { ReceiptData } from '@/components/billing/ReceiptDocument'
 import { getPlatformBillingSettings } from '@/lib/billing/manualBilling'
-import { SUPER_ADMIN_EMAILS } from '@/app/admin/layout'
+import { isSuperAdminEmail } from '@/lib/auth/superAdmin'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -38,19 +38,13 @@ export default async function ReceiptPage({ params }: PageProps) {
   // Security check: User must be owner of shop or super admin
   const { data: dbUser } = await admin
     .from('users')
-    .select('workspace_id, role')
+    .select('workspace_id')
     .eq('id', user.id)
     .single()
 
   const isOwner = dbUser?.workspace_id === payment.shop_id
-  const isSuperAdmin =
-    dbUser?.role === 'superadmin' ||
-    SUPER_ADMIN_EMAILS.includes(user.email || '') ||
-    user.email === 'admin@dealmee.app' ||
-    user.email === 'admin@botify.ai' ||
-    user.email === 'jack291625@gmail.com'
 
-  if (!isOwner && !isSuperAdmin) {
+  if (!isOwner && !isSuperAdminEmail(user.email)) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center space-y-2">
