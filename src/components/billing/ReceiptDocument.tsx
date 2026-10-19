@@ -46,6 +46,7 @@ export default function ReceiptDocument({
     receipt_number,
     verified_at,
     created_at,
+    plan_key,
     plan_name,
     billed_amount,
     withheld_amount,
@@ -53,6 +54,7 @@ export default function ReceiptDocument({
     shop,
     platform,
   } = data
+  const isWalletTopup = plan_key === 'wallet_topup'
 
   const dateToDisplay = new Date(verified_at || created_at).toLocaleDateString(
     'th-TH',
@@ -202,14 +204,27 @@ export default function ReceiptDocument({
               <tr>
                 <td className="py-4 text-left font-mono">1</td>
                 <td className="py-4 text-left">
-                  <p className="font-bold text-slate-900 text-sm">
-                    ค่าบริการใช้งานระบบ DealMee AI - แพ็กเกจ {plan_name}
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    ระยะเวลาการใช้งาน 1 เดือน (SaaS Cloud Subscription Period: 30 Days)
-                  </p>
+                  {isWalletTopup ? (
+                    <>
+                      <p className="font-bold text-slate-900 text-sm">
+                        เติมเงินเข้ากระเป๋า DealMee (เครดิตค่าบริการล่วงหน้า)
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        ใช้ชำระค่าแพ็กเกจรายเดือนและแพ็กเสริมของระบบ DealMee AI (Prepaid Service Credit)
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-bold text-slate-900 text-sm">
+                        ค่าบริการใช้งานระบบ DealMee AI - แพ็กเกจ {plan_name}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        ระยะเวลาการใช้งาน 1 เดือน (SaaS Cloud Subscription Period: 30 Days)
+                      </p>
+                    </>
+                  )}
                 </td>
-                <td className="py-4 text-center font-mono">1 งวด</td>
+                <td className="py-4 text-center font-mono">{isWalletTopup ? '1 รายการ' : '1 งวด'}</td>
                 <td className="py-4 text-right font-mono font-bold text-slate-900">
                   ฿{Number(billed_amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                 </td>

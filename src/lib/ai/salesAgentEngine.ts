@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { effectivePlanKey, salesAutomationEnabled, SALES_AUTOMATION_TOOLS, SALES_LOCKED_PROMPT, TRIAL_MESSAGE_LIMIT } from '@/lib/billing/trial'
+import { salesAutomationEnabled, SALES_AUTOMATION_TOOLS, SALES_LOCKED_PROMPT } from '@/lib/billing/trial'
+import { getPlanLimits, getAddonRemaining, consumeAddonCredit } from '@/lib/billing/planLimits'
 import { selectRelevantKnowledge } from '@/lib/ai/knowledgeSelect'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildBusinessPromptContext } from '@/lib/businessGreeting'
@@ -822,19 +823,19 @@ export function classifyMessageComplexity(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Checks whether a shop has exceeded its plan's monthly message quota.
- * Limits are resolved from the admin-editable `plans` table (keyed by
- * shop.plan_key, falling back to shop.plan for shops not yet migrated),
- * not duplicated onto `shops`, so a plan edit takes effect immediately.
- * A messages limit of -1 (byok/unlimited sentinel) always skips the check.
- * An expired-but-not-yet-downgraded subscription (plan_expires_at in the
- * past) is treated as the free plan's limit.
+ * Checks whether a shop has used up its monthly AI messages. The limit comes
+ * from the plan the shop is entitled to right now (src/lib/billing/planLimits.ts):
+ * a trial's own allowance, Free once a trial or a paid plan has lapsed, and -1
+ * (BYOK) for unlimited. Once the plan's allowance is used, each further message
+ * takes one unit from a message add-on pack bought from the wallet.
  */
 export interface QuotaStatus {
   planKey: string
   messagesUsed: number
   messageLimit: number // -1 = unlimited
   isUnlimited: boolean
+  /** Units left in unexpired message add-on packs */
+  addonMessagesRemaining: number
   isOverQuota: boolean
 }
 
@@ -845,36 +846,19 @@ export interface QuotaStatus {
  */
 export async function getQuotaStatus(shop: any): Promise<QuotaStatus> {
   const admin = createAdminClient()
-  // 'trial' while a trial runs, 'free' once it has ended (see src/lib/billing/trial.ts)
-  const planKey = effectivePlanKey(shop)
-
-  const { data: planRow } = planKey === 'trial'
-    ? { data: null }
-    : await admin.from('plans').select('key, messages').eq('key', planKey).maybeSingle()
-
-  let messageLimit = planKey === 'trial' ? TRIAL_MESSAGE_LIMIT : planRow ? Number(planRow.messages) : null
-
-  // Fallback for shops whose plan isn't in the `plans` table yet (defaults)
-  if (messageLimit === null) {
-    const defaults: Record<string, number> = { free: 100, starter: 3000, pro: 10000, agency: 30000, byok: -1 }
-    messageLimit = defaults[planKey] ?? 100
-  }
-
-  // Expired subscription (past plan_expires_at) falls back to free-tier limit
-  if (shop.plan_expires_at && new Date(shop.plan_expires_at) < new Date() && planKey !== 'free' && planKey !== 'trial') {
-    const { data: freeRow } = await admin.from('plans').select('messages').eq('key', 'free').maybeSingle()
-    messageLimit = freeRow ? Number(freeRow.messages) : 100
-  }
-
+  const { planKey, messages: messageLimit } = await getPlanLimits(shop)
   const isUnlimited = messageLimit === -1
 
   const period = getCurrentPeriod()
-  const { data: usageRow } = await admin
-    .from('usage_logs')
-    .select('messages_used')
-    .eq('shop_id', shop.id)
-    .eq('period', period)
-    .maybeSingle()
+  const [{ data: usageRow }, addonMessagesRemaining] = await Promise.all([
+    admin
+      .from('usage_logs')
+      .select('messages_used')
+      .eq('shop_id', shop.id)
+      .eq('period', period)
+      .maybeSingle(),
+    isUnlimited ? Promise.resolve(0) : getAddonRemaining(shop.id, 'messages'),
+  ])
 
   const messagesUsed = usageRow ? Number(usageRow.messages_used) : 0
 
@@ -883,14 +867,21 @@ export async function getQuotaStatus(shop: any): Promise<QuotaStatus> {
     messagesUsed,
     messageLimit,
     isUnlimited,
-    isOverQuota: !isUnlimited && messagesUsed >= messageLimit,
+    addonMessagesRemaining,
+    isOverQuota: !isUnlimited && messagesUsed >= messageLimit && addonMessagesRemaining <= 0,
   }
 }
 
-async function isOverQuota(shop: any): Promise<boolean> {
+/**
+ * Quota gate for one incoming message. Past the plan's allowance the message is
+ * paid for with an add-on unit here (the playground only checks, it isn't billed).
+ */
+async function isOverQuota(shop: any, isPlayground?: boolean): Promise<boolean> {
   try {
     const status = await getQuotaStatus(shop)
-    return status.isOverQuota
+    if (status.isUnlimited || status.messagesUsed < status.messageLimit) return false
+    if (isPlayground) return status.isOverQuota
+    return !(await consumeAddonCredit(shop.id, 'messages'))
   } catch (err) {
     console.error('[isOverQuota] Exception (fail-open):', err)
     return false // never block a customer's chat due to a quota-check bug
@@ -932,7 +923,7 @@ async function preparePlanningState({
 }: SalesAgentRequest): Promise<
   { quotaExceeded: true; language: CustomerLanguage } | { quotaExceeded: false; state: PlanningState }
 > {
-  if (await isOverQuota(shop)) {
+  if (await isOverQuota(shop, isPlayground)) {
     // Language still matters on this path: the quota notice is the one
     // message a customer gets, and the model never runs to set the tone.
     return { quotaExceeded: true, language: detectCustomerLanguage(userQuery) }

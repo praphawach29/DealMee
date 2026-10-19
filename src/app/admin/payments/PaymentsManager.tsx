@@ -497,7 +497,7 @@ export default function PaymentsManager({
                               {p.shop_name}
                             </span>
                             <span className="px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-bold uppercase text-[10px]">
-                              {p.plan_key}
+                              {p.plan_key === 'wallet_topup' ? 'เติมเงิน' : p.plan_key}
                             </span>
                           </div>
 

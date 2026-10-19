@@ -11,7 +11,7 @@ function adminLineId(shop: Shop): string | null {
 }
 
 /** LINE push to the shop owner through the shop's own OA; silently skipped when not set up. */
-async function pushToOwner(shop: Shop, text: string): Promise<boolean> {
+export async function pushToOwner(shop: Shop, text: string): Promise<boolean> {
   const token = shop.line_token ? String(shop.line_token).trim() : ''
   const to = adminLineId(shop)
   if (!token || !to) return false
@@ -121,7 +121,7 @@ export async function notifyQuotaExhausted(shop: Shop): Promise<void> {
   if (shop.features?.quota_alert_period === period) return
   await pushToOwner(
     shop,
-    `⚠️ ข้อความ AI ของร้านเดือนนี้ใช้ครบแล้ว\nตอนนี้ลูกค้าที่ทักมาจะได้รับข้อความว่าแอดมินจะตอบกลับ กรุณาตอบลูกค้าใน Inbox\n\nอัปเกรดเพื่อให้บอทตอบต่อทันที: ${UPGRADE_URL}`
+    `⚠️ ข้อความ AI ของร้านเดือนนี้ใช้ครบแล้ว\nตอนนี้ลูกค้าที่ทักมาจะได้รับข้อความว่าแอดมินจะตอบกลับ กรุณาตอบลูกค้าใน Inbox\n\nซื้อแพ็กข้อความเสริมหรืออัปเกรดแพ็กเกจเพื่อให้บอทตอบต่อทันที: ${UPGRADE_URL}`
   )
   await setFeatureFlag(shop.id, 'quota_alert_period', period)
 }

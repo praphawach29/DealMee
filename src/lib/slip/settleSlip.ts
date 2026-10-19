@@ -3,8 +3,11 @@ import { salesAutomationEnabled } from '@/lib/billing/trial'
 import { notifyShopAdmin } from '@/lib/billing/ownerAlerts'
 import { cancelFollowUpTasks, scheduleRepurchaseFollowUp } from '@/lib/ai/proactiveFollowUp'
 import { extractGoldenTrajectoryFromOrder } from '@/lib/ai/salesTrajectory'
-import { verifySlip, checkSlipReceiver } from './verifySlip'
+import { claimSlipCheck } from '@/lib/billing/planLimits'
+import { verifySlip, checkSlipReceiver, resolveSlipProviderAndKey } from './verifySlip'
 import { readSlipQr, type SlipQr } from './readSlipQr'
+
+const BILLING_URL = `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.dealmee.app'}/dashboard/billing`
 
 export type SlipPlatform = 'line' | 'facebook' | 'instagram'
 
@@ -119,11 +122,21 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
     }
   }
 
+  // Checks on the platform's provider key count against the plan's monthly slip
+  // allowance, then slip add-on packs; a shop using its own key isn't counted
+  const shopSlipSettings = shop?.features?.slip_verification
+  if (!resolveSlipProviderAndKey(shopSlipSettings).isShopCustomKey && (await claimSlipCheck(shop)) === 'none') {
+    await logCustomerImage(' — รอแอดมินตรวจสลิป')
+    await replyAndLog('ได้รับสลิปแล้วค่ะ 🙏 แอดมินจะตรวจสอบและยืนยันออเดอร์ให้โดยเร็วที่สุดนะคะ')
+    await notifyShopAdmin(shop, `⚠️ สลิปรอตรวจสอบ\nลูกค้า: ${customerLabel}\n${pendingOrder ? `ออเดอร์: ${pendingOrder.order_no}\n` : ''}${slipQr ? `เลขอ้างอิงสลิป: ${slipQr.transRef}\n` : ''}เหตุผล: โควตาตรวจสลิปอัตโนมัติของร้านเดือนนี้หมดแล้ว\nซื้อแพ็กตรวจสลิปเพิ่มได้ที่ ${BILLING_URL}`)
+    return
+  }
+
   const expectedAmount = pendingOrder ? Number(pendingOrder.total_amount) : undefined
   const verifyResult = await verifySlip({
     imageBase64: image.base64,
     mimeType: image.mimeType,
-    shopSettings: shop?.features?.slip_verification,
+    shopSettings: shopSlipSettings,
     expectedAmount,
   })
   console.log('[SlipVerify] Verification result:', JSON.stringify({ ...verifyResult, data: undefined }))

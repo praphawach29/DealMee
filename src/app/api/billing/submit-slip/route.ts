@@ -5,8 +5,20 @@ import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { readSlipQr } from '@/lib/slip/readSlipQr'
 import {
   getPlatformBillingSettings,
+  isPlatformPromptPayConfigured,
   verifySlipWithEasySlip,
+  WALLET_TOPUP_PLAN_KEY,
+  MIN_TOPUP_AMOUNT,
+  MAX_TOPUP_AMOUNT,
 } from '@/lib/billing/manualBilling'
+
+/**
+ * Wallet top-up by PromptPay transfer: the shop sends the slip, and a slip that
+ * checks out (amount, our account, never used before) is approved on the spot,
+ * crediting the wallet through verify_manual_payment. Anything else, and every
+ * top-up with 3% withheld (which needs the withholding certificate), waits for
+ * an admin in /admin/payments.
+ */
 
 export const runtime = 'nodejs'
 
@@ -27,21 +39,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'ไม่พบข้อมูลร้านค้า' }, { status: 404 })
     }
 
+    const platformSettings = await getPlatformBillingSettings()
+    if (!isPlatformPromptPayConfigured(platformSettings)) {
+      return NextResponse.json({ error: 'ระบบรับชำระเงินยังไม่เปิดใช้งาน กรุณาติดต่อทีมงาน DealMee' }, { status: 503 })
+    }
+
     const formData = await req.formData()
     const file = formData.get('slip') as File | null
-    const planKey = (formData.get('planKey') as string) || 'pro'
-    const billedAmount = parseFloat((formData.get('billedAmount') as string) || '0')
-    const withheldAmount = parseFloat((formData.get('withheldAmount') as string) || '0')
-    const transferredAmount = parseFloat((formData.get('transferredAmount') as string) || '0')
+    const billedAmount = Math.round(parseFloat((formData.get('amount') as string) || '0') * 100) / 100
+    const withholding = formData.get('withholding') === 'true'
     const customerNotes = (formData.get('customerNotes') as string) || ''
 
     if (!file || file.size === 0) {
       return NextResponse.json({ error: 'กรุณาแนบรูปภาพสลิปการโอนเงิน' }, { status: 400 })
     }
 
-    if (transferredAmount <= 0) {
-      return NextResponse.json({ error: 'ยอดเงินที่โอนต้องมากกว่า 0 บาท' }, { status: 400 })
+    if (!Number.isFinite(billedAmount) || billedAmount < MIN_TOPUP_AMOUNT || billedAmount > MAX_TOPUP_AMOUNT) {
+      return NextResponse.json(
+        { error: `ยอดเติมเงินต้องอยู่ระหว่าง ฿${MIN_TOPUP_AMOUNT.toLocaleString()} ถึง ฿${MAX_TOPUP_AMOUNT.toLocaleString()}` },
+        { status: 400 }
+      )
     }
+
+    // Worked out here, not taken from the browser
+    const withheldAmount = withholding ? Math.round(billedAmount * 3) / 100 : 0
+    const transferredAmount = Math.round((billedAmount - withheldAmount) * 100) / 100
 
     // 1. Convert file to Buffer and base64
     const arrayBuffer = await file.arrayBuffer()
@@ -86,11 +108,10 @@ export async function POST(req: NextRequest) {
         const slipAmount = Number(slipData.amount?.amount || 0)
 
         // Validate amount (allow small rounding delta of 1 THB)
-        const expectedAmount = withheldAmount > 0 ? transferredAmount : billedAmount
+        const expectedAmount = transferredAmount
         const isAmountMatch = Math.abs(slipAmount - expectedAmount) <= 1.0
 
         // Check if receiver matches platform settings
-        const platformSettings = await getPlatformBillingSettings()
         const cleanPromptPay = platformSettings.promptpay_id.replace(/[^0-9]/g, '')
         const receiverAccount = (slipData.receiver?.account?.value || '').replace(/[^0-9]/g, '')
         const receiverName = slipData.receiver?.displayName || ''
@@ -104,6 +125,8 @@ export async function POST(req: NextRequest) {
         if (isAmountMatch && isReceiverMatch && !slipRef) {
           // Without a reference the duplicate check below can't run, so a person must look
           easySlipMessage = 'สลิปไม่มีเลขอ้างอิงธุรกรรม รอแอดมินตรวจสอบ'
+        } else if (isAmountMatch && isReceiverMatch && withholding) {
+          easySlipMessage = 'หัก ณ ที่จ่าย 3% รอแอดมินตรวจหนังสือรับรองการหักภาษี'
         } else if (isAmountMatch && isReceiverMatch) {
           autoVerified = true
         } else {
@@ -143,7 +166,7 @@ export async function POST(req: NextRequest) {
       .insert({
         shop_id: shop.id,
         provider: 'promptpay',
-        plan_key: planKey,
+        plan_key: WALLET_TOPUP_PLAN_KEY,
         amount: transferredAmount,
         billed_amount: billedAmount,
         withheld_amount: withheldAmount,
@@ -182,7 +205,8 @@ export async function POST(req: NextRequest) {
           autoVerified: true,
           paymentId: newPayment.id,
           receiptNumber: verifiedReceiptNo,
-          message: 'ชำระเงินและตรวจสอบสลิปสำเร็จ! ระบบได้เปิดใช้งานแพ็กเกจให้คุณทันที 🎉',
+          balance: verifyResult.balance,
+          message: `เติมเงินสำเร็จ ฿${billedAmount.toLocaleString('th-TH')} ยอดคงเหลือ ฿${Number(verifyResult.balance || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })} 🎉`,
         })
       }
     }
@@ -195,8 +219,8 @@ export async function POST(req: NextRequest) {
       pendingReview: true,
       message:
         withheldAmount > 0
-          ? 'บันทึกข้อมูลและสลิปการโอนเงิน (หัก ณ ที่จ่าย 3%) เรียบร้อยแล้ว แอดมินกำลังตรวจสอบยอดเงินและออกใบเสร็จให้ค่ะ'
-          : 'บันทึกสลิปเรียบร้อยแล้ว อยู่ในคิวรอตรวจสอบ แอดมินจะดำเนินการอนุมัติให้อย่างรวดเร็วค่ะ',
+          ? 'บันทึกสลิปเรียบร้อยแล้ว (หัก ณ ที่จ่าย 3%) เมื่อแอดมินได้รับหนังสือรับรองการหักภาษีและตรวจยอดแล้ว เงินจะเข้ากระเป๋าเต็มจำนวนค่ะ'
+          : `บันทึกสลิปเรียบร้อยแล้ว อยู่ในคิวรอแอดมินตรวจสอบ${easySlipMessage ? ` (${easySlipMessage})` : ''} เงินจะเข้ากระเป๋าเมื่ออนุมัติค่ะ`,
     })
   } catch (err: any) {
     console.error('[SubmitSlip] Error:', err)

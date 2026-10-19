@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   X,
-  QrCode,
   UploadCloud,
   CheckCircle2,
   AlertCircle,
@@ -14,28 +13,35 @@ import {
   FileText,
   ExternalLink,
   ShieldCheck,
+  Wallet,
 } from 'lucide-react'
-import { PlanItem } from '@/app/admin/actions'
 import {
   PlatformBillingSettings,
   generatePromptPayQRImage,
+  MIN_TOPUP_AMOUNT,
+  MAX_TOPUP_AMOUNT,
 } from '@/lib/billing/manualBilling'
 
-interface PromptPayPaymentModalProps {
+const PRESET_AMOUNTS = [300, 590, 1000, 1690, 3000, 5000]
+
+interface TopUpModalProps {
   isOpen: boolean
   onClose: () => void
-  plan: PlanItem
+  /** Pre-filled amount, e.g. what's missing to buy a plan */
+  initialAmount?: number
   platformSettings: PlatformBillingSettings
   onPaymentSuccess?: () => void
 }
 
-export default function PromptPayPaymentModal({
+/** Wallet top-up: PromptPay QR for the chosen amount, then the slip is checked by /api/billing/submit-slip. */
+export default function TopUpModal({
   isOpen,
   onClose,
-  plan,
+  initialAmount,
   platformSettings,
   onPaymentSuccess,
-}: PromptPayPaymentModalProps) {
+}: TopUpModalProps) {
+  const [amountInput, setAmountInput] = useState(String(Math.max(MIN_TOPUP_AMOUNT, Math.ceil(initialAmount || 1000))))
   const [isWithholdingTax, setIsWithholdingTax] = useState(false)
   const [companyTaxId, setCompanyTaxId] = useState('')
   const [customerNotes, setCustomerNotes] = useState('')
@@ -59,7 +65,9 @@ export default function PromptPayPaymentModal({
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Calculations
-  const billedAmount = plan.price
+  const parsedAmount = Math.round(Number(amountInput) * 100) / 100
+  const amountValid = Number.isFinite(parsedAmount) && parsedAmount >= MIN_TOPUP_AMOUNT && parsedAmount <= MAX_TOPUP_AMOUNT
+  const billedAmount = amountValid ? parsedAmount : 0
   const withheldAmount = isWithholdingTax
     ? Number((billedAmount * 0.03).toFixed(2))
     : 0
@@ -67,7 +75,7 @@ export default function PromptPayPaymentModal({
 
   // Generate QR when transferredAmount or promptpay_id changes
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen || !amountValid) return
 
     let cancelled = false
     const loadQR = async () => {
@@ -91,7 +99,7 @@ export default function PromptPayPaymentModal({
     return () => {
       cancelled = true
     }
-  }, [isOpen, transferredAmount, platformSettings.promptpay_id])
+  }, [isOpen, amountValid, transferredAmount, platformSettings.promptpay_id])
 
   const handleCopy = (text: string, field: string) => {
     navigator.clipboard.writeText(text)
@@ -119,6 +127,10 @@ export default function PromptPayPaymentModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!amountValid) {
+      setError(`กรุณาระบุยอดเติมเงินระหว่าง ฿${MIN_TOPUP_AMOUNT.toLocaleString()} ถึง ฿${MAX_TOPUP_AMOUNT.toLocaleString()}`)
+      return
+    }
     if (!slipFile) {
       setError('กรุณาแนบรูปภาพสลิปการโอนเงินก่อนส่ง')
       return
@@ -136,10 +148,8 @@ export default function PromptPayPaymentModal({
     try {
       const formData = new FormData()
       formData.append('slip', slipFile)
-      formData.append('planKey', plan.key)
-      formData.append('billedAmount', billedAmount.toString())
-      formData.append('withheldAmount', withheldAmount.toString())
-      formData.append('transferredAmount', transferredAmount.toString())
+      formData.append('amount', billedAmount.toString())
+      formData.append('withholding', String(isWithholdingTax))
 
       const notes = [
         isWithholdingTax ? `หัก ณ ที่จ่าย 3% (Tax ID: ${companyTaxId})` : '',
@@ -150,7 +160,7 @@ export default function PromptPayPaymentModal({
 
       formData.append('customerNotes', notes)
 
-      setSubmitProgress('กำลังตรวจสอบสลิปผ่าน EasySlip API...')
+      setSubmitProgress('กำลังตรวจสอบสลิป...')
       const res = await fetch('/api/billing/submit-slip', {
         method: 'POST',
         body: formData,
@@ -188,12 +198,12 @@ export default function PromptPayPaymentModal({
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-indigo-900 via-indigo-800 to-purple-900 text-white">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center text-white">
-              <QrCode className="h-5 w-5" />
+              <Wallet className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-bold text-sm sm:text-base">ชำระเงินผ่าน PromptPay</h3>
+              <h3 className="font-bold text-sm sm:text-base">เติมเงินเข้ากระเป๋า</h3>
               <p className="text-[11px] text-indigo-200">
-                แพ็กเกจ {plan.name} (฿{plan.price.toLocaleString()}/เดือน)
+                สแกน PromptPay แล้วแนบสลิป เงินเข้ากระเป๋าทันทีเมื่อสลิปถูกต้อง
               </p>
             </div>
           </div>
@@ -217,7 +227,7 @@ export default function PromptPayPaymentModal({
             <div className="space-y-1.5">
               <h4 className="text-lg font-bold text-slate-900 dark:text-white">
                 {successResult.autoVerified
-                  ? 'ตรวจสอบสลิปและเปิดใช้งานสำเร็จ!'
+                  ? 'เติมเงินสำเร็จ!'
                   : 'บันทึกสลิปเรียบร้อยแล้ว'}
               </h4>
               <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed max-w-sm mx-auto">
@@ -262,6 +272,45 @@ export default function PromptPayPaymentModal({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+            {/* Step 0: Amount */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                ยอดเติมเงิน (บาท)
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {PRESET_AMOUNTS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setAmountInput(String(preset))}
+                    className={`py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                      parsedAmount === preset
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                    }`}
+                  >
+                    ฿{preset.toLocaleString()}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={MIN_TOPUP_AMOUNT}
+                max={MAX_TOPUP_AMOUNT}
+                step="1"
+                value={amountInput}
+                onChange={(e) => setAmountInput(e.target.value)}
+                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-mono"
+                aria-label="ยอดเติมเงิน"
+              />
+              {!amountValid && (
+                <p className="text-[11px] text-rose-600">
+                  ขั้นต่ำ ฿{MIN_TOPUP_AMOUNT.toLocaleString()} สูงสุด ฿{MAX_TOPUP_AMOUNT.toLocaleString()}
+                </p>
+              )}
+            </div>
+
             {/* Step 1: QR & Payment details */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center bg-slate-50 dark:bg-slate-850 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800">
               {/* QR Image */}
@@ -271,7 +320,7 @@ export default function PromptPayPaymentModal({
                     <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
                     <span>กำลังสร้าง QR Code...</span>
                   </div>
-                ) : qrDataUrl ? (
+                ) : qrDataUrl && amountValid ? (
                   <>
                     <img src={qrDataUrl} alt="PromptPay QR" className="w-44 h-44 object-contain" />
                     <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">
@@ -280,7 +329,7 @@ export default function PromptPayPaymentModal({
                   </>
                 ) : (
                   <div className="w-44 h-44 flex items-center justify-center text-rose-500 text-xs text-center p-2">
-                    ไม่สามารถสร้าง QR ได้
+                    {amountValid ? 'ไม่สามารถสร้าง QR ได้' : 'ระบุยอดเติมเงินก่อน'}
                   </div>
                 )}
               </div>
@@ -294,7 +343,7 @@ export default function PromptPayPaymentModal({
                   </div>
                   {isWithholdingTax && (
                     <span className="text-[10px] text-amber-600 font-semibold block">
-                      (หัก ณ ที่จ่าย 3%: -฿{withheldAmount.toLocaleString()} จากยอดเต็ม ฿{billedAmount.toLocaleString()})
+                      (หัก ณ ที่จ่าย 3%: -฿{withheldAmount.toLocaleString()} เงินเข้ากระเป๋าเต็ม ฿{billedAmount.toLocaleString()} เมื่อแอดมินได้รับใบ 50 ทวิ)
                     </span>
                   )}
                 </div>
@@ -458,7 +507,7 @@ export default function PromptPayPaymentModal({
 
               <button
                 type="submit"
-                disabled={!slipFile || submitting}
+                disabled={!slipFile || !amountValid || submitting}
                 className="flex-2 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-md hover:shadow-lg shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 {submitting ? (

@@ -10,11 +10,15 @@
 
 export const TRIAL_DAYS = 14
 export const TRIAL_MESSAGE_LIMIT = 300
+export const TRIAL_SLIP_LIMIT = 50
+/** Days a paid plan keeps working after plan_expires_at, so a late top-up doesn't interrupt sales */
+export const PLAN_GRACE_DAYS = 3
 
 type ShopPlanFields = {
   plan?: string | null
   plan_key?: string | null
   trial_expires_at?: string | null
+  plan_expires_at?: string | null
 }
 
 function isTrialShop(shop: ShopPlanFields | null | undefined): boolean {
@@ -30,10 +34,20 @@ export function trialStatus(shop: ShopPlanFields | null | undefined, now = new D
   return { isTrial: true, expired, daysLeft, endsAt }
 }
 
-/** Plan key the shop is entitled to right now ('trial' while it runs, 'free' once it has ended). */
-export function effectivePlanKey(shop: ShopPlanFields | null | undefined): string {
-  const trial = trialStatus(shop)
+/** True once a paid plan is past its end date and the grace period. No end date means it doesn't expire. */
+export function planLapsed(shop: ShopPlanFields | null | undefined, now = new Date()): boolean {
+  if (!shop?.plan_expires_at) return false
+  return now.getTime() >= new Date(shop.plan_expires_at).getTime() + PLAN_GRACE_DAYS * 86_400_000
+}
+
+/**
+ * Plan key the shop is entitled to right now: 'trial' while it runs, and 'free'
+ * once the trial has ended or a paid plan has lapsed (past its end date and grace period).
+ */
+export function effectivePlanKey(shop: ShopPlanFields | null | undefined, now = new Date()): string {
+  const trial = trialStatus(shop, now)
   if (trial.isTrial) return trial.expired ? 'free' : 'trial'
+  if (planLapsed(shop, now)) return 'free'
   return (shop?.plan_key || shop?.plan || 'free').toLowerCase()
 }
 

@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 
 import { SUPER_ADMIN_EMAILS } from './layout'
@@ -16,6 +17,8 @@ export interface PlanItem {
   badge_color?: string
   features: string[]
   stripe_price_id?: string
+  /** Automatic slip checks per month; -1 = unlimited */
+  slips: number
 }
 
 export async function verifySuperAdmin() {
@@ -49,7 +52,8 @@ export async function toggleShopStatus(shopId: string, currentStatus: string) {
     return { error: 'คุณไม่มีสิทธิ์ผู้ดูแลระบบ Super Admin' }
   }
 
-  const supabase = await createClient()
+  // Service role: RLS only lets a user write their own shop and profile
+  const supabase = createAdminClient()
   const newStatus = currentStatus === 'suspended' ? 'active' : 'suspended'
 
   const { error } = await supabase
@@ -72,7 +76,8 @@ export async function updateShopPlan(shopId: string, newPlan: string) {
     return { error: 'คุณไม่มีสิทธิ์ผู้ดูแลระบบ Super Admin' }
   }
 
-  const supabase = await createClient()
+  // Service role: RLS only lets a user write their own shop and profile
+  const supabase = createAdminClient()
 
   const { error } = await supabase
     .from('shops')
@@ -95,7 +100,8 @@ export async function impersonateShop(shopId: string) {
     return { error: 'คุณไม่มีสิทธิ์ผู้ดูแลระบบ Super Admin' }
   }
 
-  const supabase = await createClient()
+  // Service role: RLS only lets a user write their own shop and profile
+  const supabase = createAdminClient()
 
   // Update user's active workspace_id to target shop
   const { error } = await supabase
@@ -119,56 +125,62 @@ export async function getPlans(): Promise<PlanItem[]> {
     .select('*')
     .order('price', { ascending: true })
 
+  // Shown only when the plans table can't be read (matches the 2026-10-20 wallet migration)
   const defaultPlans: PlanItem[] = [
     {
       key: 'free',
-      name: 'ทดลองใช้งาน',
+      name: 'Free',
       price: 0,
-      messages: 500,
+      messages: 100,
       tokens: 1000000,
-      description: 'สำหรับร้านค้าทดลองใช้งาน DealMee AI เบื้องต้น 14 วัน',
+      slips: 0,
+      description: 'บอทตอบคำถามลูกค้าได้ ออเดอร์และสลิปส่งให้แอดมินดูแลเอง',
       badge_color: 'bg-surface-container-high text-on-surface',
-      features: ['ตอบแชท DealMee AI บน LINE OA', 'คลังความรู้ FAQ 10 ข้อ', 'ระบบแชทสด'],
+      features: ['ข้อความ AI 100 ข้อความ/เดือน', 'ตอบแชท LINE OA และ Messenger', 'ระบบแชทสด (Inbox)'],
     },
     {
       key: 'starter',
-      name: 'เริ่มต้น',
-      price: 390,
-      messages: 3000,
-      tokens: 3000000,
-      description: 'สำหรับร้านค้าขนาดเล็กที่เน้นปิดการขายใน LINE OA',
+      name: 'Starter',
+      price: 590,
+      messages: 1000,
+      tokens: 5000000,
+      slips: 100,
+      description: 'สำหรับร้านเล็กที่เริ่มให้บอทปิดการขาย',
       badge_color: 'bg-electric-blue/10 text-electric-blue border border-electric-blue/20',
-      features: ['ตอบแชท DealMee AI บน LINE OA', 'คลังความรู้ไม่จำกัด', 'ระบบจัดการสินค้า 50 รายการ', 'เช็คสลิปโอนเงินอัตโนมัติ'],
-    },
-    {
-      key: 'pro',
-      name: 'มืออาชีพ (แนะนำ ✨)',
-      price: 990,
-      messages: 10000,
-      tokens: 15000000,
-      description: 'สำหรับร้านค้าที่มียอดแชทหนาแน่น รองรับระบบจองคิวครบวงจร',
-      badge_color: 'bg-amber-500/10 text-amber-600 border border-amber-500/20 font-bold',
-      features: ['ฟีเจอร์ Starter ทั้งหมด', '✨ AI Copywriter ช่วยเขียนรายละเอียดสินค้า', 'ระบบจองคิวบริการอัตโนมัติ', 'ระบบจัดส่งพัสดุ & แจ้งเลข Tracking', 'ตรวจสลิปโอนเงินฟรี 100 รายการ/เดือน'],
-    },
-    {
-      key: 'agency',
-      name: 'ธุรกิจองค์กร',
-      price: 2490,
-      messages: 30000,
-      tokens: 50000000,
-      description: 'สำหรับแบรนด์ใหญ่หรือเอเจนซี่ที่ต้องการการดูแลระดับ VIP',
-      badge_color: 'bg-purple-500/10 text-purple-600 border border-purple-500/20 font-bold',
-      features: ['ฟีเจอร์ Pro ทั้งหมด', '✨ AI Copywriter ช่วยเขียนรายละเอียดสินค้า', 'ตรวจสลิปโอนเงินไม่จำกัด', 'รองรับเชื่อมต่อหลายเพจ/LINE OA', 'ทีมงานตั้งค่าและซัพพอร์ต 24/7'],
+      features: ['ข้อความ AI 1,000 ข้อความ/เดือน', 'ตรวจสลิปอัตโนมัติ 100 ครั้ง/เดือน', 'รับออเดอร์ ส่ง QR และติดตามการชำระเงิน', 'ใบเสนอราคาและส่วนลด'],
     },
     {
       key: 'byok',
-      name: 'ใช้ API Key ตัวเอง',
-      price: 590,
+      name: 'BYOK',
+      price: 790,
       messages: -1,
       tokens: -1,
-      description: 'ใส่ API Key ของ Gemini/Claude เอง โดยไม่ต้องกังวลเรื่องลิมิต',
+      slips: 300,
+      description: 'ใช้ Gemini API Key ของร้านเอง ค่า AI จ่ายตรงกับ Google',
       badge_color: 'bg-success-green/10 text-success-green border border-success-green/20',
-      features: ['ไม่จำกัดจำนวนข้อความ & Token', '✨ AI Copywriter ช่วยเขียนรายละเอียดสินค้า', 'ใช้ API Key ของตนเอง', 'เข้าถึงทุกมอดูลและฟีเจอร์ในระบบ'],
+      features: ['ข้อความ AI ไม่จำกัด (ใช้ API Key ของร้าน)', 'ตรวจสลิปอัตโนมัติ 300 ครั้ง/เดือน', 'ฟีเจอร์ Pro ทั้งหมด'],
+    },
+    {
+      key: 'pro',
+      name: 'Pro',
+      price: 1690,
+      messages: 3000,
+      tokens: 15000000,
+      slips: 300,
+      description: 'สำหรับร้านที่มีแชทหนาแน่นและระบบจองคิว',
+      badge_color: 'bg-amber-500/10 text-amber-600 border border-amber-500/20 font-bold',
+      features: ['ข้อความ AI 3,000 ข้อความ/เดือน', 'ตรวจสลิปอัตโนมัติ 300 ครั้ง/เดือน', 'ฟีเจอร์ Starter ทั้งหมด', 'ระบบจองคิวและแจ้งเตือนลูกค้า'],
+    },
+    {
+      key: 'agency',
+      name: 'Business',
+      price: 4490,
+      messages: 8000,
+      tokens: 50000000,
+      slips: 1000,
+      description: 'สำหรับแบรนด์หรือร้านหลายช่องทางที่มียอดแชทสูง',
+      badge_color: 'bg-purple-500/10 text-purple-600 border border-purple-500/20 font-bold',
+      features: ['ข้อความ AI 8,000 ข้อความ/เดือน', 'ตรวจสลิปอัตโนมัติ 1,000 ครั้ง/เดือน', 'ฟีเจอร์ Pro ทั้งหมด', 'ซัพพอร์ตแบบเร่งด่วน'],
     },
   ]
 
@@ -183,6 +195,7 @@ export async function getPlans(): Promise<PlanItem[]> {
     price: Number(item.price || 0),
     messages: Number(item.messages || 0),
     tokens: Number(item.tokens || 0),
+    slips: Number(item.slips ?? 0),
     description: item.description || '',
     badge_color: item.badge_color || 'bg-surface-container-high text-on-surface',
     features: Array.isArray(item.features) ? item.features : [],
@@ -196,7 +209,8 @@ export async function updatePlanDetails(plan: PlanItem) {
     return { error: 'คุณไม่มีสิทธิ์ผู้ดูแลระบบ Super Admin' }
   }
 
-  const supabase = await createClient()
+  // Service role: the plans table has no write policy for signed-in users
+  const supabase = createAdminClient()
 
   const payload = {
     key: plan.key,
@@ -204,6 +218,7 @@ export async function updatePlanDetails(plan: PlanItem) {
     price: Number(plan.price),
     messages: Number(plan.messages),
     tokens: Number(plan.tokens),
+    slips: Number(plan.slips ?? 0),
     description: plan.description,
     badge_color: plan.badge_color || 'bg-surface-container-high text-on-surface',
     features: plan.features,
