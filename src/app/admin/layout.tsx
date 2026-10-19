@@ -3,8 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import AdminClientLayout from './AdminClientLayout'
 import Link from 'next/link'
-import { revalidatePath } from 'next/cache'
-import { Lock, ShieldCheck } from 'lucide-react'
+import { Lock } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'DealMee AI - ส่วนควบคุม Super Admin',
@@ -45,20 +44,6 @@ export default async function AdminLayout({
     isSuperAdmin = true
   }
 
-  // Server Action to grant superadmin role if requested by user
-  async function grantSuperAdminAction() {
-    'use server'
-    const supabaseServer = await createClient()
-    const { data: { user: currentUser } } = await supabaseServer.auth.getUser()
-    if (currentUser) {
-      await supabaseServer
-        .from('users')
-        .update({ role: 'superadmin' })
-        .eq('id', currentUser.id)
-      revalidatePath('/admin')
-    }
-  }
-
   if (!isSuperAdmin) {
     return (
       <div className="min-h-screen bg-merchant-bg text-on-surface flex items-center justify-center p-4">
@@ -77,21 +62,11 @@ export default async function AdminLayout({
           </div>
 
           <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 text-xs text-amber-700 dark:text-amber-300 text-left space-y-1">
-            <p className="font-bold">คำแนะนำ:</p>
-            <p>คุณสามารถกดปุ่มเปิดใช้งานสิทธิ์ Super Admin ด้านล่างเพื่อปรับเปลี่ยนสิทธิ์บัญชีนี้เป็น Super Admin ทันที</p>
+            <p className="font-bold">บัญชีนี้ไม่มีสิทธิ์เข้าถึงส่วนนี้</p>
+            <p>หากต้องการสิทธิ์ Super Admin โปรดติดต่อเจ้าของระบบ DealMee</p>
           </div>
 
           <div className="flex flex-col gap-3 pt-2">
-            <form action={grantSuperAdminAction}>
-              <button
-                type="submit"
-                className="w-full py-3 px-4 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2 min-h-[44px] active:scale-[0.98]"
-              >
-                <ShieldCheck className="h-5 w-5" />
-                <span>เปิดใช้งานสิทธิ์ Super Admin บัญชีนี้</span>
-              </button>
-            </form>
-
             <Link
               href="/dashboard"
               className="w-full py-2.5 px-4 bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-bold text-xs sm:text-sm rounded-xl transition-all border border-outline-variant/40 text-center min-h-[44px] flex items-center justify-center"
