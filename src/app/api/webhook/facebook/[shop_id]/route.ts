@@ -208,9 +208,14 @@ async function processMessengerEntries({
       const imageAttachment = (event.message?.attachments || []).find((a: any) => a?.type === 'image' && a?.payload?.url)
       if (senderPsid && imageAttachment && !event.message?.text) {
         if (pageToken && isAutoReplyEnabled && (await claimMessengerEvent(event.message?.mid, shop_id))) {
-          await withFacebookTyping(senderPsid, pageToken, () =>
-            handleMessengerImage({ shop, shopId: shop_id, platform: targetPlatform, psid: senderPsid, url: imageAttachment.payload.url, mid: event.message?.mid, pageToken })
-          )
+          if (features.slip_verify === false) {
+            // Slip checks are switched off: same reply as LINE, an admin looks at it
+            await sendFacebookMessage(senderPsid, 'ได้รับรูปภาพเรียบร้อยแล้วค่ะ แอดมินจะเข้ามาตรวจสอบให้นะคะ 😊', pageToken)
+          } else {
+            await withFacebookTyping(senderPsid, pageToken, () =>
+              handleMessengerImage({ shop, shopId: shop_id, platform: targetPlatform, psid: senderPsid, url: imageAttachment.payload.url, mid: event.message?.mid, pageToken })
+            )
+          }
         }
         continue
       }

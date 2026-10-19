@@ -158,6 +158,9 @@ async function draftReply({ shop, shopId: shop_id, data, senderId, text }: {
     .select('id')
     .single()
 
+  // The message stays in the Inbox; with AI replies switched off nothing is drafted
+  if (shop.features?.auto_reply === false) return
+
   // 4. Run AI engine to draft response
   const agentResult = await processSalesAgentChat({
     shop,

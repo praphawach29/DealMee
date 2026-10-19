@@ -1008,7 +1008,9 @@ async function preparePlanningState({
   // 3. Booking Templates
   let bookingContext = ''
   let bookingPromptTemplates: any[] = []
-  if (features.booking_system !== false) {
+  // Same default as the dashboard: on for booking/service shops unless switched off, off for others unless switched on
+  const bookingOn = features.booking_system ?? ['booking', 'service'].includes(String(shop.business_type || ''))
+  if (bookingOn) {
     const { data: bookingTemplates } = await db
       .from('services')
       .select('name, booking_type, resource_label, staff_name, duration_minutes, available_days, start_time, end_time, buffer_minutes, capacity_per_slot, required_fields, deposit_amount, description')

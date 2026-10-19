@@ -463,6 +463,23 @@ export async function executeTool(
   const { shopId: rawShopId, userId, conversationId, shop, supabase, supabaseAdmin, language: lang = 'th' } = ctx
   const shopId = rawShopId || shop?.id
 
+  // The tool set offered to the model is the same for every shop (prompt caching),
+  // so the shop's switches on /dashboard/modules are enforced here
+  const shopFeatures = (shop?.features || {}) as Record<string, any>
+  const bookingOn = shopFeatures.booking_system ?? ['booking', 'service'].includes(String(shop?.business_type || ''))
+  if (!bookingOn && (toolName === 'check_available_slots' || toolName === 'book_appointment')) {
+    return {
+      resultForAi: 'ร้านนี้ไม่ได้เปิดระบบจองคิวผ่านแชท แจ้งลูกค้าอย่างสุภาพว่าแอดมินจะติดต่อกลับเพื่อนัดหมายให้',
+      immediateMessages: [],
+    }
+  }
+  if (toolName === 'create_official_letter' && shopFeatures.official_letters !== true) {
+    return {
+      resultForAi: 'ร้านนี้ไม่ได้เปิดระบบร่างหนังสือราชการ แจ้งลูกค้าอย่างสุภาพว่าบริการนี้ยังไม่เปิดให้ใช้งาน',
+      immediateMessages: [],
+    }
+  }
+
   // ── 💳 PAYMENT TOOLS ─────────────────────────────────────────────────
   if (toolName === 'send_payment_qr') {
     const promptpayId = shop.promptpay_id || shop.promptpay_number
