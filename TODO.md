@@ -2,12 +2,18 @@
 
 > **บันทึกล่าสุด:** 19 ตุลาคม 2026 (ดูหัวข้อ "อัปเดต 19 ตุลาคม 2026" ด้านล่าง)  
 > **Repository:** `praphawach29/ai-agent-google-SDK` (Branch: `main`)  
-> **Last Commit:** `91c6118` - *Merge pull request #25 (TikTok/Shopee webhook signatures)*  
+> **Last Commit:** `967a000` - *Merge pull request #28 (stable tool set for Gemini cache)*  
 > **Status:** Production Build Passed (`npm run build` ✓, TypeScript 0 errors ✓)
 
 ---
 
-## 🆕 อัปเดต 19 ตุลาคม 2026 — โควต้า, ต้นทุน AI, Messenger, ความปลอดภัย (PR #20–#25)
+## 🆕 อัปเดต 19 ตุลาคม 2026 (รอบ 2) — ต้นทุน AI ต่อข้อความ (PR #27–#28, แผน 1.8)
+
+- Gemini explicit context cache (PR #27) + ชุดเครื่องมือคงที่ให้ใช้ cache ร่วมกัน (PR #28): input ~85–88% คิดราคา 0.1× — ต้นทุนเหลือ ~0.13–0.15 บาท/ข้อความ (จาก ~1.5–2 บาทก่อน PR #23)
+- ทวงจ่ายใน LINE ทดสอบแล้ว ✅
+- **รอเจ้าของระบบ:** ตัดสินใจราคา/โควต้าแพ็กเกจก่อน 1 ม.ค. 2027 (ราคา Gemini ×2) — ตัวเลขและตารางเทียบอยู่ในไฟล์แผน หัวข้อ "ทบทวนต้นทุน AI"
+
+## อัปเดต 19 ตุลาคม 2026 — โควต้า, ต้นทุน AI, Messenger, ความปลอดภัย (PR #20–#25)
 
 - **โควต้าข้อความเพิ่งเริ่มทำงานจริง:** ตาราง `usage_logs` บน production ผิดรูปแบบ ไม่เคยนับข้อความ (Free/หมดทดลองใช้ได้ไม่จำกัด) — แก้ด้วย migration (PR #22) และรันแล้ว
 - **ต้นทุน AI ลดลง 3–6 เท่า, ตอบเร็วขึ้น:** Gemini thinking `low` + ตัด context (PR #23) — ถ้าคุณภาพลดลง ตั้ง `GEMINI_THINKING_LEVEL=medium` ใน Vercel
