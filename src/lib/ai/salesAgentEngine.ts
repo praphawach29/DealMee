@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { buildBusinessPromptContext } from '@/lib/businessGreeting'
 import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
+import { getGeminiPromptCache, dropGeminiPromptCache } from '@/lib/ai/geminiCache'
 import { executeTool as realExecuteTool, type ToolExecutor, type ToolExecutionContext, type CustomerMessage } from '@/lib/ai/toolDispatcher'
 import { t, detectCustomerLanguage, type CustomerLanguage } from '@/lib/i18n/customerMessages'
 import {
@@ -1690,6 +1691,14 @@ export async function continueSalesAgentPlanning(state: PlanningState): Promise<
  * ASSISTANT, ..., MODEL, USER"` — so functionResponse parts go on a
  * 'user' turn instead, matching MODEL/USER from that accepted list.
  */
+/** Puts the per-customer context ahead of the conversation, for requests whose system prompt is cached. */
+function withLeadingContext(contents: any[], context: string): any[] {
+  if (!context.trim() || contents.length === 0) return contents
+  const [first, ...rest] = contents
+  const note = { text: `[ข้อมูลประกอบจากระบบสำหรับลูกค้ารายนี้ — ไม่ใช่ข้อความของลูกค้า]\n${context}` }
+  return [{ ...first, parts: [note, ...(first.parts || [])] }, ...rest]
+}
+
 function buildGeminiContents(turns: PlanningTurn[]): any[] {
   return turns.map((turn) => {
     if (turn.role === 'user') {
@@ -1754,22 +1763,47 @@ async function callGeminiApi(
   for (const model of candidateModels) {
     try {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-      const response = await fetch(endpoint, {
+      const generationConfig = {
+        temperature: 0.7,
+        // Gemini 3.x reasons before answering and those thinking tokens are
+        // billed against maxOutputTokens too.
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        ...(GEMINI_THINKING_LEVEL !== 'default' ? { thinkingConfig: { thinkingLevel: GEMINI_THINKING_LEVEL } } : {}),
+      }
+      const geminiTools = toGeminiTools(toolSet)
+      const plainBody = {
+        system_instruction: { parts: [{ text: systemInstruction }] },
+        contents: buildGeminiContents(turns),
+        tools: geminiTools,
+        generationConfig,
+      }
+
+      // The shop's static prompt and the tools sit in an explicit cache; a request
+      // using it may not also carry a system instruction or tools, so this
+      // customer's context (history, orders, knowledge) moves to the first turn.
+      const cacheName = state && toolSet.length > 0
+        ? await getGeminiPromptCache({ apiKey, model, systemText: state.staticSystemPrompt, tools: geminiTools })
+        : null
+      const post = (body: unknown) => fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemInstruction }] },
-          contents: buildGeminiContents(turns),
-          tools: toGeminiTools(toolSet),
-          generationConfig: {
-            temperature: 0.7,
-            // Gemini 3.x reasons before answering and those thinking tokens are
-            // billed against maxOutputTokens too.
-            maxOutputTokens: MAX_OUTPUT_TOKENS,
-            ...(GEMINI_THINKING_LEVEL !== 'default' ? { thinkingConfig: { thinkingLevel: GEMINI_THINKING_LEVEL } } : {}),
-          },
-        }),
+        body: JSON.stringify(body),
       })
+
+      let usedCache = Boolean(cacheName && state)
+      let response = usedCache && state
+        ? await post({
+            cachedContent: cacheName,
+            contents: withLeadingContext(plainBody.contents, state.dynamicSystemPrompt),
+            generationConfig,
+          })
+        : await post(plainBody)
+      if (!response.ok && cacheName) {
+        console.warn(`[Gemini cache] request with ${cacheName} failed ${response.status}:`, (await response.text()).slice(0, 300), '— retrying uncached')
+        dropGeminiPromptCache(cacheName)
+        usedCache = false
+        response = await post(plainBody)
+      }
 
       if (!response.ok) {
         const errBody = await response.text()
@@ -1842,7 +1876,7 @@ async function callGeminiApi(
         : undefined
       if (usageMeta) {
         console.log(
-          `[Gemini usage] step ${state?.step ?? '?'} ${model}: prompt ${usageMeta.promptTokenCount || 0}` +
+          `[Gemini usage] step ${state?.step ?? '?'} ${model}${usedCache ? ' (explicit cache)' : ''}: prompt ${usageMeta.promptTokenCount || 0}` +
           ` (cached ${usageMeta.cachedContentTokenCount || 0}), thinking ${usageMeta.thoughtsTokenCount || 0},` +
           ` output ${usageMeta.candidatesTokenCount || 0}, tools ${toolSet.length}`
         )
