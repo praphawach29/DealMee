@@ -205,11 +205,11 @@ export default function SettingsForm({ shop, onNavigateToChannels }: SettingsFor
             </label>
             <span className="text-[10px] text-success-green font-bold px-2 py-0.5 rounded-full bg-success-green/10 border border-success-green/20 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-success-green animate-pulse"></span>
-              ความเสถียร 99.9%
+              ระบบสำรองพร้อม
             </span>
           </div>
           <p className="text-[11px] text-on-surface-variant">
-            ระบบกำหนดมาตรฐานโมเดลที่ดีที่สุดและคุ้มค่าโควต้าให้โดยอัตโนมัติ พร้อมระบบสำรองข้ามค่ายเพื่อความต่อเนื่องของธุรกิจ
+            DealMee เลือกและปรับโมเดล AI ให้อัตโนมัติ พร้อมระบบสำรองข้ามค่ายเพื่อให้บอทตอบลูกค้าได้ต่อเนื่อง
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -220,10 +220,10 @@ export default function SettingsForm({ shop, onNavigateToChannels }: SettingsFor
                 <span className="text-[10px] font-bold text-electric-blue bg-electric-blue/10 px-2 py-0.5 rounded-md">
                   โมเดลหลัก (Primary)
                 </span>
-                <span className="text-xs font-bold text-on-surface">Gemini 3.8 Flash Ultra</span>
+                <span className="text-xs font-bold text-on-surface">Google Gemini</span>
               </div>
               <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                ขับเคลื่อนแชทขายของอัตโนมัติ (LINE/FB) และ Copilot วิเคราะห์ธุรกิจ ด้วยความเร็วตอบสนองสูงพิเศษ ~1.1s ดึงข้อมูลสดจากฐานข้อมูล
+                ขับเคลื่อนแชทขายของอัตโนมัติ (LINE/FB) และ Copilot วิเคราะห์ธุรกิจ โดยดึงข้อมูลสินค้าและออเดอร์ล่าสุดของร้าน
               </p>
             </div>
 
@@ -234,10 +234,10 @@ export default function SettingsForm({ shop, onNavigateToChannels }: SettingsFor
                 <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-md">
                   สำรองฉุกเฉิน (Failover)
                 </span>
-                <span className="text-xs font-bold text-on-surface">ChatGPT (OpenAI)</span>
+                <span className="text-xs font-bold text-on-surface">OpenAI</span>
               </div>
               <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                สลับการทำงานอัตโนมัติทันทีหากเซิร์ฟเวอร์ Google มีปัญหา ทำให้แชทบอทของร้านไม่เคยล่มและไม่พลาดทุกออเดอร์
+                หากบริการของ Google ขัดข้อง ระบบจะสลับไปใช้อีกค่ายให้อัตโนมัติ บอทจึงยังตอบลูกค้าได้ต่อ
               </p>
             </div>
           </div>
@@ -245,8 +245,8 @@ export default function SettingsForm({ shop, onNavigateToChannels }: SettingsFor
           <div className="bg-surface-container/60 border border-outline-variant/30 rounded-xl p-3 flex items-start gap-2.5 text-[11px] text-on-surface-variant">
             <Cpu className="w-4 h-4 text-electric-blue shrink-0 mt-0.5" />
             <div>
-              <span className="font-semibold text-on-surface">การจัดการโควต้าอัตโนมัติ (Zero Maintenance): </span>
-              DealMee ดูแลและปรับจูนความเร็วตลอด 24 ชม. ไม่มีการหักโควต้าซ้ำซ้อน และควบคุมต้นทุนแพ็กเกจให้คุ้มค่าที่สุดสำหรับร้านค้า
+              <span className="font-semibold text-on-surface">ไม่ต้องตั้งค่าเอง (Zero Maintenance): </span>
+              DealMee ดูแลการเลือกโมเดลและการอัปเดตให้ทั้งหมด ร้านค้าไม่ต้องตั้งค่า API Key หรือโควต้าเอง
             </div>
           </div>
         </div>
