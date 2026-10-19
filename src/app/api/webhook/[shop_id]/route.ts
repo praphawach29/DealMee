@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server'
+import { botMayReplyNow } from '@/lib/shop/businessHours'
 import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { processSalesAgentChat, type AgentResult } from '@/lib/ai/salesAgentEngine'
@@ -75,7 +76,8 @@ export async function POST(
     const lineToken = shop.line_token ? shop.line_token.trim() : undefined
     const lineSecret = shop.line_secret ? shop.line_secret.trim() : undefined
     const features = (shop.features as Record<string, boolean>) || {}
-    const isAutoReplyEnabled = features.auto_reply !== false
+    // Off when switched off, or while the shop is open and answers customers itself (business hours)
+    const isAutoReplyEnabled = features.auto_reply !== false && botMayReplyNow(features)
 
     // 2. Verify LINE Signature (reject fake webhooks). A missing signature is rejected too:
     // otherwise anyone could post fake events simply by leaving the header out.

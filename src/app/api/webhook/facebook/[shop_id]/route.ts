@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server'
+import { botMayReplyNow } from '@/lib/shop/businessHours'
 import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
@@ -158,7 +159,8 @@ export async function POST(
 
     const entries = body.entry || []
     const features = (shop.features as Record<string, boolean>) || {}
-    const isAutoReplyEnabled = features.auto_reply !== false
+    // Off when switched off, or while the shop is open and answers customers itself (business hours)
+    const isAutoReplyEnabled = features.auto_reply !== false && botMayReplyNow(features)
 
     // Meta wants a 200 within seconds and redelivers otherwise, which used to make the
     // bot answer twice; acknowledge now and let the AI work after the response.

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import ModulesView from './ModulesView'
 import { DEFAULT_PENDING_ORDER_EXPIRY_HOURS, PENDING_ORDER_EXPIRY_OPTIONS } from '@/lib/orders/pendingOrderExpiry'
+import { readBusinessHours } from '@/lib/shop/businessHours'
 
 export default async function ModulesPage() {
   const supabase = await createClient()
@@ -33,6 +34,7 @@ export default async function ModulesPage() {
         initialDiscountCap={discountCap}
         initialFollowUp={followUpConfig}
         initialOrderExpiryHours={orderExpiryHours}
+        initialBusinessHours={readBusinessHours(shop?.features as Record<string, any>)}
       />
     </div>
   )
