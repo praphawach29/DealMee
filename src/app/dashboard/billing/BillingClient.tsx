@@ -8,7 +8,7 @@ import { PlatformBillingSettings } from '@/lib/billing/manualBilling'
 import type { PlanLimits } from '@/lib/billing/planLimits'
 import TopUpModal from './TopUpModal'
 import { buyPlanWithWallet, buyAddonWithWallet, setWalletAutoRenew } from './actions'
-import { FileText, ExternalLink, CheckCircle2, Clock, XCircle, Wallet, Plus, MessageSquare, Receipt, AlertTriangle } from 'lucide-react'
+import { FileText, ExternalLink, CheckCircle2, Clock, XCircle, Wallet, Plus, MessageSquare, Receipt, AlertTriangle, X, ShoppingBag } from 'lucide-react'
 
 interface AddonPack {
   key: string
@@ -57,6 +57,15 @@ const TRANSACTION_LABEL_TH: Record<string, string> = {
   plan_credit: 'คืนมูลค่าแพ็กเกจเดิม',
   addon: 'แพ็กเสริม',
   adjust: 'ปรับยอดโดยทีมงาน',
+}
+
+interface PendingPurchase {
+  key: string
+  title: string
+  detail: string
+  note?: string
+  price: number
+  run: () => Promise<any>
 }
 
 function baht(value: number) {
@@ -112,6 +121,7 @@ export default function BillingClient({
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [portalLoading, setPortalLoading] = useState(false)
+  const [pendingPurchase, setPendingPurchase] = useState<PendingPurchase | null>(null)
 
   const currentPlanKey = limits.planKey
   const currentPlan = plans.find((p) => p.key === currentPlanKey)
@@ -134,8 +144,7 @@ export default function BillingClient({
     setTopUpAmount(Math.max(100, Math.ceil(amount || 1000)))
   }
 
-  const runPurchase = (key: string, confirmText: string, purchase: () => Promise<any>) => {
-    if (!window.confirm(confirmText)) return
+  const runPurchase = (key: string, purchase: () => Promise<any>) => {
     setBusyKey(key)
     setNotice(null)
     startTransition(async () => {
@@ -151,22 +160,36 @@ export default function BillingClient({
     })
   }
 
+  const confirmPurchase = () => {
+    if (!pendingPurchase) return
+    const { key, run } = pendingPurchase
+    setPendingPurchase(null)
+    runPurchase(key, run)
+  }
+
   const handleBuyPlan = (plan: PlanItem) => {
     const isSamePlan = paysFromWallet && storedPlanKey === plan.key && !lapsed
-    const switching = paysFromWallet && storedPlanKey !== plan.key && expiresAt && expiresAt.getTime() > Date.now()
-    const text = isSamePlan
-      ? `ต่ออายุแพ็กเกจ ${plan.name} ล่วงหน้าอีก 30 วัน\nหักจากกระเป๋า ${baht(plan.price)}`
-      : `ซื้อแพ็กเกจ ${plan.name} 30 วัน\nหักจากกระเป๋า ${baht(plan.price)}${switching ? '\n\nมูลค่าวันที่เหลือของแพ็กเกจเดิมจะคืนเข้ากระเป๋าให้ และแพ็กเกจใหม่เริ่มนับ 30 วันจากวันนี้' : ''}`
-    runPurchase(`plan:${plan.key}`, text, () => buyPlanWithWallet(plan.key))
+    const switching = Boolean(paysFromWallet && storedPlanKey !== plan.key && expiresAt && expiresAt.getTime() > Date.now())
+    setPendingPurchase({
+      key: `plan:${plan.key}`,
+      title: isSamePlan ? `ต่ออายุแพ็กเกจ ${plan.name}` : `ซื้อแพ็กเกจ ${plan.name}`,
+      detail: isSamePlan ? 'ต่ออายุล่วงหน้าอีก 30 วัน' : 'ใช้งาน 30 วัน เริ่มนับจากวันนี้',
+      note: switching ? 'มูลค่าวันที่เหลือของแพ็กเกจเดิมจะคืนเข้ากระเป๋าให้อัตโนมัติ' : undefined,
+      price: plan.price,
+      run: () => buyPlanWithWallet(plan.key),
+    })
   }
 
   const handleBuyAddon = (pack: AddonPack) => {
     const unit = pack.kind === 'slips' ? 'ครั้ง' : 'ข้อความ'
-    runPurchase(
-      `addon:${pack.key}`,
-      `ซื้อ${pack.name}\nหักจากกระเป๋า ${baht(pack.price)}\nใช้ได้ ${pack.valid_days} วัน หลังโควตา${unit}ของแพ็กเกจหมด`,
-      () => buyAddonWithWallet(pack.key)
-    )
+    setPendingPurchase({
+      key: `addon:${pack.key}`,
+      title: `ซื้อ${pack.name}`,
+      detail: `ใช้ได้ ${pack.valid_days} วัน`,
+      note: `ระบบจะใช้แพ็กเสริมนี้หลังโควตา${unit}ของแพ็กเกจหมด`,
+      price: pack.price,
+      run: () => buyAddonWithWallet(pack.key),
+    })
   }
 
   const handleAutoRenew = (value: boolean) => {
@@ -548,6 +571,19 @@ export default function BillingClient({
         </div>
       )}
 
+      {pendingPurchase && (
+        <PurchaseConfirmCard
+          purchase={pendingPurchase}
+          balance={wallet.balance}
+          onCancel={() => setPendingPurchase(null)}
+          onConfirm={confirmPurchase}
+          onTopUp={(shortfall) => {
+            setPendingPurchase(null)
+            openTopUp(shortfall)
+          }}
+        />
+      )}
+
       {topUpAmount !== null && (
         <TopUpModal
           isOpen
@@ -559,6 +595,125 @@ export default function BillingClient({
           platformSettings={platformSettings}
         />
       )}
+    </div>
+  )
+}
+
+function PurchaseConfirmCard({
+  purchase,
+  balance,
+  onCancel,
+  onConfirm,
+  onTopUp,
+}: {
+  purchase: PendingPurchase
+  balance: number
+  onCancel: () => void
+  onConfirm: () => void
+  onTopUp: (shortfall: number) => void
+}) {
+  const after = balance - purchase.price
+  const shortfall = after < 0 ? -after : 0
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in"
+      onClick={onCancel}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="purchase-confirm-title"
+        className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden text-slate-900 dark:text-white"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 py-4 flex items-center justify-between bg-gradient-to-r from-indigo-900 via-indigo-800 to-purple-900 text-white">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+              <ShoppingBag className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <h3 id="purchase-confirm-title" className="font-bold text-sm sm:text-base truncate">
+                {purchase.title}
+              </h3>
+              <p className="text-[11px] text-indigo-200">{purchase.detail}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="ปิด"
+            className="p-1.5 rounded-xl hover:bg-white/15 text-indigo-200 hover:text-white transition-colors cursor-pointer"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="text-center">
+            <p className="text-xs text-slate-500 dark:text-slate-400">ราคา</p>
+            <p className="text-3xl font-black text-indigo-600 dark:text-indigo-400 font-mono">{baht(purchase.price)}</p>
+          </div>
+
+          <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 p-3.5 space-y-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-slate-500 dark:text-slate-400">ยอดในกระเป๋าตอนนี้</span>
+              <span className="font-mono font-bold">{baht(balance)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500 dark:text-slate-400">หักค่า{purchase.key.startsWith('plan:') ? 'แพ็กเกจ' : 'แพ็กเสริม'}</span>
+              <span className="font-mono font-bold text-rose-600">-{baht(purchase.price)}</span>
+            </div>
+            <div className="flex justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
+              <span className="font-bold">คงเหลือหลังซื้อ</span>
+              <span className={`font-mono font-black ${shortfall > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                {shortfall > 0 ? '-' : ''}
+                {baht(Math.abs(after))}
+              </span>
+            </div>
+          </div>
+
+          {purchase.note && (
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">{purchase.note}</p>
+          )}
+
+          {shortfall > 0 && (
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-[11px] text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
+              <span>ยอดในกระเป๋าไม่พอ ต้องเติมอีกอย่างน้อย {baht(shortfall)}</span>
+            </div>
+          )}
+
+          <div className="flex gap-2.5 pt-1">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs transition-colors cursor-pointer min-h-[44px]"
+            >
+              ยกเลิก
+            </button>
+            {shortfall > 0 ? (
+              <button
+                type="button"
+                onClick={() => onTopUp(shortfall)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white font-bold text-xs shadow-md transition-all cursor-pointer min-h-[44px]"
+              >
+                <Plus className="h-4 w-4" />
+                เติมเงิน
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onConfirm}
+                autoFocus
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white font-bold text-xs shadow-md transition-all cursor-pointer min-h-[44px]"
+              >
+                ยืนยันซื้อ
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
