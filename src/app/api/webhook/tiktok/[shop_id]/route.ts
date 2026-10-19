@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
+import { verifyTikTokShopSignature } from '@/lib/marketplace/webhookSignature'
 
 const supabase = createAdminClient()
 
@@ -30,7 +31,12 @@ export async function POST(
 ) {
   try {
     const { shop_id } = await params
-    const rawBody = await req.json().catch(() => ({}))
+    // The signature covers the exact bytes received, so read the body as text first
+    const rawText = await req.text()
+    let rawBody: any = {}
+    try {
+      rawBody = JSON.parse(rawText)
+    } catch {}
 
     const { data: shop } = await supabase
       .from('shops')
@@ -40,6 +46,19 @@ export async function POST(
 
     if (!shop) {
       return NextResponse.json({ error: 'Shop not found' }, { status: 404 })
+    }
+
+    // Only TikTok, holding the shop's app secret, can produce this signature. Without it
+    // anyone with the URL could create conversations and spend the shop's AI quota.
+    const appKey = String(shop.tiktok_app_key || '').trim()
+    const appSecret = String(shop.tiktok_app_secret || '').trim()
+    if (!appKey || !appSecret) {
+      console.error(`[TikTok Webhook] Shop ${shop_id} has no TikTok app key/secret; rejecting unverifiable webhook`)
+      return NextResponse.json({ code: -1, error: 'TikTok app not configured' }, { status: 401 })
+    }
+    if (!verifyTikTokShopSignature(rawText, req.headers.get('authorization'), appKey, appSecret)) {
+      console.error(`[TikTok Webhook] Invalid signature for shop ${shop_id}`)
+      return NextResponse.json({ code: -1, error: 'Invalid signature' }, { status: 401 })
     }
 
     // Extract message data from standard TikTok Shop webhook payload
