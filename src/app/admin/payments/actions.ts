@@ -183,6 +183,7 @@ export async function updatePlatformSettingsAction(
   }
 
   revalidatePath('/admin/payments')
+  revalidatePath('/admin/payment-settings')
   revalidatePath('/dashboard/billing')
   return { success: true }
 }
