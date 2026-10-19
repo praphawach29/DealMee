@@ -23,27 +23,14 @@ export default async function ReceiptPage({ params }: PageProps) {
 
   const admin = createAdminClient()
 
-  // Fetch payment row
-  const { data: payment, error } = await admin
-    .from('billing_payments')
-    .select(
-      `
-      *,
-      shops:shop_id (
-        id,
-        name,
-        email,
-        company_name,
-        company_tax_id,
-        company_address,
-        company_phone,
-        company_email
-      )
-    `
-    )
-    .eq('id', id)
-    .single()
+  // Fetch payment row. The shop is read separately with select('*'): naming its columns
+  // (one of them, shops.email, doesn't exist in production) made the query fail and every
+  // receipt link show "not found".
+  const { data: payment, error } = await admin.from('billing_payments').select('*').eq('id', id).maybeSingle()
 
+  if (error) {
+    console.error('[Receipt] Failed to load payment:', error)
+  }
   if (error || !payment) {
     notFound()
   }
@@ -75,7 +62,7 @@ export default async function ReceiptPage({ params }: PageProps) {
   }
 
   const platformSettings = await getPlatformBillingSettings()
-  const shopData: any = Array.isArray(payment.shops) ? payment.shops[0] : payment.shops
+  const { data: shopData } = await admin.from('shops').select('*').eq('id', payment.shop_id).maybeSingle()
 
   const receiptData: ReceiptData = {
     id: payment.id,
