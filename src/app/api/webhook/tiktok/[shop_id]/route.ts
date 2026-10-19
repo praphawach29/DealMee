@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server'
+import { botMayReplyNow } from '@/lib/shop/businessHours'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
@@ -158,8 +159,9 @@ async function draftReply({ shop, shopId: shop_id, data, senderId, text }: {
     .select('id')
     .single()
 
-  // The message stays in the Inbox; with AI replies switched off nothing is drafted
-  if (shop.features?.auto_reply === false) return
+  // The message stays in the Inbox; with AI replies switched off (or the shop open and
+  // answering itself) nothing is drafted
+  if (shop.features?.auto_reply === false || !botMayReplyNow(shop.features)) return
 
   // 4. Run AI engine to draft response
   const agentResult = await processSalesAgentChat({

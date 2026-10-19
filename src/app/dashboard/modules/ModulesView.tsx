@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { updateShopFeatures, updateBotDiscountCap, updateFollowUpConfig, updatePendingOrderExpiry } from './actions'
+import { updateShopFeatures, updateBotDiscountCap, updateFollowUpConfig, updatePendingOrderExpiry, updateBusinessHours } from './actions'
 import { PENDING_ORDER_EXPIRY_OPTIONS } from '@/lib/orders/pendingOrderExpiry'
+import { DEFAULT_BUSINESS_HOURS, THAI_DAY_SHORT, type BusinessHours } from '@/lib/shop/businessHours'
 
 interface ModulesViewProps {
   initialFeatures: Record<string, boolean>
@@ -11,6 +12,7 @@ interface ModulesViewProps {
   initialDiscountCap?: number
   initialFollowUp?: Record<string, any>
   initialOrderExpiryHours?: number
+  initialBusinessHours?: BusinessHours
 }
 
 export default function ModulesView({
@@ -19,6 +21,7 @@ export default function ModulesView({
   initialDiscountCap = 0,
   initialFollowUp = {},
   initialOrderExpiryHours = 24,
+  initialBusinessHours = DEFAULT_BUSINESS_HOURS,
 }: ModulesViewProps) {
   const router = useRouter()
   const isBookingDefault = bizType === 'booking' || bizType === 'service'
@@ -66,6 +69,26 @@ export default function ModulesView({
       showToast(res?.success || 'บันทึกแล้ว')
     }
   }
+
+  const [businessHours, setBusinessHours] = useState<BusinessHours>(initialBusinessHours)
+  const [savingHours, setSavingHours] = useState(false)
+
+  const saveBusinessHours = async () => {
+    setSavingHours(true)
+    const res = await updateBusinessHours(businessHours)
+    setSavingHours(false)
+    if (res?.error) {
+      alert(res.error)
+    } else {
+      showToast(res?.success || 'บันทึกแล้ว')
+    }
+  }
+
+  const toggleDay = (day: number) =>
+    setBusinessHours((h) => ({
+      ...h,
+      days: h.days.includes(day) ? h.days.filter((d) => d !== day) : [...h.days, day].sort(),
+    }))
 
   const saveOrderExpiry = async (hours: number) => {
     const previous = orderExpiryHours
@@ -369,6 +392,107 @@ export default function ModulesView({
             ))}
           </select>
         </label>
+      </section>
+
+      {/* Business hours */}
+      <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-on-surface font-headline-sm">🕐 เวลาทำการของบอท</h2>
+            <p className="text-[11px] sm:text-xs text-on-surface-variant mt-0.5">
+              กำหนดเวลาที่แอดมินอยู่ บอทจะบอกลูกค้าได้ว่าแอดมินจะตอบกลับเมื่อไร (เวลาประเทศไทย)
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={businessHours.enabled}
+            aria-label="ใช้เวลาทำการ"
+            onClick={() => setBusinessHours((h) => ({ ...h, enabled: !h.enabled }))}
+            className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-200 cursor-pointer shrink-0 ${businessHours.enabled ? 'bg-electric-blue' : 'bg-slate-300'}`}
+          >
+            <div className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${businessHours.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+          </button>
+        </div>
+
+        <div className={`space-y-4 ${businessHours.enabled ? '' : 'opacity-50 pointer-events-none'}`}>
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-on-surface">วันทำการ</p>
+            <div className="flex flex-wrap gap-1.5">
+              {[1, 2, 3, 4, 5, 6, 0].map((d) => {
+                const on = businessHours.days.includes(d)
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => toggleDay(d)}
+                    className={`min-w-[44px] px-3 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                      on ? 'bg-electric-blue text-white border-electric-blue' : 'bg-merchant-bg text-on-surface-variant border-outline-variant/60'
+                    }`}
+                  >
+                    {THAI_DAY_SHORT[d]}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 text-sm text-on-surface-variant">
+            <span className="text-xs font-bold text-on-surface">เวลา</span>
+            <input
+              type="time"
+              value={businessHours.open}
+              onChange={(e) => setBusinessHours((h) => ({ ...h, open: e.target.value }))}
+              className="rounded-xl border border-outline-variant/60 bg-merchant-bg px-3 py-2 text-sm text-on-surface"
+              aria-label="เวลาเปิด"
+            />
+            <span>ถึง</span>
+            <input
+              type="time"
+              value={businessHours.close}
+              onChange={(e) => setBusinessHours((h) => ({ ...h, close: e.target.value }))}
+              className="rounded-xl border border-outline-variant/60 bg-merchant-bg px-3 py-2 text-sm text-on-surface"
+              aria-label="เวลาปิด"
+            />
+            {businessHours.close < businessHours.open && <span className="text-[11px]">(ปิดหลังเที่ยงคืน)</span>}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {([
+              ['outside_hours', 'บอทตอบเฉพาะนอกเวลาทำการ', 'ในเวลาทำการ บอทจะเงียบ ข้อความลูกค้าเข้ากล่องข้อความให้แอดมินตอบเอง'],
+              ['always', 'บอทตอบตลอด 24 ชั่วโมง', 'บอทตอบทุกเวลา นอกเวลาทำการจะแจ้งลูกค้าว่าแอดมินจะกลับมาตอบเมื่อไร'],
+            ] as const).map(([mode, title, desc]) => {
+              const on = businessHours.bot_mode === mode
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setBusinessHours((h) => ({ ...h, bot_mode: mode }))}
+                  className={`text-left p-3.5 rounded-xl border transition-colors cursor-pointer ${
+                    on ? 'border-electric-blue bg-electric-blue/5' : 'border-outline-variant/50 bg-merchant-bg'
+                  }`}
+                >
+                  <span className="flex items-center gap-2 text-xs sm:text-sm font-bold text-on-surface">
+                    <span className={`w-4 h-4 rounded-full border-2 shrink-0 ${on ? 'border-electric-blue bg-electric-blue shadow-[inset_0_0_0_2px_white]' : 'border-slate-300'}`} />
+                    {title}
+                  </span>
+                  <span className="block text-[11px] text-on-surface-variant mt-1 leading-relaxed">{desc}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          disabled={savingHours}
+          onClick={saveBusinessHours}
+          className="rounded-xl bg-electric-blue px-4 py-2 text-xs sm:text-sm font-bold text-white disabled:opacity-50"
+        >
+          {savingHours ? 'กำลังบันทึก...' : 'บันทึกเวลาทำการ'}
+        </button>
       </section>
     </div>
   )

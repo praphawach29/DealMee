@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { businessHoursPromptContext } from '@/lib/shop/businessHours'
 import { salesAutomationEnabled, SALES_AUTOMATION_TOOLS, SALES_LOCKED_PROMPT } from '@/lib/billing/trial'
 import { getPlanLimits, getAddonRemaining, consumeAddonCredit } from '@/lib/billing/planLimits'
 import { selectRelevantKnowledge } from '@/lib/ai/knowledgeSelect'
@@ -1331,7 +1332,7 @@ ${paymentInfo}`
   const goldenClosersContext = formatGoldenClosersPromptContext(goldenTrajectories)
 
   const dynamicSystemPrompt = `${salesStageContext}${goldenClosersContext ? `\n\n${goldenClosersContext}` : ''}
-${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}
+${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}${businessHoursPromptContext(shop.features)}
 ${historyContext}`
 
   // Free plan (incl. ended trials): sales automation is locked and orders go to the admin

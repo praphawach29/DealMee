@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { revalidatePath } from 'next/cache'
 import { PENDING_ORDER_EXPIRY_OPTIONS } from '@/lib/orders/pendingOrderExpiry'
+import { isValidTime, type BusinessHours } from '@/lib/shop/businessHours'
 
 export async function updateShopFeatures(features: Record<string, boolean>) {
   const supabase = await createClient()
@@ -152,4 +153,50 @@ export async function updatePendingOrderExpiry(hours: number) {
 
   revalidatePath('/dashboard/modules')
   return { success: value > 0 ? `ออเดอร์ที่ไม่ชำระภายใน ${value} ชั่วโมงจะถูกยกเลิกอัตโนมัติ` : 'ปิดการยกเลิกออเดอร์ค้างชำระอัตโนมัติแล้ว' }
+}
+
+/** Saves features.business_hours (when the shop is open and whether the bot answers then) */
+export async function updateBusinessHours(hours: BusinessHours) {
+  const supabase = await createClient()
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return { error: 'กรุณาเข้าสู่ระบบอีกครั้ง' }
+  }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop?.id) {
+    return { error: 'ไม่พบข้อมูลร้านค้า' }
+  }
+
+  const days = [...new Set((hours.days || []).map(Number))].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort()
+  if (!isValidTime(hours.open) || !isValidTime(hours.close)) {
+    return { error: 'รูปแบบเวลาไม่ถูกต้อง' }
+  }
+  if (hours.enabled && days.length === 0) {
+    return { error: 'เลือกวันทำการอย่างน้อย 1 วัน' }
+  }
+
+  const value: BusinessHours = {
+    enabled: hours.enabled === true,
+    days,
+    open: hours.open,
+    close: hours.close,
+    bot_mode: hours.bot_mode === 'always' ? 'always' : 'outside_hours',
+  }
+
+  const { error } = await supabase
+    .from('shops')
+    .update({
+      features: { ...((shop.features as Record<string, any>) || {}), business_hours: value },
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', shop.id)
+
+  if (error) {
+    return { error: `บันทึกไม่สำเร็จ: ${error.message}` }
+  }
+
+  revalidatePath('/dashboard/modules')
+  return { success: value.enabled ? 'บันทึกเวลาทำการแล้ว' : 'ปิดการใช้เวลาทำการแล้ว บอทตอบตลอด 24 ชั่วโมง' }
 }
