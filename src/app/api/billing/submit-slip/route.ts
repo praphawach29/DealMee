@@ -99,7 +99,10 @@ export async function POST(req: NextRequest) {
 
     const hasSlipApiKey = process.env.EASYSLIP_API_KEY || process.env.THUNDER_API_KEY || process.env.SLIPOK_API_KEY
     if (hasSlipApiKey) {
-      const easySlipResult = await verifySlipWithEasySlip(base64, mimeType)
+      const easySlipResult = await verifySlipWithEasySlip(base64, mimeType, [
+        platformSettings.promptpay_id,
+        platformSettings.bank_account_number,
+      ])
 
       if (easySlipResult.success && easySlipResult.data) {
         const slipData = easySlipResult.data
@@ -116,7 +119,9 @@ export async function POST(req: NextRequest) {
         const receiverAccount = (slipData.receiver?.account?.value || '').replace(/[^0-9]/g, '')
         const receiverName = slipData.receiver?.displayName || ''
 
+        // The slip usually shows the bank account behind the PromptPay, so check every account number on it
         const isReceiverMatch =
+          easySlipResult.receiverCheck === 'match' ||
           !cleanPromptPay ||
           receiverAccount.includes(cleanPromptPay.slice(-4)) ||
           (platformSettings.account_name &&

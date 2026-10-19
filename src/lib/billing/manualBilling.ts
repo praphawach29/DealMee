@@ -144,7 +144,8 @@ export async function generatePromptPayQRImage(
  */
 export async function verifySlipWithEasySlip(
   imageBase64: string,
-  mimeType: string = 'image/jpeg'
+  mimeType: string = 'image/jpeg',
+  receiverAccountIds: Array<string | null | undefined> = []
 ): Promise<{
   success: boolean
   status: number
@@ -157,10 +158,12 @@ export async function verifySlipWithEasySlip(
     receiver?: { displayName?: string; account?: { value: string } }
     ref1?: string
   }
+  /** Whether the slip's receiver is one of the given accounts (see checkSlipReceiver) */
+  receiverCheck?: 'match' | 'mismatch' | 'unknown'
   message?: string
 }> {
   try {
-    const { verifySlip } = await import('@/lib/slip/verifySlip')
+    const { verifySlip, checkSlipReceiver } = await import('@/lib/slip/verifySlip')
     const result = await verifySlip({ imageBase64, mimeType })
     if (result.success) {
       return {
@@ -175,6 +178,7 @@ export async function verifySlipWithEasySlip(
           receiver: { displayName: result.receiverName, account: { value: result.receiverAccount || '' } },
           ref1: result.transRef,
         },
+        receiverCheck: checkSlipReceiver(result, receiverAccountIds),
       }
     }
     return {
