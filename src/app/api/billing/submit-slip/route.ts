@@ -209,6 +209,15 @@ export async function POST(req: NextRequest) {
           message: `เติมเงินสำเร็จ ฿${billedAmount.toLocaleString('th-TH')} ยอดคงเหลือ ฿${Number(verifyResult.balance || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })} 🎉`,
         })
       }
+
+      // The slip checked out but crediting failed: keep it for an admin and leave the reason on the payment
+      const reason = verifyError?.message || 'verify_manual_payment did not succeed'
+      console.error('[SubmitSlip] Auto-verify failed:', reason)
+      easySlipMessage = 'สลิปถูกต้อง แต่ระบบเติมเงินเข้ากระเป๋าอัตโนมัติไม่สำเร็จ รอแอดมินอนุมัติ'
+      await admin
+        .from('billing_payments')
+        .update({ customer_notes: `${customerNotes} [Auto-verify failed: ${reason}]`.trim() })
+        .eq('id', newPayment.id)
     }
 
     // 6. Otherwise, remains pending for admin review
