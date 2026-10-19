@@ -10,6 +10,7 @@ import {
   TrendingUp,
   History,
   Sparkles,
+  Landmark,
 } from 'lucide-react'
 
 interface AdminSidebarNavProps {
@@ -30,6 +31,11 @@ export default function AdminSidebarNav({ onNavClick }: AdminSidebarNavProps) {
       label: 'รายการชำระเงิน',
       href: '/admin/payments',
       icon: Receipt,
+    },
+    {
+      label: 'ตั้งค่าบัญชีรับเงิน',
+      href: '/admin/payment-settings',
+      icon: Landmark,
     },
     {
       label: 'จัดการร้านค้า',
