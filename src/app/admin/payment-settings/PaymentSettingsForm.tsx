@@ -1,21 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { Loader2, Check, Save, Building, BellRing, Send } from 'lucide-react'
-import {
-  updatePlatformSettingsAction,
-  updatePlatformAlertShopAction,
-  sendTestPlatformAlertAction,
-  type AlertShopOption,
-} from '../payments/actions'
+import { Loader2, Check, Save, Building } from 'lucide-react'
+import { updatePlatformSettingsAction } from '../payments/actions'
 import { PlatformBillingSettings } from '@/lib/billing/manualBilling'
 
 export default function PaymentSettingsForm({
   initialSettings,
-  alertShops = [],
 }: {
   initialSettings: PlatformBillingSettings
-  alertShops?: AlertShopOption[]
 }) {
   const [settings, setSettings] = useState<PlatformBillingSettings>(initialSettings)
   const [savingSettings, setSavingSettings] = useState(false)
@@ -38,34 +31,6 @@ export default function PaymentSettingsForm({
     } finally {
       setSavingSettings(false)
     }
-  }
-
-  // Top-up alerts to the owner's LINE (saved on their own, so the form above works without the column)
-  const [alertShopId, setAlertShopId] = useState<string>(initialSettings.notify_shop_id || '')
-  const [alertBusy, setAlertBusy] = useState<'save' | 'test' | null>(null)
-  const [alertNotice, setAlertNotice] = useState<{ ok: boolean; text: string } | null>(null)
-  const chosenShop = alertShops.find((s) => s.id === alertShopId)
-
-  const handleSaveAlertShop = async (shopId: string) => {
-    setAlertShopId(shopId)
-    setAlertBusy('save')
-    setAlertNotice(null)
-    const res = await updatePlatformAlertShopAction(shopId || null)
-    setAlertBusy(null)
-    setAlertNotice(
-      res.success
-        ? { ok: true, text: shopId ? 'บันทึกแล้ว จะแจ้งเตือนเมื่อร้านค้าเติมเงิน' : 'ปิดการแจ้งเตือนแล้ว' }
-        : { ok: false, text: res.error || 'บันทึกไม่สำเร็จ' }
-    )
-  }
-
-  const handleTestAlert = async () => {
-    if (!alertShopId) return
-    setAlertBusy('test')
-    setAlertNotice(null)
-    const res = await sendTestPlatformAlertAction(alertShopId)
-    setAlertBusy(null)
-    setAlertNotice(res.success ? { ok: true, text: 'ส่งข้อความทดสอบแล้ว ลองเปิด LINE ดูครับ' } : { ok: false, text: res.error || 'ส่งไม่สำเร็จ' })
   }
 
   return (
@@ -240,64 +205,6 @@ export default function PaymentSettingsForm({
           </div>
         </div>
       </form>
-
-      {/* Top-up alerts to the owner's LINE */}
-      <div className="max-w-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-            <BellRing className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">แจ้งเตือนการเติมเงินเข้า LINE ของคุณ</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              เมื่อร้านค้าเติมเงินสำเร็จ หรือมีสลิปรอตรวจ ระบบจะส่งข้อความผ่าน LINE OA ของร้านที่เลือก ไปยัง LINE แอดมินที่ผูกกับร้านนั้น
-            </p>
-          </div>
-        </div>
-
-        {alertShops.length === 0 ? (
-          <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl p-3">
-            ยังไม่มีร้านที่เชื่อม LINE OA เชื่อม LINE OA ให้ร้านของคุณในหน้าตั้งค่าร้านก่อน แล้วกลับมาเลือกที่นี่
-          </p>
-        ) : (
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 text-xs">
-            <select
-              value={alertShopId}
-              disabled={alertBusy !== null}
-              onChange={(e) => handleSaveAlertShop(e.target.value)}
-              className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50"
-              aria-label="ร้านที่ใช้ส่งแจ้งเตือน"
-            >
-              <option value="">ไม่แจ้งเตือน</option>
-              {alertShops.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                  {s.ready ? '' : ' (ยังไม่ได้ผูก LINE แอดมิน)'}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleTestAlert}
-              disabled={!alertShopId || alertBusy !== null}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-all disabled:opacity-50 cursor-pointer min-h-[40px]"
-            >
-              {alertBusy === 'test' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              <span>ส่งข้อความทดสอบ</span>
-            </button>
-          </div>
-        )}
-
-        {chosenShop && !chosenShop.ready && (
-          <p className="text-[11px] text-amber-700 dark:text-amber-300">
-            ร้านนี้ยังไม่ได้ผูก LINE แอดมิน: เข้าแดชบอร์ดของร้านนี้ → ตั้งค่า → ช่องทางแชท → &quot;การแจ้งเตือนแอดมินผ่าน LINE&quot; แล้วทำตามขั้นตอนผูกบัญชี
-          </p>
-        )}
-
-        {alertNotice && (
-          <p className={`text-xs font-semibold ${alertNotice.ok ? 'text-emerald-600' : 'text-rose-600'}`}>{alertNotice.text}</p>
-        )}
-      </div>
     </div>
   )
 }
