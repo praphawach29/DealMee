@@ -8,7 +8,14 @@ import {
   getPlatformBillingSettings,
 } from '@/lib/billing/manualBilling'
 import { SUPER_ADMIN_EMAILS } from '@/app/admin/layout'
-import { canCarryAlerts, notifyPlatformOwner } from '@/lib/billing/platformAlerts'
+import qrcode from 'qrcode'
+import { notifyPlatformOwner } from '@/lib/billing/platformAlerts'
+import {
+  ensureLinkCode,
+  fetchBotBasicId,
+  getPlatformLineConfig,
+  savePlatformLineConfig,
+} from '@/lib/billing/platformLineAlerts'
 
 async function assertSuperAdmin() {
   const supabase = await createClient()
@@ -188,56 +195,91 @@ export async function updatePlatformSettingsAction(
   return { success: true }
 }
 
-export interface AlertShopOption {
-  id: string
-  name: string
+export interface PlatformLineStatus {
+  /** False until migration 20261023000000_platform_line_alerts.sql has run */
   ready: boolean
+  connected: boolean
+  basicId: string | null
+  linked: boolean
+  adminName: string | null
+  linkCode: string | null
+  deepLink: string | null
+  qrDataUrl: string | null
 }
 
-/** Shops with a LINE OA, for choosing which one sends top-up alerts; ready = admin LINE linked */
-export async function listAlertShopsAction(): Promise<AlertShopOption[]> {
+/** State of the platform's LINE OA for owner alerts; never returns the credentials */
+export async function getPlatformLineStatusAction(): Promise<PlatformLineStatus> {
   await assertSuperAdmin()
-  const { data } = await createAdminClient()
-    .from('shops')
-    .select('*')
-    .not('line_token', 'is', null)
-    .order('created_at', { ascending: true })
-    .limit(200)
-  return (data || [])
-    .filter((s: any) => String(s.line_token || '').trim())
-    .map((s: any) => ({ id: s.id, name: s.name || 'ไม่ระบุชื่อร้าน', ready: canCarryAlerts(s) }))
+  const empty = { connected: false, basicId: null, linked: false, adminName: null, linkCode: null, deepLink: null, qrDataUrl: null }
+  let config
+  try {
+    config = await getPlatformLineConfig()
+  } catch {
+    return { ready: false, ...empty }
+  }
+
+  const connected = Boolean(config?.channel_access_token && config?.channel_secret)
+  const linked = Boolean(connected && config?.admin_line_user_id)
+  if (!connected || linked) {
+    return { ready: true, ...empty, connected, basicId: config?.bot_basic_id || null, linked, adminName: config?.admin_line_name || null }
+  }
+
+  const linkCode = await ensureLinkCode(config)
+  const deepLink = config?.bot_basic_id
+    ? `https://line.me/R/oaMessage/@${config.bot_basic_id}/?${encodeURIComponent('/admin-link ' + linkCode)}`
+    : null
+  let qrDataUrl: string | null = null
+  if (deepLink) {
+    try {
+      qrDataUrl = await qrcode.toDataURL(deepLink, { width: 280, margin: 2, color: { dark: '#0F172A', light: '#FFFFFF' } })
+    } catch {}
+  }
+  return { ready: true, connected, basicId: config?.bot_basic_id || null, linked, adminName: null, linkCode, deepLink, qrDataUrl }
 }
 
-/** Saves which shop's LINE OA carries top-up alerts (null turns them off) */
-export async function updatePlatformAlertShopAction(shopId: string | null) {
+/** Saves the OA's channel credentials after checking the token with LINE; a new channel needs linking again */
+export async function savePlatformLineChannelAction(input: { accessToken: string; channelSecret: string }) {
   await assertSuperAdmin()
-  const admin = createAdminClient()
-  const { data: existing } = await admin.from('platform_billing_settings').select('id').limit(1).maybeSingle()
-  if (!existing?.id) {
-    return { success: false, error: 'บันทึกข้อมูลบัญชีรับเงินก่อน แล้วค่อยตั้งค่าการแจ้งเตือน' }
+  const accessToken = (input.accessToken || '').trim()
+  const channelSecret = (input.channelSecret || '').trim()
+  if (!accessToken || !channelSecret) {
+    return { success: false, error: 'กรอกทั้ง Channel Access Token และ Channel Secret' }
   }
-  const { error } = await admin
-    .from('platform_billing_settings')
-    .update({ notify_shop_id: shopId || null, updated_at: new Date().toISOString() })
-    .eq('id', existing.id)
-  if (error) {
-    const missingColumn = /notify_shop_id/.test(error.message)
-    return {
-      success: false,
-      error: missingColumn ? 'ยังไม่ได้รัน SQL สำหรับการแจ้งเตือน (migration 20261022000000_platform_alert_shop.sql)' : error.message,
-    }
+
+  const basicId = await fetchBotBasicId(accessToken)
+  if (!basicId) {
+    return { success: false, error: 'LINE ไม่ยอมรับ Channel Access Token นี้ ตรวจว่าคัดลอกมาครบ (Messaging API → Channel access token)' }
   }
+
+  try {
+    const current = await getPlatformLineConfig()
+    const sameChannel = current?.bot_basic_id === basicId
+    await savePlatformLineConfig({
+      channel_access_token: accessToken,
+      channel_secret: channelSecret,
+      bot_basic_id: basicId,
+      ...(sameChannel ? {} : { admin_line_user_id: null, admin_line_name: null, link_code: null, link_code_expires_at: null }),
+    })
+  } catch (err: any) {
+    const missingTable = /platform_line_alerts/.test(err.message || '')
+    return { success: false, error: missingTable ? 'ยังไม่ได้รัน SQL สำหรับ LINE แจ้งเตือน (migration 20261023000000_platform_line_alerts.sql)' : err.message }
+  }
+
+  revalidatePath('/admin/payment-settings')
+  return { success: true, basicId }
+}
+
+export async function unlinkPlatformLineAdminAction() {
+  await assertSuperAdmin()
+  await savePlatformLineConfig({ admin_line_user_id: null, admin_line_name: null })
   revalidatePath('/admin/payment-settings')
   return { success: true }
 }
 
-export async function sendTestPlatformAlertAction(shopId: string) {
+export async function sendTestPlatformAlertAction() {
   await assertSuperAdmin()
   const sent = await notifyPlatformOwner(
-    '🔔 ทดสอบการแจ้งเตือน DealMee\nเมื่อร้านค้าเติมเงินเข้ากระเป๋า คุณจะได้รับข้อความแบบนี้ที่ LINE นี้',
-    shopId
+    '🔔 ทดสอบการแจ้งเตือน DealMee\nเมื่อร้านค้าเติมเงินเข้ากระเป๋า คุณจะได้รับข้อความแบบนี้ที่ LINE นี้'
   )
-  return sent
-    ? { success: true }
-    : { success: false, error: 'ส่งไม่สำเร็จ ตรวจว่าร้านนี้เชื่อม LINE OA และผูก LINE แอดมินไว้แล้ว' }
+  return sent ? { success: true } : { success: false, error: 'ส่งไม่สำเร็จ ตรวจว่าบันทึก Channel Access Token และผูก LINE ของคุณแล้ว' }
 }

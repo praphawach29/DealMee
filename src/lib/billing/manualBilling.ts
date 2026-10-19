@@ -13,8 +13,6 @@ export interface PlatformBillingSettings {
   company_address: string
   company_phone: string
   company_email: string
-  /** Shop whose LINE OA sends top-up alerts to its linked admin (the platform owner) */
-  notify_shop_id?: string | null
   updated_at?: string
 }
 
@@ -108,7 +106,6 @@ export async function getPlatformBillingSettings(): Promise<PlatformBillingSetti
       company_address: data.company_address || DEFAULT_PLATFORM_SETTINGS.company_address,
       company_phone: data.company_phone || DEFAULT_PLATFORM_SETTINGS.company_phone,
       company_email: companyEmail,
-      notify_shop_id: data.notify_shop_id || null,
       updated_at: data.updated_at,
     }
   } catch (err) {
