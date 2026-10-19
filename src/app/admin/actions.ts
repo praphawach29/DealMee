@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 
-import { SUPER_ADMIN_EMAILS } from './layout'
+import { isSuperAdminEmail } from '@/lib/auth/superAdmin'
 
 export interface PlanItem {
   id?: string
@@ -29,21 +29,7 @@ export async function verifySuperAdmin() {
     return { isSuperAdmin: false, user: null }
   }
 
-  if (SUPER_ADMIN_EMAILS.includes(user.email || '')) {
-    return { isSuperAdmin: true, user }
-  }
-
-  const { data: profile } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.role === 'superadmin') {
-    return { isSuperAdmin: true, user }
-  }
-
-  return { isSuperAdmin: false, user }
+  return { isSuperAdmin: isSuperAdminEmail(user.email), user }
 }
 
 export async function toggleShopStatus(shopId: string, currentStatus: string) {

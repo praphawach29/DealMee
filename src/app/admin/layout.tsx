@@ -4,18 +4,12 @@ import { redirect } from 'next/navigation'
 import AdminClientLayout from './AdminClientLayout'
 import Link from 'next/link'
 import { Lock } from 'lucide-react'
+import { isSuperAdminEmail } from '@/lib/auth/superAdmin'
 
 export const metadata: Metadata = {
   title: 'DealMee AI - ส่วนควบคุม Super Admin',
   description: 'พอร์ทัลจัดการระบบ DealMee AI Super Admin',
 }
-
-export const SUPER_ADMIN_EMAILS = [
-  'praphawach@gmail.com',
-  'admin@dealmee.app',
-  'admin@botify.ai',
-  'jack291625@gmail.com',
-]
 
 export default async function AdminLayout({
   children,
@@ -30,21 +24,7 @@ export default async function AdminLayout({
     redirect('/login')
   }
 
-  // Check if current user email is in superadmin list
-  let isSuperAdmin = SUPER_ADMIN_EMAILS.includes(user.email || '')
-
-  // Check if role is superadmin in public.users table
-  const { data: profile } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.role === 'superadmin') {
-    isSuperAdmin = true
-  }
-
-  if (!isSuperAdmin) {
+  if (!isSuperAdminEmail(user.email)) {
     return (
       <div className="min-h-screen bg-merchant-bg text-on-surface flex items-center justify-center p-4">
         <div className="bg-surface border border-outline-variant/40 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-lg space-y-6 text-center">

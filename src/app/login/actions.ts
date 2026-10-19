@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
-import { SUPER_ADMIN_EMAILS } from '@/app/admin/layout'
+import { isSuperAdminEmail } from '@/lib/auth/superAdmin'
 
 export async function login(formData: FormData) {
   const supabase = await createClient()
@@ -24,7 +24,7 @@ export async function login(formData: FormData) {
         const { error: retryError } = await supabase.auth.signInWithPassword({ email, password })
         if (!retryError) {
           revalidatePath('/', 'layout')
-          if (SUPER_ADMIN_EMAILS.includes(email)) {
+          if (isSuperAdminEmail(email)) {
             redirect('/admin')
           }
           redirect('/dashboard')
@@ -36,7 +36,7 @@ export async function login(formData: FormData) {
   }
 
   revalidatePath('/', 'layout')
-  if (SUPER_ADMIN_EMAILS.includes(email)) {
+  if (isSuperAdminEmail(email)) {
     redirect('/admin')
   }
   redirect('/dashboard')
@@ -66,7 +66,7 @@ export async function signup(formData: FormData) {
   }
 
   revalidatePath('/', 'layout')
-  if (SUPER_ADMIN_EMAILS.includes(email)) {
+  if (isSuperAdminEmail(email)) {
     redirect('/admin')
   }
   redirect('/onboarding')
