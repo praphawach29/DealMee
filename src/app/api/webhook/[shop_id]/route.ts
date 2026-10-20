@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import { botMayReplyNow } from '@/lib/shop/businessHours'
 import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
+import { linkPlatformOwnerFromShopOa } from '@/lib/billing/platformLineAlerts'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { processSalesAgentChat, type AgentResult } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
@@ -264,6 +265,18 @@ async function processLineEvents({
           }
           continue
         } else {
+          // The platform's own OA may run as this shop: its owner-link code (DM-…) lands here
+          const platformName = code ? await linkPlatformOwnerFromShopOa(lineToken, code, userId) : null
+          if (platformName) {
+            if (replyToken && lineToken) {
+              await sendLineReply(
+                replyToken,
+                `✅ ผูกบัญชีสำเร็จ คุณ ${platformName}\n\nต่อไปนี้ LINE นี้จะได้รับแจ้งเตือนจาก DealMee เมื่อ:\n• ร้านค้าเติมเงินสำเร็จ 💰\n• มีสลิปเติมเงินรอตรวจ ⏳`,
+                lineToken
+              )
+            }
+            continue
+          }
           if (replyToken && lineToken) {
             await sendLineReply(
               replyToken,

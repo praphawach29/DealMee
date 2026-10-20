@@ -162,6 +162,9 @@ export default function PlatformLineAlertsCard({ status, webhookUrl }: { status:
                 คัดลอก
               </button>
             </div>
+            <p className="text-[11px] text-slate-500 mt-2">
+              ถ้าใช้ OA นี้เป็นบอทของร้าน DealMee ด้วย ให้ใช้ Webhook URL ของร้านนั้นแทน แจ้งเตือนและการผูก LINE ในขั้นที่ 3 ยังใช้ได้ตามปกติ
+            </p>
           </Step>
 
           <Step n={3} title="ผูก LINE ส่วนตัวของคุณ" done={status.linked}>
