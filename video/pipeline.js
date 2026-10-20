@@ -6,7 +6,7 @@ const { chromium } = require('playwright-core')
 const { spawn, execFileSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
-const clips = require('./clips')
+const clips = require(process.env.CLIPS || './clips')
 const overview = require('./overview')
 
 const FPS = 30
