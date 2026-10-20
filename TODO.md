@@ -2,7 +2,7 @@
 
 > **บันทึกล่าสุด:** 20 ตุลาคม 2026 (ดูหัวข้อ "อัปเดต 20 ตุลาคม 2026" ด้านล่าง)  
 > **Repository:** `praphawach29/DealMee` (Branch: `main`)  
-> **Last Commit:** `170e2ab` - *chore: rename to DealMee (repo, package name, docs) (#53)*  
+> **Last Commit:** `3765716` - *docs: record the DealMee rename as done (Vercel project checked) (#54)*  
 > **Status:** Production Build Passed (`npm run build` ✓)
 
 ---
@@ -13,7 +13,8 @@
 - `package.json` name: `botify-saas-web` → `dealmee`
 - Vercel project: `ai-agent-google-sdk` → `dealmee` ✅ (เจ้าของเปลี่ยนใน dashboard เพราะ token ของ AI ได้ 403) — project id เดิม `prj_ZDd2PDrA3vq13IK9O23r4jIwCCsR`, deploy ของ #53 มาจาก repo `DealMee` สถานะ READY, โดเมน `app.dealmee.app`/`dealmee.app`/`www.dealmee.app` ครบ, `ai-agent-google-sdk-jade.vercel.app` ยังใช้ได้
 - ชื่อ session ของ Claude Code เปลี่ยนเป็น DealMee ✅
-- **รอเจ้าของ:** เปลี่ยนชื่อโฟลเดอร์ในเครื่องเป็น `DealMee` และ `git remote set-url origin https://github.com/praphawach29/DealMee.git`
+- โฟลเดอร์ในเครื่องเจ้าของ: `C:\Users\Jack\Documents\DealmeeChatbot` → `C:\Users\Jack\Documents\DealMee` ✅ (ตอนแรกเปลี่ยนไม่ได้เพราะโปรแกรมเปิดไฟล์ค้าง — ปิด editor/terminal/`node.exe` ก่อน) แล้ว `git remote set-url origin https://github.com/praphawach29/DealMee.git`
+- **เปลี่ยนชื่อครบทุกส่วนแล้ว**
 - ชื่อ `botify-saas-web` ที่ยังเหลือใน `ROADMAP_AI_AGENT.md` / `docs/DESIGN_SYSTEM.md` เป็นบันทึกประวัติ ตั้งใจคงไว้
 
 ## อัปเดต 20 ตุลาคม 2026 — กระเป๋าเงิน, Super Admin, รีเซ็ตรหัสผ่าน, คู่มือ (PR #29–#51)
