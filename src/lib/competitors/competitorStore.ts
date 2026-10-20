@@ -185,6 +185,7 @@ export async function getCompetitors(shopId: string): Promise<CompetitorRecord[]
           aiPlaybook,
           is_live_data: true,
           data_source: 'live_api',
+          last_scanned_at: c.last_scanned_at || c.created_at,
         }
 
         return {
