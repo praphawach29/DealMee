@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { platformSecret } from '@/lib/platformSecrets'
 
 export interface SynthesizedFaq {
   title: string
@@ -47,13 +48,13 @@ export async function synthesizeFaqFromConversation({
       .map((m) => `${m.sender_type === 'user' ? 'ลูกค้า' : m.sender_type === 'human' || m.sender_type === 'agent' ? 'แอดมินคนจริง' : 'บอท AI'}: ${m.message}`)
       .join('\n')
 
-    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
+    const apiKey = await platformSecret('GEMINI_API_KEY')
     if (!apiKey) {
       console.warn('[FaqSynthesis] GEMINI_API_KEY not configured, skipping auto-synthesis')
       return { success: false, createdCount: 0, message: 'ยังไม่ได้ตั้งค่า API Key' }
     }
 
-    const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+    const model = (await platformSecret('GEMINI_MODEL')) || 'gemini-2.5-flash'
     const prompt = `คุณคือผู้เชี่ยวชาญการถอดบทเรียนและสร้างคลังความรู้ (Knowledge Synthesizer) สำหรับร้านค้า
 บทบาทของคุณคือวิเคราะห์บทสนทนาระหว่างลูกค้าและร้านค้าด้านล่างนี้ และตรวจสอบว่ามี "คำถามสำคัญที่ลูกค้าถาม และได้รับคำตอบที่ชัดเจนถูกต้อง" ซึ่งควรค่าแก่การเก็บเป็น FAQ ประจำร้านหรือไม่
 

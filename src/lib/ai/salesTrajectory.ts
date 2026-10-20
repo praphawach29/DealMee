@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { platformSecret } from '@/lib/platformSecrets'
 
 export type ObjectionType =
   | 'price_hesitation'
@@ -60,12 +61,12 @@ export async function extractGoldenTrajectoryFromOrder({
       .map((m) => `${m.sender_type === 'user' ? 'ลูกค้า' : 'พนักงานขาย/บอท'}: ${m.message}`)
       .join('\n')
 
-    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
+    const apiKey = await platformSecret('GEMINI_API_KEY')
     if (!apiKey) {
       return { success: false, error: 'Missing Gemini API Key' }
     }
 
-    const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+    const model = (await platformSecret('GEMINI_MODEL')) || 'gemini-2.5-flash'
     const prompt = `คุณคือสุดยอดโค้ชวิเคราะห์การขาย (Sales Trajectory Analyst)
 จงวิเคราะห์บทสนทนานี้ซึ่งปิดการขายสำเร็จและลูกค้าโอนเงินแล้ว เพื่อถอดรหัส "จังหวะปิดการขายที่ดีที่สุด" (Winning Closing Turn)
 

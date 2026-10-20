@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireShop } from '@/lib/auth/requireShop'
+import { platformSecret } from '@/lib/platformSecrets'
 import { liveStudioGuard } from '@/lib/live/liveStudioAccess'
 
 // Paid TTS providers bill per character, so cap what one request can spend.
@@ -104,7 +105,7 @@ async function generateAudioResponse(
   const supabase = createAdminClient()
 
   // 1. Check for OpenAI API key (Env or Shop Settings)
-  let openaiKey = process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || ''
+  let openaiKey = await platformSecret('OPENAI_API_KEY')
   if (!openaiKey && shopId) {
     try {
       const { data: setting } = await supabase
@@ -153,8 +154,8 @@ async function generateAudioResponse(
   }
 
   // 2. Check if ElevenLabs API key is configured (Env or Shop Settings)
-  let elevenLabsKey = process.env.ELEVENLABS_API_KEY || ''
-  const elevenLabsVoiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'
+  let elevenLabsKey = await platformSecret('ELEVENLABS_API_KEY')
+  const elevenLabsVoiceId = (await platformSecret('ELEVENLABS_VOICE_ID')) || '21m00Tcm4TlvDq8ikWAM'
 
   if (!elevenLabsKey && shopId) {
     try {

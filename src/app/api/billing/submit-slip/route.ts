@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { platformSecret } from '@/lib/platformSecrets'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { readSlipQr } from '@/lib/slip/readSlipQr'
 import { notifyPlatformOwner, APP_URL } from '@/lib/billing/platformAlerts'
@@ -100,7 +101,8 @@ export async function POST(req: NextRequest) {
     let slipRef: string | null = null
     let easySlipMessage = ''
 
-    const hasSlipApiKey = process.env.EASYSLIP_API_KEY || process.env.THUNDER_API_KEY || process.env.SLIPOK_API_KEY
+    const hasSlipApiKey =
+      (await platformSecret('EASYSLIP_API_KEY')) || (await platformSecret('THUNDER_API_KEY')) || (await platformSecret('SLIPOK_API_KEY'))
     if (hasSlipApiKey) {
       const easySlipResult = await verifySlipWithEasySlip(base64, mimeType, [
         platformSettings.promptpay_id,

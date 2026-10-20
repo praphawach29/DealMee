@@ -1,5 +1,5 @@
-import { createAdminClient } from '@/lib/supabase/admin'
 import type { AiCompetitorPlaybook, CompetitorPost, SocialPlatform } from './scraperEngine'
+import { platformSecret } from '@/lib/platformSecrets'
 
 /**
  * Writes the strategy section of a competitor scan with Gemini, from the posts and
@@ -16,17 +16,6 @@ export interface PlaybookInput {
   posts: CompetitorPost[]
   myProducts: Array<{ name: string; price: number }>
   shopName?: string
-}
-
-async function getGeminiApiKey(): Promise<string> {
-  const envKey = process.env.GEMINI_API_KEY || process.env.GEMINI_KEY
-  if (envKey) return envKey
-  try {
-    const { data } = await createAdminClient().from('settings').select('value').eq('key', 'gemini_key').maybeSingle()
-    return data?.value || ''
-  } catch {
-    return ''
-  }
 }
 
 function buildPrompt(input: PlaybookInput): string {
@@ -82,10 +71,10 @@ function isPlaybook(value: any): value is AiCompetitorPlaybook {
 
 export async function generateCompetitorPlaybook(input: PlaybookInput): Promise<AiCompetitorPlaybook | null> {
   if (input.posts.length === 0) return null
-  const apiKey = await getGeminiApiKey()
+  const apiKey = await platformSecret('GEMINI_API_KEY')
   if (!apiKey) return null
 
-  const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash'
+  const model = (await platformSecret('GEMINI_MODEL')) || 'gemini-3.8-flash'
   try {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
       method: 'POST',

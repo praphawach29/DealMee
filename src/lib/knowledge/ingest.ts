@@ -1,4 +1,5 @@
 import { parseCsv } from './extract'
+import { platformSecret } from '@/lib/platformSecrets'
 
 export interface KnowledgeEntry {
   title: string
@@ -137,8 +138,8 @@ export async function toKnowledgeEntries(text: string, shopName: string): Promis
     return directMd
   }
 
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
-  const claudeKey = process.env.CLAUDE_API_KEY || process.env.CLAUDE_KEY || process.env.NEXT_PUBLIC_CLAUDE_API_KEY || ''
+  const geminiKey = await platformSecret('GEMINI_API_KEY')
+  const claudeKey = await platformSecret('CLAUDE_API_KEY')
 
   const prompt = `คุณคือผู้ช่วยจัดระเบียบข้อมูลของร้าน "${shopName}"
 
@@ -161,7 +162,7 @@ ${text}
   // 1. Try Gemini if configured
   if (geminiKey) {
     const modelsToTry = [
-      process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      (await platformSecret('GEMINI_MODEL')) || 'gemini-2.5-flash',
       'gemini-3-flash-preview',
       'gemini-flash-latest',
     ]
@@ -208,7 +209,7 @@ ${text}
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: process.env.CLAUDE_MODEL || 'claude-haiku-5-5',
+          model: (await platformSecret('CLAUDE_MODEL')) || 'claude-haiku-5-5',
           max_tokens: 4096,
           messages: [{ role: 'user', content: prompt }],
         }),

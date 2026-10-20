@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generatePromptPayQRImage } from '@/lib/billing/manualBilling'
+import { platformSecret } from '@/lib/platformSecrets'
 
 export interface LiveBasketItem {
   basket_no: number
@@ -412,11 +413,7 @@ export async function generateHostPitch(
   product: LiveBasketItem,
   shopName: string = 'DealMee Live Shop'
 ): Promise<LiveHostPitch> {
-  const apiKey =
-    process.env.GEMINI_API_KEY ||
-    process.env.GEMINI_KEY ||
-    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
-    ''
+  const apiKey = await platformSecret('GEMINI_API_KEY')
 
   const savings = Math.max(0, product.regular_price - product.live_price)
 
