@@ -42,6 +42,8 @@ export default function AdminLineNotificationCard({
   const [code, setCode] = useState<string>('')
   const [deepLink, setDeepLink] = useState<string>('')
   const [qrDataUrl, setQrDataUrl] = useState<string>('')
+  const [basicId, setBasicId] = useState<string>('')
+  const [oaName, setOaName] = useState<string>('')
   const [copiedCode, setCopiedCode] = useState(false)
   const [testResult, setTestResult] = useState<{ success?: string; error?: string } | null>(null)
   const [showManualInput, setShowManualInput] = useState(false)
@@ -59,6 +61,8 @@ export default function AdminLineNotificationCard({
       setCode(res.code || '')
       setDeepLink(res.deepLink || '')
       setQrDataUrl(res.qrDataUrl || '')
+      setBasicId(res.basicId || '')
+      setOaName(res.oaName || '')
     }
   }
 
@@ -265,9 +269,21 @@ export default function AdminLineNotificationCard({
                   วิธีผูกบัญชีแอดมินใน 1 วินาที (ง่ายสุดๆ ไม่ต้องหา ID)
                 </h4>
                 <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">
-                  สแกน QR Code ด้วยมือถือ หรือแตะปุ่มด้านล่างเพื่อเปิดแอป LINE ระบบจะใส่คำสั่งยืนยันตัวตนให้อัตโนมัติ เพียงกดส่งข้อความในแชทก็เป็นแอดมินทันที!
+                  สแกนด้วย LINE ส่วนตัวของแอดมิน QR จะเปิดแชทกับ LINE OA ของร้านพร้อมคำสั่งยืนยัน กดส่งครั้งเดียวก็เสร็จ
+                  หลังจากนั้นแจ้งเตือนจะเข้ามาในแชทนี้ของ LINE ส่วนตัว
                 </p>
               </div>
+
+              {basicId ? (
+                <p className="text-xs text-on-surface bg-[#06C755]/10 border border-[#06C755]/30 rounded-lg px-3 py-2">
+                  QR นี้เปิดแชทกับ <b>{oaName || 'LINE OA ของร้าน'}</b> <span className="font-mono">@{basicId}</span>
+                  {' '}ถ้าไม่ใช่ OA ของร้านนี้ ให้ตรวจ LINE Channel Token ด้านบน
+                </p>
+              ) : (
+                <p className="text-xs text-rose-600 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
+                  อ่านข้อมูล LINE OA จาก Channel Token ไม่ได้ (token ผิดหรือหมดอายุ) จึงสร้าง QR ไม่ได้ ตรวจ token ด้านบนแล้วกดรีเฟรชสถานะ
+                </p>
+              )}
 
               {/* 1-Click Action for Mobile */}
               <div className="flex flex-col sm:flex-row items-center gap-2.5">
