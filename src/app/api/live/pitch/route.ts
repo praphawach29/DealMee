@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLiveSessionState, generateHostPitch } from '@/lib/live/liveStudioEngine'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireShop } from '@/lib/auth/requireShop'
+import { liveStudioGuard } from '@/lib/live/liveStudioAccess'
 
 export async function POST(req: NextRequest) {
   try {
     const auth = await requireShop()
     if (auth.error) return auth.error
+    const liveBlocked = await liveStudioGuard(auth.shopId)
+    if (liveBlocked) return liveBlocked
     const shopId = auth.shopId
     const body = await req.json()
     const basketNo = body.basket_no ? Number(body.basket_no) : undefined

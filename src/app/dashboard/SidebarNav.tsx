@@ -116,6 +116,7 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
             <Radar className="mr-2.5 h-[18px] w-[18px] shrink-0" />
             <span>ส่องร้านคู่แข่ง</span>
           </Link>
+          {features.live_studio === true && (
           <Link
             href="/dashboard/live-studio"
             prefetch={true}
@@ -126,6 +127,7 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
             <Radio className="mr-2.5 h-[18px] w-[18px] shrink-0 text-rose-500" />
             <span>AI Live Studio</span>
           </Link>
+          )}
         </>
       )}
 

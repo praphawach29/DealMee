@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireShop } from '@/lib/auth/requireShop'
+import { liveStudioGuard } from '@/lib/live/liveStudioAccess'
 
 // Paid TTS providers bill per character, so cap what one request can spend.
 const MAX_TTS_CHARS = 1500
@@ -12,6 +13,8 @@ const MAX_TTS_CHARS = 1500
 export async function GET(req: NextRequest) {
   const auth = await requireShop()
   if (auth.error) return auth.error
+  const liveBlocked = await liveStudioGuard(auth.shopId)
+  if (liveBlocked) return liveBlocked
 
   const searchParams = req.nextUrl.searchParams
   const text = (searchParams.get('text') || '').trim().slice(0, MAX_TTS_CHARS)
@@ -29,6 +32,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireShop()
   if (auth.error) return auth.error
+  const liveBlocked = await liveStudioGuard(auth.shopId)
+  if (liveBlocked) return liveBlocked
 
   try {
     const body = await req.json()
@@ -149,7 +154,7 @@ async function generateAudioResponse(
 
   // 2. Check if ElevenLabs API key is configured (Env or Shop Settings)
   let elevenLabsKey = process.env.ELEVENLABS_API_KEY || ''
-  let elevenLabsVoiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'
+  const elevenLabsVoiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'
 
   if (!elevenLabsKey && shopId) {
     try {
