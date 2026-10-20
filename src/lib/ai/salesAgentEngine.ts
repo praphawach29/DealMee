@@ -363,13 +363,13 @@ const MASTER_TOOLS = [
   },
   {
     name: 'check_order_status',
-    description: 'ตรวจสอบสถานะการจัดส่งออเดอร์ของลูกค้า',
+    description: 'ตรวจสอบสถานะออเดอร์ การชำระเงิน และเลขพัสดุของลูกค้าในแชทนี้ ใช้เมื่อลูกค้าถามว่าของส่งหรือยัง ถึงไหนแล้ว หรือขอเลขพัสดุ ถ้าลูกค้าไม่ได้บอกเลขออเดอร์ ให้เรียกโดยไม่ใส่ order_id จะได้ออเดอร์ล่าสุดของลูกค้าคนนี้',
     parameters: {
       type: 'object',
       properties: {
-        order_id: { type: 'string', description: 'รหัสออเดอร์ เช่น ORD-000123' },
+        order_id: { type: 'string', description: 'รหัสออเดอร์ เช่น ORD-000123 (ไม่บังคับ)' },
       },
-      required: ['order_id'],
+      required: [],
     },
   },
   {

@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { createSampleOrder, updateOrderStatus } from './actions'
+import ShipOrderDialog from './ShipOrderDialog'
+import { carrierName } from '@/lib/orders/tracking'
 
 export interface OrderItem {
   id: string
@@ -14,6 +16,8 @@ export interface OrderItem {
   product_name?: string | null
   status: string
   tracking_no: string | null
+  tracking_carrier?: string | null
+  tracking_url?: string | null
   created_at: string
 }
 
@@ -21,6 +25,7 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
+  const [shipping, setShipping] = useState<OrderItem | null>(null)
 
   const filteredOrders = orders.filter(o => {
     const matchesSearch = o.order_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -59,6 +64,25 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
         return <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-50 text-amber-700 border border-amber-200">รอชำระเงิน</span>
     }
   }
+
+  const shipButton = (ord: OrderItem) =>
+    ord.status === 'cancelled' ? null : (
+      <button
+        type="button"
+        onClick={() => setShipping(ord)}
+        className="text-xs px-2.5 py-1.5 rounded-lg border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-semibold whitespace-nowrap cursor-pointer"
+      >
+        {ord.tracking_no ? 'แก้เลขพัสดุ' : '📦 ใส่เลขพัสดุ'}
+      </button>
+    )
+
+  const trackingLine = (ord: OrderItem) =>
+    ord.tracking_no ? (
+      <span className="text-[11px] text-outline block mt-1">
+        {carrierName(ord.tracking_carrier) ? `${carrierName(ord.tracking_carrier)} · ` : ''}
+        <span className="font-mono">{ord.tracking_no}</span>
+      </span>
+    ) : null
 
   const totalSales = orders
     .filter(o => o.status === 'paid' || o.status === 'shipped')
@@ -204,6 +228,7 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
                       <span className="text-outline shrink-0">รายการ:</span>
                       <span className="font-medium text-on-surface-variant text-right line-clamp-2">{ord.items_summary || ord.product_name || 'สั่งซื้อสินค้าทั่วไป'}</span>
                     </div>
+                    {trackingLine(ord)}
                   </div>
 
                   <div className="pt-2 border-t border-outline-variant/20 flex items-center justify-between">
@@ -213,7 +238,7 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-outline">สถานะ:</span>
+                      {shipButton(ord)}
                       <select
                         value={ord.status}
                         onChange={(e) => handleStatusChange(ord.id, e.target.value)}
@@ -264,8 +289,11 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
                       </td>
                       <td className="p-4">
                         {statusBadge(ord.status)}
+                        {trackingLine(ord)}
                       </td>
                       <td className="p-4 pr-6">
+                        <div className="flex items-center gap-2">
+                        {shipButton(ord)}
                         <select
                           value={ord.status}
                           onChange={(e) => handleStatusChange(ord.id, e.target.value)}
@@ -276,6 +304,7 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
                           <option value="shipped">จัดส่งแล้ว</option>
                           <option value="cancelled">ยกเลิก</option>
                         </select>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -304,6 +333,8 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
           </div>
         )}
       </div>
+
+      {shipping && <ShipOrderDialog order={shipping} onClose={() => setShipping(null)} />}
     </div>
   )
 }

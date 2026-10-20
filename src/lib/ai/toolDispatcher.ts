@@ -8,6 +8,7 @@ import { buildLineFlexQuotationMessage, buildLineFlexOfficialLetterMessage } fro
 import { resolveCatalogProduct, describeUnresolved, parseQuantity, computeShippingFee, type CatalogProduct } from '@/lib/ai/catalogPricing'
 import { highValueThreshold, highValueRefusal } from '@/lib/ai/salesModes'
 import { notifyShopAdmin } from '@/lib/billing/ownerAlerts'
+import { carrierName, trackingLink } from '@/lib/orders/tracking'
 
 const QR_BUCKET = 'qr-codes'
 
@@ -862,29 +863,38 @@ export async function executeTool(
 
   if (toolName === 'check_order_status') {
     const oid = String(args.order_id || '').trim()
-    if (!oid) {
-      return { resultForAi: 'ยังไม่มีเลขที่ออเดอร์ ให้ขอจากลูกค้าก่อน', immediateMessages: [] }
-    }
     // Scoped to this conversation as well as the shop. Filtering on shop_id
     // alone let anyone who guessed an order number read another customer's
     // name, phone, total and tracking number — the same ownership gap that
     // was open on bookings. get_customer_history below already did this.
-    const { data: ord } = await supabase
+    // Without an order number, the conversation's latest orders ("ของถึงไหนแล้ว").
+    let query = supabase
       .from('orders')
-      .select('order_no,status,payment_status,tracking_no,product_name,total_amount')
+      .select('order_no,status,payment_status,tracking_no,tracking_carrier,tracking_url,product_name,items_summary,total_amount')
       .eq('shop_id', shopId)
       .eq('conversation_id', conversationId)
-      .or(`order_no.ilike.%${oid}%${UUID_RE.test(oid) ? `,id.eq.${oid}` : ''}`)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (!ord) {
-      return { resultForAi: `ไม่พบออเดอร์ ${oid} ในบทสนทนานี้ ให้ขอเลขที่ออเดอร์อีกครั้ง หรือถ้าลูกค้ายืนยันว่าสั่งไว้จริง ให้เรียก request_human_agent ให้แอดมินตรวจสอบ`, immediateMessages: [] }
+    if (oid) query = query.or(`order_no.ilike.%${oid}%${UUID_RE.test(oid) ? `,id.eq.${oid}` : ''}`)
+    const { data: found } = await query.order('created_at', { ascending: false }).limit(oid ? 1 : 3)
+    if (!found || found.length === 0) {
+      return {
+        resultForAi: oid
+          ? `ไม่พบออเดอร์ ${oid} ในบทสนทนานี้ ให้ขอเลขที่ออเดอร์อีกครั้ง หรือถ้าลูกค้ายืนยันว่าสั่งไว้จริง ให้เรียก request_human_agent ให้แอดมินตรวจสอบ`
+          : 'ไม่พบออเดอร์ของลูกค้าคนนี้ในแชทนี้ ให้ขอเลขที่ออเดอร์ หรือถ้าลูกค้ายืนยันว่าสั่งไว้ ให้เรียก request_human_agent ให้แอดมินตรวจสอบ',
+        immediateMessages: [],
+      }
     }
-    const sMap: Record<string, string> = { pending: 'รอดำเนินการ', confirmed: 'ยืนยันแล้ว', processing: 'กำลังดำเนินการ', shipped: 'จัดส่งแล้ว', delivered: 'ส่งถึงแล้ว', cancelled: 'ยกเลิก' }
+    const sMap: Record<string, string> = { pending: 'รอดำเนินการ', confirmed: 'ยืนยันแล้ว', processing: 'กำลังดำเนินการ', paid: 'ชำระแล้ว รอจัดส่ง', shipped: 'จัดส่งแล้ว', delivered: 'ส่งถึงแล้ว', cancelled: 'ยกเลิก' }
     const pMap: Record<string, string> = { pending: 'รอชำระ', paid: 'ชำระแล้ว', failed: 'ล้มเหลว' }
+    const lines = found.map((ord: any) => {
+      const carrier = carrierName(ord.tracking_carrier)
+      const link = trackingLink(ord.tracking_carrier, ord.tracking_url)
+      const tracking = ord.tracking_no
+        ? `, ขนส่ง ${carrier || 'ไม่ระบุ'} เลขพัสดุ ${ord.tracking_no}${link ? ` ติดตามที่ ${link}` : ''}`
+        : ord.status === 'shipped' ? ', ยังไม่มีเลขพัสดุในระบบ' : ''
+      return `ออเดอร์ ${ord.order_no}: สินค้า ${ord.product_name || ord.items_summary || '-'}, ยอด ${Number(ord.total_amount).toLocaleString()} บาท, สถานะ ${sMap[ord.status] ?? ord.status}, ชำระเงิน ${pMap[ord.payment_status] ?? ord.payment_status}${tracking}`
+    })
     return {
-      resultForAi: `ออเดอร์ ${ord.order_no}: สินค้า ${ord.product_name}, ยอด ${Number(ord.total_amount).toLocaleString()} บาท, สถานะ ${sMap[ord.status] ?? ord.status}, ชำระเงิน ${pMap[ord.payment_status] ?? ord.payment_status}${ord.tracking_no ? `, เลขพัสดุ ${ord.tracking_no}` : ''}`,
+      resultForAi: `${lines.join('\n')}\nบอกเลขพัสดุและลิงก์ตามข้อมูลนี้เท่านั้น ห้ามเดาสถานะระหว่างทางหรือวันที่ถึง เพราะระบบไม่มีข้อมูลจากขนส่ง ถ้ายังไม่มีเลขพัสดุ บอกลูกค้าว่าร้านจะแจ้งเลขพัสดุในแชทนี้เมื่อส่งของแล้ว`,
       immediateMessages: [],
     }
   }
