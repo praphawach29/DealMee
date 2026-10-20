@@ -1,0 +1,8 @@
+{
+  "name": "dealmee-video",
+  "private": true,
+  "description": "DealMee promo reels: 9:16 clips rendered frame by frame in Chromium, music and sound effects composed in code",
+  "dependencies": {
+    "playwright-core": "1.56.1"
+  }
+}

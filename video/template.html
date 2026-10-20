@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<style>
+@font-face { font-family: 'Plex Thai'; font-weight: 400; src: url('assets/ibm-plex-sans-thai-thai-400-normal.woff2') format('woff2'); unicode-range: U+0E01-0E5B, U+200C-200D, U+25CC; }
+@font-face { font-family: 'Plex Thai'; font-weight: 600; src: url('assets/ibm-plex-sans-thai-thai-600-normal.woff2') format('woff2'); unicode-range: U+0E01-0E5B, U+200C-200D, U+25CC; }
+@font-face { font-family: 'Plex Thai'; font-weight: 700; src: url('assets/ibm-plex-sans-thai-thai-700-normal.woff2') format('woff2'); unicode-range: U+0E01-0E5B, U+200C-200D, U+25CC; }
+@font-face { font-family: 'Plex Thai'; font-weight: 400; src: url('assets/ibm-plex-sans-thai-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Plex Thai'; font-weight: 600; src: url('assets/ibm-plex-sans-thai-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Plex Thai'; font-weight: 700; src: url('assets/ibm-plex-sans-thai-latin-700-normal.woff2') format('woff2'); }
+:root { --blue:#2E5BFF; --cyan:#00CFEC; --navy:#060C1B; --indigo:#1A1B4B; --green:#10B981; --amber:#F59E0B; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1080px; height: 1920px; overflow: hidden; }
+body { font-family: 'Plex Thai', sans-serif; color: #fff; background: var(--navy); position: relative; }
+.bg { position: absolute; inset: 0; background:
+  radial-gradient(900px 700px at 85% 8%, rgba(0,207,236,.22), transparent 60%),
+  radial-gradient(900px 900px at 0% 75%, rgba(46,91,255,.30), transparent 60%),
+  linear-gradient(180deg, #060C1B 0%, #0B1438 55%, #1A1B4B 100%); }
+.grid { position: absolute; inset: 0; opacity: .07; background-image: linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px); background-size: 72px 72px; }
+.layer { position: absolute; inset: 0; }
+.brand { position: absolute; top: 70px; left: 70px; display: flex; align-items: center; gap: 16px; font-weight: 700; font-size: 40px; letter-spacing: .5px; }
+.brand img { width: 64px; height: 64px; }
+.brand .mee { color: var(--cyan); }
+.tag { position: absolute; top: 82px; right: 150px; font-size: 26px; font-weight: 600; padding: 10px 22px; border-radius: 999px; background: rgba(0,207,236,.14); border: 1.5px solid rgba(0,207,236,.45); color: #8FEFFF; }
+
+/* hook */
+.hook { display: flex; flex-direction: column; justify-content: center; padding: 0 90px 280px; }
+.hook .icon { width: 230px; height: 230px; border-radius: 64px; display: flex; align-items: center; justify-content: center; font-size: 130px; margin-bottom: 60px; background: linear-gradient(135deg, rgba(46,91,255,.35), rgba(0,207,236,.25)); border: 2px solid rgba(255,255,255,.15); box-shadow: 0 30px 80px rgba(46,91,255,.35); }
+.hook .kicker { font-size: 38px; font-weight: 600; color: var(--cyan); margin-bottom: 28px; }
+.hook h1 { font-size: 96px; line-height: 1.22; font-weight: 700; }
+.hook h1 em { font-style: normal; background: linear-gradient(90deg, #5B8CFF, var(--cyan)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hook .sub { margin-top: 36px; font-size: 42px; line-height: 1.45; color: #C7D2FE; font-weight: 400; }
+
+/* main */
+.callout { position: absolute; left: 70px; right: 150px; top: 190px; height: 210px; }
+.callout .c { position: absolute; inset: 0; display: flex; align-items: center; gap: 22px; }
+.callout .num { flex: none; width: 76px; height: 76px; border-radius: 22px; background: linear-gradient(135deg, var(--blue), var(--cyan)); display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 700; box-shadow: 0 10px 30px rgba(46,91,255,.45); }
+.callout .txt { font-size: 52px; line-height: 1.28; font-weight: 700; }
+.callout .txt em { font-style: normal; color: var(--cyan); }
+
+.phone { position: absolute; left: 175px; top: 430px; width: 730px; height: 1090px; border-radius: 64px; background: #0B1022; padding: 18px; box-shadow: 0 40px 90px rgba(0,0,0,.55), 0 0 0 3px rgba(255,255,255,.08), 0 0 80px rgba(46,91,255,.25); }
+.screen { position: relative; width: 100%; height: 100%; border-radius: 48px; overflow: hidden; background: #E9EEF6; color: #0F172A; }
+.chathead { position: absolute; top: 0; left: 0; right: 0; height: 132px; padding: 44px 28px 0; display: flex; align-items: center; gap: 16px; background: #fff; border-bottom: 1px solid #E2E8F0; z-index: 3; }
+.chathead .av { width: 64px; height: 64px; border-radius: 50%; background: #FDE7C8; display: flex; align-items: center; justify-content: center; font-size: 34px; }
+.chathead .nm { font-size: 30px; font-weight: 700; }
+.chathead .st { font-size: 21px; color: #2E5BFF; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.chathead .st i { width: 10px; height: 10px; border-radius: 50%; background: var(--green); display: inline-block; }
+.viewport { position: absolute; top: 132px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+.list { position: absolute; left: 0; right: 0; top: 0; padding: 26px 24px 30px; }
+.row { display: flex; margin-bottom: 18px; visibility: hidden; }
+.row.user { justify-content: flex-end; }
+.row.sys { justify-content: center; }
+.row .bav { width: 52px; height: 52px; border-radius: 50%; background: #fff; flex: none; margin-right: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(15,23,42,.08); }
+.row .bav img { width: 40px; height: 40px; }
+.bubble { max-width: 500px; padding: 18px 24px; border-radius: 30px; font-size: 27px; line-height: 1.45; white-space: pre-line; box-shadow: 0 2px 8px rgba(15,23,42,.06); }
+.row.bot .bubble { background: #fff; border-top-left-radius: 8px; }
+.row.user .bubble { background: #7EE07B; border-top-right-radius: 8px; }
+.row.sys .bubble { background: rgba(15,23,42,.08); color: #475569; font-size: 21px; padding: 8px 18px; box-shadow: none; }
+.bubble b { font-weight: 700; }
+.bubble .meta { display: block; margin-top: 6px; font-size: 19px; color: #64748B; }
+.typing { position: absolute; left: 24px; display: flex; align-items: center; opacity: 0; }
+.typing .bav { width: 52px; height: 52px; border-radius: 50%; background: #fff; margin-right: 12px; display: flex; align-items: center; justify-content: center; }
+.typing .bav img { width: 40px; height: 40px; }
+.typing .dots { background: #fff; border-radius: 30px; border-top-left-radius: 8px; padding: 22px 26px; display: flex; gap: 10px; }
+.typing .dots span { width: 13px; height: 13px; border-radius: 50%; background: #94A3B8; }
+
+.card { background: #fff; border-radius: 26px; overflow: hidden; width: 420px; box-shadow: 0 2px 10px rgba(15,23,42,.08); }
+.card .ch { padding: 16px 22px; background: linear-gradient(90deg, var(--blue), #4F7BFF); color: #fff; font-weight: 700; font-size: 24px; }
+.card .cb { padding: 18px 22px; font-size: 24px; line-height: 1.5; }
+.qr { width: 230px; height: 230px; margin: 6px auto 10px; display: grid; grid-template-columns: repeat(21, 1fr); background: #fff; padding: 8px; border: 2px solid #E2E8F0; border-radius: 12px; }
+.qr i { display: block; }
+.slip { width: 300px; background: #fff; border-radius: 22px; padding: 20px 22px; font-size: 21px; line-height: 1.55; color: #334155; box-shadow: 0 2px 10px rgba(15,23,42,.08); border-top: 10px solid #22A06B; }
+.slip .amt { font-size: 38px; font-weight: 700; color: #0F172A; margin: 4px 0; }
+
+.notify { position: absolute; left: 18px; right: 18px; top: 22px; z-index: 6; background: rgba(255,255,255,.97); border-radius: 30px; padding: 20px 24px; color: #0F172A; box-shadow: 0 18px 50px rgba(15,23,42,.35); opacity: 0; }
+.notify .nt { display: flex; align-items: center; gap: 12px; font-size: 21px; color: #64748B; font-weight: 600; }
+.notify .nt img { width: 36px; height: 36px; border-radius: 9px; background: #EEF2FF; padding: 3px; }
+.notify .nb { margin-top: 10px; font-size: 25px; line-height: 1.45; white-space: pre-line; }
+.notify .nb b { font-weight: 700; }
+
+.panel { position: absolute; left: 60px; right: 60px; z-index: 6; background: #fff; border-radius: 34px; color: #0F172A; padding: 30px 34px; box-shadow: 0 30px 80px rgba(6,12,27,.55); opacity: 0; }
+.panel .pt { font-size: 30px; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
+.panel .f { margin-bottom: 18px; }
+.panel .f label { display: block; font-size: 21px; color: #64748B; font-weight: 600; margin-bottom: 8px; }
+.panel .f div { border: 2px solid #E2E8F0; border-radius: 16px; padding: 14px 18px; font-size: 26px; min-height: 64px; }
+.panel .btn { margin-top: 8px; border-radius: 18px; padding: 18px; text-align: center; font-weight: 700; font-size: 26px; background: var(--blue); color: #fff; }
+.panel .chk { font-size: 22px; color: #334155; margin: 6px 0 12px; }
+
+.badges { position: absolute; left: 70px; right: 150px; top: 1560px; display: flex; flex-wrap: wrap; gap: 14px; }
+.badges span { font-size: 27px; font-weight: 600; padding: 12px 22px; border-radius: 999px; background: rgba(255,255,255,.08); border: 1.5px solid rgba(255,255,255,.18); color: #E0E7FF; opacity: 0; }
+
+/* end */
+.end { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 80px 300px; }
+.end .logo { background: #fff; border-radius: 40px; padding: 30px 46px; box-shadow: 0 30px 80px rgba(46,91,255,.35); }
+.end .logo img { width: 520px; display: block; }
+.end h2 { margin-top: 70px; font-size: 76px; line-height: 1.25; font-weight: 700; }
+.end h2 em { font-style: normal; color: var(--cyan); }
+.end .sub { margin-top: 26px; font-size: 38px; color: #C7D2FE; line-height: 1.45; }
+.end .cta { margin-top: 56px; display: inline-block; padding: 28px 60px; border-radius: 999px; font-size: 46px; font-weight: 700; background: linear-gradient(90deg, var(--blue), var(--cyan)); box-shadow: 0 20px 60px rgba(0,207,236,.35); }
+.end .price { margin-top: 40px; font-size: 40px; font-weight: 600; color: #fff; padding: 18px 36px; border-radius: 26px; background: rgba(255,255,255,.08); border: 1.5px solid rgba(255,255,255,.18); }
+.end .price b { color: var(--cyan); font-size: 52px; }
+.end .contact { margin-top: 40px; font-size: 36px; font-weight: 600; color: #E0E7FF; }
+.end .contact span { color: var(--cyan); }
+</style>
+</head>
+<body>
+<div class="bg"></div><div class="grid"></div>
+<div id="root"></div>
+<script>
+const ease = (p) => (p <= 0 ? 0 : p >= 1 ? 1 : 1 - Math.pow(1 - p, 3))
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v))
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+const ICON = 'assets/dealmee-icon.png'
+
+function qrGrid() {
+  // a decorative QR-like pattern (not a scannable code)
+  let seed = 7, cells = ''
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+  for (let y = 0; y < 21; y++) for (let x = 0; x < 21; x++) {
+    const finder = (x < 7 && y < 7) || (x > 13 && y < 7) || (x < 7 && y > 13)
+    let on
+    if (finder) { const fx = x > 13 ? x - 14 : x, fy = y > 13 ? y - 14 : y; on = fx === 0 || fx === 6 || fy === 0 || fy === 6 || (fx > 1 && fx < 5 && fy > 1 && fy < 5) }
+    else on = rnd() > 0.52
+    cells += `<i style="background:${on ? '#0F172A' : 'transparent'}"></i>`
+  }
+  return `<div class="qr">${cells}</div>`
+}
+
+function msgHtml(m) {
+  if (m.kind === 'qr') return `<div class="card"><div class="ch">💳 ชำระเงินด้วยพร้อมเพย์</div><div class="cb">${qrGrid()}<div style="text-align:center">ยอดชำระ <b style="font-size:32px">${esc(m.amount)}</b><br><span style="color:#64748B;font-size:21px">ออเดอร์ ${esc(m.order)}</span></div></div></div>`
+  if (m.kind === 'slip') return `<div class="slip">โอนเงินสำเร็จ ✓<div class="amt">${esc(m.amount)}</div>ไปยัง ${esc(m.to)}<br><span style="color:#94A3B8">${esc(m.when)}</span></div>`
+  return `<div class="bubble">${esc(m.text)}${m.meta ? `<span class="meta">${esc(m.meta)}</span>` : ''}</div>`
+}
+
+let C = null
+function build(clip) {
+  C = clip
+  const hook = clip.hook
+  const m = clip.main || { callouts: [], msgs: [], shop: { name: '', emoji: '' } }
+  document.getElementById('root').innerHTML = `
+  <div class="layer hook" id="hook">
+    ${hook.icon ? `<div class="icon" id="hookicon">${hook.icon}</div>` : ''}
+    <div class="kicker">${esc(hook.kicker || '')}</div>
+    <h1>${hook.title}</h1>
+    ${hook.sub ? `<div class="sub">${esc(hook.sub)}</div>` : ''}
+  </div>
+  <div class="layer" id="main" style="${clip.main ? '' : 'display:none'}">
+    <div class="callout">${m.callouts.map((c, i) => `<div class="c" id="co${i}"><div class="num">${c.num || i + 1}</div><div class="txt">${c.text}</div></div>`).join('')}</div>
+    <div class="phone"><div class="screen">
+      <div class="chathead"><div class="av">${esc(m.shop.emoji)}</div><div><div class="nm">${esc(m.shop.name)}</div><div class="st"><i></i>ตอบโดย DealMee AI</div></div></div>
+      <div class="viewport"><div class="list" id="list">
+        ${m.msgs.map((x, i) => `<div class="row ${x.side}" id="m${i}">${x.side === 'bot' ? `<div class="bav"><img src="${ICON}"></div>` : ''}${msgHtml(x)}</div>`).join('')}
+        <div class="typing" id="typing"><div class="bav"><img src="${ICON}"></div><div class="dots"><span></span><span></span><span></span></div></div>
+      </div></div>
+      ${(m.overlays || []).map((o, i) => o.kind === 'notify'
+        ? `<div class="notify" id="ov${i}"><div class="nt"><img src="${ICON}">${esc(o.app || 'LINE · แจ้งเตือนแอดมิน')} · ตอนนี้</div><div class="nb">${esc(o.body)}</div></div>`
+        : `<div class="panel" id="ov${i}" style="top:${o.top || 170}px"><div class="pt">${esc(o.title)}</div>${o.fields.map((f, j) => `<div class="f"><label>${esc(f.label)}</label><div id="ov${i}f${j}"></div></div>`).join('')}${o.check ? `<div class="chk">☑ ${esc(o.check)}</div>` : ''}<div class="btn" id="ov${i}b">${esc(o.button)}</div></div>`).join('')}
+    </div></div>
+    <div class="badges">${(m.badges || []).map((b, i) => `<span id="bd${i}">${esc(b)}</span>`).join('')}</div>
+  </div>
+  <div class="layer end" id="end" style="${clip.endDur ? '' : 'display:none'}">
+    <div class="logo"><img src="assets/dealmee-logo-horizontal.png"></div>
+    <h2>${clip.end ? clip.end.title : ''}</h2>
+    <div class="sub">${esc(clip.end ? clip.end.sub : '')}</div>
+    ${clip.end && clip.end.price ? `<div class="price">${clip.end.price}</div>` : ''}
+    <div class="cta">ทดลองใช้ฟรี 14 วัน</div>
+    <div class="contact">dealmee.app · LINE <span>@dealmee</span></div>
+  </div>
+  <div class="brand" id="brand"><img src="${ICON}"><div>Deal<span class="mee">Mee</span></div></div>
+  <div class="tag" id="tag">${esc(clip.tag)}</div>`
+}
+
+function setLayer(id, opacity, scale = 1, ty = 0) {
+  const el = document.getElementById(id)
+  el.style.opacity = opacity
+  el.style.transform = `translateY(${ty}px) scale(${scale})`
+  el.style.visibility = opacity <= 0.001 ? 'hidden' : 'visible'
+}
+
+function render(t) {
+  const dur = C.duration, mainStart = C.hook.dur, endStart = dur - C.endDur
+  // hook
+  const hin = C.hook.instant ? 1 : ease(t / 0.45)
+  const hout = ease((t - (mainStart - 0.35)) / 0.35)
+  setLayer('hook', Math.min(hin, 1 - hout), 0.96 + 0.04 * hin, (1 - hin) * 40 - hout * 60)
+  const hi = document.getElementById('hookicon')
+  if (hi) hi.style.transform = `translateY(${Math.sin(t * 2.2) * 10}px) rotate(${Math.sin(t * 1.6) * 3}deg)`
+  // main
+  const min = C.main ? ease((t - mainStart + 0.1) / 0.45) : 0, mout = C.endDur ? ease((t - (endStart - 0.3)) / 0.35) : 0
+  setLayer('main', Math.min(min, 1 - mout), 1, (1 - min) * 80)
+  // end
+  const ein = C.endDur ? ease((t - endStart) / 0.5) : 0
+  setLayer('end', ein, 0.94 + 0.06 * ein, (1 - ein) * 50)
+  document.getElementById('tag').style.opacity = 1 - ein
+
+  const m = C.main
+  if (!m) return
+  // callouts: each visible from its t to the next one's t
+  m.callouts.forEach((c, i) => {
+    const next = m.callouts[i + 1] ? m.callouts[i + 1].t : 999
+    const pin = ease((t - c.t) / 0.4), pout = ease((t - next + 0.25) / 0.25)
+    const el = document.getElementById('co' + i)
+    el.style.opacity = Math.min(pin, 1 - pout)
+    el.style.transform = `translateX(${(1 - pin) * -40}px)`
+  })
+  // messages
+  const list = document.getElementById('list')
+  let bottom = 26, typingTop = null
+  m.msgs.forEach((x, i) => {
+    const el = document.getElementById('m' + i)
+    const p = ease((t - x.t) / 0.35)
+    const h = el.offsetHeight + 18
+    if (t >= x.t) {
+      el.style.visibility = 'visible'
+      el.style.opacity = p
+      el.style.transform = `translateY(${(1 - p) * 30}px) scale(${0.96 + 0.04 * p})`
+      bottom += h * p
+    } else {
+      el.style.visibility = 'hidden'
+      if (x.side === 'bot' && t >= x.t - (x.think || 1.0) && typingTop === null) typingTop = el.offsetTop
+    }
+  })
+  const typing = document.getElementById('typing')
+  if (typingTop !== null) {
+    typing.style.top = typingTop + 'px'
+    typing.style.opacity = 1
+    const k = Math.floor(t * 4) % 3
+    typing.querySelectorAll('span').forEach((s, j) => (s.style.background = j === k ? '#2E5BFF' : '#94A3B8'))
+    bottom += 96
+  } else typing.style.opacity = 0
+  const vh = list.parentElement.offsetHeight
+  list.style.transform = `translateY(${-Math.max(0, bottom + 30 - vh)}px)`
+  // overlays
+  ;(m.overlays || []).forEach((o, i) => {
+    const el = document.getElementById('ov' + i)
+    const pin = ease((t - o.t) / 0.45), pout = ease((t - o.until) / 0.35)
+    el.style.opacity = Math.min(pin, 1 - pout)
+    el.style.transform = o.kind === 'notify' ? `translateY(${(1 - pin) * -140}px)` : `translateY(${(1 - pin) * 60}px) scale(${0.95 + 0.05 * pin})`
+    if (o.kind === 'panel') {
+      o.fields.forEach((f, j) => {
+        const start = o.t + 0.6 + j * 0.9
+        const n = Math.round(clamp((t - start) / 0.7) * f.value.length)
+        document.getElementById(`ov${i}f${j}`).textContent = f.value.slice(0, n)
+      })
+      const press = t >= o.press && t < o.press + 0.25
+      document.getElementById(`ov${i}b`).style.transform = press ? 'scale(.95)' : 'scale(1)'
+      document.getElementById(`ov${i}b`).style.background = t >= o.press ? '#10B981' : '#2E5BFF'
+      if (t >= o.press) document.getElementById(`ov${i}b`).textContent = o.done || o.button
+    }
+  })
+  ;(m.badges || []).forEach((b, i) => {
+    const p = ease((t - (m.badgesAt + i * 0.25)) / 0.4)
+    const el = document.getElementById('bd' + i)
+    el.style.opacity = p
+    el.style.transform = `translateY(${(1 - p) * 20}px)`
+  })
+}
+window.build = build
+window.render = render
+</script>
+</body>
+</html>
