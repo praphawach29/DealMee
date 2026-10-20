@@ -11,6 +11,7 @@ const TESTABLE = new Set(['GEMINI_API_KEY', 'OPENAI_API_KEY', 'CLAUDE_API_KEY', 
 const GROUPS: { key: SecretStatus['group']; title: string }[] = [
   { key: 'ai', title: 'AI' },
   { key: 'slip', title: 'ตรวจสลิป' },
+  { key: 'facebook', title: 'Facebook (แอป Meta ของ DealMee)' },
   { key: 'other', title: 'อื่น ๆ' },
 ]
 
