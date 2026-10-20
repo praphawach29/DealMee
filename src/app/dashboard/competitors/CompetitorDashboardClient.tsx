@@ -709,10 +709,15 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
  */
 function RemoteImage({ src, className }: { src?: string; className: string }) {
   const [failed, setFailed] = useState(false)
-  useEffect(() => setFailed(false), [src])
+  const ref = React.useRef<HTMLImageElement>(null)
+  useEffect(() => {
+    // An image that failed before React hydrated never reaches onError
+    const img = ref.current
+    setFailed(Boolean(img && img.complete && img.naturalWidth === 0))
+  }, [src])
   if (!src || failed) return <div className={`${className} bg-slate-100 dark:bg-slate-800`} />
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} className={className} />
+    <img ref={ref} src={src} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} className={className} />
   )
 }
