@@ -4,6 +4,7 @@ import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import ModulesView from './ModulesView'
 import { DEFAULT_PENDING_ORDER_EXPIRY_HOURS, PENDING_ORDER_EXPIRY_OPTIONS } from '@/lib/orders/pendingOrderExpiry'
 import { readBusinessHours } from '@/lib/shop/businessHours'
+import { highValueThreshold } from '@/lib/ai/salesModes'
 
 export default async function ModulesPage() {
   const supabase = await createClient()
@@ -34,6 +35,7 @@ export default async function ModulesPage() {
         initialDiscountCap={discountCap}
         initialFollowUp={followUpConfig}
         initialOrderExpiryHours={orderExpiryHours}
+        initialHighValueThreshold={highValueThreshold(shop?.features as Record<string, any>)}
         initialBusinessHours={readBusinessHours(shop?.features as Record<string, any>)}
       />
     </div>
