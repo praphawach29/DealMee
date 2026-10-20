@@ -282,10 +282,10 @@ async function executeCopilotTool(name: string, args: Record<string, any>, shopI
           platform: c.platform,
           followers: c.follower_count,
           engagement_rate: `${c.avg_engagement_rate}%`,
-          price_range: `${c.price_range_min} - ${c.price_range_max} บาท`,
-          pricing_verdict: c.profile_data?.aiPlaybook?.pricingVerdict || 'ไม่มีข้อมูล',
-          winning_caption: c.profile_data?.aiPlaybook?.winningCaptionDraft || 'ไม่มีข้อมูล',
-          objections: c.profile_data?.aiPlaybook?.objectionHandling || [],
+          price_range: c.price_range_max > 0 ? `${c.price_range_min} - ${c.price_range_max} บาท` : 'ไม่มีข้อมูล',
+          pricing_verdict: c.profile_data?.aiPlaybook?.pricingStrategyVerdict || 'ไม่มีข้อมูล',
+          winning_caption: c.profile_data?.aiPlaybook?.winningCaptionTemplate || 'ไม่มีข้อมูล',
+          objections: c.profile_data?.aiPlaybook?.priceAdvantageBullets || [],
         })),
       }
     }

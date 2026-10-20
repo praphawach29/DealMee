@@ -182,13 +182,7 @@ export async function getCompetitors(shopId: string): Promise<CompetitorRecord[]
           price_range_max: Number(c.price_range_max) || 0,
           posts,
           priceComparison: [],
-          aiPlaybook: aiPlaybook || {
-            pricingStrategyVerdict: 'วิเคราะห์ข้อมูลราคาเสร็จสิ้น',
-            priceAdvantageBullets: ['พร้อมจัดส่งทันทีใน 24 ชั่วโมง'],
-            topViralHooks: [],
-            winningCaptionTemplate: '',
-            recommendedHashtags: [],
-          },
+          aiPlaybook,
           is_live_data: true,
           data_source: 'live_api',
         }

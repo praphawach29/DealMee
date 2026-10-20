@@ -75,26 +75,26 @@ export async function POST(req: NextRequest) {
       const compName = competitor_name || 'คู่แข่ง'
       const finalTitle = title || `กลยุทธ์รับมือข้อโต้แย้งราคาและคู่แข่ง: ${compName}`
 
-      // Synthesize high-converting objection-handling battlecard for the sales AI
+      // Built only from the analysis the shop is looking at. It is saved as a draft:
+      // the bot reads active entries only, so nothing reaches customers until the
+      // shop has read it and pressed approve on the knowledge page. (Until Oct 2026
+      // this went live at once with promises the shop never made: dispatch within
+      // 24 hours, "100% as pictured" with instant exchanges, free gifts in chat.)
       let finalContent = content
       if (!finalContent && Array.isArray(strategy_bullets) && strategy_bullets.length > 0) {
         const bulletsText = strategy_bullets.map((b: string) => `- ${b}`).join('\n')
-        finalContent = `# [แนวทางรับมือข้อโต้แย้งราคาและเปรียบเทียบคู่แข่ง: ${compName}]
+        finalContent = `# แนวทางเมื่อลูกค้าเทียบกับร้าน ${compName}
 
-## 🎯 คำถามและข้อโต้แย้งที่พบบ่อยจากลูกค้า:
-- "ทำไมร้านเราถึงแพงกว่าร้าน ${compName} หรือร้านอื่น?"
-- "เห็นร้านอื่นขายราคาถูกกว่า มีส่วนลดมั้ย?"
-- "คุณภาพต่างจากร้านดัง/ร้านอื่นยังไงบ้าง?"
+## คำถามที่อาจเจอ
+- "ทำไมร้านนี้แพงกว่าร้าน ${compName} หรือร้านอื่น?"
+- "ร้านอื่นถูกกว่า มีส่วนลดไหม?"
 
-## 💡 แนวทางการตอบของ AI (สุภาพ มั่นใจ ไม่พาดพิงเชิงลบ ชูจุดเด่นที่คุ้มค่ากว่า):
+## แนวทางตอบ (สุภาพ ไม่พูดถึงคู่แข่งในทางลบ)
 ${bulletsText}
-
-${verdict ? `## 📊 กลยุทธ์ภาพรวม:\n${verdict}\n` : ''}
-## 🛡️ จุดขายที่เหนือกว่า (Value Superiority):
-- สินค้าพร้อมส่งด่วนจากไทยใน 24 ชั่วโมง (ไม่ต้องรอพรีออเดอร์ ไม่ต้องลุ้น)
-- คัดสรรเกรดพรีเมียม สัมผัสนุ่ม ทรงสวย คุ้มค่าในระยะยาว
-- รับประกันสินค้าตรงปก 100% มีบริการดูแลเปลี่ยนเคลมทันที
-- สั่งซื้อในแชทมีสิทธิพิเศษและโปรโมชั่นของแถมเฉพาะช่องทางนี้`
+${verdict ? `\n## ภาพรวม\n${verdict}\n` : ''}
+## ร้านต้องเติมเอง
+- จุดเด่นจริงของร้าน (เช่น ระยะเวลาจัดส่ง การรับประกัน การเปลี่ยนคืน) ใส่เฉพาะที่ร้านทำได้จริง
+- ห้ามให้บอทเสนอส่วนลดหรือของแถมที่ร้านไม่ได้กำหนดไว้`
       } else if (!finalContent) {
         return NextResponse.json({ error: 'Missing title, content, or strategy_bullets' }, { status: 400 })
       }
@@ -114,6 +114,7 @@ ${verdict ? `## 📊 กลยุทธ์ภาพรวม:\n${verdict}\n` : '
           .update({
             title: finalTitle,
             content: finalContent,
+            status: 'draft',
             updated_at: new Date().toISOString(),
           })
           .eq('id', existing.id)
@@ -124,7 +125,7 @@ ${verdict ? `## 📊 กลยุทธ์ภาพรวม:\n${verdict}\n` : '
 
         return NextResponse.json({
           success: true,
-          message: `อัปเดตกลยุทธ์รับมือ "${compName}" ในคลังความรู้บอทเรียบร้อยแล้ว!`,
+          message: `อัปเดตร่างกลยุทธ์รับมือ "${compName}" แล้ว ตรวจแก้และกดอนุมัติที่หน้าคลังความรู้ก่อน บอทจึงจะนำไปใช้`,
           id: updatedItem?.id,
           updated: true,
         })
@@ -139,7 +140,7 @@ ${verdict ? `## 📊 กลยุทธ์ภาพรวม:\n${verdict}\n` : '
           category: 'กลยุทธ์คู่แข่ง',
           source: 'competitor_spy',
           source_ref: compName,
-          status: 'active',
+          status: 'draft',
         })
         .select('id')
         .single()
@@ -148,7 +149,7 @@ ${verdict ? `## 📊 กลยุทธ์ภาพรวม:\n${verdict}\n` : '
 
       return NextResponse.json({
         success: true,
-        message: `เพิ่มกลยุทธ์รับมือ "${compName}" เข้าคลังความรู้บอทเรียบร้อยแล้ว!`,
+        message: `บันทึกร่างกลยุทธ์รับมือ "${compName}" แล้ว ตรวจแก้และกดอนุมัติที่หน้าคลังความรู้ก่อน บอทจึงจะนำไปใช้`,
         id: item?.id,
         updated: false,
       })

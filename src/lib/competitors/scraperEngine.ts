@@ -60,9 +60,10 @@ export interface ScrapedCompetitorProfile {
   price_range_max: number
   posts: CompetitorPost[]
   priceComparison: PriceComparisonItem[]
-  aiPlaybook: AiCompetitorPlaybook
+  /** null when the analysis could not be written (no Gemini key, model error, no posts) */
+  aiPlaybook: AiCompetitorPlaybook | null
   is_live_data?: boolean
-  data_source?: 'live_api' | 'smart_simulator'
+  data_source?: 'live_api'
   last_scanned_at?: string
 }
 
@@ -200,7 +201,7 @@ async function fetchLiveRapidApiData(
             const comments = Number(v.comment_count || 0)
             const shares = Number(v.share_count || 0)
             const eng = views > 0 ? Number((((likes + comments + shares) / views) * 100).toFixed(2)) : 0
-            const hashtags = (v.title?.match(/#[^\s#]+/g) || ['#tiktok', '#viral'])
+            const hashtags = (v.title?.match(/#[^\s#]+/g) || [])
 
             return {
               id: String(v.video_id || v.aweme_id || `tt-${idx}`),
@@ -260,180 +261,73 @@ async function fetchLiveRapidApiData(
   return null
 }
 
+/** Why a scan produced no profile; the analyze route turns it into a message and charges no quota. */
+export class CompetitorScanError extends Error {
+  constructor(
+    public readonly reason: 'unsupported_platform' | 'no_api_key' | 'not_found',
+    message: string
+  ) {
+    super(message)
+  }
+}
+
+/** Platforms whose profile and posts fetchLiveRapidApiData can actually read */
+export const LIVE_PLATFORMS: SocialPlatform[] = ['tiktok', 'instagram']
+
 /**
- * Intelligent Social Media Scraper & Market Analytics Engine
- * Modeled after https://github.com/cporter202/social-media-scraping-apis
- * Extracts viral video metrics, price bounds, and synthesizes competitive strategies
+ * Fetches a competitor's real profile and recent posts. Everything on the result
+ * comes from the platform: there is no source for a competitor's prices, so the
+ * price range stays 0 (unknown) and priceComparison stays empty, and the strategy
+ * section (aiPlaybook) is written afterwards from these posts by
+ * generateCompetitorPlaybook. Until Oct 2026 this filled every gap with made-up
+ * numbers (follower counts from a hash, a fixed ฿290–990 range, our price × 1.15
+ * as "their" price) and labelled cached results as live.
  */
 export async function scrapeCompetitorIntelligence(
   targetUrl: string,
-  myProducts: Array<{ id: string; name: string; price: number; stock: number }> = [],
-  options?: { apiKey?: string; forceRefresh?: boolean }
+  options?: { apiKey?: string }
 ): Promise<ScrapedCompetitorProfile> {
   const parsed = parseSocialUrl(targetUrl)
-  const cleanHandle = parsed.handle.replace(/^@/, '')
-
-  // 1. Check for RapidAPI Key (System or Shop level)
-  const rapidApiKey = options?.apiKey || process.env.RAPIDAPI_KEY || process.env.NEXT_PUBLIC_RAPIDAPI_KEY || ''
-  let liveScrapeResult: { name?: string; avatar_url?: string; follower_count?: number; posts?: CompetitorPost[] } | null = null
-
-  if (rapidApiKey) {
-    liveScrapeResult = await fetchLiveRapidApiData(parsed, rapidApiKey)
+  if (!LIVE_PLATFORMS.includes(parsed.platform)) {
+    throw new CompetitorScanError(
+      'unsupported_platform',
+      'ตอนนี้ดึงข้อมูลจริงได้เฉพาะ TikTok และ Instagram กรุณาวางลิงก์โปรไฟล์ของสองแพลตฟอร์มนี้'
+    )
   }
 
-  // 2. Generate consistent seed from handle for deterministic, realistic metrics
-  let seed = 0
-  for (let i = 0; i < cleanHandle.length; i++) {
-    seed = (seed << 5) - seed + cleanHandle.charCodeAt(i)
-    seed |= 0
+  const rapidApiKey = options?.apiKey || process.env.RAPIDAPI_KEY || ''
+  if (!rapidApiKey) {
+    throw new CompetitorScanError('no_api_key', 'ยังไม่ได้ตั้ง RapidAPI Key จึงดึงข้อมูลคู่แข่งไม่ได้')
   }
-  const absSeed = Math.abs(seed)
 
-  // Follower tiering (use live scraped count if available, otherwise deterministic calculation)
-  const followerCount = liveScrapeResult?.follower_count && liveScrapeResult.follower_count > 0
-    ? liveScrapeResult.follower_count
-    : 45000 + (absSeed % 480000)
-
-  const avgEngagementRate = (liveScrapeResult?.posts && liveScrapeResult.posts.length > 0)
-    ? Number((liveScrapeResult.posts.reduce((acc, p) => acc + p.engagement_rate, 0) / liveScrapeResult.posts.length).toFixed(2))
-    : Number((2.8 + ((absSeed % 55) / 10)).toFixed(2)) // 2.8% - 8.3%
-
-  // Profile name
-  const readableName = liveScrapeResult?.name || cleanHandle
-    .replace(/[._-]/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase())
-
-  // Sample avatars
-  const avatarMap: Record<SocialPlatform, string> = {
-    tiktok: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-    instagram: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
-    facebook: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80',
-    shopee: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=200&auto=format&fit=crop&q=80',
-    lazada: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&auto=format&fit=crop&q=80',
+  const live = await fetchLiveRapidApiData(parsed, rapidApiKey)
+  if (!live) {
+    throw new CompetitorScanError(
+      'not_found',
+      'ดึงข้อมูลบัญชีนี้ไม่สำเร็จ ตรวจว่าลิงก์ถูกต้องและบัญชีเป็นสาธารณะ แล้วลองใหม่'
+    )
   }
-  const finalAvatar = liveScrapeResult?.avatar_url || avatarMap[parsed.platform] || avatarMap.tiktok
 
-  // Top 5 viral posts
-  const viralHooks = [
-    { title: 'อย่าเพิ่งซื้อเสื้อยืดถ้ายังไม่ดูคลิปนี้! เทียบเนื้อผ้าแบบซูมกล้อง 4K 🔥', tag: ['#เสื้อยืด', '#ของดีบอกต่อ', '#tiktokแฟชั่น', '#รีวิวเสื้อผ้า'] },
-    { title: 'แจกพิกัดกางเกงทรงสวย ใส่แล้วขาดูเรียวยาวขึ้น 10 ซม. ทรงฮิตในเกาหลี 👖✨', tag: ['#กางเกงยีนส์', '#แฟชั่นเกาหลี', '#ootdthailand', '#แต่งตัว'] },
-    { title: 'เปิดกรุกระเป๋าใบโปรด จุของแน่นแต่เบาสบาย คุ้มเกินราคาหลักร้อย 👜', tag: ['#กระเป๋าสะพาย', '#รีวิวกระเป๋า', '#ชี้เป้าแฟชั่น', '#fyp'] },
-    { title: 'ตอบคำถามที่คนถามเยอะที่สุด ซักแล้วหดไหม? ทดสอบลงเครื่องให้ดูจะๆ 👀', tag: ['#เคล็ดลับดีๆ', '#พิสูจน์จริง', '#สินค้าขายดี', '#dealdee'] },
-    { title: 'Flash Sale เที่ยงคืนนี้วันเดียวเท่านั้น! เคลียร์สต็อกหมดแล้วหมดเลย ⚡', tag: ['#flashsale', '#โปรโมชั่น', '#ลดราคา', '#ช้อปด่วน'] },
-  ]
-
-  const posts: CompetitorPost[] = (liveScrapeResult?.posts && liveScrapeResult.posts.length > 0)
-    ? liveScrapeResult.posts
-    : viralHooks.map((vh, idx) => {
-        const views = Math.floor(185000 + ((absSeed * (idx + 1) * 37) % 650000))
-        const likes = Math.floor(views * (0.045 + (idx * 0.008)))
-        const comments = Math.floor(likes * 0.08)
-        const shares = Math.floor(likes * 0.12)
-        const engagement = Number((((likes + comments + shares) / views) * 100).toFixed(2))
-
-        return {
-          id: `post-${absSeed}-${idx}`,
-          post_url: `${parsed.normalizedUrl}#video-${idx + 1}`,
-          thumbnail_url: `https://images.unsplash.com/photo-${1515886657613 + idx * 1000}?w=500&auto=format&fit=crop&q=80`,
-          title_or_caption: vh.title,
-          views_count: views,
-          likes_count: likes,
-          comments_count: comments,
-          shares_count: shares,
-          engagement_rate: engagement,
-          hashtags: vh.tag,
-          published_at: new Date(Date.now() - (idx + 1) * 24 * 60 * 60 * 1000).toISOString(),
-        }
-      })
-
-  // Competitor price bounds
-  const priceMin = 290
-  const priceMax = 990
-
-  // Price comparison with my products
-  const priceComparison: PriceComparisonItem[] = (myProducts.slice(0, 4) || []).map((prod) => {
-    const competitorPrice = Math.round((prod.price * 1.15) / 10) * 10
-    const diff = competitorPrice - prod.price
-    const isCheaper = diff > 0
-
-    return {
-      myProduct: {
-        id: prod.id,
-        name: prod.name,
-        price: prod.price,
-        stock: prod.stock,
-      },
-      competitorEquivalent: {
-        name: `รุ่นเทียบเคียงในตลาด (${prod.name})`,
-        estimatedPrice: competitorPrice,
-        priceDifference: diff,
-        advantageLabel: isCheaper
-          ? `ร้านคุณถูกกว่า ฿${diff} (${Math.round((diff / competitorPrice) * 100)}%)`
-          : `ราคาใกล้เคียงตลาด ชูจุดเด่นพร้อมส่งทันที`,
-      },
-    }
-  })
-
-  // AI Strategic Playbook
-  const aiPlaybook: AiCompetitorPlaybook = {
-    pricingStrategyVerdict: `ร้านคู่แข่งตั้งราคาสูงกว่าร้านคุณเฉลี่ย 15-20% โดยใช้ภาพลักษณ์แฟชั่นมินิมอล ร้านของคุณมีแต้มต่อด้าน 'ความคุ้มค่าและพร้อมส่ง' สูงมาก สามารถกระตุ้นยอดขายด้วยการชูข้อความ 'คุณภาพเท่ากันในราคาประหยัดกว่า ฿50-100'`,
-    priceAdvantageBullets: [
-      'ชูราคาเริ่มต้นที่เข้าถึงง่ายกว่า เช่น "เสื้อยืดพรีเมียมเพียง 259.- (จากปกติ 290.-)"',
-      'จัดเซตจับคู่ (Bundle Set) เสื้อยืด + กางเกงยีนส์ ในราคาเซตพิเศษ ส่งฟรีเพื่อดันยอด Basket Size',
-      'ลูกค้าคู่แข่งมักกังวลเรื่องระยะเวลาส่งของจากต่างประเทศ ร้านคุณควรย้ำ "พร้อมส่งจากไทยใน 24 ชม."',
-    ],
-    topViralHooks: [
-      {
-        hookText: 'หยุดดูคลิปนี้ก่อน 3 วินาที ถ้าไม่อยากจ่ายแพงให้เสื้อยืดเกรดเดียวกัน!',
-        whyItWorks: 'หยุดนิ้วคนดูด้วยการเตือน (Pattern Interrupt) และกระตุ้นความอยากรู้เรื่องราคา',
-        recommendedFormat: 'TikTok / Reels ความยาว 15-20 วินาที เทียบเนื้อผ้าแบบโคลสอัป',
-      },
-      {
-        hookText: 'เทียบให้เห็นจะๆ: เสื้อตัวละ 259 ของเรา กับตัวละ 350 ต่างกันตรงไหนบ้าง?',
-        whyItWorks: 'สร้างความโปร่งใส (Transparency & Social Proof) ดึงดูดคนที่กำลังชั่งใจซื้อ',
-        recommendedFormat: 'คลิปสาธิตการยืด ทดสอบการซัก และการระบายอากาศ',
-      },
-      {
-        hookText: 'ไอเทมลับที่สายมินิมอลต้องมีติดตู้! แมตช์ง่ายได้ทุกลุค 7 วัน 7 สไตล์',
-        whyItWorks: 'เน้นคุณค่าการใช้งานซ้ำ (Cost-per-wear) ทำให้ลูกค้ารู้สึกคุ้มค่าทันที',
-        recommendedFormat: 'คลิปสวมใส่จริง (OOTD) เปลี่ยนลุคเร็วๆ ตามจังหวะเพลงไวรัล',
-      },
-    ],
-    winningCaptionTemplate: `ใครกำลังตามหาเสื้อยืดเนื้อนุ่มทรงเป๊ะ ต้องรุ่นนี้เลยค่ะ! 💖
-✨ เนื้อผ้าคอตตอนพรีเมียม นุ่มระบายอากาศดี ไม่หด ไม่ย้วย
-🏷️ ปกติ 290.- พิเศษสั่งซื้อในแชทวันนี้เหลือเพียง 259.- เท่านั้น!
-📦 มีรอบจัดส่งด่วนทุกวัน โอนสแกนพร้อมเพย์ หรือเก็บเงินปลายทางได้ค่ะ
-
-👉 ทักแชทพิมพ์ "สนใจเสื้อยืด" ให้น้องบอทส่งแคตตาล็อกให้ดูได้เลยนะคะ 😊`,
-    recommendedHashtags: [
-      '#เสื้อยืดลายการ์ตูน',
-      '#เสื้อยืดโอเวอร์ไซส์',
-      '#ของดีบอกต่อ',
-      '#tiktokแฟชั่น',
-      '#ootdthailand',
-      '#แต่งตัวมินิมอล',
-      '#พิกัดเสื้อผ้า',
-      '#ช้อปกันวันหยุด',
-      '#รีวิวของดี',
-      '#dealmeeai',
-    ],
-  }
+  const posts = live.posts || []
+  const avgEngagementRate = posts.length > 0
+    ? Number((posts.reduce((acc, p) => acc + p.engagement_rate, 0) / posts.length).toFixed(2))
+    : 0
 
   return {
-    name: readableName,
+    name: live.name || parsed.handle.replace(/^@/, ''),
     handle: parsed.handle,
     platform: parsed.platform,
     target_url: parsed.normalizedUrl,
-    avatar_url: finalAvatar,
-    follower_count: followerCount,
+    avatar_url: live.avatar_url || '',
+    follower_count: live.follower_count || 0,
     avg_engagement_rate: avgEngagementRate,
-    price_range_min: priceMin,
-    price_range_max: priceMax,
+    price_range_min: 0,
+    price_range_max: 0,
     posts,
-    priceComparison,
-    aiPlaybook,
-    is_live_data: !!liveScrapeResult,
-    data_source: liveScrapeResult ? 'live_api' : 'smart_simulator',
+    priceComparison: [],
+    aiPlaybook: null,
+    is_live_data: true,
+    data_source: 'live_api',
     last_scanned_at: new Date().toISOString(),
   }
 }
