@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { updateChannelSettings } from './actions'
 import AdminLineNotificationCard from './AdminLineNotificationCard'
+import { MARKETPLACE_CHANNELS_ENABLED } from '@/lib/channels/availability'
 import {
   Save,
   CheckCircle2,
@@ -511,6 +512,9 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
                 }`}>
                   {isFbConnected ? 'เชื่อมต่อแล้ว' : 'ยังไม่ได้เชื่อมต่อ'}
                 </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-amber-500/10 text-amber-700 border border-amber-500/30">
+                  ทดลอง
+                </span>
               </div>
               <p className="text-[11px] sm:text-xs text-on-surface-variant">
                 <span className="sm:hidden">รับและตอบแชทลูกค้า Messenger อัตโนมัติ</span>
@@ -530,6 +534,16 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
             <span className="hidden sm:inline">ไปหา Key ที่ Meta for Developers</span>
             <ExternalLink className="hidden sm:inline w-3.5 h-3.5 shrink-0" />
           </a>
+        </div>
+
+        {/* Each shop's own Meta app stays in Development Mode, where only the app's admins and
+            testers get replies. Public pages need DealMee's own reviewed app (planned). */}
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-[11px] sm:text-xs text-amber-800 dark:text-amber-200 leading-relaxed space-y-1">
+          <p className="font-bold">Messenger ยังเป็นช่วงทดลอง</p>
+          <p>
+            แอป Meta ที่ร้านสร้างเองจะอยู่ใน Development Mode บอทตอบได้เฉพาะแอดมินและผู้ทดสอบของแอปเท่านั้น ลูกค้าทั่วไปที่ทักเพจจะยังไม่ได้คำตอบจากบอท
+            จนกว่าแอปจะผ่าน App Review ของ Meta ตอนนี้ DealMee กำลังเตรียมปุ่ม &quot;เชื่อมเพจด้วย Facebook&quot; ที่ใช้งานได้กับลูกค้าทุกคน แนะนำให้ใช้ LINE OA เป็นช่องทางหลักไปก่อน
+          </p>
         </div>
 
         {/* Step-by-Step Instructions Accordion for Facebook */}
@@ -832,6 +846,10 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
         </div>
       </section>
 
+      {/* TikTok Shop / Shopee: not tested with real shops yet, so hidden until they are.
+          The saved values ride along so saving this form doesn't wipe them. */}
+      {MARKETPLACE_CHANNELS_ENABLED ? (
+        <>
       {/* ========================================================= */}
       {/* SECTION 3: TIKTOK SHOP (MARKETPLACE & AI COPILOT)         */}
       {/* ========================================================= */}
@@ -1280,6 +1298,17 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
           </div>
         </div>
       </section>
+        </>
+      ) : (
+        <>
+          <input type="hidden" name="tiktok_app_key" value={shop.tiktok_app_key || ''} />
+          <input type="hidden" name="tiktok_app_secret" value={shop.tiktok_app_secret || ''} />
+          <input type="hidden" name="tiktok_shop_id" value={shop.tiktok_shop_id || ''} />
+          <input type="hidden" name="shopee_partner_id" value={shop.shopee_partner_id || ''} />
+          <input type="hidden" name="shopee_partner_key" value={shop.shopee_partner_key || ''} />
+          <input type="hidden" name="shopee_shop_id" value={shop.shopee_shop_id || ''} />
+        </>
+      )}
 
       {/* Bottom Save Bar (with clearance for floating Copilot widget) */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 pb-20 sm:pb-6 border-t border-outline-variant/30">
