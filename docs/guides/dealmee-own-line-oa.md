@@ -1,4 +1,4 @@
-# LINE OA ของ DealMee เอง (@238qsjdw)
+# LINE OA ของ DealMee เอง (@dealmee, basic ID @238qsjdw)
 
 OA ตัวเดียวทำได้ 2 งาน:
 

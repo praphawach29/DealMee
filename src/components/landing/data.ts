@@ -224,8 +224,8 @@ export const scenarios: Scenario[] = [
   },
 ]
 
-/** DealMee's own LINE OA (also the platform alert OA). Change here when a premium ID is bought. */
-export const DEALMEE_LINE_OA = { id: '@238qsjdw', url: 'https://line.me/R/ti/p/@238qsjdw' }
+/** DealMee's own LINE OA (also the platform alert OA). Premium ID @dealmee (basic ID @238qsjdw still works). */
+export const DEALMEE_LINE_OA = { id: '@dealmee', url: 'https://line.me/R/ti/p/@dealmee' }
 
 // Keep in sync with the `plans` and `addon_packs` tables (wallet billing migration)
 export const freePlan = { price: 0, msgLimit: 100 }

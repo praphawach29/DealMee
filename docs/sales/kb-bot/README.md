@@ -1,4 +1,4 @@
-# คลังความรู้สำหรับบอทตอบแชทของ DealMee เอง (LINE OA @238qsjdw)
+# คลังความรู้สำหรับบอทตอบแชทของ DealMee เอง (LINE OA @dealmee)
 
 ทำ 20 ต.ค. 2569 จากโค้ดจริงของระบบ รูปแบบเดียวกับ `checkmee/docs/sales/kb-bot` ใช้กับร้าน "DealMee" ที่ตั้งตาม `docs/guides/dealmee-own-line-oa.md`
 
