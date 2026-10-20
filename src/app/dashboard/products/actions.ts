@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
+import { platformSecret } from '@/lib/platformSecrets'
 
 export async function createProduct(formData: FormData) {
   const supabase = await createClient()
@@ -120,8 +121,8 @@ export async function generateAiProductDescription(name: string, category?: stri
     }
   }
 
-  const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
-  const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+  const apiKey = await platformSecret('GEMINI_API_KEY')
+  const modelName = (await platformSecret('GEMINI_MODEL')) || 'gemini-2.5-flash'
 
   if (!apiKey) {
     return { error: 'ระบบไม่ได้ตั้งค่า GEMINI_API_KEY กรุณาติดต่อแอดมิน' }

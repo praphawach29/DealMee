@@ -295,7 +295,7 @@ export async function scrapeCompetitorIntelligence(
     )
   }
 
-  const rapidApiKey = options?.apiKey || process.env.RAPIDAPI_KEY || ''
+  const rapidApiKey = options?.apiKey || ''
   if (!rapidApiKey) {
     throw new CompetitorScanError('no_api_key', 'ยังไม่ได้ตั้ง RapidAPI Key จึงดึงข้อมูลคู่แข่งไม่ได้')
   }

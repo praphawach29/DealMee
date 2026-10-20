@@ -4,6 +4,7 @@ import { salesAutomationEnabled, SALES_AUTOMATION_TOOLS, SALES_LOCKED_PROMPT } f
 import { getPlanLimits, getAddonRemaining, consumeAddonCredit } from '@/lib/billing/planLimits'
 import { selectRelevantKnowledge } from '@/lib/ai/knowledgeSelect'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { platformSecret } from '@/lib/platformSecrets'
 import { buildBusinessPromptContext } from '@/lib/businessGreeting'
 import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
@@ -183,14 +184,6 @@ export const KNOWLEDGE_INLINE_MAX_CHARS = 50000
  */
 export const HISTORY_LINE_MAX_CHARS = 500
 export const PRODUCT_DESCRIPTION_MAX_CHARS = 150
-
-/**
- * Gemini 3 thinks before answering and bills it as output; left unset it
- * defaults to a high level, which was most of a turn's tokens and latency for
- * routine sales chat. GEMINI_THINKING_LEVEL overrides it ('default' sends no
- * setting at all).
- */
-const GEMINI_THINKING_LEVEL = process.env.GEMINI_THINKING_LEVEL || 'low'
 
 function clipForPrompt(text: string | null | undefined, max: number): string {
   const t = String(text || '')
@@ -932,41 +925,23 @@ async function preparePlanningState({
 
   const db = supabaseClient || supabase
 
-  let geminiKey =
+  // A shop's own key (BYOK) first, then the platform's (admin page → Vercel → legacy settings rows)
+  const [platformGemini, platformClaude, platformOpenAi] = await Promise.all([
+    platformSecret('GEMINI_API_KEY'),
+    platformSecret('CLAUDE_API_KEY'),
+    platformSecret('OPENAI_API_KEY'),
+  ])
+  const geminiKey =
     (shop?.custom_ai_provider === 'gemini' || shop?.ai_provider === 'gemini' ? (shop.custom_ai_key || shop.ai_key) : '') ||
-    process.env.GEMINI_API_KEY ||
-    process.env.GEMINI_KEY ||
-    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
-    ''
-  let claudeKey =
+    platformGemini
+  const claudeKey =
     (shop?.custom_ai_provider === 'claude' || shop?.ai_provider === 'claude' ? (shop.custom_ai_key || shop.ai_key) : '') ||
-    process.env.CLAUDE_API_KEY ||
-    process.env.CLAUDE_KEY ||
-    process.env.NEXT_PUBLIC_CLAUDE_API_KEY ||
-    ''
-  let openAiKey =
+    platformClaude
+  const openAiKey =
     (shop?.custom_ai_provider === 'openai' || shop?.ai_provider === 'openai' ? (shop.custom_ai_key || shop.ai_key) : '') ||
-    process.env.OPENAI_API_KEY ||
-    process.env.NEXT_PUBLIC_OPENAI_API_KEY ||
-    ''
+    platformOpenAi
 
-  if (!geminiKey || !openAiKey) {
-    try {
-      // settings is service-role only; db may be a signed-in user's client (Chat Playground)
-      const { data: globalKeys } = await supabase.from('settings').select('key, value').in('key', ['gemini_key', 'openai_key', 'claude_key'])
-      if (globalKeys) {
-        for (const k of globalKeys) {
-          if (k.key === 'gemini_key' && !geminiKey) geminiKey = k.value
-          if (k.key === 'openai_key' && !openAiKey) openAiKey = k.value
-          if (k.key === 'claude_key' && !claudeKey) claudeKey = k.value
-        }
-      }
-    } catch (keyErr) {
-      console.warn('[salesAgentEngine] Could not load global keys from settings:', keyErr)
-    }
-  }
-
-  const modelName = shop.custom_ai_model || shop.ai_model || process.env.GEMINI_MODEL || 'gemini-3.8-flash'
+  const modelName = shop.custom_ai_model || shop.ai_model || (await platformSecret('GEMINI_MODEL')) || 'gemini-3.8-flash'
 
   // 1. Knowledge Base — inlined up to a character budget, with the rest
   // reachable through search_knowledge_base. Every entry used to be inlined
@@ -1727,6 +1702,10 @@ async function callGeminiApi(
     ].filter(Boolean))
   )
 
+  // Gemini 3 thinks before answering and bills it as output; left unset it defaults
+  // to a high level, which was most of a turn's tokens and latency for routine sales
+  // chat. GEMINI_THINKING_LEVEL (admin page or Vercel) overrides it; 'default' sends none.
+  const thinkingLevel = (await platformSecret('GEMINI_THINKING_LEVEL')) || 'low'
   for (const model of candidateModels) {
     try {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
@@ -1735,7 +1714,7 @@ async function callGeminiApi(
         // Gemini 3.x reasons before answering and those thinking tokens are
         // billed against maxOutputTokens too.
         maxOutputTokens: MAX_OUTPUT_TOKENS,
-        ...(GEMINI_THINKING_LEVEL !== 'default' ? { thinkingConfig: { thinkingLevel: GEMINI_THINKING_LEVEL } } : {}),
+        ...(thinkingLevel !== 'default' ? { thinkingConfig: { thinkingLevel } } : {}),
       }
       const geminiTools = toGeminiTools(toolSet)
       const plainBody = {
@@ -1911,7 +1890,7 @@ async function callClaudeApi(
   const candidateModels = Array.from(
     new Set(
       [
-        process.env.CLAUDE_MODEL,
+        await platformSecret('CLAUDE_MODEL'),
         'claude-sonnet-5-5',
         'claude-haiku-5-5',
       ].filter(Boolean)
@@ -2045,7 +2024,7 @@ async function callOpenAiApi(
   const candidateModels = Array.from(
     new Set(
       [
-        process.env.OPENAI_MODEL,
+        await platformSecret('OPENAI_MODEL'),
         'gpt-5.6-luna',
         'gpt-4o-mini',
       ].filter(Boolean)

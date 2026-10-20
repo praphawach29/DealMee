@@ -1,4 +1,5 @@
 import { parseDocumentWithMarkItDown } from '@/lib/documentProcessor'
+import { platformSecret } from '@/lib/platformSecrets'
 
 export interface ExtractedQuotationItem {
   name: string
@@ -37,10 +38,10 @@ export async function extractQuotationFromMarkdown(
   markdownText: string,
   vatEnabled: boolean = false
 ): Promise<ExtractedQuotationData> {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
+  const apiKey = await platformSecret('GEMINI_API_KEY')
   if (!apiKey) throw new Error('ยังไม่ได้ตั้งค่า GEMINI_API_KEY')
 
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+  const model = (await platformSecret('GEMINI_MODEL')) || 'gemini-2.5-flash'
   const prompt = `คุณคือผู้เชี่ยวชาญการถอดรหัสเอกสารใบเสนอราคา, รายการวัสดุ (BOQ), หรือรายการสั่งซื้อ
 หน้าที่ของคุณคืออ่านข้อมูล Markdown ที่แปลงมาจากเอกสาร และดึงรายการสินค้า ปริมาณ และราคา ออกมาให้ถูกต้องที่สุด
 

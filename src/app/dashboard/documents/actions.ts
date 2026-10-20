@@ -5,6 +5,7 @@ import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { convertDocumentToQuotationDraft, ExtractedQuotationData } from '@/lib/ai/documentToQuotation'
 import { parseDocumentWithMarkItDown } from '@/lib/documentProcessor'
 import { revalidatePath } from 'next/cache'
+import { platformSecret } from '@/lib/platformSecrets'
 
 export interface OfficialLetterDraft {
   doc_number: string
@@ -142,10 +143,10 @@ export async function draftOfficialLetterAction(formData: FormData) {
       throw new Error(parsed.error || 'อ่านไฟล์ต้นเรื่องไม่สำเร็จ')
     }
 
-    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
+    const apiKey = await platformSecret('GEMINI_API_KEY')
     if (!apiKey) throw new Error('ยังไม่ได้ตั้งค่า GEMINI_API_KEY')
 
-    const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+    const model = (await platformSecret('GEMINI_MODEL')) || 'gemini-2.5-flash'
     const prompt = `คุณคือผู้เชี่ยวชาญด้านงานสารบรรณและการร่างหนังสือราชการตามระเบียบสำนักนายกรัฐมนตรีว่าด้วยงานสารบรรณ
 หน้าที่ของคุณคืออ่าน "เอกสารต้นเรื่อง" ที่แนบมา แล้วร่างหนังสือราชการตอบรับ/สั่งการ/อนุญาต ในนามองค์กร "${resolved.shop.company_name || resolved.shop.name || 'หน่วยงาน'}"
 

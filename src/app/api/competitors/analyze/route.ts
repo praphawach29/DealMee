@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { platformSecret } from '@/lib/platformSecrets'
 import { scrapeCompetitorIntelligence, parseSocialUrl, CompetitorScanError } from '@/lib/competitors/scraperEngine'
 import { generateCompetitorPlaybook } from '@/lib/competitors/competitorPlaybook'
 import { saveCompetitor } from '@/lib/competitors/competitorStore'
@@ -120,7 +121,7 @@ export async function POST(req: NextRequest) {
       .eq('key', `rapidapi_key_${shop_id}`)
       .maybeSingle()
 
-    const rapidApiKey = keySetting?.value || process.env.RAPIDAPI_KEY || ''
+    const rapidApiKey = keySetting?.value || (await platformSecret('RAPIDAPI_KEY'))
 
     // 4. Fetch the real profile; a platform we can't read, a missing key or an
     // account that can't be found costs no quota and saves nothing

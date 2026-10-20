@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
+  KeyRound,
   Store,
   CreditCard,
   Receipt,
@@ -36,6 +37,11 @@ export default function AdminSidebarNav({ onNavClick }: AdminSidebarNavProps) {
       label: 'ตั้งค่าบัญชีรับเงิน',
       href: '/admin/payment-settings',
       icon: Landmark,
+    },
+    {
+      label: 'ตั้งค่าระบบ (API Keys)',
+      href: '/admin/system-settings',
+      icon: KeyRound,
     },
     {
       label: 'จัดการร้านค้า',

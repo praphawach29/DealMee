@@ -1,4 +1,4 @@
-import { createAdminClient } from '@/lib/supabase/admin'
+import { platformSecret } from '@/lib/platformSecrets'
 
 export interface VideoScriptSegment {
   duration: string // e.g. "00:00 - 00:03"
@@ -29,27 +29,7 @@ export interface GenerateScriptParams {
 }
 
 async function getGeminiApiKey(): Promise<string> {
-  const envKey =
-    process.env.GEMINI_API_KEY ||
-    process.env.GEMINI_KEY ||
-    process.env.NEXT_PUBLIC_GEMINI_API_KEY
-
-  if (envKey) return envKey
-
-  try {
-    const supabase = createAdminClient()
-    const { data: setting } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', 'gemini_key')
-      .maybeSingle()
-
-    if (setting?.value) return setting.value
-  } catch (err) {
-    console.warn('[competitorVideoScript] Failed to load gemini_key from settings:', err)
-  }
-
-  return ''
+  return platformSecret('GEMINI_API_KEY')
 }
 
 export async function generateViralScriptFromCompetitor(
@@ -100,7 +80,7 @@ export async function generateViralScriptFromCompetitor(
   "hashtags": ["#แฮชแท็ก1", "#แฮชแท็ก2", "#แฮชแท็ก3", "#แฮชแท็ก4", "#แฮชแท็ก5"]
 }`
 
-      const candidateModels = [process.env.GEMINI_MODEL || 'gemini-3.8-flash', 'gemini-flash-latest']
+      const candidateModels = [(await platformSecret('GEMINI_MODEL')) || 'gemini-3.8-flash', 'gemini-flash-latest']
 
       for (const model of candidateModels) {
         try {

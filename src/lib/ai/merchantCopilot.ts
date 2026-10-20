@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCompetitors } from '@/lib/competitors/competitorStore'
+import { platformSecret } from '@/lib/platformSecrets'
 
 export interface CopilotMessage {
   role: 'user' | 'assistant' | 'system'
@@ -313,13 +314,7 @@ export async function runMerchantCopilotChat({
     const supabase = createAdminClient()
     const { data: shop } = await supabase.from('shops').select('*').eq('id', shopId).single()
 
-    let apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
-    if (!apiKey) {
-      const { data: setting } = await supabase.from('settings').select('value').eq('key', 'gemini_key').maybeSingle()
-      if (setting?.value) {
-        apiKey = setting.value
-      }
-    }
+    const apiKey = await platformSecret('GEMINI_API_KEY')
 
     if (!apiKey) {
       return {
@@ -328,7 +323,7 @@ export async function runMerchantCopilotChat({
       }
     }
 
-    const model = shop?.custom_ai_model || shop?.ai_model || process.env.GEMINI_MODEL || 'gemini-3.8-flash'
+    const model = shop?.custom_ai_model || shop?.ai_model || (await platformSecret('GEMINI_MODEL')) || 'gemini-3.8-flash'
 
     const systemPrompt = `คุณคือ "DealMee Copilot" ผู้ช่วย AI อัจฉริยะประจำตัวเจ้าของร้าน (Merchant Copilot) ของร้าน "${shop?.name || 'ร้านค้า'}"
 หน้าที่ของคุณ:

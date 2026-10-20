@@ -125,7 +125,7 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
   // Checks on the platform's provider key count against the plan's monthly slip
   // allowance, then slip add-on packs; a shop using its own key isn't counted
   const shopSlipSettings = shop?.features?.slip_verification
-  if (!resolveSlipProviderAndKey(shopSlipSettings).isShopCustomKey && (await claimSlipCheck(shop)) === 'none') {
+  if (!(await resolveSlipProviderAndKey(shopSlipSettings)).isShopCustomKey && (await claimSlipCheck(shop)) === 'none') {
     await logCustomerImage(' — รอแอดมินตรวจสลิป')
     await replyAndLog('ได้รับสลิปแล้วค่ะ 🙏 แอดมินจะตรวจสอบและยืนยันออเดอร์ให้โดยเร็วที่สุดนะคะ')
     await notifyShopAdmin(shop, `⚠️ สลิปรอตรวจสอบ\nลูกค้า: ${customerLabel}\n${pendingOrder ? `ออเดอร์: ${pendingOrder.order_no}\n` : ''}${slipQr ? `เลขอ้างอิงสลิป: ${slipQr.transRef}\n` : ''}เหตุผล: โควตาตรวจสลิปอัตโนมัติของร้านเดือนนี้หมดแล้ว\nซื้อแพ็กตรวจสลิปเพิ่มได้ที่ ${BILLING_URL}`)

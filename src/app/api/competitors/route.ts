@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCompetitors, deleteCompetitor } from '@/lib/competitors/competitorStore'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { platformSecret } from '@/lib/platformSecrets'
 import { getCompetitorQuota } from '@/lib/billing/competitorQuota'
 import { requireShop } from '@/lib/auth/requireShop'
 
@@ -27,10 +28,11 @@ export async function GET(req: NextRequest) {
       .eq('key', `rapidapi_key_${shopId}`)
       .maybeSingle()
 
-    const hasApiKey = Boolean(keySetting?.value || process.env.RAPIDAPI_KEY)
+    const platformKey = await platformSecret('RAPIDAPI_KEY')
+    const hasApiKey = Boolean(keySetting?.value || platformKey)
     const maskedKey = keySetting?.value
       ? `${keySetting.value.slice(0, 6)}••••••••${keySetting.value.slice(-4)}`
-      : (process.env.RAPIDAPI_KEY ? '•••••••• (ใช้คีย์จากระบบ Vercel)' : '')
+      : (platformKey ? '•••••••• (ใช้คีย์กลางของระบบ)' : '')
 
     return NextResponse.json({
       success: true,
