@@ -856,7 +856,7 @@ export async function executeTool(
       return { resultForAi: `ไม่พบสินค้า "${args.product_name}" ให้แจ้งลูกค้าตามนี้`, immediateMessages: [] }
     }
     return {
-      resultForAi: prods.map((p: any) => `${p.name} (รหัส SKU: ${p.master_sku || 'กลาง'}): ${p.stock > 0 ? `มีสินค้าพร้อมส่งในคลังกลาง ${p.stock} ชิ้น (ซิงค์ข้ามช่องทาง Shopee & TikTok Shop)` : 'สินค้าหมดสต๊อกชั่วคราว'}, ราคา ${Number(p.price).toLocaleString()} บาท`).join('; '),
+      resultForAi: prods.map((p: any) => `${p.name} (รหัส SKU: ${p.master_sku || 'กลาง'}): ${p.stock > 0 ? `มีสินค้าพร้อมส่ง ${p.stock} ชิ้น` : 'สินค้าหมดสต๊อกชั่วคราว'}, ราคา ${Number(p.price).toLocaleString()} บาท`).join('; '),
       immediateMessages: [],
     }
   }

@@ -14,6 +14,7 @@ import {
   ChatMessageOmnichannel,
 } from '@/types/omnichannel'
 import CustomerProfileDrawer from './CustomerProfileDrawer'
+import { MARKETPLACE_CHANNELS_ENABLED } from '@/lib/channels/availability'
 
 export type Conversation = ConversationOmnichannel
 export type ChatMessage = ChatMessageOmnichannel
@@ -183,6 +184,8 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
                   >
                     <span>🔵 Facebook Page</span>
                   </button>
+                  {MARKETPLACE_CHANNELS_ENABLED && (
+                  <>
                   <button
                     onClick={() => handleCreateMock('tiktok')}
                     className="w-full text-left px-2.5 py-1.5 text-xs font-semibold rounded-lg hover:bg-slate-100 text-slate-800 flex items-center gap-2 cursor-pointer"
@@ -195,6 +198,8 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
                   >
                     <span>🟠 Shopee</span>
                   </button>
+                  </>
+                  )}
                 </div>
               )}
             </div>
@@ -243,6 +248,8 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
             >
               Facebook
             </button>
+            {MARKETPLACE_CHANNELS_ENABLED && (
+            <>
             <button
               onClick={() => setFilterPlatform('tiktok')}
               className={`py-1 px-2 text-[11px] font-bold rounded-lg transition-all shrink-0 cursor-pointer ${
@@ -263,6 +270,8 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
             >
               Shopee
             </button>
+            </>
+            )}
           </div>
 
           {/* AI / Human Filter Pills */}

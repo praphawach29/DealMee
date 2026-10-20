@@ -44,7 +44,7 @@ export default function SettingsTabs({ shop, initialTab }: { shop: any; initialT
         >
           <Share2 className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
           <span className="sm:hidden">ช่องทางแชท</span>
-          <span className="hidden sm:inline">เชื่อมต่อช่องทางแชท & มาร์เก็ตเพลส</span>
+          <span className="hidden sm:inline">เชื่อมต่อช่องทางแชท</span>
         </button>
 
         <button
