@@ -1,6 +1,6 @@
 # คู่มือระบบกระเป๋าเงิน (Prepaid Wallet) — นำไปใช้กับโปรเจคอื่น
 
-> อ้างอิงจาก DealMee (`praphawach29/ai-agent-google-SDK`) ที่ใช้งานจริงบน production ตั้งแต่ 20 ต.ค. 2569
+> อ้างอิงจาก DealMee (`praphawach29/DealMee`) ที่ใช้งานจริงบน production ตั้งแต่ 20 ต.ค. 2569
 > เขียนให้ AI ใน session อื่นอ่านแล้วสร้างระบบเดียวกันได้ โดยไม่ต้องมีบริบทจากบทสนทนาเดิม
 > ถ้า session นั้นเข้าถึง repo DealMee ได้ ให้อ่านไฟล์จริงตามตาราง "ไฟล์อ้างอิง" ท้ายเอกสารประกอบ
 
@@ -210,7 +210,7 @@ document.addEventListener('visibilitychange', refresh)    // กลับมา�
 ## 12. ข้อความสำหรับวางใน session ใหม่
 
 ```
-อ่าน docs/guides/prepaid-wallet-billing.md จาก repo praphawach29/ai-agent-google-SDK (DealMee)
+อ่าน docs/guides/prepaid-wallet-billing.md จาก repo praphawach29/DealMee (DealMee)
 แล้วสร้างระบบกระเป๋าเงินแบบเดียวกันในโปรเจคนี้ ให้ได้ครบทุกข้อในหัวข้อ 1 และทำตามกติกาในหัวข้อ 2 ทุกข้อ
 ใช้ไฟล์ในหัวข้อ 11 เป็นต้นแบบ (add_repo เพื่ออ่านได้) ปรับชื่อตาราง tenant ให้ตรงกับโปรเจคนี้
 เริ่มจากสำรวจโครงสร้าง tenant/บิลเดิมของโปรเจคนี้ แล้วสรุปแผนให้ผมยืนยันก่อนเขียน migration

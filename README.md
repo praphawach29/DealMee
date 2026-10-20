@@ -86,8 +86,8 @@
 
 ### 1. โคลนโปรเจกต์และติดตั้ง Dependencies
 ```bash
-git clone https://github.com/praphawach29/ai-agent-google-SDK.git
-cd ai-agent-google-SDK
+git clone https://github.com/praphawach29/DealMee.git
+cd DealMee
 npm install
 ```
 

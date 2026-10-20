@@ -3,7 +3,7 @@
 > อัปเดตล่าสุด: 20 ตุลาคม 2026 (กระเป๋าเงิน, Super Admin คนเดียว, รีเซ็ตรหัสผ่าน — PR #29–#51 ดูรายละเอียดใน TODO.md)
 > คู่มือนำระบบกระเป๋าเงินไปใช้กับโปรเจคอื่น: [docs/guides/prepaid-wallet-billing.md](./docs/guides/prepaid-wallet-billing.md)
 > แผนงานถัดไปของบอทขาย & onboarding: [docs/plans/2026-10-17-bot-sales-and-onboarding-next-steps.md](./docs/plans/2026-10-17-bot-sales-and-onboarding-next-steps.md)
-> GitHub: praphawach29/ai-agent-google-SDK branch main
+> GitHub: praphawach29/DealMee branch main
 > Handover & Action Checklist: ดูรายละเอียดเพิ่มเติมที่ [TODO.md](./TODO.md)
 >
 > เอกสารนี้คือแหล่งข้อมูลสถานะปัจจุบันของโปรเจกต์ฉบับเดียว (single source of truth)
