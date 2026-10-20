@@ -1,45 +1,35 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Radar,
   Search,
   Sparkles,
-  TrendingUp,
-  DollarSign,
-  Share2,
-  ThumbsUp,
   Eye,
+  ThumbsUp,
   MessageCircle,
+  Share2,
   Copy,
   Check,
   Trash2,
   ExternalLink,
-  Flame,
-  Lightbulb,
-  CheckCircle2,
-  Database,
-  ArrowRight,
-  ShieldCheck,
-  Zap,
   RefreshCw,
   Key,
   BookOpen,
   Send,
-  Radio,
   Clapperboard,
-  Video,
-  Play,
-  Clock,
-  Layers,
-  PackagePlus,
+  Lightbulb,
+  CheckCircle2,
   AlertTriangle,
+  Loader2,
+  X,
+  Users,
+  Activity,
 } from 'lucide-react'
 import type { ScrapedCompetitorProfile, CompetitorPost } from '@/lib/competitors/scraperEngine'
-import { CompetitorRecord } from '@/lib/competitors/competitorStore'
-import { CompetitorQuotaInfo } from '@/lib/billing/competitorQuota'
-import { ViralVideoScript } from '@/lib/ai/competitorVideoScript'
+import type { CompetitorRecord } from '@/lib/competitors/competitorStore'
+import type { CompetitorQuotaInfo } from '@/lib/billing/competitorQuota'
+import type { ViralVideoScript } from '@/lib/ai/competitorVideoScript'
 
 interface CompetitorDashboardClientProps {
   shop: any
@@ -48,224 +38,108 @@ interface CompetitorDashboardClientProps {
   initialQuota?: CompetitorQuotaInfo
 }
 
+type Tab = 'posts' | 'analysis' | 'ideas'
+
+const card = 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm'
+const primaryButton =
+  'inline-flex items-center justify-center gap-2 bg-electric-blue hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-xl transition-all text-xs sm:text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
+const secondaryButton =
+  'inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs font-semibold transition-all cursor-pointer disabled:opacity-50'
+
+function compact(n: number) {
+  return Number(n || 0).toLocaleString('th-TH', { notation: 'compact', maximumFractionDigits: 1 })
+}
+
+function platformLabel(platform: string) {
+  return platform === 'tiktok' ? 'TikTok' : platform === 'instagram' ? 'Instagram' : platform
+}
+
+function thaiDateTime(iso?: string) {
+  if (!iso) return ''
+  return new Date(iso).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })
+}
+
 export default function CompetitorDashboardClient({
   shop,
   initialCompetitors = [],
   shopProducts = [],
   initialQuota,
 }: CompetitorDashboardClientProps) {
+  const router = useRouter()
   const [competitors, setCompetitors] = useState<CompetitorRecord[]>(initialCompetitors)
-  const [quota, setQuota] = useState<CompetitorQuotaInfo>(
-    initialQuota || {
-      total: 3,
-      used: 0,
-      remaining: 3,
-      planName: 'FREE',
-      period: new Date().toISOString().slice(0, 7),
-    }
-  )
+  const [quota, setQuota] = useState<CompetitorQuotaInfo | undefined>(initialQuota)
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null)
+  const [maskedKey, setMaskedKey] = useState('')
   const [inputUrl, setInputUrl] = useState('')
   const [isScanning, setIsScanning] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
-  const [activeAnalysis, setActiveAnalysis] = useState<ScrapedCompetitorProfile | null>(
-    initialCompetitors[0]?.profile_data || null
-  )
-  const [activeTab, setActiveTab] = useState<'price' | 'viral' | 'copilot'>('price')
-  const [copiedTag, setCopiedTag] = useState('')
-  const [copiedCaption, setCopiedCaption] = useState(false)
-  const [showSqlModal, setShowSqlModal] = useState(false)
-  const [showApiModal, setShowApiModal] = useState(false)
-  const [apiKeyInput, setApiKeyInput] = useState('')
+  const [active, setActive] = useState<ScrapedCompetitorProfile | null>(initialCompetitors[0]?.profile_data || null)
+  const [tab, setTab] = useState<Tab>('posts')
+  const [copied, setCopied] = useState('')
+  const [notice, setNotice] = useState('')
+  const [isSavingDraft, setIsSavingDraft] = useState(false)
+
+  const [showKeyModal, setShowKeyModal] = useState(false)
+  const [keyInput, setKeyInput] = useState('')
   const [isSavingKey, setIsSavingKey] = useState(false)
-  const [savedKeySuccess, setSavedKeySuccess] = useState('')
-  const router = useRouter()
-  const [isSyncingKb, setIsSyncingKb] = useState(false)
-  const [kbSuccessMsg, setKbSuccessMsg] = useState('')
 
-  // Script Generator Modal State
-  const [selectedPostForScript, setSelectedPostForScript] = useState<CompetitorPost | null>(null)
-  const [selectedProductId, setSelectedProductId] = useState<string>(shopProducts[0]?.id || '')
+  const [scriptPost, setScriptPost] = useState<CompetitorPost | null>(null)
+  const [scriptProductId, setScriptProductId] = useState<string>(shopProducts[0]?.id || '')
+  const [script, setScript] = useState<ViralVideoScript | null>(null)
+  const [scriptError, setScriptError] = useState('')
   const [isGeneratingScript, setIsGeneratingScript] = useState(false)
-  const [generatedScript, setGeneratedScript] = useState<ViralVideoScript | null>(null)
-  const [scriptViewMode, setScriptViewMode] = useState<'teleprompter' | 'storyboard' | 'caption'>('storyboard')
-  const [copiedTeleprompter, setCopiedTeleprompter] = useState(false)
-  const [copiedScriptStoryboard, setCopiedScriptStoryboard] = useState(false)
 
-  const handleSyncKnowledge = async () => {
-    if (!activeAnalysis?.aiPlaybook || !shop?.id) return
-    setIsSyncingKb(true)
-    setKbSuccessMsg('')
-
-    const kbTitle = `กลยุทธ์รับมือข้อโต้แย้งราคา & ชนะคู่แข่ง: ${activeAnalysis.name} (${activeAnalysis.handle})`
-
-    try {
-      const res = await fetch('/api/competitors', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'sync_knowledge',
-          shop_id: shop.id,
-          competitor_name: activeAnalysis.name,
-          title: kbTitle,
-          strategy_bullets: activeAnalysis.aiPlaybook.priceAdvantageBullets,
-          verdict: activeAnalysis.aiPlaybook.pricingStrategyVerdict,
-        }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        setKbSuccessMsg(data.message || 'บันทึกเป็นร่างในคลังความรู้แล้ว ตรวจแก้และกดอนุมัติก่อน บอทจึงจะนำไปใช้')
-        setTimeout(() => setKbSuccessMsg(''), 5000)
-      } else {
-        alert(data.error || 'บันทึกไม่สำเร็จ')
-      }
-    } catch (err: any) {
-      alert(err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ')
-    } finally {
-      setIsSyncingKb(false)
-    }
+  const refreshList = async () => {
+    const res = await fetch('/api/competitors')
+    const data = await res.json()
+    if (Array.isArray(data.competitors)) setCompetitors(data.competitors)
+    if (data.quota) setQuota(data.quota)
+    if (typeof data.has_api_key === 'boolean') setHasApiKey(data.has_api_key)
+    setMaskedKey(data.masked_api_key || '')
+    return data
   }
 
-  const handleGoToBroadcast = () => {
-    if (!activeAnalysis?.aiPlaybook) return
-    const title = `โปรโมชันพิเศษจากกลยุทธ์ ${activeAnalysis.name}`
-    const message = activeAnalysis.aiPlaybook.winningCaptionTemplate
-    router.push(`/dashboard/broadcast?title=${encodeURIComponent(title)}&message=${encodeURIComponent(message)}`)
-  }
-
-  // Handle Script Generation
-  const handleOpenScriptModal = (post: CompetitorPost) => {
-    setSelectedPostForScript(post)
-    setGeneratedScript(null)
-    generateScriptForPost(post, selectedProductId)
-  }
-
-  const generateScriptForPost = async (post: CompetitorPost, prodId?: string) => {
+  useEffect(() => {
     if (!shop?.id) return
-    setIsGeneratingScript(true)
-
-    try {
-      const res = await fetch('/api/competitors/generate-script', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shop_id: shop.id,
-          competitor_name: activeAnalysis?.name || 'ร้านคู่แข่ง',
-          video_title: post.title_or_caption,
-          product_id: prodId || selectedProductId || undefined,
-        }),
-      })
-
-      const data = await res.json()
-      if (data.success && data.script) {
-        setGeneratedScript(data.script)
-      } else {
-        alert(data.error || 'ไม่สามารถสร้างสคริปต์วิดีโอได้')
-      }
-    } catch (err: any) {
-      alert(err.message || 'เกิดข้อผิดพลาดในการสร้างสคริปต์')
-    } finally {
-      setIsGeneratingScript(false)
-    }
-  }
-
-  // Sync when initialCompetitors prop changes
-  React.useEffect(() => {
-    if (initialCompetitors && initialCompetitors.length > 0) {
-      setCompetitors(initialCompetitors)
-      if (!activeAnalysis && initialCompetitors[0]?.profile_data) {
-        setActiveAnalysis(initialCompetitors[0].profile_data)
-      }
-    }
-  }, [initialCompetitors])
-
-  // Automatically refresh competitor list and quota on client mount
-  React.useEffect(() => {
-    if (!shop?.id) return
-    fetch(`/api/competitors?shop_id=${shop.id}`)
-      .then((res) => res.json())
+    refreshList()
       .then((data) => {
-        if (data.competitors && Array.isArray(data.competitors) && data.competitors.length > 0) {
-          setCompetitors(data.competitors)
-          if (!activeAnalysis && data.competitors[0]?.profile_data) {
-            setActiveAnalysis(data.competitors[0].profile_data)
-          }
-        }
-        if (data.quota) {
-          setQuota(data.quota)
-        }
+        if (!active && data.competitors?.[0]?.profile_data) setActive(data.competitors[0].profile_data)
       })
       .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shop?.id])
 
-  const handleSaveApiKey = async () => {
-    setIsSavingKey(true)
-    setSavedKeySuccess('')
-    try {
-      const res = await fetch('/api/competitors', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'save_api_key',
-          shop_id: shop.id,
-          rapidapi_key: apiKeyInput,
-        }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        setSavedKeySuccess('บันทึก Key เรียบร้อยแล้ว!')
-        setTimeout(() => setSavedKeySuccess(''), 3000)
-      }
-    } catch (err: any) {
-      alert(err.message || 'บันทึกไม่สำเร็จ')
-    } finally {
-      setIsSavingKey(false)
-    }
+  const copy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text)
+    setCopied(id)
+    setTimeout(() => setCopied(''), 2000)
   }
 
+  const flash = (message: string) => {
+    setNotice(message)
+    setTimeout(() => setNotice(''), 6000)
+  }
 
-  const handleScan = async (targetUrlToScan?: string, forceRefresh = false) => {
-    const url = targetUrlToScan || inputUrl
-    if (!url || !url.trim()) {
-      setErrorMsg('กรุณากรอกลิงก์โปรไฟล์คู่แข่ง (TikTok หรือ Instagram)')
+  const handleScan = async (url = inputUrl, forceRefresh = false) => {
+    if (!url.trim()) {
+      setErrorMsg('วางลิงก์โปรไฟล์คู่แข่ง (TikTok หรือ Instagram)')
       return
     }
-
     setErrorMsg('')
     setIsScanning(true)
-
     try {
       const res = await fetch('/api/competitors/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shop_id: shop.id,
-          url: url.trim(),
-          force_refresh: forceRefresh,
-        }),
+        body: JSON.stringify({ url: url.trim(), force_refresh: forceRefresh }),
       })
-
       const data = await res.json()
-      if (data.quota) {
-        setQuota(data.quota)
-      }
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'ไม่สามารถสแกนข้อมูลร้านคู่แข่งได้')
-      }
-
-      setActiveAnalysis(data.data)
-
-      // Refresh list
-      const listRes = await fetch(`/api/competitors?shop_id=${shop.id}`)
-      const listData = await listRes.json()
-      if (listData.competitors) {
-        setCompetitors(listData.competitors)
-      }
-      if (listData.quota) {
-        setQuota(listData.quota)
-      }
-
-      if (!targetUrlToScan) setInputUrl('')
+      if (data.quota) setQuota(data.quota)
+      if (!res.ok || !data.success) throw new Error(data.error || 'สแกนไม่สำเร็จ')
+      setActive(data.data)
+      setTab('posts')
+      setInputUrl('')
+      await refreshList()
     } catch (err: any) {
       setErrorMsg(err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ')
     } finally {
@@ -274,1081 +148,571 @@ export default function CompetitorDashboardClient({
   }
 
   const handleDelete = async (comp: CompetitorRecord) => {
-    if (!confirm(`ต้องการลบการติดตามคู่แข่ง "${comp.name}" หรือไม่?`)) return
+    if (!confirm(`เลิกติดตาม "${comp.name}" หรือไม่?`)) return
+    await fetch(`/api/competitors?id=${comp.id}`, { method: 'DELETE' }).catch(() => {})
+    setCompetitors((prev) => prev.filter((c) => c.id !== comp.id))
+    if (active?.handle === comp.handle) setActive(null)
+  }
 
+  const handleSaveKey = async () => {
+    setIsSavingKey(true)
     try {
-      await fetch(`/api/competitors?shop_id=${shop.id}&id=${comp.id}`, { method: 'DELETE' })
-      setCompetitors((prev) => prev.filter((c) => c.id !== comp.id))
-      if (activeAnalysis?.handle === comp.handle) {
-        setActiveAnalysis(null)
-      }
-    } catch (err) {
-      console.error(err)
+      const res = await fetch('/api/competitors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save_api_key', rapidapi_key: keyInput }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error || 'บันทึกไม่สำเร็จ')
+      setKeyInput('')
+      setShowKeyModal(false)
+      flash(data.message)
+      await refreshList()
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setIsSavingKey(false)
     }
   }
 
-  const copyToClipboard = (text: string, tagId: string) => {
-    navigator.clipboard.writeText(text)
-    setCopiedTag(tagId)
-    setTimeout(() => setCopiedTag(''), 2000)
+  const handleSaveDraft = async () => {
+    if (!active?.aiPlaybook) return
+    setIsSavingDraft(true)
+    try {
+      const res = await fetch('/api/competitors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sync_knowledge',
+          competitor_name: active.name,
+          title: `แนวทางตอบเมื่อลูกค้าเทียบกับ ${active.name} (${active.handle})`,
+          strategy_bullets: active.aiPlaybook.priceAdvantageBullets,
+          verdict: active.aiPlaybook.pricingStrategyVerdict,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error || 'บันทึกไม่สำเร็จ')
+      flash(data.message)
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setIsSavingDraft(false)
+    }
   }
 
-  const copyCaption = (caption: string) => {
-    navigator.clipboard.writeText(caption)
-    setCopiedCaption(true)
-    setTimeout(() => setCopiedCaption(false), 2500)
+  const generateScript = async (post: CompetitorPost, productId: string) => {
+    setIsGeneratingScript(true)
+    setScript(null)
+    setScriptError('')
+    try {
+      const res = await fetch('/api/competitors/generate-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          competitor_name: active?.name || 'คู่แข่ง',
+          video_title: post.title_or_caption,
+          product_id: productId || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success || !data.script) throw new Error(data.error || 'สร้างสคริปต์ไม่สำเร็จ')
+      setScript(data.script)
+    } catch (err: any) {
+      setScriptError(err.message)
+    } finally {
+      setIsGeneratingScript(false)
+    }
   }
 
-  const sqlMigrationContent = `-- วางคำสั่งนี้ใน Supabase SQL Editor
-CREATE TABLE IF NOT EXISTS public.competitors (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  shop_id UUID NOT NULL REFERENCES public.shops(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  platform VARCHAR(50) NOT NULL,
-  target_url TEXT NOT NULL,
-  handle TEXT,
-  avatar_url TEXT,
-  follower_count BIGINT DEFAULT 0,
-  avg_engagement_rate NUMERIC(6, 2) DEFAULT 0.00,
-  price_range_min NUMERIC(12, 2) DEFAULT 0.00,
-  price_range_max NUMERIC(12, 2) DEFAULT 0.00,
-  notes TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+  const openScript = (post: CompetitorPost) => {
+    setScriptPost(post)
+    generateScript(post, scriptProductId)
+  }
 
-CREATE TABLE IF NOT EXISTS public.competitor_posts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  competitor_id UUID NOT NULL REFERENCES public.competitors(id) ON DELETE CASCADE,
-  shop_id UUID NOT NULL REFERENCES public.shops(id) ON DELETE CASCADE,
-  platform VARCHAR(50) NOT NULL,
-  post_url TEXT NOT NULL,
-  thumbnail_url TEXT,
-  title_or_caption TEXT,
-  views_count BIGINT DEFAULT 0,
-  likes_count BIGINT DEFAULT 0,
-  comments_count BIGINT DEFAULT 0,
-  shares_count BIGINT DEFAULT 0,
-  engagement_rate NUMERIC(6, 2) DEFAULT 0.00,
-  hashtags TEXT[] DEFAULT '{}',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);`
+  const scriptAsText = (s: ViralVideoScript) =>
+    [s.hook, s.problem, s.solution, s.offer, s.cta]
+      .map((seg) => `[${seg.duration}] ${seg.spokenText}\n(ภาพ: ${seg.visualDirection})`)
+      .join('\n\n')
+
+  const quotaPct = quota && quota.total > 0 ? Math.min(100, Math.round((quota.used / quota.total) * 100)) : 0
+  const playbook = active?.aiPlaybook || null
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/20 p-6 sm:p-8 text-white shadow-xl shadow-indigo-950/20">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-electric-blue/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="space-y-5 sm:space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 font-headline-md leading-tight">ส่องร้านคู่แข่ง</h1>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 font-body-md">
+            ดูโปรไฟล์และคลิปล่าสุดของคู่แข่งบน TikTok และ Instagram แล้วให้ AI แนะนำคอนเทนต์สำหรับสินค้าของร้านคุณ
+          </p>
+        </div>
+        <button onClick={() => setShowKeyModal(true)} className={secondaryButton}>
+          <Key className="w-4 h-4" /> RapidAPI Key
+        </button>
+      </div>
+
+      {notice && (
+        <div className="p-3 rounded-xl border border-success-green/30 bg-success-green/10 text-success-green text-xs font-semibold flex items-start gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{notice}</span>
+        </div>
+      )}
+
+      {/* Scan */}
+      <div className={`${card} p-4 sm:p-5 space-y-3`}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            handleScan()
+          }}
+          className="flex flex-col sm:flex-row gap-2"
+        >
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-500 dark:text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              value={inputUrl}
+              onChange={(e) => setInputUrl(e.target.value)}
+              placeholder="วางลิงก์โปรไฟล์ เช่น tiktok.com/@ชื่อร้าน หรือ instagram.com/ชื่อร้าน"
+              className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm outline-none focus:border-electric-blue"
+            />
+          </div>
+          <button type="submit" disabled={isScanning || hasApiKey === false} className={primaryButton}>
+            {isScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            {isScanning ? 'กำลังสแกน...' : 'สแกน'}
+          </button>
+        </form>
+
+        {hasApiKey === false && (
+          <p className="text-xs text-amber-600 flex items-start gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>
+              ต้องตั้ง RapidAPI Key ก่อนจึงจะดึงข้อมูลคู่แข่งได้{' '}
+              <button onClick={() => setShowKeyModal(true)} className="underline font-semibold cursor-pointer">
+                ตั้งค่าตอนนี้
+              </button>
+            </span>
+          </p>
+        )}
+        {errorMsg && <p className="text-xs text-error-red font-medium">{errorMsg}</p>}
+
+        {quota && (
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-electric-blue/20 border border-electric-blue/30 text-electric-blue text-xs font-semibold mb-3">
-              <Radar className="w-3.5 h-3.5 animate-pulse" />
-              <span>DealMee Competitor Spy & Market Intelligence</span>
+            <div className="flex items-center justify-between text-xs mb-1 gap-2">
+              <span className="text-slate-500 dark:text-slate-400">
+                สแกนเดือนนี้ (แพ็กเกจ {quota.planName}) · สแกนบัญชีเดิมภายใน 24 ชม. ไม่เสียโควตา
+              </span>
+              <strong className="font-mono text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                {quota.used} / {quota.total}
+              </strong>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
-              ระบบส่องร้านคู่แข่งและวิเคราะห์การตลาด
-            </h1>
-            <p className="mt-2 text-sm sm:text-base text-slate-300 max-w-2xl">
-              ดึงโปรไฟล์และคลิปล่าสุดของคู่แข่งบน TikTok และ Instagram
-              พร้อม AI Copilot ช่วยร่างสคริปต์และกลยุทธ์ปิดการขายที่เหนือกว่า
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={() => setShowApiModal(true)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/30 text-xs font-semibold text-amber-300 transition-all cursor-pointer shadow-sm"
-            >
-              <Zap className="w-4 h-4 text-amber-400" />
-              <span>วิธีดึงข้อมูลสด & ประหยัดโควต้า</span>
-            </button>
-            <button
-              onClick={() => setShowSqlModal(true)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-xs font-medium text-slate-200 transition-all cursor-pointer"
-            >
-              <Database className="w-4 h-4 text-emerald-400" />
-              <span>ดูโครงสร้างฐานข้อมูล SQL</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Search URL Input Bar */}
-        <div className="mt-8 relative max-w-3xl">
-          <div className="flex flex-col sm:flex-row items-stretch gap-2.5 bg-slate-950/80 p-2 rounded-2xl border border-indigo-500/30 backdrop-blur-md shadow-2xl">
-            <div className="relative flex-1 flex items-center">
-              <Search className="w-5 h-5 text-slate-400 absolute left-3.5 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="วางลิงก์โปรไฟล์คู่แข่ง เช่น tiktok.com/@shop, instagram.com/brand..."
-                value={inputUrl}
-                onChange={(e) => setInputUrl(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleScan()}
-                className="w-full bg-transparent pl-11 pr-4 py-3 text-sm text-white placeholder-slate-400 focus:outline-none"
+            <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <div
+                className={`h-full rounded-full ${quotaPct >= 100 ? 'bg-error-red' : quotaPct >= 80 ? 'bg-amber-500' : 'bg-electric-blue'}`}
+                style={{ width: `${quotaPct}%` }}
               />
             </div>
-            <button
-              onClick={() => handleScan()}
-              disabled={isScanning}
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-600/30 active:scale-95 disabled:opacity-50 cursor-pointer"
-            >
-              {isScanning ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>กำลังสแกนตลาด...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  <span>สแกนร้านคู่แข่ง</span>
-                </>
-              )}
-            </button>
           </div>
-
-          {errorMsg && (
-            <p className="mt-2.5 text-xs text-rose-400 font-medium flex items-center gap-1.5">
-              <span>⚠️ {errorMsg}</span>
-            </p>
-          )}
-        </div>
+        )}
       </div>
 
-      {/* Competitor Intelligence Quota Status Banner */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className={`p-3 rounded-2xl ${
-              quota.remaining > 0
-                ? 'bg-gradient-to-br from-indigo-500/10 to-blue-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20'
-                : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
-            }`}>
-              <Radar className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  โควต้าการส่องคู่แข่งประจำเดือน ({quota.period})
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wide bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-                  {quota.planName}
-                </span>
-              </div>
-              <div className="mt-1 flex flex-wrap items-baseline gap-2">
-                <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                  {quota.used} / {quota.total} ครั้ง
-                </span>
-                <span className={`text-xs font-bold ${quota.remaining > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                  • เหลืออีก {quota.remaining} ครั้ง
-                </span>
-                <span className="text-xs text-slate-400">
-                  (ระบบมีแคช 24 ชม. เปิดดูซ้ำหรือเข้ามาวิเคราะห์ซ้ำไม่เสียโควต้า)
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 shrink-0">
-            {quota.remaining <= 2 || quota.planName === 'FREE' ? (
-              <button
-                onClick={() => router.push('/dashboard/billing')}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-white text-xs font-bold shadow-md shadow-orange-500/20 transition-all active:scale-95 cursor-pointer"
-              >
-                <Zap className="w-3.5 h-3.5" />
-                <span>อัปเกรดเพื่อเพิ่มโควต้า</span>
-              </button>
-            ) : (
-              <div className="text-right hidden sm:block">
-                <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">
-                  สถานะการใช้งาน
-                </span>
-                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                  พร้อมใช้งานปกติ
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Progress Track */}
-        <div className="mt-3.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden p-0.5">
-          <div
-            className={`h-full rounded-full transition-all duration-700 ease-out ${
-              quota.remaining === 0
-                ? 'bg-rose-500'
-                : quota.remaining <= 2
-                ? 'bg-amber-500'
-                : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600'
-            }`}
-            style={{ width: `${Math.min(100, Math.round((quota.used / Math.max(1, quota.total)) * 100))}%` }}
-          />
-        </div>
-      </div>
-
-      {/* KPI Cards Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              ร้านคู่แข่งที่ติดตามอยู่
-            </span>
-            <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600">
-              <Radar className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              {competitors.length}
-            </span>
-            <span className="text-xs text-slate-500">ร้านค้าในเรดาร์</span>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              เรต Engagement เฉลี่ยคู่แข่ง
-            </span>
-            <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              {activeAnalysis ? `${activeAnalysis.avg_engagement_rate}%` : '5.4%'}
-            </span>
-            <span className="text-xs text-emerald-600 font-medium">สูงกว่ามาตรฐาน 1.8x</span>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              ช่วงราคาขายของคู่แข่ง
-            </span>
-            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
-              <DollarSign className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              {activeAnalysis && activeAnalysis.price_range_max > 0
-                ? `฿${activeAnalysis.price_range_min} - ฿${activeAnalysis.price_range_max}`
-                : '—'}
-            </span>
-            <span className="text-xs text-slate-500">
-              {activeAnalysis && activeAnalysis.price_range_max > 0 ? 'บาท/ชิ้น' : 'ยังไม่มีแหล่งข้อมูลราคา'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Analysis Workspace */}
-      {activeAnalysis ? (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 sm:p-6 shadow-sm space-y-6">
-          {/* Target Profile Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-4">
-              <img
-                src={activeAnalysis.avatar_url}
-                alt={activeAnalysis.name}
-                className="w-14 h-14 rounded-2xl object-cover border border-slate-200 dark:border-slate-700 shadow"
-              />
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                    {activeAnalysis.name}
-                  </h2>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                    {activeAnalysis.platform}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
-                  <span>{activeAnalysis.handle}</span>
-                  <span>•</span>
-                  <span>ผู้ติดตาม: {activeAnalysis.follower_count.toLocaleString()} คน</span>
-                  <span>•</span>
-                  <span>ความเคลื่อนไหว: อัปเดตล่าสุดวันนี้</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {(activeAnalysis as any).from_cache && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-emerald-500/20">
-                  <Zap className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>แคช 24 ชม. (ประหยัดโควต้า 100%)</span>
-                </span>
-              )}
-              <button
-                onClick={() => handleScan(activeAnalysis.target_url, true)}
-                disabled={isScanning}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
-                title="ดึงข้อมูลสดจาก Social Media ใหม่อีกครั้ง"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin text-blue-500' : ''}`} />
-                <span>สแกนสดใหม่</span>
-              </button>
-              <a
-                href={activeAnalysis.target_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all"
-              >
-                <span>เปิดดูโปรไฟล์จริง</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
-          </div>
-
-          {/* 1-Click Action Conversion Bar */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-purple-50/90 dark:from-blue-950/40 dark:via-indigo-950/30 dark:to-purple-950/40 border border-blue-200/70 dark:border-blue-800/40 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 shrink-0">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
-                  นำข้อมูลคู่แข่งนี้ไปสร้างยอดขายทันที
-                </h4>
-                <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-400">
-                  ส่งกลยุทธ์ให้แชทบอทใช้ปิดการขาย หรือสร้างแคมเปญบรอดแคสต์หาลูกค้าได้ใน 1 คลิก
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-              {/* Button 1: Sync to Bot Knowledge */}
-              <button
-                onClick={handleSyncKnowledge}
-                disabled={isSyncingKb}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer min-h-[44px]"
-              >
-                {isSyncingKb ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>กำลังบันทึกเข้าบอท...</span>
-                  </>
-                ) : (
-                  <>
-                    <BookOpen className="w-4 h-4" />
-                    <span>⚡ ส่งเข้าคลังความรู้บอทใน 1 คลิก</span>
-                  </>
-                )}
-              </button>
-
-              {/* Button 2: Create Broadcast */}
-              <button
-                onClick={handleGoToBroadcast}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer min-h-[44px]"
-              >
-                <Send className="w-4 h-4" />
-                <span>📢 สร้างแคมเปญบรอดแคสต์อัตโนมัติ</span>
-              </button>
-            </div>
-          </div>
-
-          {kbSuccessMsg && (
-            <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span>{kbSuccessMsg}</span>
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 sm:gap-5 items-start">
+        {/* Tracked competitors */}
+        <div className={`${card} p-3 space-y-1`}>
+          <h2 className="text-xs font-bold text-slate-500 dark:text-slate-400 px-2 py-1.5">คู่แข่งที่ติดตาม ({competitors.length})</h2>
+          {competitors.length === 0 && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 px-2 pb-2">ยังไม่มี วางลิงก์ด้านบนเพื่อเริ่มติดตาม</p>
           )}
-
-          {/* Tab Navigation (Responsive Scroll on Mobile/Tablet) */}
-          <div className="flex border-b border-slate-200 dark:border-slate-800 overflow-x-auto whitespace-nowrap scrollbar-none pb-1 gap-1 -mx-2 px-2 sm:mx-0 sm:px-0">
-            <button
-              onClick={() => setActiveTab('price')}
-              className={`pb-3 px-3.5 sm:px-4 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer min-h-[44px] flex items-center shrink-0 ${
-                activeTab === 'price'
-                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
-              }`}
-            >
-              📊 บทวิเคราะห์และคำแนะนำ
-            </button>
-            <button
-              onClick={() => setActiveTab('viral')}
-              className={`pb-3 px-3.5 sm:px-4 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer min-h-[44px] flex items-center shrink-0 ${
-                activeTab === 'viral'
-                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
-              }`}
-            >
-              🔥 คอนเทนต์ไวรัลยอดวิวสูงสุด (Top Posts)
-            </button>
-            <button
-              onClick={() => setActiveTab('copilot')}
-              className={`pb-3 px-3.5 sm:px-4 font-bold text-xs sm:text-sm border-b-2 transition-all cursor-pointer min-h-[44px] flex items-center shrink-0 ${
-                activeTab === 'copilot'
-                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
-              }`}
-            >
-              ✨ DealMee AI Copilot แนะนำกลยุทธ์
-            </button>
-          </div>
-
-          {/* TAB 1: Analysis written from the competitor's real posts */}
-          {activeTab === 'price' && !activeAnalysis.aiPlaybook && <PlaybookUnavailable />}
-          {activeTab === 'price' && activeAnalysis.aiPlaybook && (
-            <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/30 text-xs sm:text-sm text-blue-900 dark:text-blue-300 flex items-start gap-3">
-                <Lightbulb className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold">บทวิเคราะห์: </span>
-                  {activeAnalysis.aiPlaybook.pricingStrategyVerdict}
-                </div>
-              </div>
-              <ul className="space-y-2">
-                {activeAnalysis.aiPlaybook.priceAdvantageBullets.map((b, idx) => (
-                  <li key={idx} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                    <span>{b}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-xs text-slate-500">
-                วิเคราะห์จากโพสต์ล่าสุดของคู่แข่งและสินค้าในร้านคุณ ระบบยังไม่มีแหล่งข้อมูลราคาขายของคู่แข่ง จึงไม่ได้เทียบราคา
-              </p>
-            </div>
-          )}
-
-          {/* TAB 2: Viral Posts Feed */}
-          {activeTab === 'viral' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {activeAnalysis.posts.map((post) => (
-                <div
-                  key={post.id}
-                  className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4 hover:shadow-md transition-all flex flex-col justify-between bg-slate-50/30 dark:bg-slate-950/30"
+          {competitors.map((comp) => {
+            const selected = active?.handle === comp.handle && active?.platform === comp.platform
+            return (
+              <div
+                key={comp.id}
+                className={`group flex items-center gap-2.5 p-2 rounded-xl transition-all ${
+                  selected ? 'bg-electric-blue/10' : 'hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <button
+                  onClick={() => {
+                    if (comp.profile_data) {
+                      setActive(comp.profile_data)
+                      setTab('posts')
+                    } else {
+                      handleScan(comp.target_url)
+                    }
+                  }}
+                  className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer"
                 >
-                  <div>
-                    <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-                      <span className="inline-flex items-center gap-1 text-rose-500 font-bold">
-                        <Flame className="w-3.5 h-3.5" />
-                        คลิปไวรัลยอดวิวสูง
-                      </span>
-                      <span>อัตรามีส่วนร่วม: {post.engagement_rate}%</span>
-                    </div>
-
-                    <p className="text-sm font-bold text-slate-900 dark:text-white line-clamp-2">
-                      {post.title_or_caption}
+                  {comp.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={comp.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <p className={`text-sm font-semibold truncate ${selected ? 'text-electric-blue' : 'text-slate-900 dark:text-slate-100'}`}>
+                      {comp.name}
                     </p>
-
-                    {/* Viral Metrics */}
-                    <div className="grid grid-cols-4 gap-2 my-3 text-center text-xs">
-                      <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/60">
-                        <div className="flex items-center justify-center gap-1 text-slate-500 mb-0.5">
-                          <Eye className="w-3 h-3" />
-                        </div>
-                        <span className="font-bold text-slate-900 dark:text-white">
-                          {(post.views_count / 1000).toFixed(0)}k
-                        </span>
-                      </div>
-                      <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/60">
-                        <div className="flex items-center justify-center gap-1 text-slate-500 mb-0.5">
-                          <ThumbsUp className="w-3 h-3" />
-                        </div>
-                        <span className="font-bold text-slate-900 dark:text-white">
-                          {(post.likes_count / 1000).toFixed(1)}k
-                        </span>
-                      </div>
-                      <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/60">
-                        <div className="flex items-center justify-center gap-1 text-slate-500 mb-0.5">
-                          <MessageCircle className="w-3 h-3" />
-                        </div>
-                        <span className="font-bold text-slate-900 dark:text-white">
-                          {post.comments_count}
-                        </span>
-                      </div>
-                      <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/60">
-                        <div className="flex items-center justify-center gap-1 text-slate-500 mb-0.5">
-                          <Share2 className="w-3 h-3" />
-                        </div>
-                        <span className="font-bold text-slate-900 dark:text-white">
-                          {post.shares_count}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Hashtags */}
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {post.hashtags.map((tag, tIdx) => (
-                        <button
-                          key={tIdx}
-                          onClick={() => copyToClipboard(tag, `${post.id}-${tIdx}`)}
-                          className="text-[11px] px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 transition-all flex items-center gap-1 cursor-pointer"
-                        >
-                          <span>{tag}</span>
-                          {copiedTag === `${post.id}-${tIdx}` ? (
-                            <Check className="w-3 h-3 text-emerald-500" />
-                          ) : (
-                            <Copy className="w-2.5 h-2.5 opacity-60" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      {platformLabel(comp.platform)} · {compact(comp.follower_count)} ผู้ติดตาม
+                    </p>
                   </div>
+                </button>
+                <button
+                  onClick={() => handleDelete(comp)}
+                  className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-error-red opacity-60 group-hover:opacity-100 cursor-pointer"
+                  title="เลิกติดตาม"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            )
+          })}
+        </div>
 
-                  {/* Action Bar: View Original & Convert to Script */}
-                  <div className="pt-3.5 mt-3.5 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
-                    <a
-                      href={post.post_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-slate-500 hover:text-blue-500 flex items-center gap-1.5 transition-colors"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>เปิดดูคลิปต้นฉบับ</span>
-                    </a>
-                    <button
-                      onClick={() => handleOpenScriptModal(post)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white text-xs font-bold shadow-sm transition-all active:scale-95 cursor-pointer"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>🎬 ถอดเป็นสคริปต์คลิปของร้านเรา</span>
-                    </button>
-                  </div>
+        {/* Detail */}
+        {!active ? (
+          <div className={`${card} p-8 text-center text-sm text-slate-500 dark:text-slate-400`}>
+            เลือกคู่แข่งจากรายการ หรือวางลิงก์โปรไฟล์ด้านบนเพื่อสแกน
+          </div>
+        ) : (
+          <div className={`${card} p-4 sm:p-5 space-y-5`}>
+            {/* Profile */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                {active.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={active.avatar_url} alt="" className="w-14 h-14 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">{active.name}</h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                    {active.handle} · {platformLabel(active.platform)}
+                    {active.last_scanned_at ? ` · สแกนเมื่อ ${thaiDateTime(active.last_scanned_at)}` : ''}
+                  </p>
                 </div>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <a href={active.target_url} target="_blank" rel="noopener noreferrer" className={secondaryButton}>
+                  <ExternalLink className="w-4 h-4" /> เปิดโปรไฟล์
+                </a>
+                <button onClick={() => handleScan(active.target_url, true)} disabled={isScanning} className={secondaryButton}>
+                  <RefreshCw className={`w-4 h-4 ${isScanning ? 'animate-spin' : ''}`} /> สแกนใหม่
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <Stat icon={<Users className="w-4 h-4" />} label="ผู้ติดตาม" value={active.follower_count.toLocaleString('th-TH')} />
+              <Stat
+                icon={<Activity className="w-4 h-4" />}
+                label="Engagement เฉลี่ย"
+                value={active.posts.length > 0 ? `${active.avg_engagement_rate}%` : '—'}
+              />
+              <Stat
+                icon={<Clapperboard className="w-4 h-4" />}
+                label="คลิปที่ดึงมา"
+                value={active.posts.length > 0 ? `${active.posts.length} คลิปล่าสุด` : 'ไม่มีข้อมูลคลิป'}
+              />
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800 overflow-x-auto">
+              {(
+                [
+                  ['posts', 'คลิปล่าสุด'],
+                  ['analysis', 'บทวิเคราะห์'],
+                  ['ideas', 'ไอเดียคอนเทนต์'],
+                ] as [Tab, string][]
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setTab(key)}
+                  className={`px-3.5 pb-2.5 text-sm font-semibold border-b-2 whitespace-nowrap cursor-pointer transition-all ${
+                    tab === key
+                      ? 'border-electric-blue text-electric-blue'
+                      : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                  }`}
+                >
+                  {label}
+                </button>
               ))}
             </div>
-          )}
 
-          {/* TAB 3: AI Copilot Strategy */}
-          {activeTab === 'copilot' && !activeAnalysis.aiPlaybook && <PlaybookUnavailable />}
-          {activeTab === 'copilot' && activeAnalysis.aiPlaybook && (
-            <div className="space-y-6">
-              {/* Strategic Video Hooks */}
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-3">
-                  <Sparkles className="w-4 h-4 text-amber-500" />
-                  <span>3 สูตรคำเปิดคลิป (Hooks) ที่ปรับแต่งเพื่อดึงดูดลูกค้าจากคู่แข่งรายนี้</span>
-                </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {activeAnalysis.aiPlaybook.topViralHooks.map((hook, hIdx) => (
-                    <div
-                      key={hIdx}
-                      className="p-4 rounded-2xl border border-indigo-100 dark:border-indigo-950/60 bg-gradient-to-b from-indigo-50/30 to-transparent dark:from-indigo-950/20 flex flex-col justify-between"
-                    >
-                      <div>
-                        <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 mb-1 block">
-                          สูตรที่ {hIdx + 1}
-                        </span>
-                        <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mb-2">
-                          "{hook.hookText}"
-                        </p>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 mb-2">
-                          💡 <span className="font-semibold">จิตวิทยา:</span> {hook.whyItWorks}
-                        </p>
-                      </div>
-                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500">
-                        🎬 {hook.recommendedFormat}
+            {tab === 'posts' &&
+              (active.posts.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  ไม่มีข้อมูลคลิปของบัญชีนี้ ({platformLabel(active.platform)} ดึงได้เฉพาะข้อมูลโปรไฟล์)
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {active.posts.map((post) => (
+                    <div key={post.id} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex gap-3">
+                      {post.thumbnail_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={post.thumbnail_url} alt="" className="w-20 h-28 rounded-lg object-cover shrink-0 bg-slate-100 dark:bg-slate-800" />
+                      ) : (
+                        <div className="w-20 h-28 rounded-lg bg-slate-100 dark:bg-slate-800 shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0 flex flex-col">
+                        <p className="text-xs text-slate-900 dark:text-slate-100 line-clamp-3">{post.title_or_caption}</p>
+                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                          <span className="inline-flex items-center gap-1"><Eye className="w-3 h-3" />{compact(post.views_count)}</span>
+                          <span className="inline-flex items-center gap-1"><ThumbsUp className="w-3 h-3" />{compact(post.likes_count)}</span>
+                          <span className="inline-flex items-center gap-1"><MessageCircle className="w-3 h-3" />{compact(post.comments_count)}</span>
+                          <span className="inline-flex items-center gap-1"><Share2 className="w-3 h-3" />{compact(post.shares_count)}</span>
+                          <span className="font-semibold text-slate-900 dark:text-slate-100">{post.engagement_rate}%</span>
+                        </div>
+                        <div className="mt-auto pt-2 flex gap-2">
+                          <a href={post.post_url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold text-electric-blue inline-flex items-center gap-1">
+                            <ExternalLink className="w-3 h-3" /> เปิดคลิป
+                          </a>
+                          <button onClick={() => openScript(post)} className="text-[11px] font-semibold text-electric-blue inline-flex items-center gap-1 cursor-pointer">
+                            <Sparkles className="w-3 h-3" /> สคริปต์สำหรับร้านเรา
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
+              ))}
 
-              {/* Ready-to-use Caption Generator */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 text-white">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
-                  <span className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    แคปชั่นโพสต์ขายพร้อมคัดลอก (Winning Caption Draft)
-                  </span>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => copyCaption(activeAnalysis.aiPlaybook?.winningCaptionTemplate || "")}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all cursor-pointer min-h-[40px]"
-                    >
-                      {copiedCaption ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedCaption ? 'คัดลอกเรียบร้อย!' : 'คัดลอกแคปชั่น'}</span>
-                    </button>
-                    <button
-                      onClick={handleGoToBroadcast}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all cursor-pointer min-h-[40px]"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      <span>ส่งไปสร้างบรอดแคสต์ทันที</span>
-                    </button>
+            {tab === 'analysis' &&
+              (!playbook ? (
+                <PlaybookUnavailable />
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-3.5 rounded-xl bg-electric-blue/10 text-sm text-slate-900 dark:text-slate-100 flex items-start gap-2.5">
+                    <Lightbulb className="w-4 h-4 text-electric-blue shrink-0 mt-0.5" />
+                    <span>{playbook.pricingStrategyVerdict}</span>
                   </div>
-                </div>
-                <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm text-slate-200 leading-relaxed bg-slate-900/90 p-3.5 sm:p-4 rounded-xl border border-slate-800">
-                  {activeAnalysis.aiPlaybook.winningCaptionTemplate}
-                </pre>
-              </div>
-
-            </div>
-          )}
-        </div>
-      ) : null}
-
-      {/* Tracked Competitors List Table */}
-      {competitors.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
-          <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-            <Radar className="w-4 h-4 text-blue-600" />
-            <span>รายชื่อร้านคู่แข่งในระบบ ({competitors.length} ร้าน)</span>
-          </h3>
-
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {competitors.map((comp) => (
-              <div
-                key={comp.id}
-                className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 px-3 rounded-xl transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-sm text-slate-700 dark:text-slate-300">
-                    {comp.platform === 'tiktok' ? 'TT' : comp.platform === 'instagram' ? 'IG' : 'FB'}
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                      {comp.name}
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      {comp.handle} • ผู้ติดตาม {comp.follower_count.toLocaleString()} คน
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      if (comp.profile_data) {
-                        setActiveAnalysis(comp.profile_data)
-                      } else {
-                        handleScan(comp.target_url)
-                      }
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 text-xs font-semibold hover:bg-blue-100 transition-all cursor-pointer"
-                  >
-                    ดูวิเคราะห์เชิงลึก
-                  </button>
-                  <button
-                    onClick={() => handleDelete(comp)}
-                    className="p-1.5 text-slate-400 hover:text-rose-500 transition-all cursor-pointer"
-                    title="ลบการติดตาม"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* SQL Migration Modal */}
-      {showSqlModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 text-white shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Database className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-base">คำสั่ง SQL สำหรับ Supabase Editor</h3>
-              </div>
-              <button
-                onClick={() => setShowSqlModal(false)}
-                className="text-slate-400 hover:text-white text-sm"
-              >
-                ✕ ปิด
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-400 my-4">
-              คัดลอกคำสั่งด้านล่างไปวางใน <strong>Supabase Dashboard ➡️ SQL Editor</strong> เพื่อสร้างตารางสำหรับเก็บข้อมูลคู่แข่งแบบถาวร (ปัจจุบันระบบมีโหมดสำรองข้อมูลอัตโนมัติให้แล้ว จึงใช้งานได้ทันทีแม้ยังไม่รัน SQL ครับ)
-            </p>
-
-            <pre className="bg-slate-950 p-4 rounded-xl text-xs text-emerald-400 font-mono overflow-x-auto max-h-72 border border-slate-800">
-              {sqlMigrationContent}
-            </pre>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                onClick={() => copyToClipboard(sqlMigrationContent, 'sql-copy')}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 cursor-pointer"
-              >
-                {copiedTag === 'sql-copy' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedTag === 'sql-copy' ? 'คัดลอกแล้ว' : 'คัดลอกคำสั่ง SQL'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* API & Quota Saver Guide Modal */}
-      {showApiModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 text-white shadow-2xl animate-in zoom-in-95 space-y-4">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
-                  <Zap className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base">ระบบดึงข้อมูลสด & การประหยัดโควต้า (Quota Guard)</h3>
-                  <p className="text-xs text-slate-400">รองรับ TikTok (โปรไฟล์และคลิป) และ Instagram (โปรไฟล์)</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowApiModal(false)}
-                className="text-slate-400 hover:text-white text-sm"
-              >
-                ✕ ปิด
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs leading-relaxed text-slate-300">
-              <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/30">
-                <div className="flex items-center gap-2 font-bold text-emerald-400 text-sm mb-1">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>1. ระบบ Smart 24-Hour Cache (ประหยัดค่าใช้จ่าย 100%)</span>
-                </div>
-                <p className="text-slate-300">
-                  เมื่อคุณสแกนร้านใดแล้ว ระบบจะบันทึกข้อมูลและวิเคราะห์ลงฐานข้อมูล Supabase ไว้ 24 ชั่วโมง การเปิดดูซ้ำหรือเข้ามาดูสถิติจะไม่เสียโควต้า API แม้แต่ครั้งเดียว (0 บาท) หากต้องการข้อมูลสดใหม่จริง ให้กดปุ่ม <strong>"🔄 สแกนสดใหม่"</strong> ได้ตลอดเวลา
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-500/30">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2 font-bold text-amber-300 text-sm">
-                    <Key className="w-4 h-4" />
-                    <span>2. วาง RapidAPI Key เพื่อดึงข้อมูลสด (ทำงานได้ทันที ไม่ต้องแก้โค้ด):</span>
-                  </div>
-                  {savedKeySuccess && (
-                    <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5" /> {savedKeySuccess}
-                    </span>
-                  )}
-                </div>
-                <p className="text-slate-400 mb-2.5">
-                  คัดลอก <strong>Application Key</strong> จาก RapidAPI มาวางที่นี่ แล้วกดบันทึก ระบบจะเริ่มดึงยอด Followers จริงและคลิปไวรัลสดทันที:
-                </p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="password"
-                    placeholder="วาง RapidAPI Key เช่น e45b98f237msh..."
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
-                  />
-                  <button
-                    onClick={handleSaveApiKey}
-                    disabled={isSavingKey || !apiKeyInput.trim()}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md disabled:opacity-50"
-                  >
-                    {isSavingKey ? (
-                      <>
-                        <div className="w-3.5 h-3.5 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" />
-                        <span>กำลังบันทึก...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Key className="w-3.5 h-3.5" />
-                        <span>บันทึก Key เข้าสู่ระบบ</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-blue-950/30 border border-blue-500/30">
-                <div className="flex items-center gap-2 font-bold text-blue-400 text-sm mb-1">
-                  <Sparkles className="w-4 h-4" />
-                  <span>3. ระบบ Zero-Downtime Smart Simulator</span>
-                </div>
-                <p className="text-slate-300">
-                  หากคุณยังไม่ได้ใส่ API Key หรือโควต้าของเดือนนั้นหมด ระบบ DealMee จะสลับมาใช้ <strong>Smart Simulator</strong> โดยอัตโนมัติ ทำให้หน้าเว็บของคุณไม่สะดุด ไม่ขึ้น Error และยังคงให้คำแนะนำด้านการตลาดแก่ร้านค้าได้เหมือนเดิม 100% ครับ
-                </p>
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                onClick={() => setShowApiModal(false)}
-                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer shadow-md"
-              >
-                เข้าใจแล้ว พร้อมใช้งาน
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* AI Viral Video Script Generator Modal */}
-      {selectedPostForScript && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-3xl w-full p-5 sm:p-7 text-white shadow-2xl animate-in zoom-in-95 my-8 space-y-5">
-            {/* Modal Header */}
-            <div className="flex items-start justify-between pb-4 border-b border-slate-800 gap-3">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 text-white shadow-md shadow-rose-500/20">
-                  <Clapperboard className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-base sm:text-lg flex items-center gap-2 text-white">
-                    <span>AI แปลงเป็นสคริปต์คลิปไวรัล 30 วินาที</span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                      TikTok / Reels / Shorts
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">
-                    ถอดจุดขายจากคลิป: "{selectedPostForScript.title_or_caption}"
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedPostForScript(null)}
-                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all text-sm cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Product Selector Bar */}
-            <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-400 shrink-0">
-                  สินค้าที่ต้องการให้ AI ขาย:
-                </span>
-                <select
-                  value={selectedProductId}
-                  onChange={(e) => {
-                    setSelectedProductId(e.target.value)
-                    generateScriptForPost(selectedPostForScript, e.target.value)
-                  }}
-                  className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-rose-500 cursor-pointer w-full sm:w-auto"
-                >
-                  {shopProducts.length === 0 ? (
-                    <option value="">สินค้าแนะนำของร้านเรา</option>
-                  ) : (
-                    shopProducts.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} (฿{Number(p.price).toLocaleString()})
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-
-              <button
-                onClick={() => generateScriptForPost(selectedPostForScript, selectedProductId)}
-                disabled={isGeneratingScript}
-                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all cursor-pointer disabled:opacity-50 shrink-0"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingScript ? 'animate-spin' : ''}`} />
-                <span>แต่งสคริปต์ใหม่</span>
-              </button>
-            </div>
-
-            {/* Loading State */}
-            {isGeneratingScript && (
-              <div className="py-16 flex flex-col items-center justify-center text-center space-y-3">
-                <div className="w-10 h-10 border-3 border-rose-500/20 border-t-rose-500 rounded-full animate-spin" />
-                <p className="text-sm font-bold text-white">AI Gemini กำลังถอดรหัสจุดขายและเขียนบทวิดีโอ 30 วิ...</p>
-                <p className="text-xs text-slate-400">โครงสร้าง 5 จังหวะ: Hook ➡️ Problem ➡️ Solution ➡️ Offer ➡️ CTA</p>
-              </div>
-            )}
-
-            {/* Script Content */}
-            {!isGeneratingScript && generatedScript && (
-              <div className="space-y-4">
-                {/* Script Title Banner */}
-                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-rose-950/40 via-purple-950/30 to-slate-950 border border-rose-500/30 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-rose-400 shrink-0" />
-                    <span className="text-sm font-bold text-rose-200">
-                      {generatedScript.title}
-                    </span>
-                  </div>
-                  <span className="text-[11px] font-semibold text-slate-400 shrink-0">
-                    ความยาวรวม: 30 วินาที
-                  </span>
-                </div>
-
-                {/* View Mode Switcher */}
-                <div className="flex items-center border-b border-slate-800 pb-2 gap-2 text-xs">
-                  <button
-                    onClick={() => setScriptViewMode('storyboard')}
-                    className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      scriptViewMode === 'storyboard'
-                        ? 'bg-rose-600 text-white'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                    }`}
-                  >
-                    <Clapperboard className="w-3.5 h-3.5" />
-                    <span>ไทม์ไลน์ 5 จังหวะ (Storyboard)</span>
-                  </button>
-                  <button
-                    onClick={() => setScriptViewMode('teleprompter')}
-                    className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      scriptViewMode === 'teleprompter'
-                        ? 'bg-rose-600 text-white'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                    }`}
-                  >
-                    <Video className="w-3.5 h-3.5" />
-                    <span>หน้าจออ่านอัดคลิป (Teleprompter)</span>
-                  </button>
-                  <button
-                    onClick={() => setScriptViewMode('caption')}
-                    className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      scriptViewMode === 'caption'
-                        ? 'bg-rose-600 text-white'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                    }`}
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>แคปชัน & แฮชแท็ก</span>
-                  </button>
-                </div>
-
-                {/* MODE 1: Storyboard Timeline */}
-                {scriptViewMode === 'storyboard' && (
-                  <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-                    {[
-                      { key: 'hook', label: '1. HOOK (กระตุกสายตา/หยุดนิ้ว)', seg: generatedScript.hook, badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
-                      { key: 'problem', label: '2. PROBLEM (ชี้ปัญหาที่เคยเจอจากที่อื่น)', seg: generatedScript.problem, badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
-                      { key: 'solution', label: '3. SOLUTION (เปิดตัวสินค้าเรา & คุณภาพ)', seg: generatedScript.solution, badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
-                      { key: 'offer', label: '4. OFFER (ข้อเสนอสุดคุ้ม & ส่งฟรี)', seg: generatedScript.offer, badgeBg: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' },
-                      { key: 'cta', label: '5. CTA (สั่งให้ทักแชท ปิดการขาย)', seg: generatedScript.cta, badgeBg: 'bg-purple-500/20 text-purple-300 border-purple-500/30' },
-                    ].map(({ key, label, seg, badgeBg }) => (
-                      <div
-                        key={key}
-                        className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2 hover:border-slate-700 transition-all"
-                      >
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-extrabold text-white flex items-center gap-1.5">
-                            {label}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeBg}`}>
-                            ⏱️ {seg.duration}
-                          </span>
-                        </div>
-
-                        {/* Spoken Text */}
-                        <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 text-xs sm:text-sm text-slate-100">
-                          <span className="text-[10px] font-bold text-rose-400 block mb-0.5">🎙️ บทพูด / Voiceover:</span>
-                          "{seg.spokenText}"
-                        </div>
-
-                        {/* Visual Direction */}
-                        <div className="text-[11px] text-slate-400 flex items-start gap-1.5 pl-1">
-                          <span className="font-bold text-slate-500 shrink-0">🎥 มุมกล้อง & แอ็กชัน:</span>
-                          <span>{seg.visualDirection}</span>
-                        </div>
-                      </div>
+                  <ul className="space-y-2">
+                    {playbook.priceAdvantageBullets.map((b, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-slate-900 dark:text-slate-100">
+                        <CheckCircle2 className="w-4 h-4 text-success-green shrink-0 mt-0.5" />
+                        <span>{b}</span>
+                      </li>
                     ))}
+                  </ul>
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      วิเคราะห์จากคลิปล่าสุดของคู่แข่งและสินค้าในร้านคุณ ระบบยังไม่มีข้อมูลราคาขายของคู่แข่ง จึงไม่ได้เทียบราคา
+                    </p>
+                    <button onClick={handleSaveDraft} disabled={isSavingDraft} className={`${secondaryButton} shrink-0`}>
+                      {isSavingDraft ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}
+                      บันทึกเป็นร่างในคลังความรู้
+                    </button>
                   </div>
-                )}
+                </div>
+              ))}
 
-                {/* MODE 2: Teleprompter Reader */}
-                {scriptViewMode === 'teleprompter' && (
-                  <div className="space-y-4">
-                    <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-100 space-y-4 max-h-[380px] overflow-y-auto">
-                      <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-xs text-slate-400">
-                        <span>📱 วางมือถือระดับสายตา แล้วอ่านตามจังหวะเวลา</span>
-                        <span className="text-rose-400 font-bold">30 วินาทีจบ</span>
-                      </div>
+            {tab === 'ideas' &&
+              (!playbook ? (
+                <PlaybookUnavailable />
+              ) : (
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">ประโยคเปิดคลิป</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {playbook.topViralHooks.map((hook, i) => (
+                        <div key={i} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-1.5">
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">&ldquo;{hook.hookText}&rdquo;</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{hook.whyItWorks}</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">รูปแบบ: {hook.recommendedFormat}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-                      <div className="space-y-4 font-sans text-base sm:text-lg leading-relaxed">
-                        <div>
-                          <span className="text-xs font-bold text-rose-400 block mb-0.5">[00:00 - 00:03] HOOK:</span>
-                          <p className="font-semibold text-white">{generatedScript.hook.spokenText}</p>
-                        </div>
-                        <div>
-                          <span className="text-xs font-bold text-amber-400 block mb-0.5">[00:03 - 00:08] PROBLEM:</span>
-                          <p className="font-semibold text-slate-200">{generatedScript.problem.spokenText}</p>
-                        </div>
-                        <div>
-                          <span className="text-xs font-bold text-emerald-400 block mb-0.5">[00:08 - 00:16] SOLUTION:</span>
-                          <p className="font-semibold text-slate-200">{generatedScript.solution.spokenText}</p>
-                        </div>
-                        <div>
-                          <span className="text-xs font-bold text-indigo-400 block mb-0.5">[00:16 - 00:23] OFFER:</span>
-                          <p className="font-semibold text-white">{generatedScript.offer.spokenText}</p>
-                        </div>
-                        <div>
-                          <span className="text-xs font-bold text-purple-400 block mb-0.5">[00:23 - 00:30] CTA:</span>
-                          <p className="font-semibold text-rose-200">{generatedScript.cta.spokenText}</p>
-                        </div>
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">แคปชั่นตัวอย่าง</h3>
+                      <div className="flex gap-2">
+                        <button onClick={() => copy(playbook.winningCaptionTemplate, 'caption')} className={secondaryButton}>
+                          {copied === 'caption' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                          {copied === 'caption' ? 'คัดลอกแล้ว' : 'คัดลอก'}
+                        </button>
+                        <button
+                          onClick={() =>
+                            router.push(
+                              `/dashboard/broadcast?title=${encodeURIComponent(`ไอเดียจาก ${active.name}`)}&message=${encodeURIComponent(playbook.winningCaptionTemplate)}`
+                            )
+                          }
+                          className={secondaryButton}
+                        >
+                          <Send className="w-4 h-4" /> ใช้ในบรอดแคสต์
+                        </button>
                       </div>
                     </div>
-
-                    <button
-                      onClick={() => {
-                        const allSpoken = `${generatedScript.hook.spokenText}\n\n${generatedScript.problem.spokenText}\n\n${generatedScript.solution.spokenText}\n\n${generatedScript.offer.spokenText}\n\n${generatedScript.cta.spokenText}`
-                        navigator.clipboard.writeText(allSpoken)
-                        setCopiedTeleprompter(true)
-                        setTimeout(() => setCopiedTeleprompter(false), 2500)
-                      }}
-                      className="w-full py-3 rounded-xl bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-[0.99] transition-all"
-                    >
-                      {copiedTeleprompter ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
-                      <span>{copiedTeleprompter ? 'คัดลอกบทพูดทั้งหมดเรียบร้อยแล้ว!' : 'คัดลอกบทพูดทั้งหมดสำหรับ Teleprompter'}</span>
-                    </button>
+                    <pre className="whitespace-pre-wrap font-sans text-sm text-slate-900 dark:text-slate-100 bg-slate-100 dark:bg-slate-800 rounded-xl p-3.5">
+                      {playbook.winningCaptionTemplate}
+                    </pre>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">ข้อความในวงเล็บเหลี่ยมให้แทนด้วยโปรของร้านคุณเอง หรือลบออกถ้าไม่มี</p>
                   </div>
-                )}
 
-                {/* MODE 3: Caption & Hashtags */}
-                {scriptViewMode === 'caption' && (
-                  <div className="space-y-4">
-                    <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-                      <span className="text-xs font-bold text-rose-400 block">แคปชันโพสต์วิดีโอ:</span>
-                      <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm text-slate-200 leading-relaxed bg-slate-900 p-3.5 rounded-xl border border-slate-800">
-                        {generatedScript.caption}
-                      </pre>
-
-                      <span className="text-xs font-bold text-indigo-400 block pt-1">แฮชแท็กติดเทรนด์:</span>
+                  {playbook.recommendedHashtags.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">แฮชแท็ก</h3>
+                        <button onClick={() => copy(playbook.recommendedHashtags.join(' '), 'tags')} className={secondaryButton}>
+                          {copied === 'tags' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                          {copied === 'tags' ? 'คัดลอกแล้ว' : 'คัดลอกทั้งหมด'}
+                        </button>
+                      </div>
                       <div className="flex flex-wrap gap-1.5">
-                        {generatedScript.hashtags.map((h, hIdx) => (
-                          <span
-                            key={hIdx}
-                            className="px-2.5 py-1 rounded-lg bg-indigo-950/60 text-indigo-300 border border-indigo-800 text-xs font-semibold"
-                          >
-                            {h}
+                        {playbook.recommendedHashtags.map((tag) => (
+                          <span key={tag} className="text-xs px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100">
+                            {tag}
                           </span>
                         ))}
                       </div>
                     </div>
+                  )}
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
 
-                    <button
-                      onClick={() => {
-                        const fullCaption = `${generatedScript.caption}\n\n${generatedScript.hashtags.join(' ')}`
-                        navigator.clipboard.writeText(fullCaption)
-                        setCopiedCaption(true)
-                        setTimeout(() => setCopiedCaption(false), 2500)
-                      }}
-                      className="w-full py-3 rounded-xl bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-[0.99] transition-all"
-                    >
-                      {copiedCaption ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
-                      <span>{copiedCaption ? 'คัดลอกแคปชัน & แฮชแท็กแล้ว!' : 'คัดลอกแคปชัน & แฮชแท็กทั้งหมด'}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+      {/* RapidAPI key modal */}
+      {showKeyModal && (
+        <Modal title="RapidAPI Key" onClose={() => setShowKeyModal(false)}>
+          <div className="space-y-3 text-sm text-slate-900 dark:text-slate-100">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              ระบบดึงโปรไฟล์และคลิปของคู่แข่งผ่าน RapidAPI (TikTok Scraper และ Instagram Scraper) สมัครที่ rapidapi.com
+              แล้วนำ key มาวางที่นี่ ค่าบริการ RapidAPI เรียกเก็บโดย RapidAPI ตามแพ็กเกจที่คุณเลือก
+            </p>
+            {maskedKey && (
+              <p className="text-xs">
+                Key ที่ใช้อยู่: <span className="font-mono">{maskedKey}</span>
+              </p>
             )}
-
-            {/* Modal Footer */}
-            <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
-              <span>DealMee AI Short-Form Video Engine</span>
-              <button
-                onClick={() => setSelectedPostForScript(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold cursor-pointer"
-              >
-                ปิดหน้าต่าง
+            <input
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              type="password"
+              placeholder="วาง RapidAPI Key"
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm outline-none focus:border-electric-blue"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowKeyModal(false)} className={secondaryButton}>
+                ยกเลิก
+              </button>
+              <button onClick={handleSaveKey} disabled={isSavingKey || !keyInput.trim()} className={primaryButton}>
+                {isSavingKey && <Loader2 className="w-4 h-4 animate-spin" />} บันทึก
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
+
+      {/* Script modal */}
+      {scriptPost && (
+        <Modal title="สคริปต์คลิปสำหรับร้านเรา" onClose={() => setScriptPost(null)}>
+          <div className="space-y-4">
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              จากคลิปของ {active?.name}: <span className="text-slate-900 dark:text-slate-100">&ldquo;{scriptPost.title_or_caption.slice(0, 120)}&rdquo;</span>
+            </div>
+            {shopProducts.length > 0 && (
+              <div className="flex gap-2">
+                <select
+                  value={scriptProductId}
+                  onChange={(e) => setScriptProductId(e.target.value)}
+                  className="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm"
+                >
+                  {shopProducts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} (฿{Number(p.price || 0).toLocaleString()})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => generateScript(scriptPost, scriptProductId)}
+                  disabled={isGeneratingScript}
+                  className={secondaryButton}
+                >
+                  <RefreshCw className={`w-4 h-4 ${isGeneratingScript ? 'animate-spin' : ''}`} /> สร้างใหม่
+                </button>
+              </div>
+            )}
+
+            {isGeneratingScript && (
+              <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" /> กำลังเขียนสคริปต์...
+              </p>
+            )}
+            {scriptError && <p className="text-sm text-error-red">{scriptError}</p>}
+
+            {script && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{script.title}</h3>
+                {[script.hook, script.problem, script.solution, script.offer, script.cta].map((seg, i) => (
+                  <div key={i} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
+                    <p className="text-[11px] font-mono text-electric-blue">{seg.duration}</p>
+                    <p className="text-sm text-slate-900 dark:text-slate-100 mt-1">{seg.spokenText}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">ภาพ: {seg.visualDirection}</p>
+                  </div>
+                ))}
+                <div className="rounded-xl bg-slate-100 dark:bg-slate-800 p-3">
+                  <p className="text-sm text-slate-900 dark:text-slate-100 whitespace-pre-wrap">{script.caption}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">{script.hashtags.join(' ')}</p>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => copy(scriptAsText(script), 'script')} className={secondaryButton}>
+                    {copied === 'script' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />} คัดลอกบท
+                  </button>
+                  <button
+                    onClick={() => copy(`${script.caption}\n\n${script.hashtags.join(' ')}`, 'script-caption')}
+                    className={secondaryButton}
+                  >
+                    {copied === 'script-caption' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />} คัดลอกแคปชั่น
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-slate-100 dark:bg-slate-800 p-3">
+      <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+        {icon} {label}
+      </p>
+      <p className="text-base font-bold text-slate-900 dark:text-slate-100 mt-1">{value}</p>
     </div>
   )
 }
 
 function PlaybookUnavailable() {
   return (
-    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm text-slate-600 dark:text-slate-400">
-      ยังไม่มีบทวิเคราะห์สำหรับบัญชีนี้ เพราะไม่พบโพสต์ให้วิเคราะห์ หรือระบบ AI ขัดข้อง ลองกด &quot;สแกนใหม่&quot; อีกครั้งภายหลัง
+    <p className="text-sm text-slate-500 dark:text-slate-400">
+      ยังไม่มีบทวิเคราะห์สำหรับบัญชีนี้ เพราะไม่พบคลิปให้วิเคราะห์ หรือระบบ AI ขัดข้อง ลองกด &quot;สแกนใหม่&quot; อีกครั้งภายหลัง
+    </p>
+  )
+}
+
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-slate-900 w-full sm:max-w-xl max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5 space-y-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{title}</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        {children}
+      </div>
     </div>
   )
 }
