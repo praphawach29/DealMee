@@ -2,17 +2,18 @@
 
 > **บันทึกล่าสุด:** 20 ตุลาคม 2026 (ดูหัวข้อ "อัปเดต 20 ตุลาคม 2026" ด้านล่าง)  
 > **Repository:** `praphawach29/DealMee` (Branch: `main`)  
-> **Last Commit:** `3dc5d93` - *docs: guide for reusing the prepaid wallet billing in other projects (#51)*  
+> **Last Commit:** `170e2ab` - *chore: rename to DealMee (repo, package name, docs) (#53)*  
 > **Status:** Production Build Passed (`npm run build` ✓)
 
 ---
 
-## 🆕 เปลี่ยนชื่อเป็น DealMee (20 ตุลาคม 2026)
+## 🆕 เปลี่ยนชื่อเป็น DealMee (20 ตุลาคม 2026, PR #53)
 
 - GitHub repo: `ai-agent-google-SDK` → **`praphawach29/DealMee`** (GitHub ส่งต่อ URL เดิมให้อัตโนมัติ)
 - `package.json` name: `botify-saas-web` → `dealmee`
-- Vercel project: `ai-agent-google-sdk` → `dealmee` (เจ้าของเปลี่ยนใน dashboard — โดเมน `app.dealmee.app`/`dealmee.app` ไม่เปลี่ยน, `ai-agent-google-sdk-jade.vercel.app` ยังใช้ได้)
-- โฟลเดอร์ในเครื่องเจ้าของเปลี่ยนเป็น `DealMee` และ `git remote set-url origin https://github.com/praphawach29/DealMee.git`
+- Vercel project: `ai-agent-google-sdk` → `dealmee` ✅ (เจ้าของเปลี่ยนใน dashboard เพราะ token ของ AI ได้ 403) — project id เดิม `prj_ZDd2PDrA3vq13IK9O23r4jIwCCsR`, deploy ของ #53 มาจาก repo `DealMee` สถานะ READY, โดเมน `app.dealmee.app`/`dealmee.app`/`www.dealmee.app` ครบ, `ai-agent-google-sdk-jade.vercel.app` ยังใช้ได้
+- ชื่อ session ของ Claude Code เปลี่ยนเป็น DealMee ✅
+- **รอเจ้าของ:** เปลี่ยนชื่อโฟลเดอร์ในเครื่องเป็น `DealMee` และ `git remote set-url origin https://github.com/praphawach29/DealMee.git`
 - ชื่อ `botify-saas-web` ที่ยังเหลือใน `ROADMAP_AI_AGENT.md` / `docs/DESIGN_SYSTEM.md` เป็นบันทึกประวัติ ตั้งใจคงไว้
 
 ## อัปเดต 20 ตุลาคม 2026 — กระเป๋าเงิน, Super Admin, รีเซ็ตรหัสผ่าน, คู่มือ (PR #29–#51)
