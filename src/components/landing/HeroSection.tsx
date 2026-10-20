@@ -7,7 +7,7 @@ const stats = [
   { num: '10+', label: 'ประเภทธุรกิจ' },
   { num: '24/7', label: 'พร้อมให้บริการ' },
   { num: '5 นาที', label: 'ติดตั้งเสร็จ' },
-  { num: '100%', label: 'ตรวจสลิปแท้แม่นยำ' },
+  { num: 'ทันที', label: 'ตรวจสลิปกับธนาคาร' },
 ]
 
 export default function HeroSection() {
@@ -42,7 +42,7 @@ export default function HeroSection() {
           {/* Sub-headline: Balanced, natural Thai phrasing */}
           <p className="text-white/70 text-sm sm:text-base max-w-xl mx-auto lg:mx-0 leading-relaxed font-normal">
             เชื่อมต่อ LINE OA ของร้านคุณ ให้บอท AI ตอบลูกค้า รับออเดอร์
-            คำนวณค่าส่งตามพื้นที่จริง ออกใบเสนอราคา B2B และตรวจสลิปโอนเงินอัตโนมัติแม่นยำ 100%
+            คำนวณค่าส่งตามพื้นที่จริง ออกใบเสนอราคา B2B และตรวจสลิปโอนเงินอัตโนมัติ
             ช่วยปิดการขายได้ตลอดเวลา ไม่ต้องคอยเฝ้าหน้าจอ
           </p>
 

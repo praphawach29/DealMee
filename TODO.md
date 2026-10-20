@@ -2,12 +2,22 @@
 
 > **บันทึกล่าสุด:** 20 ตุลาคม 2026 (ดูหัวข้อ "อัปเดต 20 ตุลาคม 2026" ด้านล่าง)  
 > **Repository:** `praphawach29/DealMee` (Branch: `main`)  
-> **Last Commit:** `3765716` - *docs: record the DealMee rename as done (Vercel project checked) (#54)*  
+> **Last Commit:** `6fae493` - *feat(live): hide AI Live Studio unless a shop is opted in (#60)*  
 > **Status:** Production Build Passed (`npm run build` ✓)
 
 ---
 
-## 🆕 เปลี่ยนชื่อเป็น DealMee (20 ตุลาคม 2026, PR #53)
+## 🆕 อัปเดต 20 ตุลาคม 2026 (รอบ 3) — ตรวจฟีเจอร์ที่เอกสารเคลมว่าเสร็จ (PR #56–#61)
+
+- **#56 ความปลอดภัย:** ตาราง `settings` (key AI ของแพลตฟอร์ม + RapidAPI ของทุกร้าน) มี policy `FOR ALL TO public USING (true)` = ใครมี anon key ก็อ่าน/แก้/ลบได้ → ล็อกเป็น service role (migration `20261025000000` รันแล้ว ผลถูกต้อง) — **รอเจ้าของ: เปลี่ยน API key ทุกตัวในตาราง `settings`**
+- **#56–#59 ส่องคู่แข่ง:** เลิกแต่งข้อมูล (ราคา ฿290–990 ตายตัว, ราคาเรา×1.15, playbook เสื้อยืดทุกร้าน), Gemini วิเคราะห์จากคลิปจริง, ส่งเข้าคลังความรู้เป็นร่าง, ออกแบบหน้าใหม่, รูป TikTok ขึ้น, สแกนใหม่ไม่สร้างแถวซ้ำ — ทดสอบบน production แล้ว ✅
+- **#60 AI Live Studio:** ซ่อน (เมนู หน้า API) เปิดเฉพาะร้านที่ตั้ง `features.live_studio` — รายละเอียดในเสาหลักที่ 3 ด้านล่าง
+- **#61 หน้าขาย/เอกสาร:** ตัดคำเคลมที่ยืนยันไม่ได้ ("ตรวจสลิปแม่นยำ 100%", "99.9% Uptime", "แผน Elite" ที่ไม่มีจริง), README/PROJECT_STATUS แสดงสถานะจริงของส่องคู่แข่งและ Live Studio
+- เจอเพิ่ม (ยังไม่แก้): คลาส `bg-surface` / `text-on-surface` / `border-outline-variant` ที่หน้าแพ็กเกจและสินค้าใช้ ไม่มีในธีม (`globals.css`) จึงไม่ให้สี
+
+**ก่อนเปิดขาย (รอเจ้าของ):** 1) เปลี่ยน API key 2) ทดสอบปิดการขายครบวงจรด้วยสลิปจริง 3) ทดสอบทวงจ่ายใน Messenger 4) ตั้ง key ตรวจสลิปเจ้าที่สอง — แล้วค่อยวางแผน TikTok LIVE
+
+## เปลี่ยนชื่อเป็น DealMee (20 ตุลาคม 2026, PR #53)
 
 - GitHub repo: `ai-agent-google-SDK` → **`praphawach29/DealMee`** (GitHub ส่งต่อ URL เดิมให้อัตโนมัติ)
 - `package.json` name: `botify-saas-web` → `dealmee`
@@ -193,17 +203,22 @@ supabase/migrations/20261013030000_marketplace_central_inventory.sql
   - [ ] ดึงประวัติการคุยจาก Shopee Open Platform และ TikTok Shop เข้ามาที่ Unified Inbox (`/dashboard/inbox`)
   - [ ] แอดมินสามารถเปิดดูและให้ AI Copilot ช่วยร่างคำตอบส่งกลับไปยัง Shopee/TikTok ได้ในที่เดียว
 
-### เสาหลักที่ 2: ระบบส่องร้านคู่แข่ง (Competitor Intelligence & Market Insights)
-- [ ] **API Ingestion จาก `cporter202/social-media-scraping-apis`:**
-  - [ ] เชื่อมโยงโมดูล Scraping API สำหรับส่องข้อมูลจาก TikTok, Instagram, Facebook
-- [ ] **Competitor Pricing & Promotion Tracker:**
-  - [ ] หน้าแดชบอร์ด `/dashboard/competitors` ให้ร้านค้าใส่ลิงก์ร้านคู่แข่งที่ต้องการเฝ้ามอง
-  - [ ] ระบบตรวจจับการปรับราคา และแจ้งเตือนเมื่อคู่แข่งลดราคาหรือจัด Flash Sale
-- [ ] **Viral Content & Strategy Generator:**
-  - [ ] ดึงโพสต์และคลิปที่ยอดวิว/ยอดไลก์สูงสุดของคู่แข่ง
-  - [ ] ให้ AI สรุปกลยุทธ์และร่างไอเดียคอนเทนต์ + แคปชั่นขายของที่น่าดึงดูดกว่าส่งให้ร้านค้า
+### เสาหลักที่ 2: ระบบส่องร้านคู่แข่ง (Competitor Intelligence & Market Insights) — ตรวจและแก้แล้ว 20 ต.ค. 2569 (PR #56–#59)
+- [~] **ดึงข้อมูลผ่าน RapidAPI:**
+  - [x] TikTok: โปรไฟล์ + 5 คลิปล่าสุดจริง (ทดสอบบน production แล้ว รูปขึ้นหลัง #58)
+  - [~] Instagram: ได้แค่โปรไฟล์ ไม่มีคลิป
+  - [ ] Facebook / Shopee: ยังไม่รองรับ (ระบบแจ้งว่าไม่รองรับ ไม่หักโควตา)
+- [~] **Competitor Pricing & Promotion Tracker:**
+  - [x] หน้าแดชบอร์ด `/dashboard/competitors` (ออกแบบใหม่ #57) ใส่ลิงก์ ติดตาม สแกนใหม่ (อัปเดตแถวเดิม #59)
+  - [ ] ราคาขายของคู่แข่ง + แจ้งเตือนลดราคา/Flash Sale — ยังไม่มีแหล่งข้อมูลราคา (เดิมแต่งตัวเลข ลบออกแล้ว)
+- [x] **Viral Content & Strategy Generator:**
+  - [x] คลิปล่าสุดพร้อมยอดวิว/ไลก์/คอมเมนต์/แชร์ (TikTok)
+  - [x] Gemini เขียนบทวิเคราะห์ + hook + แคปชั่น จากคลิปจริงและสินค้าของร้าน (`src/lib/competitors/competitorPlaybook.ts`) — ส่งเข้าคลังความรู้เป็นร่างรออนุมัติ
 
-### เสาหลักที่ 3: ระบบ DealMee AI Live Studio (24/7 Virtual Commerce Streamer)
+### เสาหลักที่ 3: ระบบ DealMee AI Live Studio — ⚠️ ซ่อนไว้ (PR #60) จนกว่าจะรับคอมเมนต์ไลฟ์จริงได้
+> ตรวจ 20 ต.ค. 2569: คอมเมนต์มาจากที่ร้านพิมพ์ในแดชบอร์ดเท่านั้น, คำตอบอัตโนมัติเคยสัญญาส่งฟรี/COD/ส่ง DM, ราคาปกติบนจอ = ราคา × 1.25, คอมเมนต์ CF ทดสอบสร้างออเดอร์จริง — ต้องแก้ทั้งหมดก่อนเปิด
+> เปิดให้ร้านทดสอบ: `update shops set features = coalesce(features,'{}'::jsonb) || '{"live_studio": true}' where id = '<shop id>';`
+> แผน TikTok LIVE: ใช้ TikTool (`tiktool/tiktok-live-api`, WebSocket + API key, $7/สัปดาห์ หรือ $19/เดือน) ผ่าน adapter ที่สลับไป Euler Stream ได้, รันบนเซิร์ฟเวอร์แยก (Vercel ถือ WebSocket ค้างไม่ได้), อ่านคอมเมนต์อย่างเดียว ไม่ส่งคุกกี้บัญชีร้าน; อวตารใช้ HeyGen LiveAvatar เป็นแพ็กเสริม; Facebook Live ต้องผ่าน App Review
 - [ ] **Real-time Live Comment Listener:**
   - [ ] เชื่อมต่อ WebSocket ดักฟังคอมเมนต์สดจาก TikTok Live, Facebook Live, Shopee Live
 - [ ] **OBS Studio Live Overlay Widget (`/live/overlay/[shop_id]`):**

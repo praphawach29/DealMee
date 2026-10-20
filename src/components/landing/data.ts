@@ -88,8 +88,8 @@ export const scenarios: Scenario[] = [
   },
   {
     key: 'slip',
-    label: '🧾 ตรวจสลิปอัตโนมัติ 100%',
-    subtitle: 'ลูกค้าส่งรูปสลิปผ่าน LINE → ระบบยิงตรวจสอบความถูกต้องกับธนาคารอัตโนมัติ 100%',
+    label: '🧾 ตรวจสลิปอัตโนมัติ',
+    subtitle: 'ลูกค้าส่งรูปสลิปผ่าน LINE → ระบบตรวจสอบความถูกต้องกับธนาคารอัตโนมัติ',
     botName: 'น้อง DealMee — TechShop',
     botEmoji: '💳',
     messages: [
@@ -115,7 +115,7 @@ export const scenarios: Scenario[] = [
   {
     key: 'quotation',
     label: '📄 ออกใบเสนอราคา B2B',
-    subtitle: 'รองรับลูกค้าธุรกิจ ออกเอกสาร PDF คำนวณ VAT 7% ส่งเป็น LINE Flex Card ทันที (แผน Elite)',
+    subtitle: 'รองรับลูกค้าธุรกิจ ออกเอกสาร PDF คำนวณ VAT 7% ส่งเป็น LINE Flex Card ทันที',
     botName: 'น้อง DealMee — B2B Pro',
     botEmoji: '🏢',
     messages: [

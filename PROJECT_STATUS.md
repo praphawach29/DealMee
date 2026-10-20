@@ -16,8 +16,8 @@
 Foundation               ████████████████████  98%
 AI Sales Engine          ████████████████████ 100%
 Omnichannel AI Agent     ████████████████████ 100%  [Pillar 1: LINE + FB + IG + Pooled Inventory DONE]
-Competitor Intelligence  ████████████████████ 100%  [Pillar 2: Social Scraping + Spy Dashboard DONE]
-DealMee AI Live Studio   ████████████████████ 100%  [Pillar 3: 24/7 OBS 60fps Overlay + Comment Switcher DONE]
+Competitor Intelligence  ████████████░░░░░░░░  60%  [TikTok โปรไฟล์+คลิปจริง + AI วิเคราะห์ (#56–#59); IG แค่โปรไฟล์; ไม่มีราคาคู่แข่ง; FB/Shopee ไม่รองรับ]
+DealMee AI Live Studio   ████░░░░░░░░░░░░░░░░  20%  [ซ่อนไว้ (#60): ยังไม่รับคอมเมนต์ไลฟ์จริง มีแค่จอ OBS + บทพูด + TTS]
 Central Inventory Pool   ████████████████████ 100%  [Realtime Multi-platform Sync DONE]
 B2B Quotation Engine     ████████████████████ 100%  [PDF/Word/Excel + Sign DONE]
 Billing & Subscription   ████████████████░░░░  85%  [Stripe + Omise + Manual Slip]
