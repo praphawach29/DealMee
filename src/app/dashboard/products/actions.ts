@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { platformSecret } from '@/lib/platformSecrets'
+import { effectivePlanKey } from '@/lib/billing/trial'
 
 export async function createProduct(formData: FormData) {
   const supabase = await createClient()
@@ -112,12 +113,13 @@ export async function generateAiProductDescription(name: string, category?: stri
     return { error: 'ไม่พบข้อมูลร้านค้า' }
   }
 
-  const userPlan = (shop.plan || 'free').toLowerCase()
-  const allowedPlans = ['pro', 'agency', 'byok']
+  // Effective plan, so trial shops (all Pro features) can use it too
+  const userPlan = effectivePlanKey(shop)
+  const allowedPlans = ['pro', 'agency', 'byok', 'trial']
 
   if (!allowedPlans.includes(userPlan)) {
     return {
-      error: 'ฟีเจอร์ AI Copywriter รองรับเฉพาะแพ็กเกจ Pro (฿990), Agency (฿2,490) และ BYOK เท่านั้น กรุณาอัปเกรดแพ็กเกจก่อนใช้งาน',
+      error: 'ฟีเจอร์ AI Copywriter ใช้ได้กับแพ็กเกจ Pro, Business และ BYOK กรุณาอัปเกรดแพ็กเกจที่หน้าแพ็กเกจก่อนใช้งาน',
     }
   }
 
