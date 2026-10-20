@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { updateBotSettings } from './actions'
 import ChatPlaygroundModal from '../components/ChatPlaygroundModal'
+import ByokKeyCard from './ByokKeyCard'
 import {
   MessageSquare,
   Save,
@@ -246,9 +247,11 @@ export default function SettingsForm({ shop, onNavigateToChannels }: SettingsFor
             <Cpu className="w-4 h-4 text-electric-blue shrink-0 mt-0.5" />
             <div>
               <span className="font-semibold text-on-surface">ไม่ต้องตั้งค่าเอง (Zero Maintenance): </span>
-              DealMee ดูแลการเลือกโมเดลและการอัปเดตให้ทั้งหมด ร้านค้าไม่ต้องตั้งค่า API Key หรือโควต้าเอง
+              DealMee ดูแลการเลือกโมเดลและการอัปเดตให้ทั้งหมด ร้านค้าไม่ต้องตั้งค่า API Key หรือโควต้าเอง (ยกเว้นแพ็กเกจ BYOK)
             </div>
           </div>
+
+          <ByokKeyCard />
         </div>
       </section>
 

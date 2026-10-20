@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { businessHoursPromptContext } from '@/lib/shop/businessHours'
-import { salesAutomationEnabled, SALES_AUTOMATION_TOOLS, SALES_LOCKED_PROMPT } from '@/lib/billing/trial'
+import { effectivePlanKey, salesAutomationEnabled, SALES_AUTOMATION_TOOLS, SALES_LOCKED_PROMPT } from '@/lib/billing/trial'
+import { getShopAiKey } from '@/lib/billing/shopAiKey'
 import { highValueThreshold, isHighValue, HIGH_VALUE_TAG, INFO_ONLY_PROMPT, highValuePrompt } from '@/lib/ai/salesModes'
 import { getPlanLimits, getAddonRemaining, consumeAddonCredit } from '@/lib/billing/planLimits'
 import { selectRelevantKnowledge } from '@/lib/ai/knowledgeSelect'
@@ -935,9 +936,14 @@ async function preparePlanningState({
   // so when the key fails the conversation goes to the shop's admin rather than
   // quietly running on the platform's keys. Other shops use the platform's keys
   // (admin page → Vercel → legacy settings rows), Gemini first.
-  const shopKey = String(shop?.custom_ai_key || shop?.ai_key || '').trim()
-  const shopProvider = String(shop?.custom_ai_provider || shop?.ai_provider || '').toLowerCase()
-  const byok = Boolean(shopKey) && ['gemini', 'claude', 'openai'].includes(shopProvider)
+  // The BYOK plan's key comes from shop_ai_keys (set on the bot settings page). A BYOK
+  // shop with no key saved yet gets no AI rather than the platform's keys: its
+  // quota is unlimited, so those messages would be paid for by the platform.
+  const onByokPlan = effectivePlanKey(shop) === 'byok'
+  const ownKey = onByokPlan && shop?.id ? await getShopAiKey(shop.id) : null
+  const shopKey = ownKey?.key || String(shop?.custom_ai_key || shop?.ai_key || '').trim()
+  const shopProvider = ownKey?.provider || String(shop?.custom_ai_provider || shop?.ai_provider || '').toLowerCase()
+  const byok = onByokPlan || (Boolean(shopKey) && ['gemini', 'claude', 'openai'].includes(shopProvider))
   const [geminiKey, claudeKey, openAiKey] = byok
     ? [shopProvider === 'gemini' ? shopKey : '', shopProvider === 'claude' ? shopKey : '', shopProvider === 'openai' ? shopKey : '']
     : await Promise.all([platformSecret('GEMINI_API_KEY'), platformSecret('CLAUDE_API_KEY'), platformSecret('OPENAI_API_KEY')])
@@ -1446,7 +1452,10 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
   if (!response) {
     // All configured providers failed this step
     const hasAnyKey = !!(state.geminiKey || state.claudeKey || state.openAiKey)
-    const errDetail = state.lastProviderError || (!hasAnyKey ? 'ยังไม่ได้ตั้งค่า API Key ของ AI ในระบบ (กรุณาตั้งค่า GEMINI_API_KEY)' : 'AI Provider ขัดข้องชั่วคราว')
+    const noKeyDetail = state.byok
+      ? 'ยังไม่ได้ใส่ API Key ของร้าน (แพ็กเกจ BYOK) ที่หน้าตั้งค่าบอท'
+      : 'ยังไม่ได้ตั้งค่า API Key ของ AI ในระบบ (กรุณาตั้งค่า GEMINI_API_KEY)'
+    const errDetail = state.lastProviderError || (!hasAnyKey ? noKeyDetail : 'AI Provider ขัดข้องชั่วคราว')
 
     console.error(`[DealMee Planning Loop] All providers failed for shop "${state.shop.name}":`, errDetail)
 
