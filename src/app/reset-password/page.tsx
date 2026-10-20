@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import { isSuperAdminEmail } from '@/lib/auth/superAdmin'
 import { Button } from '@/components/ui/button'
 import {
   KeyRound,
@@ -38,6 +39,8 @@ function ResetPasswordContent() {
   const [resendSent, setResendSent] = useState(false)
   const [resendError, setResendError] = useState<string | null>(null)
   const linkFailed = searchParams.get('error') === 'link'
+  // Only the Super Admin may open /admin; a shop owner sent there after a reset met a locked page.
+  const homePath = isSuperAdminEmail(userEmail) ? '/admin' : '/dashboard'
 
   useEffect(() => {
     const supabase = createClient()
@@ -109,7 +112,7 @@ function ResetPasswordContent() {
       } else {
         setSuccess(true)
         setTimeout(() => {
-          router.push('/admin')
+          router.push(homePath)
         }, 2000)
       }
     } catch (err: any) {
@@ -162,12 +165,12 @@ function ResetPasswordContent() {
               <div>
                 <h3 className="text-sm font-bold text-emerald-900">เปลี่ยนรหัสผ่านสำเร็จแล้ว!</h3>
                 <p className="text-xs text-emerald-700 mt-1">
-                  กำลังนำคุณเข้าสู่ระบบผู้ดูแลระบบ/แดชบอร์ด...
+                  กำลังนำคุณเข้าสู่แดชบอร์ด...
                 </p>
               </div>
               <Button
                 type="button"
-                onClick={() => router.push('/admin')}
+                onClick={() => router.push(homePath)}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm h-10 mt-2 font-bold cursor-pointer"
               >
                 เข้าสู่ระบบทันที <ArrowRight className="w-4 h-4 ml-1.5" />
