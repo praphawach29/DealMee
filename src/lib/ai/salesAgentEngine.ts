@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { businessHoursPromptContext } from '@/lib/shop/businessHours'
 import { salesAutomationEnabled, SALES_AUTOMATION_TOOLS, SALES_LOCKED_PROMPT } from '@/lib/billing/trial'
+import { highValueThreshold, isHighValue, HIGH_VALUE_TAG, INFO_ONLY_PROMPT, highValuePrompt } from '@/lib/ai/salesModes'
 import { getPlanLimits, getAddonRemaining, consumeAddonCredit } from '@/lib/billing/planLimits'
 import { selectRelevantKnowledge } from '@/lib/ai/knowledgeSelect'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -561,12 +562,15 @@ const MASTER_TOOLS = [
   // ── 🙋 Escalation ─────────────────────────────────────────────────────────────
   {
     name: 'request_human_agent',
-    description: 'เรียกแอดมิน/เจ้าของร้านเข้ามาดูแลแชท เมื่อ AI ไม่สามารถช่วยได้หรือลูกค้าต้องการพูดคุยกับคน',
+    description: 'เรียกแอดมิน/เจ้าของร้านเข้ามาดูแลแชท เมื่อ AI ไม่สามารถช่วยได้ ลูกค้าต้องการพูดคุยกับคน หรือลูกค้าสนใจสินค้าที่แอดมินต้องปิดการขายเอง (ใส่ชื่อ เบอร์ และสิ่งที่สนใจถ้ามี แอดมินจะได้รับแจ้งทาง LINE ทันที)',
     parameters: {
       type: 'object',
       properties: {
         reason: { type: 'string', description: 'เหตุผลที่ต้องการ Human Agent' },
         urgency: { type: 'string', description: 'urgent หรือ normal' },
+        customer_name: { type: 'string', description: 'ชื่อลูกค้า (ถ้าลูกค้าให้มา)' },
+        phone: { type: 'string', description: 'เบอร์โทรหรือช่องทางติดต่อของลูกค้า (ถ้าลูกค้าให้มา)' },
+        interest: { type: 'string', description: 'สิ่งที่ลูกค้าสนใจ เช่น สินค้า แพ็กเกจ จำนวน งบประมาณ' },
       },
       required: ['reason'],
     },
@@ -961,6 +965,9 @@ async function preparePlanningState({
   // 2. Products
   const features = (shop.features as Record<string, boolean>) || {}
   let productsContext = ''
+  const valueThreshold = highValueThreshold(features)
+  let catalogEmpty = false
+  let hasHighValue = false
   if (features.product_recommend !== false) {
     const { data: products } = await db
       .from('products')
@@ -968,15 +975,22 @@ async function preparePlanningState({
       .eq('shop_id', shop.id)
       .limit(30)
 
+    catalogEmpty = !products || products.length === 0
     if (products && products.length > 0) {
       productsContext =
         `\n\n[แคตตาล็อกสินค้าของร้าน]\n` +
         products.map((p) => {
           const stockStr = p.stock !== null && p.stock !== undefined ? `${p.stock} ชิ้น` : 'มีพร้อมส่ง'
           const descStr = p.description ? ` (${clipForPrompt(p.description, PRODUCT_DESCRIPTION_MAX_CHARS)})` : ''
-          return `- ${p.name}${descStr} [หมวดหมู่: ${p.category || 'ทั่วไป'}]: ${Number(p.price || 0).toLocaleString()} บาท (คงเหลือ: ${stockStr})`
+          const highValue = isHighValue(p.price, valueThreshold)
+          if (highValue) hasHighValue = true
+          return `- ${p.name}${descStr} [หมวดหมู่: ${p.category || 'ทั่วไป'}]: ${Number(p.price || 0).toLocaleString()} บาท (คงเหลือ: ${stockStr})${highValue ? ` ${HIGH_VALUE_TAG}` : ''}`
         }).join('\n')
     }
+  } else {
+    // The catalog isn't shown to the model, but whether one exists still decides the mode
+    const { count } = await db.from('products').select('id', { count: 'exact', head: true }).eq('shop_id', shop.id)
+    catalogEmpty = !count
   }
 
   // 3. Booking Templates
@@ -1308,9 +1322,18 @@ ${paymentInfo}`
 ${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}${businessHoursPromptContext(shop.features)}
 ${historyContext}`
 
-  // Free plan (incl. ended trials): sales automation is locked and orders go to the admin
-  const salesLocked = !salesAutomationEnabled(shop)
-  const systemInstruction = `${staticSystemPrompt}\n${dynamicSystemPrompt}${salesLocked ? SALES_LOCKED_PROMPT : ''}`
+  // Free plan (incl. ended trials): sales automation is locked and orders go to the admin.
+  // An empty catalog (service / info page) works the same way: the bot answers from the
+  // knowledge base and hands interested customers to the admin with their contact details.
+  const salesLocked = !salesAutomationEnabled(shop) || catalogEmpty
+  const modePrompt = !salesAutomationEnabled(shop)
+    ? SALES_LOCKED_PROMPT
+    : catalogEmpty
+      ? INFO_ONLY_PROMPT
+      : hasHighValue
+        ? highValuePrompt(valueThreshold)
+        : ''
+  const systemInstruction = `${staticSystemPrompt}\n${dynamicSystemPrompt}${modePrompt}`
 
   // 6. Route
   const routing = classifyMessageComplexity(userQuery, {
@@ -1358,7 +1381,7 @@ ${historyContext}`
       executor,
       toolCtx,
       staticSystemPrompt,
-      dynamicSystemPrompt: `${dynamicSystemPrompt}${salesLocked ? SALES_LOCKED_PROMPT : ''}`,
+      dynamicSystemPrompt: `${dynamicSystemPrompt}${modePrompt}`,
       systemInstruction,
       modelName,
       geminiKey,

@@ -5,6 +5,7 @@ import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { revalidatePath } from 'next/cache'
 import { PENDING_ORDER_EXPIRY_OPTIONS } from '@/lib/orders/pendingOrderExpiry'
 import { isValidTime, type BusinessHours } from '@/lib/shop/businessHours'
+import { HIGH_VALUE_THRESHOLD_OPTIONS } from '@/lib/ai/salesModes'
 
 export async function updateShopFeatures(features: Record<string, boolean>) {
   const supabase = await createClient()
@@ -153,6 +154,45 @@ export async function updatePendingOrderExpiry(hours: number) {
 
   revalidatePath('/dashboard/modules')
   return { success: value > 0 ? `ออเดอร์ที่ไม่ชำระภายใน ${value} ชั่วโมงจะถูกยกเลิกอัตโนมัติ` : 'ปิดการยกเลิกออเดอร์ค้างชำระอัตโนมัติแล้ว' }
+}
+
+/** Price from which the bot hands the sale to the admin instead of ordering itself (features.high_value_threshold) */
+export async function updateHighValueThreshold(threshold: number) {
+  const supabase = await createClient()
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return { error: 'กรุณาเข้าสู่ระบบอีกครั้ง' }
+  }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop?.id) {
+    return { error: 'ไม่พบข้อมูลร้านค้า' }
+  }
+
+  const value = Number(threshold)
+  if (!HIGH_VALUE_THRESHOLD_OPTIONS.includes(value)) {
+    return { error: 'ค่าที่เลือกไม่ถูกต้อง' }
+  }
+
+  const { error } = await supabase
+    .from('shops')
+    .update({
+      features: { ...((shop.features as Record<string, any>) || {}), high_value_threshold: value },
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', shop.id)
+
+  if (error) {
+    return { error: `บันทึกไม่สำเร็จ: ${error.message}` }
+  }
+
+  revalidatePath('/dashboard/modules')
+  return {
+    success: value > 0
+      ? `สินค้าราคาตั้งแต่ ${value.toLocaleString()} บาท บอทจะเก็บข้อมูลติดต่อแล้วส่งให้แอดมินปิดการขาย`
+      : 'บอทจะรับออเดอร์สินค้าทุกราคาเอง',
+  }
 }
 
 /** Saves features.business_hours (when the shop is open and whether the bot answers then) */

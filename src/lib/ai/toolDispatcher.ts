@@ -6,6 +6,8 @@ import { t, type CustomerLanguage } from '@/lib/i18n/customerMessages'
 import { scheduleQrFollowUp, scheduleBookingReminder } from '@/lib/ai/proactiveFollowUp'
 import { buildLineFlexQuotationMessage, buildLineFlexOfficialLetterMessage } from '@/lib/line/flexHelper'
 import { resolveCatalogProduct, describeUnresolved, parseQuantity, computeShippingFee, type CatalogProduct } from '@/lib/ai/catalogPricing'
+import { highValueThreshold, highValueRefusal } from '@/lib/ai/salesModes'
+import { notifyShopAdmin } from '@/lib/billing/ownerAlerts'
 
 const QR_BUCKET = 'qr-codes'
 
@@ -480,6 +482,31 @@ export async function executeTool(
     }
   }
 
+  // High-value products are closed by the admin (src/lib/ai/salesModes.ts). The prompt
+  // says so; this stops an order or quotation that slips through anyway.
+  if (toolName === 'take_order' || toolName === 'create_quotation') {
+    const threshold = highValueThreshold(shopFeatures)
+    const requestedNames: string[] = (
+      Array.isArray(args.items) && args.items.length > 0
+        ? args.items.map((it: any) => String(it?.product || it?.name || it?.product_name || ''))
+        : [String(args.product || '')]
+    ).map((n: string) => n.trim().toLowerCase()).filter(Boolean)
+    if (threshold > 0 && requestedNames.length > 0) {
+      const { data: pricey } = await supabaseAdmin
+        .from('products')
+        .select('name, price')
+        .eq('shop_id', shopId)
+        .gte('price', threshold)
+      const hits = (pricey || []).filter((p: any) => {
+        const name = String(p.name || '').toLowerCase()
+        return requestedNames.some((req) => req.includes(name) || name.includes(req))
+      })
+      if (hits.length > 0) {
+        return { resultForAi: highValueRefusal(hits.map((p: any) => p.name)), immediateMessages: [] }
+      }
+    }
+  }
+
   // ── 💳 PAYMENT TOOLS ─────────────────────────────────────────────────
   if (toolName === 'send_payment_qr') {
     const promptpayId = shop.promptpay_id || shop.promptpay_number
@@ -713,25 +740,36 @@ export async function executeTool(
   if (toolName === 'request_human_agent') {
     await supabase.from('conversations').update({ status: 'human' }).eq('id', conversationId)
 
-    if (shop?.line_token && shop?.features?.admin_notify !== false) {
-      const targetAdmin = shop.admin_line_user_id || shop.owner_line_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
-      if (targetAdmin) {
-        const notifyText = `🔔 มีลูกค้าขอยื่นคุยกับแอดมินคนจริง!\nเหตุผล: ${args.reason || 'ต้องการคุยกับคน'}\nกรุณาเข้ากล่องข้อความเพื่อดูแลลูกค้าค่ะ`
-        fetch('https://api.line.me/v2/bot/message/push', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${shop.line_token}`,
-          },
-          body: JSON.stringify({
-            to: targetAdmin,
-            messages: [{ type: 'text', text: notifyText }],
-          }),
-        }).catch((e) => console.warn('[Admin Handover Notify Error]:', e))
-      }
+    const customerName = String(args.customer_name || '').trim()
+    const phone = String(args.phone || '').trim()
+    const interest = String(args.interest || '').trim()
+
+    // A customer who left contact details is a lead the admin should call back
+    if (phone || interest) {
+      await supabaseAdmin.from('leads').upsert({
+        shop_id: shopId,
+        user_id: userId,
+        product_name: interest || null,
+        customer_name: customerName || `ลูกค้า-${userId.substring(0, 6)}`,
+        source: /^U[0-9a-f]{32}$/.test(userId) ? 'LINE' : 'Messenger',
+        status: 'new',
+        note: [phone && `ติดต่อ: ${phone}`, args.reason && `เหตุผล: ${args.reason}`].filter(Boolean).join(' | ') || null,
+      }, { onConflict: 'shop_id,user_id' })
     }
 
-    return { resultForAi: 'เรียกแอดมินให้เข้ามาดูแลแล้ว ให้บอกลูกค้าว่ากำลังตามแอดมินให้และรอสักครู่', immediateMessages: [] }
+    // Straight to the admin's LINE, so a hot lead isn't left waiting for someone to open the inbox
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.dealmee.app'
+    const notifyText = [
+      phone || interest ? '🔔 มีลูกค้าสนใจ รอแอดมินติดต่อกลับ' : '🔔 มีลูกค้าขอคุยกับแอดมินคนจริง',
+      customerName && `ชื่อ: ${customerName}`,
+      phone && `ติดต่อ: ${phone}`,
+      interest && `สนใจ: ${interest}`,
+      `เหตุผล: ${args.reason || 'ต้องการคุยกับคน'}`,
+      `ตอบลูกค้า: ${baseUrl}/dashboard/inbox`,
+    ].filter(Boolean).join('\n')
+    await notifyShopAdmin(shop, notifyText).catch((e) => console.warn('[Admin Handover Notify Error]:', e))
+
+    return { resultForAi: 'เรียกแอดมินให้เข้ามาดูแลแล้ว ให้บอกลูกค้าว่าส่งเรื่องให้แอดมินแล้ว แอดมินจะติดต่อกลับโดยเร็ว', immediateMessages: [] }
   }
 
   if (toolName === 'transfer_to_agent') {

@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { updateShopFeatures, updateBotDiscountCap, updateFollowUpConfig, updatePendingOrderExpiry, updateBusinessHours } from './actions'
+import { updateShopFeatures, updateBotDiscountCap, updateFollowUpConfig, updatePendingOrderExpiry, updateBusinessHours, updateHighValueThreshold } from './actions'
+import { DEFAULT_HIGH_VALUE_THRESHOLD, HIGH_VALUE_THRESHOLD_OPTIONS } from '@/lib/ai/salesModes'
 import { PENDING_ORDER_EXPIRY_OPTIONS } from '@/lib/orders/pendingOrderExpiry'
 import { DEFAULT_BUSINESS_HOURS, THAI_DAY_SHORT, type BusinessHours } from '@/lib/shop/businessHours'
 
@@ -12,6 +13,7 @@ interface ModulesViewProps {
   initialDiscountCap?: number
   initialFollowUp?: Record<string, any>
   initialOrderExpiryHours?: number
+  initialHighValueThreshold?: number
   initialBusinessHours?: BusinessHours
 }
 
@@ -21,6 +23,7 @@ export default function ModulesView({
   initialDiscountCap = 0,
   initialFollowUp = {},
   initialOrderExpiryHours = 24,
+  initialHighValueThreshold = DEFAULT_HIGH_VALUE_THRESHOLD,
   initialBusinessHours = DEFAULT_BUSINESS_HOURS,
 }: ModulesViewProps) {
   const router = useRouter()
@@ -49,6 +52,8 @@ export default function ModulesView({
   })
   const [savingFollowUp, setSavingFollowUp] = useState(false)
   const [orderExpiryHours, setOrderExpiryHours] = useState<number>(initialOrderExpiryHours)
+  const [highValue, setHighValue] = useState<number>(initialHighValueThreshold)
+  const [savingHighValue, setSavingHighValue] = useState(false)
   const [savingExpiry, setSavingExpiry] = useState(false)
 
   const showToast = (text: string) => {
@@ -89,6 +94,20 @@ export default function ModulesView({
       ...h,
       days: h.days.includes(day) ? h.days.filter((d) => d !== day) : [...h.days, day].sort(),
     }))
+
+  const saveHighValue = async (value: number) => {
+    const previous = highValue
+    setHighValue(value)
+    setSavingHighValue(true)
+    const res = await updateHighValueThreshold(value)
+    setSavingHighValue(false)
+    if (res?.error) {
+      setHighValue(previous)
+      alert(res.error)
+    } else {
+      showToast(res?.success || 'บันทึกแล้ว')
+    }
+  }
 
   const saveOrderExpiry = async (hours: number) => {
     const previous = orderExpiryHours
@@ -388,6 +407,32 @@ export default function ModulesView({
             {PENDING_ORDER_EXPIRY_OPTIONS.map((h) => (
               <option key={h} value={h}>
                 {h === 0 ? 'ไม่ยกเลิกอัตโนมัติ' : h === 24 ? '24 ชั่วโมง (ค่าเริ่มต้น)' : `${h} ชั่วโมง`}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
+
+      {/* High-value products go to the admin */}
+      <section className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+        <div>
+          <h2 className="text-base font-bold text-on-surface font-headline-sm">💎 สินค้าราคาสูง ให้แอดมินปิดการขาย</h2>
+          <p className="text-[11px] sm:text-xs text-on-surface-variant mt-0.5">
+            บอทตอบข้อมูลสินค้าได้ตามปกติ แต่เมื่อลูกค้าสนใจซื้อ บอทจะขอชื่อและเบอร์โทร แล้วแจ้งแอดมินทาง LINE ทันทีแทนการเปิดออเดอร์เอง
+            ร้านที่ไม่มีสินค้าในระบบ (เพจบริการ/ให้ข้อมูล) บอทจะทำแบบนี้กับทุกคำขอซื้อโดยอัตโนมัติ
+          </p>
+        </div>
+        <label className="flex items-center gap-2.5 text-sm text-on-surface-variant">
+          <span>สินค้าราคาตั้งแต่</span>
+          <select
+            value={highValue}
+            disabled={savingHighValue}
+            onChange={(e) => saveHighValue(Number(e.target.value))}
+            className="rounded-xl border border-outline-variant/60 bg-merchant-bg px-3 py-2 text-sm text-on-surface disabled:opacity-50"
+          >
+            {HIGH_VALUE_THRESHOLD_OPTIONS.map((v) => (
+              <option key={v} value={v}>
+                {v === 0 ? 'ไม่ใช้ (บอทขายเองทุกราคา)' : `${v.toLocaleString()} บาท${v === DEFAULT_HIGH_VALUE_THRESHOLD ? ' (ค่าเริ่มต้น)' : ''}`}
               </option>
             ))}
           </select>
