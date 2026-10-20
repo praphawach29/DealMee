@@ -343,12 +343,7 @@ export default function CompetitorDashboardClient({
                   }}
                   className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer"
                 >
-                  {comp.avatar_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={comp.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0" />
-                  )}
+                  <RemoteImage src={comp.avatar_url} className="w-9 h-9 rounded-full object-cover shrink-0" />
                   <div className="min-w-0">
                     <p className={`text-sm font-semibold truncate ${selected ? 'text-electric-blue' : 'text-slate-900 dark:text-slate-100'}`}>
                       {comp.name}
@@ -380,12 +375,7 @@ export default function CompetitorDashboardClient({
             {/* Profile */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex items-center gap-3 flex-1 min-w-0">
-                {active.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={active.avatar_url} alt="" className="w-14 h-14 rounded-full object-cover shrink-0" />
-                ) : (
-                  <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0" />
-                )}
+                <RemoteImage src={active.avatar_url} className="w-14 h-14 rounded-full object-cover shrink-0" />
                 <div className="min-w-0">
                   <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">{active.name}</h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
@@ -450,12 +440,7 @@ export default function CompetitorDashboardClient({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {active.posts.map((post) => (
                     <div key={post.id} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex gap-3">
-                      {post.thumbnail_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={post.thumbnail_url} alt="" className="w-20 h-28 rounded-lg object-cover shrink-0 bg-slate-100 dark:bg-slate-800" />
-                      ) : (
-                        <div className="w-20 h-28 rounded-lg bg-slate-100 dark:bg-slate-800 shrink-0" />
-                      )}
+                      <RemoteImage src={post.thumbnail_url} className="w-20 h-28 rounded-lg object-cover shrink-0 bg-slate-100 dark:bg-slate-800" />
                       <div className="flex-1 min-w-0 flex flex-col">
                         <p className="text-xs text-slate-900 dark:text-slate-100 line-clamp-3">{post.title_or_caption}</p>
                         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
@@ -714,5 +699,20 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
         {children}
       </div>
     </div>
+  )
+}
+
+/**
+ * Images from TikTok/Instagram CDNs: sent without a referrer (TikTok refuses
+ * hot-linked requests that carry one) and replaced by a grey box when the signed
+ * URL has expired, instead of a broken-image icon.
+ */
+function RemoteImage({ src, className }: { src?: string; className: string }) {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [src])
+  if (!src || failed) return <div className={`${className} bg-slate-100 dark:bg-slate-800`} />
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} className={className} />
   )
 }
