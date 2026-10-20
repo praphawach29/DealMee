@@ -21,7 +21,7 @@ export default function FeaturesBento() {
         <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-cyan-50 border border-cyan-200 text-cyan-800 text-sm font-bold uppercase tracking-wider">
             <Sparkles className="w-4 h-4 text-cyan-600" />
-            <span>ความสามารถที่พร้อมใช้งานได้จริง 100%</span>
+            <span>ความสามารถที่ใช้งานได้จริงวันนี้</span>
           </div>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
             ครบทุกมิติงานขายและการบริการบน LINE OA
@@ -86,7 +86,7 @@ export default function FeaturesBento() {
                 </h3>
               </div>
               <p className="text-slate-600 text-base leading-relaxed">
-                เมื่อลูกค้าส่งรูปสลิปเข้ามาใน LINE ระบบจะตรวจสอบตรงกับฐานข้อมูลธนาคารทันที ยืนยันยอดเงิน วันเวลา และบัญชีผู้รับ ป้องกันสลิปปลอม สลิปแต่งรูป และสลิปที่ใช้ซ้ำได้ 100%
+                เมื่อลูกค้าส่งรูปสลิปเข้ามาใน LINE ระบบจะตรวจสอบตรงกับฐานข้อมูลธนาคารทันที ยืนยันยอดเงิน วันเวลา และบัญชีผู้รับ ป้องกันสลิปปลอม สลิปแต่งรูป และสลิปที่ใช้ซ้ำ สลิปที่ตรวจไม่ผ่านจะส่งให้แอดมินดูต่อ
               </p>
             </div>
 

@@ -31,7 +31,7 @@ export default function Footer() {
             </p>
             <div className="flex items-center gap-2 pt-1 text-emerald-400 text-sm font-semibold">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>ระบบทำงานปกติ 99.9% Uptime</span>
+              <span>บอทตอบลูกค้าตลอด 24 ชั่วโมง</span>
             </div>
           </div>
 
