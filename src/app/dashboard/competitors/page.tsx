@@ -9,8 +9,8 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export const metadata = {
-  title: 'ส่องร้านคู่แข่ง (Competitor Intelligence) — DealMee AI',
-  description: 'วิเคราะห์ราคา คอนเทนต์ไวรัล และแฮชแท็กคู่แข่งบน TikTok, IG, FB เพื่อชิงยอดขายให้ธุรกิจคุณ',
+  title: 'ส่องร้านคู่แข่ง — DealMee AI',
+  description: 'ดูโปรไฟล์และคลิปล่าสุดของคู่แข่งบน TikTok และ Instagram พร้อมไอเดียคอนเทนต์จาก AI',
 }
 
 export default async function CompetitorsPage() {
