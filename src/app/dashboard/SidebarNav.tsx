@@ -19,6 +19,7 @@ import {
   ShieldAlert,
   Radar,
   Radio,
+  BookOpen,
 } from 'lucide-react'
 
 interface SidebarNavProps {
@@ -236,6 +237,17 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
       </Link>
       
       <div className="pt-3 mt-3 border-t border-outline-variant/30 space-y-1">
+        <Link
+          href="/dashboard/help"
+          prefetch={true}
+          onMouseEnter={() => handleMouseEnter('/dashboard/help')}
+          onClick={() => handleLinkClick('/dashboard/help')}
+          className={linkClass('/dashboard/help')}
+        >
+          <BookOpen className="mr-2.5 h-[18px] w-[18px] shrink-0" />
+          <span>คู่มือการใช้งาน</span>
+        </Link>
+
         {isSuperAdmin && (
           <Link
             href="/admin"
