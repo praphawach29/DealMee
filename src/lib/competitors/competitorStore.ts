@@ -30,24 +30,39 @@ export async function saveCompetitor(
   try {
     const compId = `comp-${Date.now()}`
 
-    // 1. Try writing to public.competitors table
-    const { data, error } = await supabase
+    // 1. Write to public.competitors: a rescan updates the shop's existing row for
+    // this account (and replaces its posts) instead of adding a second one
+    const row = {
+      shop_id: shopId,
+      name: profile.name,
+      platform: profile.platform,
+      target_url: profile.target_url,
+      handle: profile.handle,
+      avatar_url: profile.avatar_url,
+      follower_count: profile.follower_count,
+      avg_engagement_rate: profile.avg_engagement_rate,
+      price_range_min: profile.price_range_min,
+      price_range_max: profile.price_range_max,
+      notes: JSON.stringify(profile.aiPlaybook),
+      last_scanned_at: new Date().toISOString(),
+    }
+    const { data: existing } = await supabase
       .from('competitors')
-      .insert({
-        shop_id: shopId,
-        name: profile.name,
-        platform: profile.platform,
-        target_url: profile.target_url,
-        handle: profile.handle,
-        avatar_url: profile.avatar_url,
-        follower_count: profile.follower_count,
-        avg_engagement_rate: profile.avg_engagement_rate,
-        price_range_min: profile.price_range_min,
-        price_range_max: profile.price_range_max,
-        notes: JSON.stringify(profile.aiPlaybook),
-      })
       .select('id')
-      .single()
+      .eq('shop_id', shopId)
+      .eq('platform', profile.platform)
+      .eq('handle', profile.handle)
+      .order('last_scanned_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const { data, error } = existing
+      ? await supabase.from('competitors').update(row).eq('id', existing.id).select('id').single()
+      : await supabase.from('competitors').insert(row).select('id').single()
+
+    if (!error && data?.id && existing) {
+      await supabase.from('competitor_posts').delete().eq('competitor_id', data.id)
+    }
 
     if (!error && data?.id) {
       // Also insert posts
