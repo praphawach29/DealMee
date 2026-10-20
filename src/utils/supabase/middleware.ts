@@ -60,6 +60,9 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/auth') &&
     !request.nextUrl.pathname.startsWith('/api/auth') &&
     !request.nextUrl.pathname.startsWith('/api/webhook') &&
+    // Meta's data deletion / deauthorize callbacks and the status page it links people to
+    !request.nextUrl.pathname.startsWith('/api/facebook/data-deletion') &&
+    !request.nextUrl.pathname.startsWith('/facebook/data-deletion') &&
     !request.nextUrl.pathname.startsWith('/api/billing/webhook') &&
     !request.nextUrl.pathname.startsWith('/api/cron') &&
     !request.nextUrl.pathname.startsWith('/api/test') &&

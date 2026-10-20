@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { updateChannelSettings } from './actions'
 import AdminLineNotificationCard from './AdminLineNotificationCard'
+import FacebookConnectCard from './FacebookConnectCard'
 import { MARKETPLACE_CHANNELS_ENABLED } from '@/lib/channels/availability'
 import {
   Save,
@@ -545,6 +546,10 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
             จนกว่าแอปจะผ่าน App Review ของ Meta ตอนนี้ DealMee กำลังเตรียมปุ่ม &quot;เชื่อมเพจด้วย Facebook&quot; ที่ใช้งานได้กับลูกค้าทุกคน แนะนำให้ใช้ LINE OA เป็นช่องทางหลักไปก่อน
           </p>
         </div>
+
+        <Suspense fallback={null}>
+          <FacebookConnectCard />
+        </Suspense>
 
         {/* Step-by-Step Instructions Accordion for Facebook */}
         <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl overflow-hidden transition-all">

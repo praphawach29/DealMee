@@ -19,7 +19,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
  * Actions) and SETTINGS_ENCRYPTION_KEY itself.
  */
 
-export type SecretGroup = 'ai' | 'slip' | 'other'
+export type SecretGroup = 'ai' | 'slip' | 'facebook' | 'other'
 
 export interface SecretDef {
   name: string
@@ -47,6 +47,10 @@ export const SECRET_DEFS: SecretDef[] = [
   { name: 'THUNDER_API_KEY', label: 'Thunder API Key', group: 'slip', secret: true },
   { name: 'SLIPOK_API_KEY', label: 'SlipOK API Key', group: 'slip', secret: true },
   { name: 'SLIPOK_BRANCH_ID', label: 'SlipOK Branch ID', group: 'slip', secret: false },
+  { name: 'FACEBOOK_APP_ID', label: 'Facebook App ID', group: 'facebook', secret: false, help: 'แอป Meta ของ DealMee (แอปเดียวสำหรับทุกร้าน) ใช้กับปุ่ม "เชื่อมเพจด้วย Facebook"' },
+  { name: 'FACEBOOK_APP_SECRET', label: 'Facebook App Secret', group: 'facebook', secret: true, help: 'App settings → Basic → App secret ใช้ตรวจลายเซ็น webhook และแลก token' },
+  { name: 'FACEBOOK_LOGIN_CONFIG_ID', label: 'Facebook Login for Business Configuration ID', group: 'facebook', secret: false, help: 'ถ้าแอปเป็นประเภท Business ให้สร้าง Configuration ใน Facebook Login for Business แล้วใส่ ID ที่นี่ ถ้าว่าง ระบบขอสิทธิ์แบบ scope ปกติ' },
+  { name: 'FACEBOOK_WEBHOOK_VERIFY_TOKEN', label: 'Webhook Verify Token', group: 'facebook', secret: false, help: 'ข้อความสุ่มที่ตั้งเอง แล้วใส่ค่าเดียวกันในหน้า Webhooks ของแอป (Callback URL: https://www.dealmee.app/api/webhook/facebook)' },
   { name: 'RAPIDAPI_KEY', label: 'RapidAPI Key (ส่องคู่แข่ง)', group: 'other', secret: true, help: 'ใช้เมื่อร้านไม่ได้ใส่ key ของตัวเอง' },
   { name: 'ELEVENLABS_API_KEY', label: 'ElevenLabs API Key (เสียง)', group: 'other', secret: true },
   { name: 'ELEVENLABS_VOICE_ID', label: 'ElevenLabs Voice ID', group: 'other', secret: false },
