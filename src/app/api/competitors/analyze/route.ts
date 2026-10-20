@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { scrapeCompetitorIntelligence, parseSocialUrl } from '@/lib/competitors/scraperEngine'
+import { scrapeCompetitorIntelligence, parseSocialUrl, CompetitorScanError } from '@/lib/competitors/scraperEngine'
+import { generateCompetitorPlaybook } from '@/lib/competitors/competitorPlaybook'
 import { saveCompetitor } from '@/lib/competitors/competitorStore'
 import { canScanCompetitor, incrementCompetitorQuota, getCompetitorQuota } from '@/lib/billing/competitorQuota'
 import { requireShop } from '@/lib/auth/requireShop'
@@ -10,7 +11,7 @@ const supabase = createAdminClient()
 /**
  * POST /api/competitors/analyze
  * Body: { url: string, force_refresh?: boolean } (shop comes from the session)
- * Features 24-Hour Smart Cache to save 100% of API Quota on repeat requests
+ * A scan of the same account within 24 hours is served from the saved copy at no quota cost
  */
 export async function POST(req: NextRequest) {
   try {
@@ -63,13 +64,7 @@ export async function POST(req: NextRequest) {
             price_range_max: cachedComp.price_range_max,
             posts: cachedComp.competitor_posts || [],
             priceComparison: [],
-            aiPlaybook: aiPlaybook || {
-              pricingStrategyVerdict: 'ข้อมูลสรุปจากแคชระบบ 24 ชม.',
-              priceAdvantageBullets: ['ประหยัดโควต้า API สำเร็จ'],
-              topViralHooks: [],
-              winningCaptionTemplate: '',
-              recommendedHashtags: [],
-            },
+            aiPlaybook,
             is_live_data: true,
             data_source: 'live_api',
             from_cache: true,
@@ -127,10 +122,25 @@ export async function POST(req: NextRequest) {
 
     const rapidApiKey = keySetting?.value || process.env.RAPIDAPI_KEY || ''
 
-    // 4. Run live scraping / competitive intelligence engine
-    const profile = await scrapeCompetitorIntelligence(url, mappedProducts, {
-      apiKey: rapidApiKey,
-      forceRefresh: !!force_refresh,
+    // 4. Fetch the real profile; a platform we can't read, a missing key or an
+    // account that can't be found costs no quota and saves nothing
+    let profile
+    try {
+      profile = await scrapeCompetitorIntelligence(url, { apiKey: rapidApiKey })
+    } catch (err) {
+      if (err instanceof CompetitorScanError) {
+        return NextResponse.json({ error: err.message, reason: err.reason }, { status: 422 })
+      }
+      throw err
+    }
+
+    // The strategy is written from the posts just fetched and the shop's own products
+    profile.aiPlaybook = await generateCompetitorPlaybook({
+      competitorName: profile.name,
+      platform: profile.platform,
+      followerCount: profile.follower_count,
+      posts: profile.posts,
+      myProducts: mappedProducts,
     })
 
     // 5. Persist competitor profile to Supabase

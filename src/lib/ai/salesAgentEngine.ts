@@ -952,7 +952,8 @@ async function preparePlanningState({
 
   if (!geminiKey || !openAiKey) {
     try {
-      const { data: globalKeys } = await db.from('settings').select('key, value').in('key', ['gemini_key', 'openai_key', 'claude_key'])
+      // settings is service-role only; db may be a signed-in user's client (Chat Playground)
+      const { data: globalKeys } = await supabase.from('settings').select('key, value').in('key', ['gemini_key', 'openai_key', 'claude_key'])
       if (globalKeys) {
         for (const k of globalKeys) {
           if (k.key === 'gemini_key' && !geminiKey) geminiKey = k.value

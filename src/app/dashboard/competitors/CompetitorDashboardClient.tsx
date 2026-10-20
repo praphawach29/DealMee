@@ -36,7 +36,7 @@ import {
   PackagePlus,
   AlertTriangle,
 } from 'lucide-react'
-import { ScrapedCompetitorProfile, CompetitorPost } from '@/lib/competitors/scraperEngine'
+import type { ScrapedCompetitorProfile, CompetitorPost } from '@/lib/competitors/scraperEngine'
 import { CompetitorRecord } from '@/lib/competitors/competitorStore'
 import { CompetitorQuotaInfo } from '@/lib/billing/competitorQuota'
 import { ViralVideoScript } from '@/lib/ai/competitorVideoScript'
@@ -92,7 +92,7 @@ export default function CompetitorDashboardClient({
   const [copiedScriptStoryboard, setCopiedScriptStoryboard] = useState(false)
 
   const handleSyncKnowledge = async () => {
-    if (!activeAnalysis || !shop?.id) return
+    if (!activeAnalysis?.aiPlaybook || !shop?.id) return
     setIsSyncingKb(true)
     setKbSuccessMsg('')
 
@@ -113,7 +113,7 @@ export default function CompetitorDashboardClient({
       })
       const data = await res.json()
       if (data.success) {
-        setKbSuccessMsg(data.message || 'บันทึกเข้าคลังความรู้บอทสำเร็จ! แชทบอทพร้อมรับมือข้อโต้แย้งราคาทันที 🎉')
+        setKbSuccessMsg(data.message || 'บันทึกเป็นร่างในคลังความรู้แล้ว ตรวจแก้และกดอนุมัติก่อน บอทจึงจะนำไปใช้')
         setTimeout(() => setKbSuccessMsg(''), 5000)
       } else {
         alert(data.error || 'บันทึกไม่สำเร็จ')
@@ -126,7 +126,7 @@ export default function CompetitorDashboardClient({
   }
 
   const handleGoToBroadcast = () => {
-    if (!activeAnalysis) return
+    if (!activeAnalysis?.aiPlaybook) return
     const title = `โปรโมชันพิเศษจากกลยุทธ์ ${activeAnalysis.name}`
     const message = activeAnalysis.aiPlaybook.winningCaptionTemplate
     router.push(`/dashboard/broadcast?title=${encodeURIComponent(title)}&message=${encodeURIComponent(message)}`)
@@ -222,17 +222,11 @@ export default function CompetitorDashboardClient({
     }
   }
 
-  // Sample presets for quick testing
-  const presets = [
-    { label: '🔥 ร้านแฟชั่นไวรัล TikTok', url: 'https://www.tiktok.com/@korea_style_fashion' },
-    { label: '💄 ร้านบิวตี้เครื่องสำอาง IG', url: 'https://www.instagram.com/aura_glow_official' },
-    { label: '👟 ร้านสตรีทแวร์ & สนีกเกอร์ FB', url: 'https://www.facebook.com/streetwear.bkk' },
-  ]
 
   const handleScan = async (targetUrlToScan?: string, forceRefresh = false) => {
     const url = targetUrlToScan || inputUrl
     if (!url || !url.trim()) {
-      setErrorMsg('กรุณากรอกลิงก์ร้านคู่แข่ง (TikTok, Instagram, หรือ Facebook)')
+      setErrorMsg('กรุณากรอกลิงก์โปรไฟล์คู่แข่ง (TikTok หรือ Instagram)')
       return
     }
 
@@ -354,7 +348,7 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
               ระบบส่องร้านคู่แข่งและวิเคราะห์การตลาด
             </h1>
             <p className="mt-2 text-sm sm:text-base text-slate-300 max-w-2xl">
-              ดึงข้อมูลราคา คอนเทนต์ไวรัล และแฮชแท็กติดเทรนด์ของคู่แข่งบน TikTok, IG, FB
+              ดึงโปรไฟล์และคลิปล่าสุดของคู่แข่งบน TikTok และ Instagram
               พร้อม AI Copilot ช่วยร่างสคริปต์และกลยุทธ์ปิดการขายที่เหนือกว่า
             </p>
           </div>
@@ -408,23 +402,6 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
                 </>
               )}
             </button>
-          </div>
-
-          {/* Quick Preset Buttons */}
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-slate-400">ลองสแกนด่วน:</span>
-            {presets.map((p, idx) => (
-              <button
-                key={idx}
-                onClick={() => {
-                  setInputUrl(p.url)
-                  handleScan(p.url)
-                }}
-                className="text-xs px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all cursor-pointer"
-              >
-                {p.label}
-              </button>
-            ))}
           </div>
 
           {errorMsg && (
@@ -553,9 +530,13 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              {activeAnalysis ? `฿${activeAnalysis.price_range_min} - ฿${activeAnalysis.price_range_max}` : '฿290 - ฿990'}
+              {activeAnalysis && activeAnalysis.price_range_max > 0
+                ? `฿${activeAnalysis.price_range_min} - ฿${activeAnalysis.price_range_max}`
+                : '—'}
             </span>
-            <span className="text-xs text-slate-500">บาท/ชิ้น</span>
+            <span className="text-xs text-slate-500">
+              {activeAnalysis && activeAnalysis.price_range_max > 0 ? 'บาท/ชิ้น' : 'ยังไม่มีแหล่งข้อมูลราคา'}
+            </span>
           </div>
         </div>
       </div>
@@ -682,7 +663,7 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
                   : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
               }`}
             >
-              📊 การเปรียบเทียบราคากับร้านคุณ
+              📊 บทวิเคราะห์และคำแนะนำ
             </button>
             <button
               onClick={() => setActiveTab('viral')}
@@ -706,60 +687,28 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
             </button>
           </div>
 
-          {/* TAB 1: Price Comparison Matrix */}
-          {activeTab === 'price' && (
+          {/* TAB 1: Analysis written from the competitor's real posts */}
+          {activeTab === 'price' && !activeAnalysis.aiPlaybook && <PlaybookUnavailable />}
+          {activeTab === 'price' && activeAnalysis.aiPlaybook && (
             <div className="space-y-4">
               <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/30 text-xs sm:text-sm text-blue-900 dark:text-blue-300 flex items-start gap-3">
                 <Lightbulb className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold">บทวิเคราะห์ราคา: </span>
+                  <span className="font-bold">บทวิเคราะห์: </span>
                   {activeAnalysis.aiPlaybook.pricingStrategyVerdict}
                 </div>
               </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500">
-                      <th className="py-3 px-4">สินค้าในร้านคุณ</th>
-                      <th className="py-3 px-4">ราคาร้านคุณ</th>
-                      <th className="py-3 px-4">ราคาคู่แข่งในตลาด</th>
-                      <th className="py-3 px-4">ผลต่างราคา</th>
-                      <th className="py-3 px-4">ข้อได้เปรียบทางธุรกิจ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
-                    {activeAnalysis.priceComparison.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-all">
-                        <td className="py-3.5 px-4 font-medium text-slate-900 dark:text-white">
-                          {item.myProduct.name}
-                        </td>
-                        <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">
-                          ฿{item.myProduct.price.toLocaleString()}
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">
-                          ฿{item.competitorEquivalent.estimatedPrice.toLocaleString()}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          {item.competitorEquivalent.priceDifference > 0 ? (
-                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                              ถูกกว่า ฿{item.competitorEquivalent.priceDifference}
-                            </span>
-                          ) : (
-                            <span className="text-slate-500">ใกล้เคียงกัน</span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            {item.competitorEquivalent.advantageLabel}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ul className="space-y-2">
+                {activeAnalysis.aiPlaybook.priceAdvantageBullets.map((b, idx) => (
+                  <li key={idx} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                    <span>{b}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-slate-500">
+                วิเคราะห์จากโพสต์ล่าสุดของคู่แข่งและสินค้าในร้านคุณ ระบบยังไม่มีแหล่งข้อมูลราคาขายของคู่แข่ง จึงไม่ได้เทียบราคา
+              </p>
             </div>
           )}
 
@@ -864,7 +813,8 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
           )}
 
           {/* TAB 3: AI Copilot Strategy */}
-          {activeTab === 'copilot' && (
+          {activeTab === 'copilot' && !activeAnalysis.aiPlaybook && <PlaybookUnavailable />}
+          {activeTab === 'copilot' && activeAnalysis.aiPlaybook && (
             <div className="space-y-6">
               {/* Strategic Video Hooks */}
               <div>
@@ -907,7 +857,7 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
                   </span>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
-                      onClick={() => copyCaption(activeAnalysis.aiPlaybook.winningCaptionTemplate)}
+                      onClick={() => copyCaption(activeAnalysis.aiPlaybook?.winningCaptionTemplate || "")}
                       className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all cursor-pointer min-h-[40px]"
                     >
                       {copiedCaption ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -927,56 +877,6 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
                 </pre>
               </div>
 
-              {/* Strategic Product Bundling (Beat Single-Item Price War) */}
-              <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50/50 via-purple-50/30 to-blue-50/50 dark:from-indigo-950/30 dark:via-purple-950/20 dark:to-blue-950/30 border border-indigo-200/60 dark:border-indigo-800/40">
-                <div className="flex items-center gap-2.5 mb-3">
-                  <div className="p-2 rounded-xl bg-indigo-600 text-white">
-                    <PackagePlus className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                      กลยุทธ์จัดเซตสินค้า (Bundle Playbook) เพื่อเอาชนะสงครามราคา
-                    </h4>
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
-                      แทนที่จะลดราคาแข่งกับคู่แข่งทีละชิ้นจนเสียกำไร ให้ใช้วิธีจัดเซตดันยอดบิล (Basket Size) ให้สูงกว่า
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mt-3">
-                  <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <span className="text-[11px] font-black uppercase text-indigo-600 dark:text-indigo-400 block mb-1">
-                      สูตรที่ 1: Value Duo Bundle (ซื้อคู่ถูกกว่า)
-                    </span>
-                    <h5 className="text-xs font-bold text-slate-900 dark:text-white mb-1.5">
-                      {shopProducts[0]?.name || 'สินค้าขายดี 1'} + {shopProducts[1]?.name || 'สินค้าเสริม/คู่กัน'}
-                    </h5>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
-                      จับคู่ 2 ชิ้นในราคาพิเศษ ลดเพียง 5-10% แต่แถมสิทธิ์ส่งฟรีทันที ลูกค้าจะรู้สึกคุ้มค่ากว่าสั่งจากร้านคู่แข่งที่ต้องรอสินค้า
-                    </p>
-                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                      <span className="text-slate-500">ผลลัพธ์: ดัน AOV โต 40%</span>
-                      <span className="font-bold text-emerald-600 dark:text-emerald-400">กำไรสุทธิคงเดิม</span>
-                    </div>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <span className="text-[11px] font-black uppercase text-purple-600 dark:text-purple-400 block mb-1">
-                      สูตรที่ 2: Mystery Gift / Fast Track Bundle
-                    </span>
-                    <h5 className="text-xs font-bold text-slate-900 dark:text-white mb-1.5">
-                      เซตสั่งด่วน 24 ชม. รับของแถมพรีเมียมเฉพาะในแชท
-                    </h5>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
-                      ย้ำจุดขายพร้อมส่งใน 24 ชม. หากลูกค้าสั่งซื้อพร้อมชำระเงินผ่านแชท DealMee รับของแถมพิเศษที่คู่แข่งไม่มีให้
-                    </p>
-                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                      <span className="text-slate-500">ผลลัพธ์: ปิดการขายเร็วขึ้น 3x</span>
-                      <span className="font-bold text-indigo-600 dark:text-indigo-400">ตัดการเปรียบเทียบราคา</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
         </div>
@@ -1086,7 +986,7 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
                 </div>
                 <div>
                   <h3 className="font-bold text-base">ระบบดึงข้อมูลสด & การประหยัดโควต้า (Quota Guard)</h3>
-                  <p className="text-xs text-slate-400">รองรับ TikTok, Instagram, และ Facebook ดึงข้อมูลจริง</p>
+                  <p className="text-xs text-slate-400">รองรับ TikTok (โปรไฟล์และคลิป) และ Instagram (โปรไฟล์)</p>
                 </div>
               </div>
               <button
@@ -1441,6 +1341,14 @@ CREATE TABLE IF NOT EXISTS public.competitor_posts (
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function PlaybookUnavailable() {
+  return (
+    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm text-slate-600 dark:text-slate-400">
+      ยังไม่มีบทวิเคราะห์สำหรับบัญชีนี้ เพราะไม่พบโพสต์ให้วิเคราะห์ หรือระบบ AI ขัดข้อง ลองกด &quot;สแกนใหม่&quot; อีกครั้งภายหลัง
     </div>
   )
 }
