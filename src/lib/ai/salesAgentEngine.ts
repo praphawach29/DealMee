@@ -223,6 +223,8 @@ export interface PlanningState {
   productsData?: any[]
   lastProviderError?: string
   isPlayground?: boolean
+  /** The shop runs on its own AI key only (no platform fallback) */
+  byok?: boolean
 }
 
 export type PlanningStart =
@@ -925,21 +927,16 @@ async function preparePlanningState({
 
   const db = supabaseClient || supabase
 
-  // A shop's own key (BYOK) first, then the platform's (admin page → Vercel → legacy settings rows)
-  const [platformGemini, platformClaude, platformOpenAi] = await Promise.all([
-    platformSecret('GEMINI_API_KEY'),
-    platformSecret('CLAUDE_API_KEY'),
-    platformSecret('OPENAI_API_KEY'),
-  ])
-  const geminiKey =
-    (shop?.custom_ai_provider === 'gemini' || shop?.ai_provider === 'gemini' ? (shop.custom_ai_key || shop.ai_key) : '') ||
-    platformGemini
-  const claudeKey =
-    (shop?.custom_ai_provider === 'claude' || shop?.ai_provider === 'claude' ? (shop.custom_ai_key || shop.ai_key) : '') ||
-    platformClaude
-  const openAiKey =
-    (shop?.custom_ai_provider === 'openai' || shop?.ai_provider === 'openai' ? (shop.custom_ai_key || shop.ai_key) : '') ||
-    platformOpenAi
+  // A shop that brings its own key (BYOK) uses only that key: it pays for its own AI,
+  // so when the key fails the conversation goes to the shop's admin rather than
+  // quietly running on the platform's keys. Other shops use the platform's keys
+  // (admin page → Vercel → legacy settings rows), Gemini first.
+  const shopKey = String(shop?.custom_ai_key || shop?.ai_key || '').trim()
+  const shopProvider = String(shop?.custom_ai_provider || shop?.ai_provider || '').toLowerCase()
+  const byok = Boolean(shopKey) && ['gemini', 'claude', 'openai'].includes(shopProvider)
+  const [geminiKey, claudeKey, openAiKey] = byok
+    ? [shopProvider === 'gemini' ? shopKey : '', shopProvider === 'claude' ? shopKey : '', shopProvider === 'openai' ? shopKey : '']
+    : await Promise.all([platformSecret('GEMINI_API_KEY'), platformSecret('CLAUDE_API_KEY'), platformSecret('OPENAI_API_KEY')])
 
   const modelName = shop.custom_ai_model || shop.ai_model || (await platformSecret('GEMINI_MODEL')) || 'gemini-3.8-flash'
 
@@ -1367,6 +1364,7 @@ ${historyContext}`
       geminiKey,
       claudeKey,
       openAiKey,
+      byok,
       allUsage: [],
       immediateMessages: [],
       toolCallsExecuted: [],
@@ -1374,6 +1372,14 @@ ${historyContext}`
       isPlayground: isPlayground || false,
     },
   }
+}
+
+/** How long a provider may take before the next one is tried */
+const GEMINI_TIMEOUT_MS = 12_000
+const FALLBACK_TIMEOUT_MS = 15_000
+
+function isTimeout(err: any): boolean {
+  return err?.name === 'TimeoutError' || err?.name === 'AbortError'
 }
 
 async function callCurrentStep(state: PlanningState): Promise<ProviderStepResult | null> {
@@ -1421,9 +1427,24 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
 
     console.error(`[DealMee Planning Loop] All providers failed for shop "${state.shop.name}":`, errDetail)
 
-    const finalText = (state.isPlayground || state.step > 0)
-      ? `ขออภัยค่ะ ระบบ AI ไม่สามารถตอบกลับได้ในขณะนี้ (${errDetail})`
-      : (state.shop.greeting_message || `สวัสดีค่ะ ยินดีต้อนรับสู่ร้าน "${state.shop.name}" มีอะไรให้ช่วยแนะนำไหมคะ?`)
+    // The playground is the owner testing: show what went wrong
+    if (state.isPlayground) {
+      return { done: true, finalText: `ขออภัยค่ะ ระบบ AI ไม่สามารถตอบกลับได้ในขณะนี้ (${errDetail})` }
+    }
+
+    // A customer never sees provider errors. The chat goes to the shop's admin
+    // (human mode + LINE alert, same as request_human_agent) and the customer is told so.
+    const reason = state.byok
+      ? 'AI key ของร้าน (BYOK) ใช้งานไม่ได้ บอทจึงตอบลูกค้าไม่ได้ กรุณาตรวจสอบ key ที่หน้าตั้งค่าบอท'
+      : 'ระบบ AI ตอบกลับไม่ได้ชั่วคราว บอทจึงส่งลูกค้าคนนี้ให้แอดมินดูแล'
+    try {
+      await state.executor('request_human_agent', { reason }, state.toolCtx)
+    } catch (handoffErr) {
+      console.error('[DealMee Planning Loop] handoff after provider failure failed:', handoffErr)
+    }
+    const finalText = state.language === 'en'
+      ? 'Sorry, our automatic replies are having a problem right now. An admin will get back to you shortly 🙏'
+      : 'ขออภัยค่ะ ตอนนี้ระบบตอบกลับอัตโนมัติขัดข้องชั่วคราว แอดมินจะรีบตอบกลับนะคะ 🙏'
     return { done: true, finalText }
   }
 
@@ -1706,6 +1727,9 @@ async function callGeminiApi(
   // to a high level, which was most of a turn's tokens and latency for routine sales
   // chat. GEMINI_THINKING_LEVEL (admin page or Vercel) overrides it; 'default' sends none.
   const thinkingLevel = (await platformSecret('GEMINI_THINKING_LEVEL')) || 'low'
+  // One budget for every model this provider tries: a provider that hangs (Gemini
+  // once took 32s to answer 503) should hand over to the next one, not hold the customer
+  const deadline = AbortSignal.timeout(GEMINI_TIMEOUT_MS)
   for (const model of candidateModels) {
     try {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
@@ -1732,6 +1756,7 @@ async function callGeminiApi(
         : null
       const post = (body: unknown) => fetch(endpoint, {
         method: 'POST',
+        signal: deadline,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
@@ -1836,6 +1861,11 @@ async function callGeminiApi(
 
       return { text: replyText.trim(), toolCall, usage, truncated }
     } catch (err: any) {
+      if (isTimeout(err)) {
+        console.error(`[Gemini Timeout] model=${model} after ${GEMINI_TIMEOUT_MS}ms`)
+        if (state) state.lastProviderError = `Gemini timeout`
+        return null
+      }
       console.error(`[Gemini Exception] model=${model}:`, err)
       if (state) {
         state.lastProviderError = `Gemini (${model}) exception: ${err?.message || String(err)}`
@@ -1897,6 +1927,9 @@ async function callClaudeApi(
     )
   ) as string[]
 
+  // One budget for every model this provider tries: a provider that hangs (Gemini
+  // once took 32s to answer 503) should hand over to the next one, not hold the customer
+  const deadline = AbortSignal.timeout(FALLBACK_TIMEOUT_MS)
   for (const model of candidateModels) {
     try {
       // Prompt caching: the static block (bot identity, knowledge base,
@@ -1907,6 +1940,7 @@ async function callClaudeApi(
       // cacheable minimum this just silently doesn't activate — no error.
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
+        signal: deadline,
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
@@ -1977,6 +2011,11 @@ async function callClaudeApi(
 
       return { text: replyText.trim(), toolCall, usage, truncated }
     } catch (err: any) {
+      if (isTimeout(err)) {
+        console.error(`[Claude Timeout] model=${model} after ${FALLBACK_TIMEOUT_MS}ms`)
+        if (state) state.lastProviderError = `Claude timeout`
+        return null
+      }
       console.error(`[Claude Exception] model=${model}:`, err)
       if (state) {
         state.lastProviderError = `Claude (${model}) exception: ${err?.message || String(err)}`
@@ -2031,10 +2070,14 @@ async function callOpenAiApi(
     )
   ) as string[]
 
+  // One budget for every model this provider tries: a provider that hangs (Gemini
+  // once took 32s to answer 503) should hand over to the next one, not hold the customer
+  const deadline = AbortSignal.timeout(FALLBACK_TIMEOUT_MS)
   for (const model of candidateModels) {
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
+        signal: deadline,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
@@ -2107,6 +2150,11 @@ async function callOpenAiApi(
 
       return { text: replyText.trim(), toolCall, usage, truncated }
     } catch (err: any) {
+      if (isTimeout(err)) {
+        console.error(`[OpenAI Timeout] model=${model} after ${FALLBACK_TIMEOUT_MS}ms`)
+        if (state) state.lastProviderError = `OpenAI timeout`
+        return null
+      }
       console.error(`[OpenAI Exception] model=${model}:`, err)
       if (state) {
         state.lastProviderError = `OpenAI (${model}) exception: ${err?.message || String(err)}`
