@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,6 +18,7 @@ import {
 
 function ResetPasswordContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -27,6 +28,16 @@ function ResetPasswordContent() {
   const [success, setSuccess] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [userEmail, setUserEmail] = useState<string | null>(null)
+
+  // Without a recovery session updateUser() can only fail ("Auth session missing!"), so a form
+  // shown here would be a dead end. /auth/callback sends ?error=link when the link could not be
+  // exchanged — opened in another browser than the one that asked for it (the PKCE verifier lives
+  // in that browser's cookies), already used, or expired.
+  const [resendEmail, setResendEmail] = useState('')
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendSent, setResendSent] = useState(false)
+  const [resendError, setResendError] = useState<string | null>(null)
+  const linkFailed = searchParams.get('error') === 'link'
 
   useEffect(() => {
     const supabase = createClient()
@@ -51,6 +62,26 @@ function ResetPasswordContent() {
       subscription.unsubscribe()
     }
   }, [])
+
+  const handleResend = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const email = resendEmail.trim()
+    if (!email) return
+    setResendLoading(true)
+    setResendError(null)
+    try {
+      const supabase = createClient()
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      })
+      if (resetErr) setResendError(resetErr.message || 'ไม่สามารถส่งลิงก์ได้ กรุณาลองใหม่อีกครั้ง')
+      else setResendSent(true)
+    } catch (err: any) {
+      setResendError(err?.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง')
+    } finally {
+      setResendLoading(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -141,6 +172,43 @@ function ResetPasswordContent() {
               >
                 เข้าสู่ระบบทันที <ArrowRight className="w-4 h-4 ml-1.5" />
               </Button>
+            </div>
+          ) : !userEmail ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 text-xs sm:text-sm text-amber-800 flex items-start gap-2.5">
+                <AlertCircle className="h-5 w-5 shrink-0 text-amber-500 mt-0.5" />
+                <div className="space-y-1 leading-relaxed">
+                  <p className="font-bold">{linkFailed ? 'ลิงก์นี้ใช้ไม่ได้แล้ว' : 'ยังไม่ได้ยืนยันตัวตนจากลิงก์ในอีเมล'}</p>
+                  <p>
+                    ลิงก์รีเซ็ตรหัสผ่านใช้ได้ครั้งเดียว และต้องเปิดใน<strong>เบราว์เซอร์เดียวกับที่กดขอลิงก์</strong>
+                    (ถ้าเปิดจากแอปอีเมลแล้วไปเปิดในเบราว์เซอร์อื่น ลิงก์จะใช้ไม่ได้) กรุณาขอลิงก์ใหม่ด้านล่าง
+                  </p>
+                </div>
+              </div>
+              {resendSent ? (
+                <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-4 text-xs sm:text-sm text-emerald-800">
+                  ถ้าอีเมลนี้มีบัญชีในระบบ ลิงก์ใหม่จะถูกส่งไปให้ กรุณาเปิดลิงก์ล่าสุดในเบราว์เซอร์นี้
+                </div>
+              ) : (
+                <form onSubmit={handleResend} className="space-y-3">
+                  {resendError && <p className="text-xs text-red-600 font-medium">{resendError}</p>}
+                  <input
+                    type="email"
+                    value={resendEmail}
+                    onChange={(e) => setResendEmail(e.target.value)}
+                    required
+                    placeholder="อีเมลที่ใช้เข้าสู่ระบบ"
+                    className="block w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/80 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all text-xs sm:text-sm outline-none font-medium"
+                  />
+                  <Button
+                    type="submit"
+                    disabled={resendLoading}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 rounded-2xl font-bold text-sm cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {resendLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'ส่งลิงก์รีเซ็ตใหม่'}
+                  </Button>
+                </form>
+              )}
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">

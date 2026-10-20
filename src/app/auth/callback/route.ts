@@ -28,6 +28,12 @@ export async function GET(request: Request) {
     }
   }
 
+  // A reset link that could not be exchanged lands on the reset page, which says why and offers a
+  // new link, rather than on the login form the user came here to get past.
+  if (next === '/reset-password' || type === 'recovery') {
+    return NextResponse.redirect(`${origin}/reset-password?error=link`)
+  }
+
   return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent('ลิงก์ยืนยันตัวตนหมดอายุหรือไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง')}`)
 }
 
