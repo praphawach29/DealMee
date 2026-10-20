@@ -2,12 +2,12 @@
 
 > **บันทึกล่าสุด:** 20 ตุลาคม 2026 (ดูหัวข้อ "อัปเดต 20 ตุลาคม 2026" ด้านล่าง)  
 > **Repository:** `praphawach29/ai-agent-google-SDK` (Branch: `main`)  
-> **Last Commit:** `85a9c17` - *docs: DealMee auth email templates with token_hash links (#49)*  
+> **Last Commit:** `3dc5d93` - *docs: guide for reusing the prepaid wallet billing in other projects (#51)*  
 > **Status:** Production Build Passed (`npm run build` ✓)
 
 ---
 
-## 🆕 อัปเดต 20 ตุลาคม 2026 — กระเป๋าเงิน, Super Admin, รีเซ็ตรหัสผ่าน (PR #29–#49)
+## 🆕 อัปเดต 20 ตุลาคม 2026 — กระเป๋าเงิน, Super Admin, รีเซ็ตรหัสผ่าน, คู่มือ (PR #29–#51)
 
 **Billing / กระเป๋าเงิน (PR #30–#43)**
 - กระเป๋าเงินแบบเติมเงินผ่านพร้อมเพย์ ราคาใหม่ และแพ็กเสริม (#30) หน้า landing แสดงแพ็กเกจกระเป๋าเงิน/โควต้าตรวจสลิป/แพ็กเสริม (#31)
@@ -29,6 +29,10 @@
   - #48 หลังตั้งรหัสใหม่ ร้านค้าไป `/dashboard` (เดิมไป `/admin` ที่ถูกล็อกตั้งแต่ #46)
   - #49 เทมเพลตอีเมล Supabase Auth 6 แบบใน `docs/email-templates/` ใช้ลิงก์ `token_hash` — **ตั้งใน Supabase Dashboard แล้ว** ทดสอบรีเซ็ตรหัสผ่านแล้ว ✅ (โลโก้ขึ้น เข้าหน้าตั้งรหัสได้ เข้าแดชบอร์ดได้)
 - Supabase Auth URL Configuration ตรวจแล้ว: Site URL `https://app.dealmee.app`, Redirect URLs มี `app.dealmee.app/**` และ `dealmee.app/**`
+
+**เอกสาร (PR #50–#51)**
+- #50 บันทึก PR #29–#49 ลงไฟล์นี้และ `PROJECT_STATUS.md`
+- #51 คู่มือนำระบบกระเป๋าเงินไปใช้กับโปรเจคอื่น: `docs/guides/prepaid-wallet-billing.md` (ความสามารถ 9 ข้อ, กติกา 14 ข้อจากบั๊กจริง, schema/RPC, flow, เช็คลิสต์ทดสอบ, ข้อความสำหรับวางใน session ใหม่ที่หัวข้อ 12) — **ถ้าแก้ระบบกระเป๋าเงินของ DealMee ให้อัปเดตคู่มือนี้ด้วย** เพราะโปรเจคอื่นใช้เป็นต้นแบบ
 
 **ยังไม่ได้ทดสอบ:** ลิงก์ในอีเมล Confirm signup (ตอนนี้สมัครแล้วเข้าระบบทันที ไม่ได้ส่งอีเมลยืนยัน), Invite, Magic link, Change email — ถ้าเปิดใช้ ให้ลองกดลิงก์จริงก่อน
 
