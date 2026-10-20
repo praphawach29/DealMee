@@ -1,6 +1,6 @@
 # DealMee AI (DealMee.app) - Project Status
 
-> อัปเดตล่าสุด: 17 ตุลาคม 2026 (Bot Sales Hardening — PR #1–#9)
+> อัปเดตล่าสุด: 20 ตุลาคม 2026 (กระเป๋าเงิน, Super Admin คนเดียว, รีเซ็ตรหัสผ่าน — PR #29–#49 ดูรายละเอียดใน TODO.md)
 > แผนงานถัดไปของบอทขาย & onboarding: [docs/plans/2026-10-17-bot-sales-and-onboarding-next-steps.md](./docs/plans/2026-10-17-bot-sales-and-onboarding-next-steps.md)
 > GitHub: praphawach29/ai-agent-google-SDK branch main
 > Handover & Action Checklist: ดูรายละเอียดเพิ่มเติมที่ [TODO.md](./TODO.md)
@@ -33,7 +33,7 @@ Official Branding        ██████████████████�
 | UI Library | shadcn/ui + Base UI + Lucide React |
 | Styling | Tailwind CSS + tw-animate-css |
 | Database | Supabase (PostgreSQL + RLS + Storage) |
-| Auth | Supabase Auth (Email/Password) |
+| Auth | Supabase Auth (Email/Password) · Super Admin: `src/lib/auth/superAdmin.ts` · อีเมลใช้ลิงก์ `token_hash` (`docs/email-templates/`) |
 | AI Providers | Gemini 3.6 Flash (primary) -> Claude Sonnet 5 (high-persuasion) -> GPT-5.6 Luna (fallback) |
 | LINE Integration | LINE Messaging API (Reply + Push) |
 | QR Generation | promptpay-qr + qrcode |
