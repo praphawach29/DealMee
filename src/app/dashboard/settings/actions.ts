@@ -589,18 +589,27 @@ export async function getAdminLinkDataAction() {
   const adminName = shop.features?.admin_line_name || null
   const adminUserId = shop.owner_line_id || shop.features?.admin_line_user_id || null
 
+  // The QR must open the OA this shop's token belongs to: the code is checked by that
+  // OA's webhook only. Until Oct 2026 a failed lookup fell back to a hard-coded OA of
+  // another shop, which answered "รหัสไม่ถูกต้อง".
   let basicId = ''
+  let oaName = ''
   if (shop.line_token) {
     try {
       const res = await fetch('https://api.line.me/v2/bot/info', {
         headers: { Authorization: `Bearer ${shop.line_token}` },
-        next: { revalidate: 3600 },
+        cache: 'no-store',
       })
       if (res.ok) {
         const info = await res.json()
         basicId = (info.basicId || '').replace(/^@/, '')
+        oaName = info.displayName || ''
+      } else {
+        console.warn('[getAdminLinkDataAction] bot/info failed:', res.status)
       }
-    } catch {}
+    } catch (err) {
+      console.warn('[getAdminLinkDataAction] bot/info error:', err)
+    }
   }
 
   // Generate or retrieve current active link code (e.g. ADM-7492)
@@ -617,19 +626,23 @@ export async function getAdminLinkDataAction() {
     }).eq('id', shop.id)
   }
 
-  const cleanBasicId = basicId || shop.line_bot_id || '971njcnv'
+  const cleanBasicId = basicId || String(shop.line_bot_id || '').replace(/^@/, '')
   // LINE Official Account deep link that pre-fills message
-  const deepLink = `https://line.me/R/oaMessage/@${cleanBasicId}/?${encodeURIComponent('/admin-link ' + code)}`
+  const deepLink = cleanBasicId
+    ? `https://line.me/R/oaMessage/@${cleanBasicId}/?${encodeURIComponent('/admin-link ' + code)}`
+    : ''
 
   let qrDataUrl = ''
-  try {
-    qrDataUrl = await qrcode.toDataURL(deepLink, {
-      width: 280,
-      margin: 2,
-      color: { dark: '#0F172A', light: '#FFFFFF' },
-    })
-  } catch (e) {
-    console.warn('[getAdminLinkDataAction] QR generation error:', e)
+  if (deepLink) {
+    try {
+      qrDataUrl = await qrcode.toDataURL(deepLink, {
+        width: 280,
+        margin: 2,
+        color: { dark: '#0F172A', light: '#FFFFFF' },
+      })
+    } catch (e) {
+      console.warn('[getAdminLinkDataAction] QR generation error:', e)
+    }
   }
 
   return {
@@ -641,6 +654,7 @@ export async function getAdminLinkDataAction() {
     deepLink,
     qrDataUrl,
     basicId: cleanBasicId,
+    oaName,
   }
 }
 
