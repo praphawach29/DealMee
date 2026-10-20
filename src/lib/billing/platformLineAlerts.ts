@@ -55,6 +55,39 @@ export async function fetchBotBasicId(token: string): Promise<string | null> {
   return String(info.basicId || '').replace(/^@/, '') || null
 }
 
+/**
+ * Links the platform owner from a shop's webhook. The platform OA can also be a
+ * shop's OA (DealMee's own sales bot), and an OA has one webhook URL, so then the
+ * owner's "/admin-link DM-…" reaches the shop webhook instead of /platform-alerts.
+ * Returns the linked name, or null when this isn't the platform OA or the code is wrong.
+ */
+export async function linkPlatformOwnerFromShopOa(
+  shopToken: string | undefined,
+  code: string,
+  userId: string
+): Promise<string | null> {
+  if (!shopToken || !/^DM-/i.test(code)) return null
+  const config = await getPlatformLineConfig().catch(() => null)
+  const token = config?.channel_access_token?.trim()
+  if (!token || token !== shopToken.trim()) return null
+
+  const valid =
+    config!.link_code &&
+    config!.link_code_expires_at &&
+    new Date(config!.link_code_expires_at).getTime() > Date.now() &&
+    code.toUpperCase() === config!.link_code.toUpperCase()
+  if (!valid) return null
+
+  let name = 'แอดมิน'
+  try {
+    const res = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, { headers: { Authorization: `Bearer ${token}` } })
+    if (res.ok) name = (await res.json()).displayName || name
+  } catch {}
+
+  await savePlatformLineConfig({ admin_line_user_id: userId, admin_line_name: name, link_code: null, link_code_expires_at: null })
+  return name
+}
+
 /** Push to the linked owner; false when the OA or the owner isn't set up, or LINE refuses */
 export async function pushPlatformLineAlert(text: string): Promise<boolean> {
   const config = await getPlatformLineConfig()
