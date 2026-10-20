@@ -2,6 +2,23 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
+  // An auth code or token_hash arriving on the root or login page means Supabase fell back to the
+  // Site URL — the redirectTo was not on the project's Redirect URLs list. The root page would
+  // redirect to /dashboard and drop it, and a password reset would end on the login form. Hand it
+  // to the callback instead; a recovery link still finds its way to /reset-password.
+  const { pathname, searchParams } = request.nextUrl
+  if (
+    (searchParams.has('code') || searchParams.has('token_hash')) &&
+    (pathname === '/' || pathname === '/login')
+  ) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/auth/callback'
+    if (!url.searchParams.has('next')) {
+      url.searchParams.set('next', searchParams.get('type') === 'recovery' ? '/reset-password' : '/dashboard')
+    }
+    return NextResponse.redirect(url)
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })
