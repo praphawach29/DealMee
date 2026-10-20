@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLiveSessionState, processLiveComment, updateLiveBaskets } from '@/lib/live/liveStudioEngine'
 import { requireShop } from '@/lib/auth/requireShop'
+import { liveStudioGuard } from '@/lib/live/liveStudioAccess'
 
 /**
  * GET /api/live/comment?shop_id=...
@@ -15,6 +16,8 @@ export async function GET(req: NextRequest) {
     if (!shopId) {
       return NextResponse.json({ error: 'Missing shop_id query parameter' }, { status: 400 })
     }
+    const liveBlocked = await liveStudioGuard(shopId)
+    if (liveBlocked) return liveBlocked
 
     const state = await getLiveSessionState(shopId)
     return NextResponse.json({ success: true, state })
@@ -31,6 +34,8 @@ export async function POST(req: NextRequest) {
   try {
     const auth = await requireShop()
     if (auth.error) return auth.error
+    const liveBlocked = await liveStudioGuard(auth.shopId)
+    if (liveBlocked) return liveBlocked
     const shop_id = auth.shopId
     const body = await req.json()
     const { username, comment_text, platform, action, baskets, title } = body
