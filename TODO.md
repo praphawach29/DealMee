@@ -1,13 +1,21 @@
 # DealMee AI - Project Handover & TODO List
 
 > **บันทึกล่าสุด:** 20 ตุลาคม 2026 (ดูหัวข้อ "อัปเดต 20 ตุลาคม 2026" ด้านล่าง)  
-> **Repository:** `praphawach29/ai-agent-google-SDK` (Branch: `main`)  
+> **Repository:** `praphawach29/DealMee` (Branch: `main`)  
 > **Last Commit:** `3dc5d93` - *docs: guide for reusing the prepaid wallet billing in other projects (#51)*  
 > **Status:** Production Build Passed (`npm run build` ✓)
 
 ---
 
-## 🆕 อัปเดต 20 ตุลาคม 2026 — กระเป๋าเงิน, Super Admin, รีเซ็ตรหัสผ่าน, คู่มือ (PR #29–#51)
+## 🆕 เปลี่ยนชื่อเป็น DealMee (20 ตุลาคม 2026)
+
+- GitHub repo: `ai-agent-google-SDK` → **`praphawach29/DealMee`** (GitHub ส่งต่อ URL เดิมให้อัตโนมัติ)
+- `package.json` name: `botify-saas-web` → `dealmee`
+- Vercel project: `ai-agent-google-sdk` → `dealmee` (เจ้าของเปลี่ยนใน dashboard — โดเมน `app.dealmee.app`/`dealmee.app` ไม่เปลี่ยน, `ai-agent-google-sdk-jade.vercel.app` ยังใช้ได้)
+- โฟลเดอร์ในเครื่องเจ้าของเปลี่ยนเป็น `DealMee` และ `git remote set-url origin https://github.com/praphawach29/DealMee.git`
+- ชื่อ `botify-saas-web` ที่ยังเหลือใน `ROADMAP_AI_AGENT.md` / `docs/DESIGN_SYSTEM.md` เป็นบันทึกประวัติ ตั้งใจคงไว้
+
+## อัปเดต 20 ตุลาคม 2026 — กระเป๋าเงิน, Super Admin, รีเซ็ตรหัสผ่าน, คู่มือ (PR #29–#51)
 
 **Billing / กระเป๋าเงิน (PR #30–#43)**
 - กระเป๋าเงินแบบเติมเงินผ่านพร้อมเพย์ ราคาใหม่ และแพ็กเสริม (#30) หน้า landing แสดงแพ็กเกจกระเป๋าเงิน/โควต้าตรวจสลิป/แพ็กเสริม (#31)
