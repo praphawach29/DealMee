@@ -11,6 +11,7 @@ import {
   planningAckMessage,
 } from '@/lib/ai/salesAgentEngine'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
+import { facebookPageUsedByOtherShop, fetchLineBotInfo, lineOaUsedByOtherShop } from '@/lib/shop/channelOwnership'
 import { buildAutoGreeting } from '@/lib/businessGreeting'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 
@@ -97,9 +98,29 @@ export async function updateChannelSettings(formData: FormData) {
   const shopeePartnerKey = ((formData.get('shopee_partner_key') as string) || '').trim()
   const shopeeShopId = ((formData.get('shopee_shop_id') as string) || '').trim()
 
+  // One LINE OA / Facebook page per shop (see channelOwnership.ts)
+  let lineBotUserId: string | null = null
+  if (lineToken) {
+    const { info, rejected } = await fetchLineBotInfo(lineToken)
+    if (rejected) {
+      return { error: 'LINE ไม่ยอมรับ Channel Access Token นี้ (ผิดหรือหมดอายุ) กรุณาคัดลอกใหม่จาก LINE Developers → Messaging API' }
+    }
+    lineBotUserId = info?.userId || null
+    if (await lineOaUsedByOtherShop(shop.id, lineToken, lineBotUserId)) {
+      const oa = info?.basicId ? ` (${info.basicId})` : ''
+      return {
+        error: `LINE OA นี้${oa} เชื่อมกับร้านอื่นใน DealMee อยู่แล้ว 1 LINE OA ใช้ได้กับ 1 ร้านเท่านั้น เพราะข้อความจากลูกค้าจะไปถึงร้านที่ Webhook URL ชี้ไปร้านเดียว กรุณาใช้ OA อื่น หรือลบ Token ออกจากร้านเดิมก่อน`,
+      }
+    }
+  }
+  if (fbPageId && (await facebookPageUsedByOtherShop(shop.id, fbPageId))) {
+    return { error: 'เพจ Facebook นี้เชื่อมกับร้านอื่นใน DealMee อยู่แล้ว 1 เพจใช้ได้กับ 1 ร้านเท่านั้น กรุณาลบออกจากร้านเดิมก่อน' }
+  }
+
   const updateData = {
     line_token: lineToken,
     line_secret: lineSecret,
+    line_bot_user_id: lineBotUserId,
     facebook_page_id: fbPageId,
     facebook_page_token: fbPageToken,
     facebook_verify_token: fbVerifyToken,
