@@ -434,7 +434,7 @@ export default function BillingClient({
         </div>
         {plans.some((p) => p.key === 'byok') && (
           <p className="text-[11px] text-on-surface-variant">
-            BYOK: ใส่ Gemini API Key ของร้านในหน้าตั้งค่า AI ค่า AI ร้านจ่ายตรงกับ Google
+            BYOK: หลังซื้อแพ็กเกจ ใส่ API Key ของร้าน (แนะนำ Google Gemini) ที่หน้าตั้งค่าบอท ค่า AI ร้านจ่ายตรงกับผู้ให้บริการ
           </p>
         )}
       </div>

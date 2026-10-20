@@ -3,9 +3,11 @@
 import React from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { TRIAL_DAYS } from '@/lib/billing/trial'
+import { DEALMEE_LINE_OA } from './data'
 
 const items = [
-  { num: '30 วัน', label: 'ทดลองใช้งานฟรี' },
+  { num: `${TRIAL_DAYS} วัน`, label: 'ทดลองใช้งานฟรี' },
   { num: '5 นาที', label: 'ติดตั้งเชื่อมต่อเสร็จ' },
   { num: '0 บาท', label: 'ไม่มีค่าธรรมเนียมแอบแฝง' },
 ]
@@ -39,10 +41,10 @@ export default function CtaSection() {
               href="/login"
               className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-7 py-3 rounded-full font-bold text-sm sm:text-base inline-flex items-center gap-2 hover:opacity-95 shadow-lg shadow-cyan-500/25 transition-all duration-200 active:scale-95"
             >
-              🚀 ทดลองใช้ฟรี 30 วัน
+              🚀 ทดลองใช้ฟรี {TRIAL_DAYS} วัน
             </Link>
             <a
-              href="https://line.me"
+              href={DEALMEE_LINE_OA.url}
               target="_blank"
               rel="noopener noreferrer"
               className="border border-white/30 text-white px-7 py-3 rounded-full font-semibold text-sm sm:text-base hover:bg-white/10 transition-all duration-200 active:scale-95"

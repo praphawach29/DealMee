@@ -105,6 +105,9 @@ function decrypt(stored: string): string {
   }
 }
 
+/** Same AES-256-GCM scheme for other server-only secrets, such as a shop's own AI key */
+export { encrypt as encryptSecretValue, decrypt as decryptSecretValue }
+
 // ---- reading --------------------------------------------------------------------
 
 interface Snapshot {

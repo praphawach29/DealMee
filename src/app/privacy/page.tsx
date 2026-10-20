@@ -140,7 +140,7 @@ export default function PrivacyPolicyPage() {
               <ul className="list-disc pl-5 space-y-1.5">
                 <li><strong>การเข้ารหัสข้อมูล:</strong> ข้อมูลทั้งหมดที่ส่งผ่านเครือข่ายได้รับการเข้ารหัสด้วยโพรโทคอล HTTPS / TLS 1.3</li>
                 <li><strong>ระบบฐานข้อมูลและการแบ่งแยกสิทธิ์:</strong> ฐานข้อมูลใช้ PostgreSQL บน Supabase พร้อมเทคโนโลยี Row Level Security (RLS) เพื่อให้แน่ใจว่าร้านค้าแต่ละแห่งจะสามารถเข้าถึงได้เฉพาะข้อมูลของตนเองเท่านั้น</li>
-                <li><strong>การจัดเก็บ Token:</strong> ข้อมูล Secret Tokens ของ LINE OA และ API Key ได้รับการเข้ารหัสอย่างปลอดภัย</li>
+                <li><strong>การจัดเก็บ Token:</strong> Token ของ LINE OA และ Facebook ใช้เพื่อเชื่อมต่อช่องทางของร้านเท่านั้น และแยกสิทธิ์ตามร้านเช่นเดียวกับข้อมูลอื่น ส่วน API Key ของระบบ DealMee จัดเก็บแบบเข้ารหัส (AES-256)</li>
               </ul>
             </section>
 

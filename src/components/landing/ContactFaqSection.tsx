@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { faqs } from './data'
+import { DEALMEE_LINE_OA, faqs } from './data'
 import {
   ChevronDown,
   MessageSquare,
@@ -47,7 +47,7 @@ export default function ContactFaqSection() {
                     LINE Official Account
                   </div>
                   <div className="text-base font-bold text-slate-900 mt-0.5">
-                    @dealmee
+                    {DEALMEE_LINE_OA.id}
                   </div>
                   <div className="text-xs text-slate-500 mt-0.5">
                     แชทสอบถาม ปรึกษาการใช้งานได้ตลอดเวลา
@@ -92,7 +92,7 @@ export default function ContactFaqSection() {
 
               <div className="pt-2">
                 <a
-                  href="https://line.me"
+                  href={DEALMEE_LINE_OA.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full py-3 bg-[#06C755] hover:bg-[#05b34c] text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all duration-200 active:scale-95"
