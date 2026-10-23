@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createSampleOrder, updateOrderStatus } from './actions'
 import ShipOrderDialog from './ShipOrderDialog'
 import { carrierName } from '@/lib/orders/tracking'
+import { OrderStatusChip } from '@/components/dashboard/StatusChip'
 
 export interface OrderItem {
   id: string
@@ -52,18 +53,7 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
     if (res?.error) alert(res.error)
   }
 
-  const statusBadge = (st: string) => {
-    switch (st) {
-      case 'paid':
-        return <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">ชำระเงินแล้ว</span>
-      case 'shipped':
-        return <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-50 text-blue-700 border border-blue-200">จัดส่งแล้ว</span>
-      case 'cancelled':
-        return <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-50 text-rose-700 border border-rose-200">ยกเลิกแล้ว</span>
-      default:
-        return <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-50 text-amber-700 border border-amber-200">รอชำระเงิน</span>
-    }
-  }
+  const statusBadge = (st: string) => <OrderStatusChip status={st} />
 
   const shipButton = (ord: OrderItem) =>
     ord.status === 'cancelled' ? null : (

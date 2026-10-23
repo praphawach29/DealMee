@@ -301,14 +301,14 @@ export default function KnowledgeManager({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-bold text-on-surface tracking-tight">
               คลังความรู้ AI (Knowledge Base)
             </h1>
             <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
               RAG 2.0
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-on-surface-variant mt-1">
             เพิ่มข้อมูลเอกสาร ถาม-ตอบ หรือเงื่อนไขร้านค้า เพื่อให้ AI นำไปใช้อ้างอิงตอบคำถามลูกค้าได้อย่างแม่นยำ 24 ชม.
           </p>
         </div>

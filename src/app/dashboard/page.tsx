@@ -5,6 +5,7 @@ import { getOrCreateShopForUser } from '@/lib/shopHelper'
 
 import { getLinePushQuotaInfo } from '@/lib/billing/pushQuota'
 import type { SetupChecklistItem } from './components/SetupChecklistCard'
+import type { DashboardOrder, DashboardProduct } from '@/lib/dashboard/metrics'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -28,6 +29,8 @@ export default async function DashboardPage() {
         totalMessages={0}
         latestKnowledgeTitle="ยังไม่ได้เชื่อมต่อร้านค้า"
         latestKnowledgeDate=""
+        orders={[]}
+        products={[]}
         pushQuotaInfo={{
           totalQuota: 300,
           usedCount: 0,
@@ -58,23 +61,55 @@ export default async function DashboardPage() {
     planName: planLabel(shop),
   }
 
+  let recentOrders: DashboardOrder[] = []
+  let catalog: DashboardProduct[] = []
+
   if (currentShopId) {
-    // Run all 5 independent queries in parallel
     const [
       prodRes,
       kbRes,
       msgRes,
       orderRes,
+      productRes,
       quotaInfo,
     ] = await Promise.all([
       supabase.from('products').select('*', { count: 'exact', head: true }).eq('shop_id', currentShopId),
       supabase.from('knowledge_base').select('title, created_at', { count: 'exact' }).eq('shop_id', currentShopId).order('created_at', { ascending: false }).limit(1),
       supabase.from('chat_messages').select('*', { count: 'exact', head: true }).eq('shop_id', currentShopId),
-      supabase.from('orders').select('id, total_amount, status, payment_status').eq('shop_id', currentShopId),
+      supabase
+        .from('orders')
+        .select('id, order_no, customer_name, total_amount, status, items_summary, product_name, quantity, created_at')
+        .eq('shop_id', currentShopId)
+        .order('created_at', { ascending: false })
+        .limit(1000),
+      supabase
+        .from('products')
+        .select('id, name, price, stock, image_url, category')
+        .eq('shop_id', currentShopId)
+        .order('stock', { ascending: true }),
       getLinePushQuotaInfo(supabase, currentShopId, shop?.plan || 'pro'),
     ])
 
     productsCount = prodRes.count || 0
+    catalog = (productRes.data || []).map((product) => ({
+      id: product.id,
+      name: product.name || 'สินค้า',
+      price: Number(product.price || 0),
+      stock: product.stock == null ? null : Number(product.stock),
+      image_url: product.image_url,
+      category: product.category,
+    }))
+    recentOrders = (orderRes.data || []).map((order) => ({
+      id: order.id,
+      order_no: order.order_no || '',
+      customer_name: order.customer_name || 'ลูกค้า',
+      total_amount: Number(order.total_amount || 0),
+      status: order.status || 'pending',
+      items_summary: order.items_summary,
+      product_name: order.product_name,
+      quantity: order.quantity,
+      created_at: order.created_at,
+    }))
 
     const knowledgeItems = kbRes.data
     knowledgeCount = kbRes.count || knowledgeItems?.length || 0
@@ -153,6 +188,8 @@ export default async function DashboardPage() {
       latestKnowledgeTitle={latestKnowledgeTitle}
       latestKnowledgeDate={latestKnowledgeDate}
       pushQuotaInfo={pushQuotaInfo}
+      orders={recentOrders}
+      products={catalog}
     />
   )
 }

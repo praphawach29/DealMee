@@ -178,20 +178,20 @@ export default function MerchantCopilotDrawer({
       {/* Drawer Container - 100% Opaque Solid Background */}
       <aside className="relative z-10 w-full max-w-md sm:max-w-lg bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col h-full animate-slide-in-right">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-indigo-950/20 bg-gradient-to-r from-indigo-900 via-indigo-800 to-purple-900 text-white flex items-center justify-between shrink-0 shadow-sm">
+        <div className="px-5 py-4 border-b border-outline-variant bg-white text-on-surface flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20 text-indigo-100 shadow-inner">
+            <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
               <Bot className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-sm sm:text-base tracking-tight text-white">DealMee Copilot</h3>
-                <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <h3 className="font-bold text-sm sm:text-base tracking-tight text-on-surface">ผู้ช่วย AI</h3>
+                <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   Online
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-indigo-200">AI Copilot ประจำตัวเจ้าของร้าน</p>
+              <p className="text-[11px] sm:text-xs text-on-surface-variant">DealMee Copilot ประจำตัวเจ้าของร้าน</p>
             </div>
           </div>
 
@@ -199,7 +199,7 @@ export default function MerchantCopilotDrawer({
             {messages.length > 1 && (
               <button
                 onClick={handleResetChat}
-                className="p-2 rounded-xl text-indigo-200 hover:text-white hover:bg-white/10 transition-colors cursor-pointer flex items-center justify-center min-h-[36px] min-w-[36px]"
+                className="p-2 rounded-xl text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer flex items-center justify-center min-h-[36px] min-w-[36px]"
                 title="เริ่มการสนทนาใหม่"
               >
                 <RotateCcw className="h-4 w-4" />
@@ -207,7 +207,7 @@ export default function MerchantCopilotDrawer({
             )}
             <button
               onClick={onClose}
-              className="p-2 rounded-xl text-indigo-200 hover:text-white hover:bg-white/10 transition-colors cursor-pointer flex items-center justify-center min-h-[44px] min-w-[44px]"
+              className="p-2 rounded-xl text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer flex items-center justify-center min-h-[44px] min-w-[44px]"
               aria-label="Close Copilot"
             >
               <X className="h-5 w-5" />

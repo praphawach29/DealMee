@@ -114,24 +114,24 @@ export default function HelpGuideClient({
   }, [guides, tab, query, searching])
 
   return (
-    <div className="max-w-4xl mx-auto space-y-5">
+    <div className="max-w-4xl space-y-5">
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 flex items-center justify-center shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
           <BookOpen className="w-5 h-5" />
         </div>
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">คู่มือการใช้งาน</h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">วิธีตั้งค่าร้าน ฟีเจอร์ของบอท และเรื่องแพ็กเกจ ค้นหาด้วยคำที่สงสัยได้เลย</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-on-surface">คู่มือการใช้งาน</h1>
+          <p className="text-sm text-on-surface-variant mt-0.5">วิธีตั้งค่าร้าน ฟีเจอร์ของบอท และเรื่องแพ็กเกจ ค้นหาด้วยคำที่สงสัยได้เลย</p>
         </div>
       </div>
 
       <div className="relative">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <Search className="w-4 h-4 text-outline absolute left-3.5 top-1/2 -translate-y-1/2" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="ค้นหา เช่น เชื่อม LINE, ตรวจสลิป, เติมเงิน"
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-indigo-500"
+          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-outline-variant bg-white text-sm text-on-surface placeholder:text-outline outline-none focus:border-primary shadow-card"
         />
       </div>
 
@@ -147,8 +147,8 @@ export default function HelpGuideClient({
               }}
               className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap cursor-pointer transition-colors ${
                 tab === g.id
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                  ? 'bg-primary text-white'
+                  : 'bg-white border border-outline-variant text-on-surface-variant hover:bg-surface-container'
               }`}
             >
               {g.label}
@@ -157,7 +157,7 @@ export default function HelpGuideClient({
         </div>
       )}
 
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl divide-y divide-slate-100 dark:divide-slate-800">
+      <div className="bg-white border border-outline-variant rounded-2xl divide-y divide-outline-variant shadow-card">
         {results.length === 0 ? (
           <p className="p-5 text-sm text-slate-500">ไม่พบหัวข้อที่ตรงกับคำค้น ลองใช้คำอื่น หรือทักทีมงานด้านล่าง</p>
         ) : (
@@ -169,9 +169,9 @@ export default function HelpGuideClient({
                 <button
                   type="button"
                   onClick={() => setOpen(isOpen ? null : key)}
-                  className="w-full flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 text-left cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  className="w-full flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 text-left cursor-pointer hover:bg-surface-container"
                 >
-                  <span className="text-sm font-semibold text-slate-900 dark:text-white">
+                  <span className="text-sm font-semibold text-on-surface">
                     {topic.title}
                     {searching && <span className="ml-2 text-[11px] font-normal text-slate-400">{guide.label}</span>}
                   </span>

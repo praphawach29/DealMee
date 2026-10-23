@@ -242,8 +242,8 @@ export default function CompetitorDashboardClient({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 font-headline-md leading-tight">ส่องร้านคู่แข่ง</h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 font-body-md">
+          <h1 className="text-xl sm:text-2xl font-bold text-on-surface leading-tight">ส่องร้านคู่แข่ง</h1>
+          <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5">
             ดูโปรไฟล์และคลิปล่าสุดของคู่แข่งบน TikTok และ Instagram แล้วให้ AI แนะนำคอนเทนต์สำหรับสินค้าของร้านคุณ
           </p>
         </div>
