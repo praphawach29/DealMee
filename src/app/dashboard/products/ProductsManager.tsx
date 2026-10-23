@@ -149,9 +149,13 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
       return
     }
 
-    const targetCategory = isCustomCategoryMode ? customCategory : selectedCategory
+    if (!editingProduct?.id) {
+      alert('กรุณาบันทึกสินค้าให้เรียบร้อยก่อน แล้วจึงให้ AI เขียนจากข้อมูลสินค้าจริงของร้าน')
+      return
+    }
+
     setIsAiGenerating(true)
-    const res = await generateAiProductDescription(productName, targetCategory)
+    const res = await generateAiProductDescription(editingProduct.id)
     setIsAiGenerating(false)
 
     if (res.error) {
