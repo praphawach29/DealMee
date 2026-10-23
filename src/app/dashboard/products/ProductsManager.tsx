@@ -329,7 +329,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
   return (
     <div className={`flex flex-col w-full relative space-y-5 sm:space-y-6 ${isOpenModal ? 'xl:pr-[420px]' : ''}`}>
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
+      <div className={`flex flex-col justify-between gap-3 sm:gap-4 ${isOpenModal ? 'xl:items-start' : 'md:flex-row md:items-center'}`}>
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-on-surface font-headline-md leading-tight">จัดการสินค้า</h1>
           <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5 font-body-md">
@@ -337,7 +337,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
           </p>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap">
+        <div className={`flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap ${isOpenModal ? 'xl:hidden' : ''}`}>
           <button
             type="button"
             onClick={() => setIsOpenSyncModal(true)}
