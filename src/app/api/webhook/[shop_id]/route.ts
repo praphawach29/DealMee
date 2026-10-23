@@ -12,6 +12,12 @@ import { scheduleCustomerMessage } from '@/lib/ai/proactiveFollowUp'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildLineFlexProductCarousel } from '@/lib/line/flexHelper'
+import {
+  isKeywordProductQuery,
+  isProductCardSuppressed,
+  mergeProductCards,
+  resolveChannelProductCards,
+} from '@/lib/ai/productCards'
 import { settleSlipImage } from '@/lib/slip/settleSlip'
 
 const supabase = createAdminClient()
@@ -438,52 +444,27 @@ async function deliverAgentResult({
     )
   }
 
-  // Send LINE Flex Product Carousel if products were searched/recommended OR specifically requested
-  let flexProducts = agentResult.productsData || []
-
-  // Check if current turn is related to quotation or official documents
-  const isDocOrQuotation =
-    /(ใบเสนอราคา|เสนอราคา|quotation|หนังสือราชการ|บันทึกข้อความ|เอกสารทางการ)/i.test(userText || '') ||
-    agentResult.toolCallsExecuted.some(
-      (t) => t.name === 'create_quotation' || t.name === 'create_official_letter'
-    )
-
-  if (features.product_recommend === false || isDocOrQuotation) {
-    // When product recommendation is disabled or requesting quotation/official docs, don't send product cards
-    flexProducts = []
-  } else if (flexProducts.length === 0 && lineToken) {
-    const rawUserQuery = (userText || '').toLowerCase().trim()
-    // Explicit product inquiry keywords like "มีเสื้อยืดไหม", "ขอดูเสื้อ", "มีสินค้าอะไรบ้าง"
-    const isExplicitProductQuery =
-      /(มี|ขอ|ดู|ค้นหา|แนะนำ|ซื้อ|สั่ง|ขาย)\s*(เสื้อ|กางเกง|กระเป๋า|รองเท้า|หมวก|เคส|ผ้าพันคอ|กระบอกน้ำ|สินค้า|แคตตาล็อก)/i.test(rawUserQuery) ||
-      /(มี.*ไหม|มี.*มั้ย|ขอดู.*หน่อย|ราคาเท่าไหร่|มีแบบไหนบ้าง)/i.test(rawUserQuery)
-
-    if (isExplicitProductQuery) {
-      const { data: shopProducts } = await supabase
-        .from('products')
-        .select('id, name, price, stock, category, description, image_url')
-        .eq('shop_id', shopId)
-        .limit(10)
-
-      if (shopProducts && shopProducts.length > 0) {
-        const matched = shopProducts.filter((p: any) => {
-          const pName = (p.name || '').toLowerCase()
-          const pCat = (p.category || '').toLowerCase()
-          return (
-            rawUserQuery.includes(pName) ||
-            (pCat && rawUserQuery.includes(pCat)) ||
-            pName.split(' ').some((w: string) => w.length >= 2 && rawUserQuery.includes(w))
-          )
-        })
-
-        if (matched.length > 0) {
-          flexProducts = matched
-        } else if (/(สินค้าทั้งหมด|มีอะไรบ้าง|มีอะไรขายบ้าง|ขอดูสินค้า|แนะนำสินค้า)/i.test(rawUserQuery)) {
-          flexProducts = shopProducts.slice(0, 5)
-        }
-      }
-    }
+  // One LINE Flex carousel: catalog rows from search_products / check_stock, or the
+  // keyword fallback when those tools returned nothing. Never both in one reply.
+  const toolNames = (agentResult.toolCallsExecuted || []).map((t) => t.name)
+  const suppressProductCards =
+    features.product_recommend === false || isProductCardSuppressed(userText, toolNames)
+  const toolCards = suppressProductCards ? [] : mergeProductCards([], agentResult.productsData)
+  let keywordCatalog: unknown[] = []
+  if (!suppressProductCards && toolCards.length === 0 && lineToken && isKeywordProductQuery(userText)) {
+    const { data: shopProducts } = await supabase
+      .from('products')
+      .select('id, name, price, stock, category, description, image_url')
+      .eq('shop_id', shopId)
+      .limit(10)
+    keywordCatalog = shopProducts || []
   }
+  const flexProducts = resolveChannelProductCards({
+    suppress: suppressProductCards,
+    toolProducts: agentResult.productsData,
+    userText,
+    catalogProducts: keywordCatalog,
+  })
 
   const flexMsg = flexProducts.length > 0 ? buildLineFlexProductCarousel(flexProducts) : null
 

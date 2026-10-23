@@ -12,6 +12,7 @@ import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
 import { getGeminiPromptCache, dropGeminiPromptCache } from '@/lib/ai/geminiCache'
 import { executeTool as realExecuteTool, type ToolExecutor, type ToolExecutionContext, type CustomerMessage } from '@/lib/ai/toolDispatcher'
+import { mergeProductCards } from '@/lib/ai/productCards'
 import { t, detectCustomerLanguage, type CustomerLanguage } from '@/lib/i18n/customerMessages'
 import {
   formatSalesStagePromptContext,
@@ -144,7 +145,7 @@ export interface AgentResult {
   toolCallsExecuted: AgentToolCall[]
   /** Delayed pushes (schedule_followup) — the engine has no channel access to set its own setTimeout, so the caller (webhook route) does it. Always an array. */
   scheduledMessages: { delayMs: number; message: CustomerMessage }[]
-  /** Products returned by search_products for rendering LINE Flex Carousel product cards. */
+  /** Catalog rows from search_products / check_stock. Channels render one carousel from this list. */
   productsData?: any[]
   /** Active sales stage computed at the end of the turn (greeting, discovery, showcase, closing, post_sale). */
   salesStage?: SalesStage
@@ -1233,7 +1234,8 @@ async function preparePlanningState({
 - แจ้งสิทธิประโยชน์ทันที เช่น "รอบส่งวันนี้ตัดรอบ 14:00 น. หากคอนเฟิร์มตอนนี้แอดมินจะรีบล็อกสิทธิ์ส่งฟรีรอบวันนี้ให้เลยค่ะ"
 
 6. [Product Card & Flex Carousel Display]
-- เมื่อลูกค้าถามถึงสินค้า ขอดูสินค้า ขอดูรูปภาพ หรือสนใจสินค้าประเภทใดประเภทหนึ่งชัดเจน (เช่น "มีเสื้อยืดไหม", "ขอดูกางเกงหน่อย", "มีสินค้าอะไรบ้าง", "มีรูปไหม") คุณต้องเรียกใช้ Tool "search_products" เพื่อให้ระบบดึงข้อมูลและแสดงผลเป็นการ์ดรูปภาพสินค้าความละเอียดสูง (LINE Flex Carousel) ให้ลูกค้าดูทาง LINE!
+- เมื่อลูกค้าถามถึงสินค้า ขอดูสินค้า ขอดูรูปภาพ หรือสนใจสินค้าประเภทใดประเภทหนึ่งชัดเจน (เช่น "มีเสื้อยืดไหม", "ขอดูกางเกงหน่อย", "มีสินค้าอะไรบ้าง", "มีรูปไหม") คุณต้องเรียกใช้ Tool "search_products" ระบบจะแนบการ์ดสินค้าจากรายการที่เครื่องมือพบให้เอง ทั้งบน LINE (Flex carousel) และ Facebook/Instagram (การ์ด Messenger)
+- ถ้าเรียก check_stock แล้วพบสินค้า ระบบแนบการ์ดของรายการนั้นให้เช่นกัน ห้ามบอกว่าส่งการ์ดถ้าเครื่องมือไม่พบสินค้า
 - แต่ถ้าลูกค้ากำลังขอใบเสนอราคา ขอหนังสือราชการ จองคิว หรือถามคำถามทั่วไปที่ไม่เกี่ยวกับสินค้าในสต็อก **ห้ามเรียก search_products และห้ามส่งการ์ดสินค้าเด็ดขาด**
 
 7. [Product Bundling & Upsell Synergy]
@@ -1516,7 +1518,8 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
     : await state.executor(response.toolCall.name, response.toolCall.args, state.toolCtx)
 
   if (toolResult.productsData && toolResult.productsData.length > 0) {
-    state.productsData = toolResult.productsData
+    // A later tool in the same turn (search, then stock) adds cards. Same catalog id is kept once.
+    state.productsData = mergeProductCards(state.productsData, toolResult.productsData)
   }
   state.toolCallsExecuted.push({ name: response.toolCall.name, args: response.toolCall.args })
   state.immediateMessages.push(...toolResult.immediateMessages)
