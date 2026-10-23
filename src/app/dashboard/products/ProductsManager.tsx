@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import {
   createProduct,
+  updateProduct,
   deleteProduct,
   generateAiProductDescription,
   bulkImportProducts,
@@ -31,6 +32,7 @@ export interface ProductItem {
 
 export default function ProductsManager({ products }: { products: ProductItem[] }) {
   const [isOpenModal, setIsOpenModal] = useState(false)
+  const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null)
   const [isOpenImportModal, setIsOpenImportModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [isAiGenerating, setIsAiGenerating] = useState(false)
@@ -83,6 +85,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
 
   // Reset form when modal opens
   const handleOpenAddModal = () => {
+    setEditingProduct(null)
     setProductName('')
     setSelectedCategory('ทั่วไป')
     setCustomCategory('')
@@ -97,6 +100,29 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
     setIsOpenModal(true)
   }
 
+  const handleOpenEditModal = (product: ProductItem) => {
+    const category = product.category || 'ทั่วไป'
+    const hasExistingCategory = allCategories.includes(category)
+    setEditingProduct(product)
+    setProductName(product.name)
+    setSelectedCategory(hasExistingCategory ? category : 'ทั่วไป')
+    setCustomCategory(hasExistingCategory ? '' : category)
+    setIsCustomCategoryMode(!hasExistingCategory)
+    setProductPrice(String(product.price ?? 0))
+    setProductStock(String(product.stock ?? 0))
+    setProductDescription(product.description || '')
+    setImageInputType(product.image_url?.startsWith('http') ? 'url' : 'upload')
+    setImageUrl(product.image_url || '')
+    setImagePreview(product.image_url || null)
+    setMessage(null)
+    setIsOpenModal(true)
+  }
+
+  const handleCloseProductModal = () => {
+    if (loading) return
+    setIsOpenModal(false)
+    setEditingProduct(null)
+  }
   // Handle local image file selection
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -136,7 +162,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
   }
 
   // Submit Add Product Form
-  async function handleAddSubmit(e: React.FormEvent) {
+  async function handleProductSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setMessage(null)
@@ -153,7 +179,9 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
     formData.append('description', productDescription)
     formData.append('image_url', imageUrl)
 
-    const res = await createProduct(formData)
+    const res = editingProduct
+      ? await updateProduct(editingProduct.id, formData)
+      : await createProduct(formData)
     setLoading(false)
 
     if (res?.error) {
@@ -498,17 +526,17 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
           {filteredProducts.map(product => {
             const isOutOfStock = product.stock <= 0
 
             return (
               <div
                 key={product.id}
-                className="bg-surface border border-outline-variant/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between space-y-3 hover:shadow-md transition-all relative group"
+                className="bg-surface border border-outline-variant/35 rounded-xl p-2.5 sm:p-3 shadow-none flex flex-col justify-between space-y-2.5 hover:border-electric-blue/45 hover:shadow-[0_12px_28px_rgba(46,91,255,0.10)] transition-all duration-200 relative group"
               >
                 <div className="space-y-2.5">
-                  <div className="aspect-video w-full rounded-xl bg-merchant-bg border border-outline-variant/30 overflow-hidden relative flex items-center justify-center">
+                  <div className="aspect-square w-full rounded-lg bg-merchant-bg border border-outline-variant/25 overflow-hidden relative flex items-center justify-center">
                     {product.image_url ? (
                       <img
                         src={product.image_url}
@@ -545,7 +573,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                   </div>
 
                   <div>
-                    <h3 className="font-bold text-sm text-on-surface line-clamp-1">{product.name}</h3>
+                    <h3 className="font-bold text-xs sm:text-sm text-on-surface line-clamp-1">{product.name}</h3>
                     {product.master_sku && (
                       <div className="mt-1 mb-1">
                         <span className="inline-block text-[10px] font-mono text-electric-blue bg-electric-blue/10 px-2 py-0.5 rounded-md font-bold border border-electric-blue/20">
@@ -553,7 +581,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                         </span>
                       </div>
                     )}
-                    <p className="text-xs text-on-surface-variant line-clamp-2 mt-0.5 min-h-[32px]">
+                    <p className="hidden sm:block text-xs text-on-surface-variant line-clamp-2 mt-0.5 min-h-[32px]">
                       {product.description || 'ไม่มีรายละเอียดสินค้า'}
                     </p>
                   </div>
@@ -561,7 +589,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
 
                 <div className="pt-2 border-t border-outline-variant/20 flex items-center justify-between">
                   <div>
-                    <span className="text-xs font-bold text-electric-blue font-mono">
+                    <span className="text-sm font-bold text-electric-blue font-mono">
                       ฿{(product.price ?? 0).toLocaleString()}
                     </span>
                   </div>
@@ -582,6 +610,17 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                     </button>
 
                     <button
+                      type="button"
+                      onClick={() => handleOpenEditModal(product)}
+                      className="p-1 rounded-lg text-outline hover:text-electric-blue hover:bg-electric-blue/10 transition-colors cursor-pointer"
+                      title="แก้ไขสินค้า"
+                      aria-label={'แก้ไขสินค้า ' + product.name}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">edit</span>
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() => handleDelete(product.id)}
                       className="p-1 rounded-lg text-outline hover:text-error-red hover:bg-error-red/10 transition-colors cursor-pointer"
                       title="ลบสินค้า"
@@ -596,10 +635,10 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
         </div>
       )}
 
-      {/* 1. Add Product Modal */}
+      {/* 1. Add / Edit Product Drawer */}
       {isOpenModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
-          <div className="bg-slate-900 text-slate-100 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-50 bg-slate-950/35 backdrop-blur-[1px] animate-in fade-in duration-200">
+          <div className="absolute inset-y-0 right-0 w-full max-w-xl bg-white text-on-surface border-l border-outline-variant/35 shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
             <div className="shrink-0 px-6 py-4 border-b border-slate-700/80 flex items-center justify-between bg-slate-800/90">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-electric-blue/20 flex items-center justify-center text-electric-blue">
@@ -609,20 +648,20 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                   <h3 className="font-bold text-base text-slate-100 font-headline-md leading-tight">
                     เพิ่มรายการสินค้าใหม่
                   </h3>
-                  <p className="text-[11px] text-slate-400">กรอกข้อมูลสินค้าเพื่อให้ AI นำไปใช้เชียร์ขายหน้าร้าน</p>
+                  <p className="text-[11px] text-outline">กรอกข้อมูลสินค้าเพื่อให้ AI นำไปใช้เชียร์ขายหน้าร้าน</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsOpenModal(false)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+                className="p-1.5 rounded-xl text-outline hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
 
-            <form onSubmit={handleAddSubmit} className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-900">
+            <form onSubmit={handleProductSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 bg-white">
               <div>
-                <label className="block text-xs font-bold text-slate-200 mb-1.5 font-label-md">
+                <label className="block text-xs font-bold text-on-surface mb-1.5 font-label-md">
                   ชื่อสินค้า *
                 </label>
                 <input
@@ -631,7 +670,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                   onChange={(e) => setProductName(e.target.value)}
                   required
                   placeholder="เช่น เสื้อยืด Oversize สีดำ, เซรั่มหน้าใส"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm focus:border-electric-blue focus:ring-2 focus:ring-electric-blue/20 outline-none transition-colors placeholder:text-slate-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-outline-variant/65 bg-surface text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-2 focus:ring-electric-blue/20 outline-none transition-colors placeholder:text-outline"
                 />
               </div>
 
@@ -639,7 +678,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold text-slate-200 font-label-md">
+                    <label className="block text-xs font-bold text-on-surface font-label-md">
                       หมวดหมู่
                     </label>
                     <button
@@ -658,23 +697,23 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                       onChange={(e) => setCustomCategory(e.target.value)}
                       placeholder="พิมพ์หมวดหมู่ใหม่ที่ต้องการ..."
                       required
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-electric-blue bg-slate-800 text-slate-100 text-xs sm:text-sm outline-none placeholder:text-slate-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-electric-blue bg-surface text-on-surface text-xs sm:text-sm outline-none placeholder:text-outline"
                     />
                   ) : (
                     <select
                       value={selectedCategory}
                       onChange={(e) => setSelectedCategory(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm font-medium focus:border-electric-blue outline-none transition-colors cursor-pointer"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-outline-variant/65 bg-surface text-on-surface text-xs sm:text-sm font-medium focus:border-electric-blue outline-none transition-colors cursor-pointer"
                     >
                       {allCategories.map(cat => (
-                        <option key={cat} value={cat} className="bg-slate-800 text-slate-100">{cat}</option>
+                        <option key={cat} value={cat} className="bg-surface text-on-surface">{cat}</option>
                       ))}
                     </select>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-200 mb-1.5 font-label-md">
+                  <label className="block text-xs font-bold text-on-surface mb-1.5 font-label-md">
                     ราคา (บาท) *
                   </label>
                   <input
@@ -684,7 +723,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                     onChange={(e) => setProductPrice(e.target.value)}
                     required
                     placeholder="390"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm focus:border-electric-blue outline-none font-mono transition-colors placeholder:text-slate-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-outline-variant/65 bg-surface text-on-surface text-xs sm:text-sm focus:border-electric-blue outline-none font-mono transition-colors placeholder:text-outline"
                   />
                 </div>
               </div>
@@ -692,7 +731,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
               {/* Stock and Image Selection */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-200 mb-1.5 font-label-md">
+                  <label className="block text-xs font-bold text-on-surface mb-1.5 font-label-md">
                     จำนวนสต๊อก (ชิ้น) *
                   </label>
                   <input
@@ -701,27 +740,27 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                     onChange={(e) => setProductStock(e.target.value)}
                     required
                     min={0}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm focus:border-electric-blue outline-none font-mono transition-colors"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-outline-variant/65 bg-surface text-on-surface text-xs sm:text-sm focus:border-electric-blue outline-none font-mono transition-colors"
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold text-slate-200 font-label-md">
+                    <label className="block text-xs font-bold text-on-surface font-label-md">
                       รูปภาพสินค้า
                     </label>
                     <div className="flex gap-2 text-[10px] font-bold">
                       <button
                         type="button"
                         onClick={() => setImageInputType('upload')}
-                        className={`cursor-pointer ${imageInputType === 'upload' ? 'text-electric-blue underline' : 'text-slate-400'}`}
+                        className={`cursor-pointer ${imageInputType === 'upload' ? 'text-electric-blue underline' : 'text-outline'}`}
                       >
                         📁 อัปโหลด
                       </button>
                       <button
                         type="button"
                         onClick={() => setImageInputType('url')}
-                        className={`cursor-pointer ${imageInputType === 'url' ? 'text-electric-blue underline' : 'text-slate-400'}`}
+                        className={`cursor-pointer ${imageInputType === 'url' ? 'text-electric-blue underline' : 'text-outline'}`}
                       >
                         🔗 URL
                       </button>
@@ -755,12 +794,12 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                         setImagePreview(e.target.value)
                       }}
                       placeholder="https://..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs focus:border-electric-blue outline-none placeholder:text-slate-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-outline-variant/65 bg-surface text-on-surface text-xs focus:border-electric-blue outline-none placeholder:text-outline"
                     />
                   )}
 
                   {imagePreview && (
-                    <div className="mt-2 relative w-16 h-16 rounded-xl border border-slate-700 overflow-hidden">
+                    <div className="mt-2 relative w-16 h-16 rounded-xl border border-outline-variant/65 overflow-hidden">
                       <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
                       <button
                         type="button"
@@ -780,7 +819,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
               {/* Description & AI Copywriter Feature */}
               <div className="space-y-1.5 pt-2">
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-slate-200 font-label-md">
+                  <label className="block text-xs font-bold text-on-surface font-label-md">
                     รายละเอียดสินค้า
                   </label>
                   <button
@@ -798,7 +837,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                   value={productDescription}
                   onChange={(e) => setProductDescription(e.target.value)}
                   placeholder="กรอกรายละเอียด จุดเด่น หรือขนาดสินค้า (หรือกดปุ่ม AI ช่วยเขียนด้านบน)..."
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm focus:border-electric-blue outline-none resize-none transition-colors placeholder:text-slate-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-outline-variant/65 bg-surface text-on-surface text-xs sm:text-sm focus:border-electric-blue outline-none resize-none transition-colors placeholder:text-outline"
                 />
               </div>
 

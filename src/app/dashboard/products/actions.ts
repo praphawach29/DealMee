@@ -54,14 +54,36 @@ export async function createProduct(formData: FormData) {
 export async function updateProduct(id: string, formData: FormData) {
   const supabase = await createClient()
 
-  const name = formData.get('name') as string
-  const category = formData.get('category') as string || 'ทั่วไป'
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return { error: 'กรุณาเข้าสู่ระบบอีกครั้ง' }
+  }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop?.id) {
+    return { error: 'ไม่พบข้อมูลร้านค้า' }
+  }
+
+  const name = String(formData.get('name') || '').trim()
+  const category = String(formData.get('category') || '').trim() || 'ทั่วไป'
   const price = parseFloat(formData.get('price') as string || '0')
   const stock = parseInt(formData.get('stock') as string || '0', 10)
-  const description = formData.get('description') as string
-  const image_url = formData.get('image_url') as string
+  const description = String(formData.get('description') || '').trim()
+  const image_url = String(formData.get('image_url') || '').trim()
 
-  const { error } = await supabase
+  if (!id || !name) {
+    return { error: 'กรุณากรอกชื่อสินค้า' }
+  }
+
+  if (!Number.isFinite(price) || price < 0) {
+    return { error: 'กรุณากรอกราคาสินค้าให้ถูกต้อง' }
+  }
+
+  if (!Number.isInteger(stock) || stock < 0) {
+    return { error: 'กรุณากรอกจำนวนสต็อกเป็นเลขจำนวนเต็มตั้งแต่ 0 ขึ้นไป' }
+  }
+
+  const { data: updatedProduct, error } = await supabase
     .from('products')
     .update({
       name,
@@ -73,6 +95,13 @@ export async function updateProduct(id: string, formData: FormData) {
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
+    .eq('shop_id', shop.id)
+    .select('id')
+    .maybeSingle()
+
+  if (!error && !updatedProduct) {
+    return { error: 'ไม่พบสินค้านี้ หรือคุณไม่มีสิทธิ์แก้ไขสินค้า' }
+  }
 
   if (error) {
     return { error: `แก้ไขสินค้าไม่สำเร็จ: ${error.message}` }
