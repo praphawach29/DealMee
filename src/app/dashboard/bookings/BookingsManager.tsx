@@ -244,7 +244,7 @@ export default function BookingsManager({ bookings }: { bookings: BookingItem[] 
             <div className="w-14 h-14 sm:w-16 sm:h-16 bg-electric-blue/10 rounded-2xl flex items-center justify-center mb-4 text-electric-blue">
               <span className="material-symbols-outlined text-2xl sm:text-3xl">calendar_month</span>
             </div>
-            <h3 className="text-base sm:text-lg font-bold text-on-surface mb-1">ยังไม่มีรายการจองคิว</h3>
+            <h3 className="font-heading text-base sm:text-lg font-semibold text-on-surface mb-1">ยังไม่มีรายการจองคิว</h3>
             <p className="text-xs sm:text-sm text-on-surface-variant max-w-sm mb-6">
               เมื่อลูกค้าจองคิวผ่าน LINE หรือกับบอท AI รายการจองจะมาแสดงในหน้านี้ทันที
             </p>

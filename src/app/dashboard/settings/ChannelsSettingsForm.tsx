@@ -281,7 +281,7 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
         <div className="space-y-1">
           <div className="flex items-center gap-1.5 sm:gap-2">
             <Zap className="w-4 h-4 text-amber-500 shrink-0" />
-            <h3 className="text-xs sm:text-base font-bold text-on-surface">
+            <h3 className="font-heading text-xs sm:text-base font-semibold text-on-surface">
               ศูนย์รวมแชทแห่งเดียว (Unified Inbox)
             </h3>
           </div>

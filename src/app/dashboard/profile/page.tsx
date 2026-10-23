@@ -43,7 +43,7 @@ export default async function ProfilePage() {
             <span className="material-symbols-outlined text-[20px]">storefront</span>
           </div>
           <div>
-            <h2 className="text-base sm:text-lg font-bold text-on-surface">ข้อมูลร้านค้า</h2>
+            <h2 className="font-heading text-base sm:text-lg font-semibold text-on-surface">ข้อมูลร้านค้า</h2>
             <p className="text-[11px] sm:text-xs text-on-surface-variant">รหัสอ้างอิงร้านค้าและประเภทธุรกิจปัจจุบัน</p>
           </div>
         </div>
@@ -80,7 +80,7 @@ export default async function ProfilePage() {
               <span className="material-symbols-outlined text-[20px]">diamond</span>
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="text-base sm:text-lg font-bold text-on-surface truncate">แพ็กเกจและการใช้งาน</h2>
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-on-surface truncate">แพ็กเกจและการใช้งาน</h2>
               <p className="text-[11px] sm:text-xs text-on-surface-variant truncate">โควต้าข้อความและสถานะสมาชิกปัจจุบัน</p>
             </div>
           </div>
@@ -120,7 +120,7 @@ export default async function ProfilePage() {
             <span className="material-symbols-outlined text-[20px]">person</span>
           </div>
           <div>
-            <h2 className="text-base sm:text-lg font-bold text-on-surface">ผู้ใช้งานบัญชีนี้</h2>
+            <h2 className="font-heading text-base sm:text-lg font-semibold text-on-surface">ผู้ใช้งานบัญชีนี้</h2>
             <p className="text-[11px] sm:text-xs text-on-surface-variant">อีเมลและบทบาทการเข้าถึงระบบ</p>
           </div>
         </div>

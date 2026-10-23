@@ -151,7 +151,7 @@ export default function PaymentsManager({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="font-heading text-xl sm:text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
               รายการชำระเงิน & ใบเสร็จ DealMee AI
             </h1>
             {pendingCount > 0 && (
@@ -465,7 +465,7 @@ export default function PaymentsManager({
                 <AlertTriangle className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                <h3 className="font-heading font-semibold text-slate-900 dark:text-white text-base">
                   ระบุเหตุผลการปฏิเสธสลิป
                 </h3>
                 <p className="text-xs text-slate-500">
@@ -553,7 +553,7 @@ function VerifyConfirmCard({
             <CheckCircle2 className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <h3 id="verify-confirm-title" className="font-bold text-base">
+            <h3 id="verify-confirm-title" className="font-heading font-semibold text-base">
               อนุมัติการชำระเงิน
             </h3>
             <p className="text-[11px] text-emerald-100 truncate">

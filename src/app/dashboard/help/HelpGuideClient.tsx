@@ -120,7 +120,7 @@ export default function HelpGuideClient({
           <BookOpen className="w-5 h-5" />
         </div>
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-on-surface">คู่มือการใช้งาน</h1>
+          <h1 className="font-heading text-xl sm:text-2xl font-semibold text-on-surface">คู่มือการใช้งาน</h1>
           <p className="text-sm text-on-surface-variant mt-0.5">วิธีตั้งค่าร้าน ฟีเจอร์ของบอท และเรื่องแพ็กเกจ ค้นหาด้วยคำที่สงสัยได้เลย</p>
         </div>
       </div>
@@ -171,7 +171,7 @@ export default function HelpGuideClient({
                   onClick={() => setOpen(isOpen ? null : key)}
                   className="w-full flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 text-left cursor-pointer hover:bg-surface-container"
                 >
-                  <span className="text-sm font-semibold text-on-surface">
+                  <span className="font-heading text-sm font-semibold text-on-surface">
                     {topic.title}
                     {searching && <span className="ml-2 text-[11px] font-normal text-slate-400">{guide.label}</span>}
                   </span>

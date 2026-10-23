@@ -125,7 +125,7 @@ export default function DashboardClientLayout({
         <div className="flex h-16 items-center justify-between border-b border-outline-variant px-4">
           <Link href="/dashboard" className="flex items-center gap-2" onClick={() => setIsMobileMenuOpen(false)}>
             <Image src="/logos/dealmee-icon.png" alt="DealMee" width={28} height={28} className="h-7 w-7" />
-            <span className="text-sm font-bold text-primary">DealMee</span>
+            <span className="font-heading text-sm font-semibold text-primary">DealMee</span>
           </Link>
           <button type="button" onClick={() => setIsMobileMenuOpen(false)} className="rounded-lg p-2 text-on-surface-variant" aria-label="ปิดเมนู">
             <X className="h-5 w-5" />

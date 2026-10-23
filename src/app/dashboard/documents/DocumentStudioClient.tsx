@@ -339,7 +339,7 @@ export default function DocumentStudioClient({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-outline-variant/40 pb-5">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-on-surface flex items-center gap-2.5">
+          <h1 className="font-heading text-xl sm:text-2xl font-semibold text-on-surface flex items-center gap-2.5">
             <span className="p-2 rounded-xl bg-electric-blue/10 text-electric-blue">
               <FileSpreadsheet className="w-5 h-5" />
             </span>
@@ -397,7 +397,7 @@ export default function DocumentStudioClient({
           <div className="bg-surface rounded-2xl border border-outline-variant/60 p-6 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
               <div>
-                <h2 className="text-base font-bold text-on-surface flex items-center gap-2">
+                <h2 className="font-heading text-base font-semibold text-on-surface flex items-center gap-2">
                   <UploadCloud className="w-5 h-5 text-electric-blue" />
                   อัปโหลดเอกสารต้นฉบับ (Excel, PDF, Word, รูปภาพ)
                 </h2>
@@ -450,7 +450,7 @@ export default function DocumentStudioClient({
           <div className="bg-surface rounded-2xl border border-outline-variant/60 p-6 shadow-sm space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-outline-variant/40 pb-4">
               <div>
-                <h3 className="text-base font-bold text-on-surface">ฟอร์มปรับแต่งใบเสนอราคา (Interactive Quotation Editor)</h3>
+                <h3 className="font-heading text-base font-semibold text-on-surface">ฟอร์มปรับแต่งใบเสนอราคา (Interactive Quotation Editor)</h3>
                 <p className="text-xs text-on-surface-variant">
                   ตรวจทานข้อมูลที่ AI สกัดได้ เพิ่มกำไร (Margin) หรือแก้ไขตัวเลขก่อนออกเอกสาร
                 </p>
@@ -749,7 +749,7 @@ export default function DocumentStudioClient({
         <div className="space-y-6">
           <div className="bg-surface rounded-2xl border border-outline-variant/60 p-6 shadow-sm">
             <div className="mb-4">
-              <h2 className="text-base font-bold text-on-surface flex items-center gap-2">
+              <h2 className="font-heading text-base font-semibold text-on-surface flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-emerald-600" />
                 ระบบร่างหนังสือราชการและเอกสารทางการ (GovTech Official Scribe)
               </h2>
@@ -809,7 +809,7 @@ export default function DocumentStudioClient({
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Left Column: Form Editor */}
               <div className="bg-surface rounded-2xl border border-outline-variant/60 p-6 shadow-sm space-y-4">
-                <h3 className="text-sm font-bold text-on-surface flex items-center justify-between border-b border-outline-variant/40 pb-3">
+                <h3 className="font-heading text-sm font-semibold text-on-surface flex items-center justify-between border-b border-outline-variant/40 pb-3">
                   <span>แก้ไขข้อมูลในหนังสือราชการ</span>
                   <span className="text-[11px] font-normal text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                     AI Auto-drafted
@@ -1003,7 +1003,7 @@ export default function DocumentStudioClient({
         <div className="bg-surface rounded-2xl border border-outline-variant/60 p-6 shadow-sm space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-bold text-on-surface flex items-center gap-2">
+              <h2 className="font-heading text-base font-semibold text-on-surface flex items-center gap-2">
                 <FileText className="w-5 h-5 text-sky-500" />
                 คลังเอกสารและประวัติใบเสนอราคา ({filteredDocs.length} ฉบับ)
               </h2>
@@ -1251,7 +1251,7 @@ export default function DocumentStudioClient({
                 <Eye className="w-5 h-5" />
               </span>
               <div>
-                <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white flex items-center gap-2">
+                <h3 className="font-heading font-semibold text-sm sm:text-base text-slate-900 dark:text-white flex items-center gap-2">
                   <span>ตัวอย่างหน้าใบเสนอราคาจริง</span>
                   <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800">
                     แบบร่างจำลอง A4
@@ -1305,7 +1305,7 @@ export default function DocumentStudioClient({
                   </div>
                 )}
                 <div>
-                  <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">
+                  <h1 className="font-heading text-xl sm:text-2xl font-semibold text-gray-900 leading-tight">
                     {companyProfile?.companyName || companyName || shopName}
                   </h1>
                   <p className="text-xs text-gray-500 mt-1 max-w-md leading-relaxed">
@@ -1326,7 +1326,7 @@ export default function DocumentStudioClient({
               </div>
 
               <div className="text-left sm:text-right shrink-0">
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-blue-600 tracking-wider">
+                <h2 className="font-heading text-2xl sm:text-3xl font-semibold text-blue-600 tracking-wider">
                   ใบเสนอราคา
                 </h2>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-0.5">

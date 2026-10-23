@@ -412,7 +412,7 @@ function StripStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <p className="truncate text-[11px] text-outline">{label}</p>
-      <p className="truncate text-sm font-bold text-on-surface">{value}</p>
+      <p className="font-heading truncate text-sm font-semibold text-on-surface">{value}</p>
     </div>
   )
 }

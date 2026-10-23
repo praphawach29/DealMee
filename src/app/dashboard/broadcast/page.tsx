@@ -19,7 +19,7 @@ export default async function BroadcastPage() {
   return (
     <div className="px-4 sm:px-6 md:px-8 py-6 max-w-7xl mx-auto w-full space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-on-surface">
+        <h1 className="font-heading text-2xl font-semibold text-on-surface">
           Smart Broadcast (บรอดแคสต์ตรงกลุ่มเป้าหมาย)
         </h1>
         <p className="text-sm text-on-surface-variant mt-1">

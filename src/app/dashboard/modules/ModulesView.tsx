@@ -248,7 +248,7 @@ export default function ModulesView({
                       <span className="material-symbols-outlined text-lg sm:text-xl">{m.icon}</span>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-bold text-on-surface text-xs sm:text-sm leading-tight truncate">{m.name}</h3>
+                      <h3 className="font-heading font-semibold text-on-surface text-xs sm:text-sm leading-tight truncate">{m.name}</h3>
                       <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md inline-block mt-0.5 ${
                         isEnabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-500 border border-gray-200'
                       }`}>
@@ -353,7 +353,7 @@ export default function ModulesView({
             return (
               <div key={item.key} className="bg-merchant-bg border border-outline-variant/40 rounded-xl p-3.5 space-y-2.5 flex flex-col">
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-bold text-on-surface text-xs sm:text-sm leading-tight">{item.title}</h3>
+                  <h3 className="font-heading font-semibold text-on-surface text-xs sm:text-sm leading-tight">{item.title}</h3>
                   <button
                     type="button"
                     role="switch"

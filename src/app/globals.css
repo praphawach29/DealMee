@@ -9,8 +9,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-ibm-plex-sans-thai);
   --font-mono: var(--font-geist-mono);
-  /* Dashboard headings only. Switch to Anuphan: --font-heading: var(--font-anuphan), "Anuphan", sans-serif; */
-  --font-heading: var(--font-prompt), "Prompt", sans-serif;
+  /* App headings. Body, forms, tables, and buttons stay on --font-sans (IBM Plex Sans Thai). */
+  --font-heading: var(--font-anuphan), "Anuphan", sans-serif;
   
   --color-electric-blue: #2F6BFF;
   --color-cyber-cyan: #00CFEC;
@@ -37,9 +37,10 @@
   --color-secondary-fixed: #ecebff;
   --color-tertiary-fixed-dim: #d7f3ff;
 
-  --font-headline-md: var(--font-ibm-plex-sans-thai), "IBM Plex Sans Thai", sans-serif;
-  --font-headline-lg: var(--font-ibm-plex-sans-thai), "IBM Plex Sans Thai", sans-serif;
-  --font-headline-sm: var(--font-ibm-plex-sans-thai), "IBM Plex Sans Thai", sans-serif;
+  --font-headline-md: var(--font-heading);
+  --font-headline-lg: var(--font-heading);
+  --font-headline-sm: var(--font-heading);
+  --font-headline-xl: var(--font-heading);
   --font-body-md: var(--font-ibm-plex-sans-thai), "IBM Plex Sans Thai", sans-serif;
   --font-label-md: var(--font-ibm-plex-sans-thai), "IBM Plex Sans Thai", sans-serif;
   --font-label-sm: var(--font-ibm-plex-sans-thai), "IBM Plex Sans Thai", sans-serif;
@@ -326,6 +327,15 @@ body {
 .dm-scroll::-webkit-scrollbar-thumb {
   background: #e4e9f1;
   border-radius: 99px;
+}
+
+/* Anuphan is loaded at 500 and 600 only. Keep heading utilities inside that range. */
+.font-heading,
+.font-headline-md,
+.font-headline-lg,
+.font-headline-sm,
+.font-headline-xl {
+  font-weight: 600;
 }
 
 

@@ -18,7 +18,7 @@ export default function PricingComparison() {
           <div className="text-xs font-bold tracking-[2px] uppercase text-blue-600 mb-2">
             เปรียบเทียบ
           </div>
-          <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+          <h3 className="font-heading text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight">
             ตารางเปรียบเทียบทุกฟีเจอร์
           </h3>
           <p className="text-slate-600 text-sm sm:text-base leading-relaxed">

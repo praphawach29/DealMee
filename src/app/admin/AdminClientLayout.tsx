@@ -31,7 +31,7 @@ export default function AdminClientLayout({
               priority
             />
             <div>
-              <span className="font-bold tracking-tight text-sm block leading-none text-on-surface">
+              <span className="font-heading font-semibold tracking-tight text-sm block leading-none text-on-surface">
                 DealMee
               </span>
               <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider block mt-1 flex items-center gap-1">
@@ -68,7 +68,7 @@ export default function AdminClientLayout({
               className="w-8 h-8 object-contain shrink-0"
             />
             <div>
-              <span className="font-bold tracking-tight text-sm block leading-none text-on-surface">
+              <span className="font-heading font-semibold tracking-tight text-sm block leading-none text-on-surface">
                 DealMee
               </span>
               <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider block mt-1 flex items-center gap-1">

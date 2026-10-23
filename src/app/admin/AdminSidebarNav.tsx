@@ -79,7 +79,7 @@ export default function AdminSidebarNav({ onNavClick }: AdminSidebarNavProps) {
 
   return (
     <nav className="flex-1 px-3 space-y-1 overflow-y-auto py-3">
-      <div className="px-3 pb-2 text-[10px] font-bold text-amber-600 uppercase tracking-widest">
+      <div className="font-heading px-3 pb-2 text-[10px] font-semibold text-amber-600 uppercase tracking-widest">
         DealMee AI Super Admin
       </div>
 

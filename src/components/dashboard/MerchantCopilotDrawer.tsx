@@ -185,7 +185,7 @@ export default function MerchantCopilotDrawer({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-sm sm:text-base tracking-tight text-on-surface">ผู้ช่วย AI</h3>
+                <h3 className="font-heading font-semibold text-sm sm:text-base tracking-tight text-on-surface">ผู้ช่วย AI</h3>
                 <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   Online

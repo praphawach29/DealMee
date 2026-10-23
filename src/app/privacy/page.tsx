@@ -47,7 +47,7 @@ export default function PrivacyPolicyPage() {
               <Shield className="w-3.5 h-3.5" />
               <span>คุ้มครองข้อมูลส่วนบุคคลตาม PDPA</span>
             </div>
-            <h1 className="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+            <h1 className="font-heading text-2xl sm:text-4xl font-semibold text-slate-900 tracking-tight">
               นโยบายความเป็นส่วนตัว (Privacy Policy)
             </h1>
             <p className="text-xs sm:text-sm text-slate-500">
@@ -70,14 +70,14 @@ export default function PrivacyPolicyPage() {
           <div className="space-y-8 text-xs sm:text-sm text-slate-600 leading-relaxed">
             {/* Section 1 */}
             <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900">
                 1. ข้อมูลส่วนบุคคลที่เราจัดเก็บ
               </h2>
               <p>เรามีการเก็บรวบรวมข้อมูลส่วนบุคคลเท่าที่จำเป็นต่อการให้บริการ โดยแบ่งออกเป็น 2 ส่วนหลัก:</p>
 
               <div className="space-y-3 pt-1">
                 <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
-                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <h3 className="font-heading font-semibold text-slate-900 text-sm flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-blue-600" />
                     <span>ข้อมูลของผู้ใช้บริการ (ร้านค้า / สมาชิก):</span>
                   </h3>
@@ -90,7 +90,7 @@ export default function PrivacyPolicyPage() {
                 </div>
 
                 <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
-                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <h3 className="font-heading font-semibold text-slate-900 text-sm flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     <span>ข้อมูลของลูกค้าปลายทาง (ลูกค้าที่คุยกับบอทใน LINE OA):</span>
                   </h3>
@@ -105,7 +105,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 2 */}
             <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900">
                 2. วัตถุประสงค์ในการประมวลผลข้อมูล
               </h2>
               <ul className="list-disc pl-5 space-y-1.5">
@@ -119,7 +119,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 3 */}
             <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900">
                 3. บทบาทตามกฎหมาย PDPA (ผู้ควบคุมข้อมูล vs. ผู้ประมวลผลข้อมูล)
               </h2>
               <p>
@@ -133,7 +133,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 4 */}
             <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900">
                 4. มาตรการรักษาความปลอดภัยของข้อมูล
               </h2>
               <p>เราใช้มาตรฐานความปลอดภัยระดับสากลในการดูแลรักษาข้อมูล:</p>
@@ -146,7 +146,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 5 */}
             <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900">
                 5. สิทธิของเจ้าของข้อมูลส่วนบุคคล
               </h2>
               <p>ตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 ท่านมีสิทธิดังต่อไปนี้:</p>
@@ -160,7 +160,7 @@ export default function PrivacyPolicyPage() {
 
             {/* Section 6 */}
             <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900">
                 6. การติดต่อเจ้าหน้าที่คุ้มครองข้อมูลส่วนบุคคล
               </h2>
               <p>

@@ -59,7 +59,7 @@ export default function MarginManagement({ report }: { report: MarginReport }) {
 
       {/* Per-Plan Table */}
       <div className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-5 shadow-sm">
-        <h2 className="text-sm font-bold text-on-surface mb-3">สรุปตามแพ็กเกจ</h2>
+        <h2 className="font-heading text-sm font-semibold text-on-surface mb-3">สรุปตามแพ็กเกจ</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
@@ -101,7 +101,7 @@ export default function MarginManagement({ report }: { report: MarginReport }) {
 
       {/* Per-Shop Drill-down */}
       <div className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-5 shadow-sm">
-        <h2 className="text-sm font-bold text-on-surface mb-3">รายร้านค้า (เรียงจากขาดทุนมากสุด)</h2>
+        <h2 className="font-heading text-sm font-semibold text-on-surface mb-3">รายร้านค้า (เรียงจากขาดทุนมากสุด)</h2>
         <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
           <table className="w-full text-xs">
             <thead>

@@ -242,7 +242,7 @@ export default function CompetitorDashboardClient({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-on-surface leading-tight">ส่องร้านคู่แข่ง</h1>
+          <h1 className="font-heading text-xl sm:text-2xl font-semibold text-on-surface leading-tight">ส่องร้านคู่แข่ง</h1>
           <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5">
             ดูโปรไฟล์และคลิปล่าสุดของคู่แข่งบน TikTok และ Instagram แล้วให้ AI แนะนำคอนเทนต์สำหรับสินค้าของร้านคุณ
           </p>
@@ -319,7 +319,7 @@ export default function CompetitorDashboardClient({
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 sm:gap-5 items-start">
         {/* Tracked competitors */}
         <div className={`${card} p-3 space-y-1`}>
-          <h2 className="text-xs font-bold text-slate-500 dark:text-slate-400 px-2 py-1.5">คู่แข่งที่ติดตาม ({competitors.length})</h2>
+          <h2 className="font-heading text-xs font-semibold text-slate-500 dark:text-slate-400 px-2 py-1.5">คู่แข่งที่ติดตาม ({competitors.length})</h2>
           {competitors.length === 0 && (
             <p className="text-xs text-slate-500 dark:text-slate-400 px-2 pb-2">ยังไม่มี วางลิงก์ด้านบนเพื่อเริ่มติดตาม</p>
           )}
@@ -377,7 +377,7 @@ export default function CompetitorDashboardClient({
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <RemoteImage src={active.avatar_url} className="w-14 h-14 rounded-full object-cover shrink-0" />
                 <div className="min-w-0">
-                  <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">{active.name}</h2>
+                  <h2 className="font-heading text-lg font-semibold text-slate-900 dark:text-slate-100 truncate">{active.name}</h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                     {active.handle} · {platformLabel(active.platform)}
                     {active.last_scanned_at ? ` · สแกนเมื่อ ${thaiDateTime(active.last_scanned_at)}` : ''}
@@ -499,7 +499,7 @@ export default function CompetitorDashboardClient({
               ) : (
                 <div className="space-y-5">
                   <div className="space-y-2">
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">ประโยคเปิดคลิป</h3>
+                    <h3 className="font-heading text-sm font-semibold text-slate-900 dark:text-slate-100">ประโยคเปิดคลิป</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       {playbook.topViralHooks.map((hook, i) => (
                         <div key={i} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-1.5">
@@ -513,7 +513,7 @@ export default function CompetitorDashboardClient({
 
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">แคปชั่นตัวอย่าง</h3>
+                      <h3 className="font-heading text-sm font-semibold text-slate-900 dark:text-slate-100">แคปชั่นตัวอย่าง</h3>
                       <div className="flex gap-2">
                         <button onClick={() => copy(playbook.winningCaptionTemplate, 'caption')} className={secondaryButton}>
                           {copied === 'caption' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -540,7 +540,7 @@ export default function CompetitorDashboardClient({
                   {playbook.recommendedHashtags.length > 0 && (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-2">
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">แฮชแท็ก</h3>
+                        <h3 className="font-heading text-sm font-semibold text-slate-900 dark:text-slate-100">แฮชแท็ก</h3>
                         <button onClick={() => copy(playbook.recommendedHashtags.join(' '), 'tags')} className={secondaryButton}>
                           {copied === 'tags' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                           {copied === 'tags' ? 'คัดลอกแล้ว' : 'คัดลอกทั้งหมด'}
@@ -632,7 +632,7 @@ export default function CompetitorDashboardClient({
 
             {script && (
               <div className="space-y-3">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{script.title}</h3>
+                <h3 className="font-heading text-sm font-semibold text-slate-900 dark:text-slate-100">{script.title}</h3>
                 {[script.hook, script.problem, script.solution, script.offer, script.cta].map((seg, i) => (
                   <div key={i} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
                     <p className="text-[11px] font-mono text-electric-blue">{seg.duration}</p>
@@ -691,7 +691,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{title}</h2>
+          <h2 className="font-heading text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">
             <X className="w-4 h-4" />
           </button>

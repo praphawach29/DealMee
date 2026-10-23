@@ -109,7 +109,7 @@ export default function SidebarNav({ bizType, features = {}, isSuperAdmin = fals
           onClick={() => handleClick('/dashboard/billing')}
           className="group block rounded-2xl border border-primary/15 bg-gradient-to-br from-[#EAF2FF] to-[#F4FBFF] p-4"
         >
-          <p className="text-sm font-semibold text-on-surface">เติบโตไปด้วยกันกับ DealMee</p>
+          <p className="font-heading text-sm font-semibold text-on-surface">เติบโตไปด้วยกันกับ DealMee</p>
           <p className="mt-1 text-xs leading-relaxed text-on-surface-variant">เครื่องมือครบสำหรับผู้ขายไทย</p>
           <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary">
             ดูแพ็กเกจ

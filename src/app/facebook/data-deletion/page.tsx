@@ -6,7 +6,7 @@ export default async function FacebookDataDeletionPage({ searchParams }: { searc
   return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-6 space-y-3 text-sm text-slate-700">
-        <h1 className="text-lg font-bold text-slate-900">คำขอลบข้อมูลจาก Facebook</h1>
+        <h1 className="font-heading text-lg font-semibold text-slate-900">คำขอลบข้อมูลจาก Facebook</h1>
         <p>
           DealMee ได้ตัดการเชื่อมต่อเพจทั้งหมดที่บัญชี Facebook นี้เชื่อมไว้ และลบ token ที่ใช้เข้าถึงเพจเรียบร้อยแล้ว
         </p>
