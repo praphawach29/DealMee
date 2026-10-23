@@ -27,7 +27,7 @@ export function KpiCard({
       </div>
       <div>
         <p className="text-xs font-medium text-on-surface-variant">{label}</p>
-        <p className="mt-1 text-2xl font-bold tracking-tight text-on-surface">{value}</p>
+        <p className="font-heading mt-1 text-2xl font-semibold tracking-tight text-on-surface">{value}</p>
         <p className="mt-1 text-[11px] text-outline">{hint}</p>
       </div>
     </article>

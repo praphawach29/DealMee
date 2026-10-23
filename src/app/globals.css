@@ -9,7 +9,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-ibm-plex-sans-thai);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-ibm-plex-sans-thai);
+  /* Dashboard headings only. Switch to Anuphan: --font-heading: var(--font-anuphan), "Anuphan", sans-serif; */
+  --font-heading: var(--font-prompt), "Prompt", sans-serif;
   
   --color-electric-blue: #2F6BFF;
   --color-cyber-cyan: #00CFEC;

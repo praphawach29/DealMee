@@ -118,7 +118,7 @@ export default function MerchantDashboardClient({
     <div className="mx-auto w-full max-w-[1440px] space-y-5 px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-on-surface">ภาพรวมร้านค้า</h1>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight text-on-surface">ภาพรวมร้านค้า</h1>
           <p className="mt-1 text-sm text-on-surface-variant">สรุปผลการดำเนินงาน และความเคลื่อนไหวล่าสุดของร้านคุณ · {shopName}</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
@@ -232,7 +232,7 @@ export default function MerchantDashboardClient({
       <section className="rounded-2xl border border-outline-variant bg-white p-4 shadow-card sm:p-5">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-on-surface">ยอดขาย</h2>
+            <h2 className="font-heading text-base font-semibold text-on-surface">ยอดขาย</h2>
             <p className="text-xs text-on-surface-variant">เทียบออเดอร์ที่ชำระแล้วหรือจัดส่งแล้ว กับช่วงก่อนหน้าเท่ากัน</p>
           </div>
           <div className="flex items-center gap-4 text-xs text-on-surface-variant">
@@ -284,7 +284,7 @@ export default function MerchantDashboardClient({
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <article className="overflow-hidden rounded-2xl border border-outline-variant bg-white shadow-card">
           <header className="flex items-center justify-between px-5 py-4">
-            <h2 className="text-base font-bold">คำสั่งซื้อล่าสุด</h2>
+            <h2 className="font-heading text-base font-semibold">คำสั่งซื้อล่าสุด</h2>
             <Link href="/dashboard/orders" className="text-sm font-semibold text-primary">
               ดูทั้งหมด
             </Link>
@@ -327,7 +327,7 @@ export default function MerchantDashboardClient({
 
         <article className="overflow-hidden rounded-2xl border border-outline-variant bg-white shadow-card">
           <header className="flex items-center justify-between px-5 py-4">
-            <h2 className="text-base font-bold">สินค้าขายดี</h2>
+            <h2 className="font-heading text-base font-semibold">สินค้าขายดี</h2>
             <Link href="/dashboard/products" className="text-sm font-semibold text-primary">
               ดูทั้งหมด
             </Link>
@@ -379,7 +379,7 @@ export default function MerchantDashboardClient({
               <Send className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold">โควต้า LINE Push</h2>
+              <h2 className="font-heading text-base font-semibold">โควต้า LINE Push</h2>
               <p className="text-xs text-on-surface-variant">
                 แพ็กเกจ {pushQuotaInfo.planName} · {pushQuotaInfo.period} · ใช้ไป {pushQuotaInfo.usedCount.toLocaleString('th-TH')} จาก{' '}
                 {pushQuotaInfo.totalQuota.toLocaleString('th-TH')}

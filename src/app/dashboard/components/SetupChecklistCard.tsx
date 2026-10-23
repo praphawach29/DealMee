@@ -22,7 +22,7 @@ export default function SetupChecklistCard({ items }: { items: SetupChecklistIte
     <section className="rounded-2xl border border-outline-variant bg-white p-4 shadow-card sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-base font-bold text-on-surface">ตั้งค่าร้านให้พร้อมขายอัตโนมัติ</h2>
+          <h2 className="font-heading text-base font-semibold text-on-surface">ตั้งค่าร้านให้พร้อมขายอัตโนมัติ</h2>
           <p className="mt-0.5 text-xs text-on-surface-variant">บอทจะรับออเดอร์ ส่ง QR และแจ้งเตือนคุณได้ครบ เมื่อตั้งค่าครบทุกข้อ</p>
         </div>
         <span className="shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">
