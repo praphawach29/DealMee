@@ -57,7 +57,7 @@ export default function Navbar() {
             href="#demo"
             className="hover:text-cyan-400 transition-colors duration-200"
           >
-            ตัวอย่างแชทจริง
+            ตัวอย่างการทำงาน
           </a>
           <a
             href="#features"
@@ -121,7 +121,7 @@ export default function Navbar() {
             onClick={() => setMobileMenuOpen(false)}
             className="block py-2.5 text-base font-medium text-slate-200 hover:text-cyan-400 border-b border-white/5"
           >
-            🔍 ตัวอย่างแชทจริง
+            🔍 ตัวอย่างการทำงาน
           </a>
           <a
             href="#features"

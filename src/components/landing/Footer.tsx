@@ -43,7 +43,7 @@ export default function Footer() {
             <ul className="space-y-2.5 text-sm">
               <li>
                 <a href="#demo" className="hover:text-cyan-400 transition-colors">
-                  ตัวอย่างแชทจริง (Simulation)
+                  ตัวอย่างการทำงานของบอท
                 </a>
               </li>
               <li>
@@ -70,10 +70,9 @@ export default function Footer() {
               เทคโนโลยี & ความปลอดภัย
             </h4>
             <ul className="space-y-2.5 text-sm text-slate-400">
-              <li>LINE Official Account Messaging API</li>
-              <li>Bank-Grade Slip Verification (Multi-Provider)</li>
-              <li>Supabase PostgreSQL Row Level Security</li>
-              <li>Gemini & Claude Multimodal AI</li>
+              <li>LINE OA, Facebook Messenger และ Instagram</li>
+              <li>ตรวจสลิปผ่าน EasySlip, Thunder และ SlipOK</li>
+              <li>Gemini เป็นหลัก สำรองด้วย OpenAI และ Claude</li>
             </ul>
           </div>
 

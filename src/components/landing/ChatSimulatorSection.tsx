@@ -112,13 +112,13 @@ export default function ChatSimulatorSection() {
         {/* Section Header */}
         <div className="text-center max-w-xl mx-auto mb-10 space-y-2">
           <div className="text-xs font-bold tracking-[2px] uppercase text-blue-600 mb-2">
-            ตัวอย่างแชทจริง
+            บทสนทนาจำลอง
           </div>
           <h2 className="font-heading text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight">
-            บอทตอบแทนคุณได้แบบนี้
+            บอททำงานเป็นขั้นแบบนี้
           </h2>
           <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-            ทดลองเลือกบทบาทธุรกิจ เพื่อดูว่า AI ตอบลูกค้า แนะนำสินค้า คำนวณค่าส่ง และตรวจสลิปได้อย่างไร
+            เลือกหัวข้อเพื่อดูลำดับที่บอททำได้จริง ข้อความด้านล่างเป็นตัวอย่างการทำงาน ไม่ใช่แชท ยอดขาย หรือรีวิวของลูกค้าจริง
           </p>
         </div>
 
@@ -265,7 +265,7 @@ export default function ChatSimulatorSection() {
                             LINE Flex Card
                           </span>
                           <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                            สต็อก {prod.stock} ชิ้น
+                            {prod.stock}
                           </span>
                         </div>
                         <div>
@@ -276,8 +276,8 @@ export default function ChatSimulatorSection() {
                         </div>
                         <div className="flex items-baseline justify-between pt-1">
                           <div className="text-xs text-slate-500">ราคาสุทธิ</div>
-                          <div className="text-base font-bold text-blue-600 font-mono">
-                            ฿{prod.price}
+                          <div className="text-base font-bold text-blue-600">
+                            {prod.price}
                           </div>
                         </div>
                         <button
@@ -316,8 +316,8 @@ export default function ChatSimulatorSection() {
                           </div>
                           <div className="flex justify-between border-t border-slate-100 pt-1.5 text-xs font-bold">
                             <span className="text-slate-800">ยอดรวมทั้งสิ้น:</span>
-                            <span className="text-amber-600 text-sm font-mono">
-                              ฿{quote.total}
+                            <span className="text-amber-600 text-sm">
+                              {quote.total}
                             </span>
                           </div>
                         </div>
