@@ -29,10 +29,9 @@ export function verifyFacebookSignature(
   signatureHeader: string | null | undefined,
   appSecret: string | null | undefined
 ): boolean {
-  // If app secret is not configured yet in merchant settings, bypass with warning
+  // No secret means the body cannot be proven to come from Meta. Callers must reject it.
   if (!appSecret || !appSecret.trim()) {
-    console.warn('[Facebook Webhook] No app_secret configured; skipping signature verification.')
-    return true
+    return false
   }
 
   if (!signatureHeader) {

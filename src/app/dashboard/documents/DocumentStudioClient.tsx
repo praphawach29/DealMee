@@ -43,6 +43,7 @@ interface DocumentItem {
   status?: string | null
   items?: any
   notes?: string | null
+  accept_token?: string | null
 }
 
 export interface CompanyProfile {
@@ -191,6 +192,7 @@ export default function DocumentStudioClient({
           customer_name: quoteCustomerName || 'ลูกค้าผู้มีอุปการคุณ',
           total_amount: totalAmount,
           created_at: new Date().toISOString(),
+          accept_token: new URLSearchParams((res.docUrl || '').split('?')[1] || '').get('accept'),
         },
         ...prev,
       ])
@@ -1094,7 +1096,11 @@ export default function DocumentStudioClient({
                     const isInvoice = doc.doc_type === 'invoice'
                     const isSalesOrder = doc.doc_type === 'sales_order'
                     const isCommercial = isQuotation || isInvoice || isSalesOrder
-                    const docUrl = isCommercial ? `/doc/quotation/${doc.id}` : `/doc/official/${doc.id}`
+                    const docUrl = !isCommercial
+                      ? `/doc/official/${doc.id}`
+                      : isQuotation && doc.accept_token
+                        ? `/doc/quotation/${doc.id}?accept=${encodeURIComponent(doc.accept_token)}`
+                        : `/doc/quotation/${doc.id}`
                     const isAccepted = doc.status === 'accepted' || (typeof doc.notes === 'string' && doc.notes.includes('[STATUS:ACCEPTED'))
 
                     return (

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import { botMayReplyNow } from '@/lib/shop/businessHours'
 import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
 import { linkPlatformOwnerFromShopOa } from '@/lib/billing/platformLineAlerts'
-import { createHmac, timingSafeEqual } from 'crypto'
+import { verifyLineSignature } from '@/lib/line/signature'
 import { processSalesAgentChat, type AgentResult } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
@@ -18,17 +18,6 @@ const supabase = createAdminClient()
 
 // LINE gets its 200 immediately; this bounds the after() work (AI planning, slip checks)
 export const maxDuration = 60
-
-// ─── LINE Signature Verification ─────────────────────────────────────────────
-function verifyLineSignature(rawBody: string, signature: string, secret: string): boolean {
-  if (!signature || !secret) return false
-  const cleanSecret = secret.trim()
-  const cleanSignature = signature.trim()
-  const hash = Buffer.from(createHmac('SHA256', cleanSecret).update(rawBody).digest('base64'))
-  const given = Buffer.from(cleanSignature)
-  return hash.length === given.length && timingSafeEqual(hash, given)
-}
-
 
 async function buildFollowGreeting(shop: any) {
   if (!isDefaultGreeting(shop.greeting_message)) return shop.greeting_message
@@ -80,16 +69,12 @@ export async function POST(
     // Off when switched off, or while the shop is open and answers customers itself (business hours)
     const isAutoReplyEnabled = features.auto_reply !== false && botMayReplyNow(features)
 
-    // 2. Verify LINE Signature (reject fake webhooks). A missing signature is rejected too:
-    // otherwise anyone could post fake events simply by leaving the header out.
+    // Reject when the shop has no Channel Secret or the signature does not match.
+    // A missing secret used to log a warning and still run the bot.
     const lineSignature = req.headers.get('x-line-signature') || ''
-    if (lineSecret) {
-      if (!verifyLineSignature(rawBody, lineSignature, lineSecret)) {
-        console.error(`[Security] Missing or invalid LINE signature for shop ${shop_id}`)
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-      }
-    } else {
-      console.warn(`[Security] Shop ${shop_id} has no LINE Channel Secret; webhook signature cannot be verified`)
+    if (!lineSecret || !verifyLineSignature(rawBody, lineSignature, lineSecret)) {
+      console.error(`[Security] Missing or invalid LINE signature for shop ${shop_id}`)
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Answer LINE right away and do the real work afterwards. The AI can take several

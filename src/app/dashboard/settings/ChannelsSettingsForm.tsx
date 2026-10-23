@@ -431,7 +431,7 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs sm:text-sm font-bold text-on-surface font-label-md">
-                Channel Secret
+                Channel Secret (จำเป็น)
               </label>
               <button
                 type="button"
@@ -449,7 +449,7 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
               placeholder="••••••••••••••••••••••••"
               className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all font-mono"
             />
-            <p className="text-[11px] text-outline">นำมาจากแท็บ Basic settings → Channel secret (32 ตัวอักษร)</p>
+            <p className="text-[11px] text-outline">จำเป็นเมื่อเชื่อมต่อ LINE — ใช้ตรวจลายเซ็น Webhook ว่าข้อความมาจาก LINE จริง (32 ตัวอักษร จาก Basic settings)</p>
           </div>
 
           <div className="space-y-1.5">
@@ -666,7 +666,7 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs sm:text-sm font-bold text-on-surface font-label-md">
-                App Secret (ไม่บังคับ - ตรวจสอบความปลอดภัย)
+                App Secret (จำเป็นเมื่อเชื่อมเพจเอง)
               </label>
               <button
                 type="button"
@@ -684,7 +684,7 @@ export default function ChannelsSettingsForm({ shop }: { shop: ShopChannelData }
               placeholder="••••••••••••••••••••••••"
               className="w-full px-3.5 sm:px-4 py-2.5 rounded-xl border border-outline-variant bg-merchant-bg text-on-surface text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-mono"
             />
-            <p className="text-[11px] text-outline">App Secret จาก App Settings → Basic ใน Meta Developers</p>
+            <p className="text-[11px] text-outline">จำเป็นสำหรับเพจที่เชื่อมเอง — ใช้ตรวจว่าข้อความมาจาก Facebook จริง (App Settings → Basic) เพจที่กดเชื่อมด้วย Facebook ไม่ต้องใส่</p>
           </div>
 
           <div className="space-y-1.5">

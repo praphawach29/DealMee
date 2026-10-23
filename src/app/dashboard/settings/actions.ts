@@ -98,6 +98,19 @@ export async function updateChannelSettings(formData: FormData) {
   const shopeePartnerKey = ((formData.get('shopee_partner_key') as string) || '').trim()
   const shopeeShopId = ((formData.get('shopee_shop_id') as string) || '').trim()
 
+  // A page connected with "เชื่อมเพจด้วย Facebook" is verified by the platform app secret.
+  // A shop's own Meta app must send its App Secret, or the webhook cannot check the signature.
+  const storedPageToken = String(shop.facebook_page_token || '').trim()
+  const oauthKeepsPlatformWebhook = shop.facebook_connected_via === 'oauth' && fbPageToken === storedPageToken
+  if (fbPageToken && !oauthKeepsPlatformWebhook) {
+    if (!fbAppSecret) {
+      return { error: 'กรุณาใส่ App Secret คู่กับ Page Access Token (ใช้ตรวจว่าข้อความมาจาก Facebook จริง)' }
+    }
+    if (!fbVerifyToken) {
+      return { error: 'กรุณาใส่ Verify Token เมื่อเชื่อม Facebook Messenger (ใช้ตอน Meta ตรวจสอบ Webhook)' }
+    }
+  }
+
   // One LINE OA / Facebook page per shop (see channelOwnership.ts)
   let lineBotUserId: string | null = null
   if (lineToken) {
