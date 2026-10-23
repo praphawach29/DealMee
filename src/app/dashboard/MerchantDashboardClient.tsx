@@ -1,24 +1,44 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  Sparkles,
-  MessageSquare,
-  Package,
-  ShoppingBag,
+  CalendarRange,
+  ChevronDown,
+  ShoppingCart,
   Banknote,
+  BadgePercent,
+  PackageX,
+  Plus,
+  MessageSquare,
   Send,
   Megaphone,
-  PlusSquare,
-  Brain,
-  QrCode,
-  Zap,
-  CheckCircle2,
 } from 'lucide-react'
 import ChatPlaygroundModal from './components/ChatPlaygroundModal'
 import SetupChecklistCard, { type SetupChecklistItem } from './components/SetupChecklistCard'
-import { PushQuotaInfo } from '@/lib/billing/pushQuota'
+import { KpiCard } from '@/components/dashboard/KpiCard'
+import { MiniSparkline, SalesChart } from '@/components/dashboard/SalesChart'
+import { DeltaPill, OrderStatusChip } from '@/components/dashboard/StatusChip'
+import type { PushQuotaInfo } from '@/lib/billing/pushQuota'
+import {
+  type DashboardOrder,
+  type DashboardProduct,
+  type PeriodPreset,
+  countOrders,
+  formatBaht,
+  formatThaiRange,
+  formatWhen,
+  lowStockProducts,
+  orderQty,
+  ordersInRange,
+  paidRate,
+  percentDelta,
+  rangeForCustom,
+  rangeForPreset,
+  salesSeries,
+  sumRevenue,
+  topProducts,
+} from '@/lib/dashboard/metrics'
 
 export interface MerchantDashboardProps {
   shopName: string
@@ -34,7 +54,16 @@ export interface MerchantDashboardProps {
   latestKnowledgeDate: string
   pushQuotaInfo?: PushQuotaInfo
   setupChecklist?: SetupChecklistItem[]
+  orders?: DashboardOrder[]
+  products?: DashboardProduct[]
 }
+
+const PRESETS: { id: PeriodPreset; label: string }[] = [
+  { id: '7', label: '7 วัน' },
+  { id: '30', label: '30 วัน' },
+  { id: '90', label: '90 วัน' },
+  { id: 'year', label: 'ปีนี้' },
+]
 
 export default function MerchantDashboardClient({
   shopName,
@@ -43,11 +72,7 @@ export default function MerchantDashboardClient({
   plan,
   productsCount,
   knowledgeCount,
-  ordersCount,
-  totalRevenue,
   totalMessages,
-  latestKnowledgeTitle,
-  latestKnowledgeDate,
   setupChecklist = [],
   pushQuotaInfo = {
     totalQuota: 300,
@@ -56,304 +81,338 @@ export default function MerchantDashboardClient({
     period: new Date().toISOString().slice(0, 7),
     planName: 'PRO',
   },
+  orders = [],
+  products = [],
 }: MerchantDashboardProps) {
   const [isPlaygroundOpen, setIsPlaygroundOpen] = useState(false)
+  const [preset, setPreset] = useState<PeriodPreset | 'custom'>('30')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const [rangeOpen, setRangeOpen] = useState(false)
 
-  const usedPercentage = Math.min(100, Math.round((pushQuotaInfo.usedCount / pushQuotaInfo.totalQuota) * 100))
+  const ranges = useMemo(() => {
+    if (preset === 'custom') {
+      return rangeForCustom(customFrom, customTo) || rangeForPreset('30')
+    }
+    return rangeForPreset(preset)
+  }, [preset, customFrom, customTo])
+
+  const currentOrders = useMemo(() => ordersInRange(orders, ranges.current), [orders, ranges])
+  const previousOrders = useMemo(() => ordersInRange(orders, ranges.previous), [orders, ranges])
+  const orderCount = countOrders(currentOrders)
+  const previousOrderCount = countOrders(previousOrders)
+  const revenue = sumRevenue(currentOrders)
+  const previousRevenue = sumRevenue(previousOrders)
+  const rate = paidRate(currentOrders)
+  const previousRate = paidRate(previousOrders)
+  const series = useMemo(() => salesSeries(orders, ranges.current, ranges.previous), [orders, ranges])
+  const leaders = useMemo(() => topProducts(orders, products, ranges.current), [orders, products, ranges])
+  const lowStock = lowStockProducts(products)
+  const latest = [...currentOrders].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at)).slice(0, 5)
+  const revenueDelta = percentDelta(revenue, previousRevenue)
+  const active = botStatus === 'active'
+  const usedPercentage = Math.min(100, Math.round((pushQuotaInfo.usedCount / Math.max(1, pushQuotaInfo.totalQuota)) * 100))
   const remainingPercentage = 100 - usedPercentage
 
   return (
-    <div className="flex flex-col w-full relative">
-      {/* Ambient Gradient Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary-fixed-dim/20 via-transparent to-secondary-fixed/20 pointer-events-none -z-10"></div>
-      <div className="absolute top-20 right-20 w-96 h-96 bg-electric-blue/10 rounded-full blur-[100px] pointer-events-none -z-10"></div>
-      <div className="absolute bottom-40 left-10 w-72 h-72 bg-tertiary-fixed-dim/10 rounded-full blur-[80px] pointer-events-none -z-10"></div>
-
-      {/* Content Container */}
-      <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6 space-y-5 sm:space-y-6 max-w-[1440px] mx-auto w-full">
-
-        {/* Page Header & Quick Actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
-          <div>
-            <h1 className="font-headline-md text-xl sm:text-2xl text-on-surface font-bold leading-tight">
-              ภาพรวมระบบร้าน "{shopName}"
-            </h1>
-            <p className="font-body-md text-xs sm:text-sm text-on-surface-variant flex items-center gap-2 mt-0.5">
-              <span className={`w-2 h-2 rounded-full ${botStatus === 'active' ? 'bg-success-green animate-pulse' : 'bg-warning-amber'}`}></span>
-              พนักงาน AI ({botName}): {botStatus === 'active' ? 'กำลังทำงานปกติ' : 'หยุดพักชั่วคราว'}
-              <span className="ml-2 px-2 py-0.5 rounded-md bg-electric-blue/10 text-electric-blue font-semibold text-[11px] uppercase">
-                แพ็กเกจ {plan}
-              </span>
-            </p>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Link
-              href="/dashboard/knowledge"
-              className="flex-1 sm:flex-initial min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 bg-surface-container rounded-xl text-on-surface hover:bg-surface-container-high transition-all duration-150 active:scale-[0.98] shadow-sm font-label-md text-xs font-semibold group cursor-pointer border border-outline-variant/40"
-            >
-              <Sparkles className="h-4 w-4 text-electric-blue" />
-              <span>คลังความรู้ ({knowledgeCount})</span>
-            </Link>
+    <div className="mx-auto w-full max-w-[1440px] space-y-5 px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight text-on-surface">ภาพรวมร้านค้า</h1>
+          <p className="mt-1 text-sm text-on-surface-variant">สรุปผลการดำเนินงาน และความเคลื่อนไหวล่าสุดของร้านคุณ · {shopName}</p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
+          <div className="relative">
             <button
-              onClick={() => setIsPlaygroundOpen(true)}
-              className="flex-1 sm:flex-initial min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 bg-electric-blue rounded-xl text-white hover:bg-primary transition-all duration-150 active:scale-[0.98] shadow-md shadow-electric-blue/20 font-label-md text-xs font-semibold group cursor-pointer border-none"
+              type="button"
+              onClick={() => setRangeOpen((open) => !open)}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-outline-variant bg-white px-3 text-sm font-medium text-on-surface shadow-card"
             >
-              <MessageSquare className="h-4 w-4 text-white" />
-              <span>ทดสอบสนทนา</span>
+              <CalendarRange className="h-4 w-4 text-primary" />
+              <span className="truncate">{formatThaiRange(ranges.current)}</span>
+              <ChevronDown className="h-4 w-4 text-outline" />
             </button>
-          </div>
-        </div>
-
-        <SetupChecklistCard items={setupChecklist} />
-
-        {/* 4 Real Metric KPI Bento Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 relative z-10">
-
-          {/* KPI 1: AI Messages Handled */}
-          <div className="bg-surface/90 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group border border-outline-variant/30 flex flex-col justify-between h-full min-h-[110px]">
-            <div className="flex justify-between items-start mb-3 relative z-10">
-              <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                <MessageSquare className="h-4 w-4" />
-              </div>
-              <span className="px-2 py-0.5 rounded-md bg-success-green/10 text-success-green font-label-sm flex items-center gap-1 text-[10px] font-semibold">
-                <CheckCircle2 className="h-3 w-3" /> เรียลไทม์
-              </span>
-            </div>
-            <div>
-              <p className="font-label-md text-xs text-on-surface-variant mb-0.5 relative z-10 font-medium truncate">ข้อความตอบสะสม</p>
-              <h3 className="font-headline-md text-lg sm:text-2xl font-bold text-on-surface relative z-10 font-mono">
-                {totalMessages.toLocaleString()}
-              </h3>
-            </div>
-          </div>
-
-          {/* KPI 2: Products Count */}
-          <div className="bg-surface/90 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group border border-outline-variant/30 flex flex-col justify-between h-full min-h-[110px]">
-            <div className="flex justify-between items-start mb-3 relative z-10">
-              <div className="w-8 h-8 rounded-xl bg-secondary flex items-center justify-center text-secondary-foreground shrink-0">
-                <Package className="h-4 w-4" />
-              </div>
-              <span className="px-2 py-0.5 rounded-md bg-electric-blue/10 text-electric-blue font-label-sm flex items-center gap-1 text-[10px] font-semibold">
-                สินค้า
-              </span>
-            </div>
-            <div>
-              <p className="font-label-md text-xs text-on-surface-variant mb-0.5 relative z-10 font-medium truncate">รายการสินค้าพร้อมส่ง</p>
-              <h3 className="font-headline-md text-lg sm:text-2xl font-bold text-on-surface relative z-10 font-mono">
-                {productsCount.toLocaleString()} <span className="text-xs font-normal text-on-surface-variant font-sans">รายการ</span>
-              </h3>
-            </div>
-          </div>
-
-          {/* KPI 3: Total Orders */}
-          <div className="bg-surface/90 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group border border-outline-variant/30 flex flex-col justify-between h-full min-h-[110px]">
-            <div className="flex justify-between items-start mb-3 relative z-10">
-              <div className="w-8 h-8 rounded-xl bg-warning-amber/10 flex items-center justify-center text-warning-amber shrink-0">
-                <ShoppingBag className="h-4 w-4" />
-              </div>
-              <span className="px-2 py-0.5 rounded-md bg-success-green/10 text-success-green font-label-sm flex items-center gap-1 text-[10px] font-semibold">
-                <CheckCircle2 className="h-3 w-3" /> สำเร็จ
-              </span>
-            </div>
-            <div>
-              <p className="font-label-md text-xs text-on-surface-variant mb-0.5 relative z-10 font-medium truncate">คำสั่งซื้อทั้งหมด</p>
-              <h3 className="font-headline-md text-lg sm:text-2xl font-bold text-on-surface relative z-10 font-mono">
-                {ordersCount.toLocaleString()} <span className="text-xs font-normal text-on-surface-variant font-sans">ออเดอร์</span>
-              </h3>
-            </div>
-          </div>
-
-          {/* KPI 4: Total Sales Revenue */}
-          <div className="bg-surface/90 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group border border-outline-variant/30 flex flex-col justify-between h-full min-h-[110px]">
-            <div className="flex justify-between items-start mb-3 relative z-10">
-              <div className="w-8 h-8 rounded-xl bg-success-green/10 flex items-center justify-center text-success-green shrink-0">
-                <Banknote className="h-4 w-4" />
-              </div>
-              <span className="px-2 py-0.5 rounded-md bg-success-green/10 text-success-green font-label-sm flex items-center gap-1 text-[10px] font-semibold">
-                ยอดขาย
-              </span>
-            </div>
-            <div>
-              <p className="font-label-md text-xs text-on-surface-variant mb-0.5 relative z-10 font-medium truncate">ยอดขายสะสมในระบบ</p>
-              <h3 className="font-headline-md text-lg sm:text-2xl font-bold text-on-surface relative z-10 font-mono">
-                ฿{totalRevenue.toLocaleString()}
-              </h3>
-            </div>
-          </div>
-
-        </div>
-
-        {/* LINE Push Quota & Broadcast Monitor Banner */}
-        <div className="bg-surface/90 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-sm border border-outline-variant/30 text-on-surface relative overflow-hidden group z-10 space-y-3.5">
-          {/* Header Row */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-electric-blue/10 border border-electric-blue/20 flex items-center justify-center text-electric-blue shrink-0 shadow-sm">
-                <Send className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <h3 className="font-bold text-sm sm:text-base text-on-surface font-headline-md">
-                    โควต้า LINE Push
-                  </h3>
-                  <span className="px-2 py-0.5 rounded-md bg-surface-container-high text-on-surface-variant text-[10px] sm:text-xs font-medium border border-outline-variant/50 font-mono">
-                    {pushQuotaInfo.period}
-                  </span>
+            {rangeOpen && (
+              <div className="absolute right-0 z-20 mt-2 w-72 rounded-2xl border border-outline-variant bg-white p-3 shadow-card">
+                <p className="mb-2 text-xs font-semibold text-on-surface-variant">ช่วงวันที่</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-xs text-on-surface-variant">
+                    จาก
+                    <input
+                      type="date"
+                      value={customFrom}
+                      onChange={(event) => {
+                        setCustomFrom(event.target.value)
+                        setPreset('custom')
+                      }}
+                      className="mt-1 h-9 w-full rounded-lg border border-outline-variant px-2 text-sm text-on-surface"
+                    />
+                  </label>
+                  <label className="text-xs text-on-surface-variant">
+                    ถึง
+                    <input
+                      type="date"
+                      value={customTo}
+                      onChange={(event) => {
+                        setCustomTo(event.target.value)
+                        setPreset('custom')
+                      }}
+                      className="mt-1 h-9 w-full rounded-lg border border-outline-variant px-2 text-sm text-on-surface"
+                    />
+                  </label>
                 </div>
-                <p className="text-[11px] sm:text-xs text-on-surface-variant font-medium">
-                  แพ็กเกจ <span className="font-semibold text-on-surface">{pushQuotaInfo.planName}</span>
-                </p>
+                <button type="button" onClick={() => setRangeOpen(false)} className="mt-3 h-9 w-full rounded-xl bg-primary text-sm font-semibold text-white">
+                  ใช้ช่วงนี้
+                </button>
               </div>
-            </div>
-
-            {/* Quota Badge */}
-            <div className="px-3.5 py-1.5 rounded-xl bg-electric-blue/10 border border-electric-blue/20 text-right shrink-0">
-              <div className="text-[11px] text-electric-blue font-bold">คงเหลือ</div>
-              <div className="text-sm sm:text-base font-extrabold text-on-surface font-mono">
-                {pushQuotaInfo.remainingCount.toLocaleString()} <span className="text-xs font-medium text-on-surface-variant">/ {pushQuotaInfo.totalQuota.toLocaleString()}</span>
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* Description & Note */}
-          <div className="text-xs text-on-surface-variant font-medium leading-relaxed bg-surface-container-low/80 p-3 rounded-xl border border-outline-variant/40">
-            โควต้าข้อความสำหรับยิงบรอดแคสต์โปรโมชัน{' '}
-            <span className="text-electric-blue font-semibold block sm:inline mt-0.5 sm:mt-0">
-              (ตอบแชท AI ปกติใช้ Reply API ฟรี 100% ไม่ถูกหักโควต้านี้)
-            </span>
-          </div>
-
-          {/* Quota Progress Bar */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">
-              <span className="text-on-surface-variant">
-                ใช้ไปแล้ว <span className="text-on-surface font-bold font-mono">{pushQuotaInfo.usedCount.toLocaleString()}</span> ข้อความ ({usedPercentage}%)
-              </span>
-              <span className="text-electric-blue font-bold">
-                คงเหลือ {remainingPercentage}% ({pushQuotaInfo.remainingCount.toLocaleString()} ข้อความ)
-              </span>
-            </div>
-            <div className="w-full bg-surface-container-highest rounded-full h-2.5 overflow-hidden border border-outline-variant/40">
-              <div
-                className={`h-full transition-all duration-500 rounded-full ${
-                  remainingPercentage > 50
-                    ? 'bg-gradient-to-r from-electric-blue to-blue-500 shadow-sm shadow-electric-blue/30'
-                    : remainingPercentage > 15
-                    ? 'bg-amber-500 shadow-sm shadow-amber-500/30'
-                    : 'bg-rose-500 shadow-sm shadow-rose-500/30'
+          <div className="inline-flex h-10 items-center rounded-xl bg-surface-container p-1">
+            {PRESETS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setPreset(item.id)}
+                className={`h-8 rounded-lg px-3 text-xs font-semibold sm:text-sm ${
+                  preset === item.id ? 'bg-white text-primary shadow-sm' : 'text-on-surface-variant'
                 }`}
-                style={{ width: `${Math.max(2, remainingPercentage)}%` }}
-              ></div>
-            </div>
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
 
-          {/* Bottom Action Row */}
-          <div className="pt-1 flex items-center justify-end">
-            <Link
-              href="/dashboard/broadcast"
-              className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-1.5 px-4 py-2.5 bg-electric-blue hover:bg-primary text-white font-bold text-xs rounded-xl shadow-md shadow-electric-blue/20 transition-all active:scale-[0.98] cursor-pointer"
-            >
-              <Megaphone className="h-4 w-4" />
-              <span>ส่งบรอดแคสต์หาลูกค้า</span>
-            </Link>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsPlaygroundOpen(true)}
+            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-outline-variant bg-white px-3 text-sm font-semibold text-on-surface"
+          >
+            <MessageSquare className="h-4 w-4 text-primary" />
+            ทดสอบสนทนา
+          </button>
+          <Link
+            href="/dashboard/products"
+            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 text-sm font-semibold text-white shadow-sm hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" />
+            เพิ่มสินค้า
+          </Link>
         </div>
+      </div>
 
-        {/* Dynamic Activity Overview */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 relative z-10">
-          {/* Quick Management Shortcuts */}
-          <div className="lg:col-span-2 bg-surface/90 backdrop-blur-xl rounded-2xl p-5 shadow-sm border border-outline-variant/30 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="font-headline-md text-base sm:text-lg font-bold text-on-surface">เมนูจัดการด่วนสำหรับร้านค้า</h2>
-                <p className="font-label-md text-xs text-on-surface-variant font-medium">เข้าถึงฟีเจอร์หลักในการดูแลร้านค้าและ AI</p>
-              </div>
-            </div>
+      <SetupChecklistCard items={setupChecklist} />
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Link href="/dashboard/products" className="p-4 rounded-xl bg-surface-container/60 hover:bg-surface-container transition-all active:scale-[0.98] border border-outline-variant/30 flex flex-col gap-2 group">
-                <div className="w-9 h-9 rounded-lg bg-electric-blue/10 flex items-center justify-center text-electric-blue group-hover:scale-110 transition-transform">
-                  <PlusSquare className="h-5 w-5" />
-                </div>
-                <h3 className="font-bold text-sm text-on-surface">เพิ่ม / นำเข้าสินค้า</h3>
-                <p className="text-xs text-on-surface-variant">จัดการแคตตาล็อกสินค้าพร้อมส่ง และเขียนคำอธิบายด้วย AI</p>
-              </Link>
-
-              <Link href="/dashboard/knowledge" className="p-4 rounded-xl bg-surface-container/60 hover:bg-surface-container transition-all active:scale-[0.98] border border-outline-variant/30 flex flex-col gap-2 group">
-                <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600 group-hover:scale-110 transition-transform">
-                  <Brain className="h-5 w-5" />
-                </div>
-                <h3 className="font-bold text-sm text-on-surface">ฝึกอบรมคลังความรู้ AI</h3>
-                <p className="text-xs text-on-surface-variant">เพิ่มข้อมูล FAQ, โปรโมชั่น และข้อมูลตอบคำถามของร้าน</p>
-              </Link>
-
-              <Link href="/dashboard/settings" className="p-4 rounded-xl bg-surface-container/60 hover:bg-surface-container transition-all active:scale-[0.98] border border-outline-variant/30 flex flex-col gap-2 group">
-                <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
-                  <QrCode className="h-5 w-5" />
-                </div>
-                <h3 className="font-bold text-sm text-on-surface">ตั้งค่าบัญชีโอนเงิน</h3>
-                <p className="text-xs text-on-surface-variant">กำหนดเลขพร้อมเพย์ ธนาคาร และข้อความทักทายลูกค้า</p>
-              </Link>
-            </div>
-          </div>
-
-          {/* AI Knowledge Overview Panel */}
-          <div className="bg-surface-container/60 backdrop-blur-md rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between border border-outline-variant/30">
+      <section className="flex flex-col gap-4 rounded-2xl border border-outline-variant bg-white px-4 py-3 shadow-card lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+          <div className="flex items-center gap-2">
+            <span className={`h-2.5 w-2.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-amber-500'}`} />
             <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center text-secondary-foreground shrink-0">
-                  <Brain className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="font-headline-md text-base font-bold text-on-surface leading-tight">คลังความรู้ AI ของร้าน</h3>
-                  <p className="font-label-md text-xs font-medium text-on-surface-variant">
-                    {latestKnowledgeDate ? `อัปเดตล่าสุด: ${latestKnowledgeDate}` : 'ยังไม่มีข้อมูลความรู้'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="bg-surface rounded-xl p-3.5 shadow-xs flex items-start gap-3 border border-outline-variant/20">
-                  <CheckCircle2 className="h-4 w-4 text-success-green mt-0.5 shrink-0" />
-                  <div>
-                    <p className="font-label-md text-xs font-bold text-on-surface">
-                      {latestKnowledgeTitle || 'คลังข้อมูลสินค้าและคำถามพบบ่อย'}
-                    </p>
-                    <p className="font-label-sm text-[11px] font-medium text-outline mt-0.5">
-                      พร้อมใช้งานในคลังความรู้ ({knowledgeCount} รายการ)
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-surface rounded-xl p-3.5 shadow-xs flex items-start gap-3 relative overflow-hidden border border-outline-variant/20">
-                  <Zap className="h-4 w-4 text-electric-blue mt-0.5 shrink-0" />
-                  <div>
-                    <p className="font-label-md text-xs font-bold text-on-surface">DealMee Brain Engine™</p>
-                    <p className="font-label-sm text-[11px] font-medium text-outline mt-0.5">
-                      สลับโมเดลอัตโนมัติ (Gemini 3.6 Flash / Claude Sonnet 5)
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-outline-variant/30">
-              <p className="font-label-sm text-[10px] font-bold text-outline uppercase tracking-wider mb-1.5">คำแนะนำ</p>
-              <p className="font-body-md text-xs text-on-surface-variant italic bg-surface/50 p-3 rounded-xl relative border border-outline-variant/20 leading-relaxed">
-                "AI จะดึงข้อมูลจากคลังความรู้ {knowledgeCount} รายการและสินค้า {productsCount} ชิ้นไปตอบลูกค้าแบบอัตโนมัติใน LINE OA"
+              <p className="text-sm font-semibold text-on-surface">{active ? 'พนักงาน AI กำลังทำงาน' : 'พนักงาน AI หยุดพักชั่วคราว'}</p>
+              <p className="text-xs text-on-surface-variant">
+                {botName} · แพ็กเกจ {plan}
               </p>
             </div>
           </div>
+          <div className="grid flex-1 grid-cols-3 gap-3 sm:max-w-xl">
+            <StripStat label="ข้อความตอบสะสม" value={totalMessages.toLocaleString('th-TH')} />
+            <StripStat label="ออเดอร์ช่วงนี้" value={orderCount.toLocaleString('th-TH')} />
+            <StripStat label="ยอดขายช่วงนี้" value={formatBaht(revenue)} />
+          </div>
         </div>
+        <div className="flex items-center justify-between gap-3 sm:justify-end">
+          <MiniSparkline values={series.map((point) => point.current)} />
+          <div className="text-right">
+            {revenueDelta ? <DeltaPill label={revenueDelta.label} tone={revenueDelta.tone} /> : <span className="text-xs text-outline">ยังไม่มียอดขาย</span>}
+            <p className="mt-1 text-[11px] text-outline">เทียบช่วงก่อนหน้า</p>
+          </div>
+        </div>
+      </section>
 
-      </div>
+      <section className="rounded-2xl border border-outline-variant bg-white p-4 shadow-card sm:p-5">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-heading text-base font-semibold text-on-surface">ยอดขาย</h2>
+            <p className="text-xs text-on-surface-variant">เทียบออเดอร์ที่ชำระแล้วหรือจัดส่งแล้ว กับช่วงก่อนหน้าเท่ากัน</p>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-on-surface-variant">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-0.5 w-4 rounded bg-primary" /> ช่วงนี้
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-0.5 w-4 rounded border-t-2 border-dashed border-slate-300" /> ช่วงก่อนหน้า
+            </span>
+          </div>
+        </div>
+        <SalesChart points={series} />
+      </section>
 
-      {/* Interactive Chat Playground Simulator Modal */}
-      <ChatPlaygroundModal
-        isOpen={isPlaygroundOpen}
-        onClose={() => setIsPlaygroundOpen(false)}
-        initialBotName={botName}
-      />
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          icon={ShoppingCart}
+          iconClass="bg-primary/10 text-primary"
+          label="คำสั่งซื้อ"
+          value={orderCount.toLocaleString('th-TH')}
+          hint={`จากช่วงก่อนหน้า ${previousOrderCount.toLocaleString('th-TH')}`}
+          delta={percentDelta(orderCount, previousOrderCount)}
+        />
+        <KpiCard
+          icon={Banknote}
+          iconClass="bg-emerald-50 text-emerald-600"
+          label="ยอดขายรวม"
+          value={formatBaht(revenue)}
+          hint={`จากช่วงก่อนหน้า ${formatBaht(previousRevenue)}`}
+          delta={revenueDelta}
+        />
+        <KpiCard
+          icon={BadgePercent}
+          iconClass="bg-sky-50 text-sky-600"
+          label="อัตราชำระเงิน"
+          value={`${rate}%`}
+          hint={`จากช่วงก่อนหน้า ${previousRate}%`}
+          delta={percentDelta(rate, previousRate)}
+        />
+        <KpiCard
+          icon={PackageX}
+          iconClass="bg-amber-50 text-amber-600"
+          label="สินค้าใกล้หมด"
+          value={`${lowStock.length.toLocaleString('th-TH')} รายการ`}
+          hint={`สต็อกไม่เกิน 5 จากสินค้าทั้งหมด ${productsCount.toLocaleString('th-TH')} รายการ`}
+        />
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <article className="overflow-hidden rounded-2xl border border-outline-variant bg-white shadow-card">
+          <header className="flex items-center justify-between px-5 py-4">
+            <h2 className="font-heading text-base font-semibold">คำสั่งซื้อล่าสุด</h2>
+            <Link href="/dashboard/orders" className="text-sm font-semibold text-primary">
+              ดูทั้งหมด
+            </Link>
+          </header>
+          {latest.length === 0 ? (
+            <p className="px-5 pb-8 pt-2 text-sm text-on-surface-variant">ยังไม่มีคำสั่งซื้อในช่วงนี้</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead className="text-xs text-on-surface-variant">
+                  <tr className="border-y border-outline-variant">
+                    <th className="px-5 py-2.5 font-medium">#คำสั่งซื้อ</th>
+                    <th className="px-3 py-2.5 font-medium">ลูกค้า</th>
+                    <th className="px-3 py-2.5 font-medium">สินค้า</th>
+                    <th className="px-3 py-2.5 font-medium">ยอดชำระ</th>
+                    <th className="px-3 py-2.5 font-medium">สถานะ</th>
+                    <th className="px-5 py-2.5 font-medium">เวลา</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {latest.map((order) => (
+                    <tr key={order.id} className="border-b border-outline-variant/70 last:border-0">
+                      <td className="px-5 py-3 font-medium text-on-surface">{order.order_no}</td>
+                      <td className="px-3 py-3 text-on-surface-variant">{order.customer_name}</td>
+                      <td className="px-3 py-3 text-on-surface-variant" title={order.items_summary || order.product_name || ''}>
+                        {orderQty(order) > 0 ? `${orderQty(order)} รายการ` : '—'}
+                      </td>
+                      <td className="px-3 py-3 font-semibold">{formatBaht(Number(order.total_amount || 0))}</td>
+                      <td className="px-3 py-3">
+                        <OrderStatusChip status={order.status} />
+                      </td>
+                      <td className="px-5 py-3 text-on-surface-variant">{formatWhen(order.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </article>
+
+        <article className="overflow-hidden rounded-2xl border border-outline-variant bg-white shadow-card">
+          <header className="flex items-center justify-between px-5 py-4">
+            <h2 className="font-heading text-base font-semibold">สินค้าขายดี</h2>
+            <Link href="/dashboard/products" className="text-sm font-semibold text-primary">
+              ดูทั้งหมด
+            </Link>
+          </header>
+          {leaders.length === 0 ? (
+            <p className="px-5 pb-8 pt-2 text-sm text-on-surface-variant">ยังไม่มีข้อมูลสินค้าที่ขายได้ในช่วงนี้</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[520px] text-left text-sm">
+                <thead className="text-xs text-on-surface-variant">
+                  <tr className="border-y border-outline-variant">
+                    <th className="px-5 py-2.5 font-medium">สินค้า</th>
+                    <th className="px-3 py-2.5 font-medium">ยอดขาย</th>
+                    <th className="px-5 py-2.5 font-medium">จำนวนที่ขาย</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leaders.map((product, index) => (
+                    <tr key={product.name} className="border-b border-outline-variant/70 last:border-0">
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="w-4 text-xs font-semibold text-outline">{index + 1}</span>
+                          {product.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={product.imageUrl} alt="" className="h-9 w-9 rounded-lg object-cover" />
+                          ) : (
+                            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
+                              {product.name.slice(0, 1)}
+                            </span>
+                          )}
+                          <span className="font-medium text-on-surface">{product.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 font-semibold">{formatBaht(product.revenue)}</td>
+                      <td className="px-5 py-3 text-on-surface-variant">{product.quantity.toLocaleString('th-TH')} ชิ้น</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </article>
+      </section>
+
+      <section className="rounded-2xl border border-outline-variant bg-white p-4 shadow-card sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Send className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="font-heading text-base font-semibold">โควต้า LINE Push</h2>
+              <p className="text-xs text-on-surface-variant">
+                แพ็กเกจ {pushQuotaInfo.planName} · {pushQuotaInfo.period} · ใช้ไป {pushQuotaInfo.usedCount.toLocaleString('th-TH')} จาก{' '}
+                {pushQuotaInfo.totalQuota.toLocaleString('th-TH')}
+              </p>
+            </div>
+          </div>
+          <Link href="/dashboard/broadcast" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-semibold text-white">
+            <Megaphone className="h-4 w-4" />
+            ส่งบรอดแคสต์หาลูกค้า
+          </Link>
+        </div>
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-surface-container">
+          <div
+            className={`h-full rounded-full ${remainingPercentage > 50 ? 'bg-primary' : remainingPercentage > 15 ? 'bg-amber-500' : 'bg-rose-500'}`}
+            style={{ width: `${Math.max(2, remainingPercentage)}%` }}
+          />
+        </div>
+        <p className="mt-2 text-xs text-on-surface-variant">
+          คงเหลือ {pushQuotaInfo.remainingCount.toLocaleString('th-TH')} ข้อความ ({remainingPercentage}%) · ตอบแชท AI ปกติไม่ถูกหักโควต้านี้
+          {knowledgeCount > 0 ? ` · คลังความรู้ ${knowledgeCount.toLocaleString('th-TH')} รายการ` : ''}
+        </p>
+      </section>
+
+      <ChatPlaygroundModal isOpen={isPlaygroundOpen} onClose={() => setIsPlaygroundOpen(false)} initialBotName={botName} />
+    </div>
+  )
+}
+
+function StripStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="truncate text-[11px] text-outline">{label}</p>
+      <p className="font-heading truncate text-sm font-semibold text-on-surface">{value}</p>
     </div>
   )
 }

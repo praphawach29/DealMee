@@ -202,7 +202,7 @@ export default function TopUpModal({
               <Wallet className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-bold text-sm sm:text-base">เติมเงินเข้ากระเป๋า</h3>
+              <h3 className="font-heading font-semibold text-sm sm:text-base">เติมเงินเข้ากระเป๋า</h3>
               <p className="text-[11px] text-indigo-200">
                 สแกน PromptPay แล้วแนบสลิป เงินเข้ากระเป๋าทันทีเมื่อสลิปถูกต้อง
               </p>

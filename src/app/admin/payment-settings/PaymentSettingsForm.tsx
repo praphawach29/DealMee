@@ -37,7 +37,7 @@ export default function PaymentSettingsForm({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+        <h1 className="font-heading text-xl sm:text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
           ตั้งค่าบัญชีรับเงิน
         </h1>
         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -52,7 +52,7 @@ export default function PaymentSettingsForm({
               <Building className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">
+              <h3 className="font-heading font-semibold text-sm sm:text-base text-slate-900 dark:text-white">
                 ข้อมูลการรับชำระเงินและออกใบเสร็จ (DealMee Billing Settings)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">

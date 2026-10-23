@@ -235,7 +235,7 @@ function LoginContent() {
 
             {/* Title & Subtitle with Smooth Fade */}
             <div className="space-y-1 text-center sm:text-left transition-all duration-300">
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight transition-all duration-300">
+              <h2 className="font-heading text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight transition-all duration-300">
                 {mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิกใหม่'}
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 font-normal leading-relaxed transition-all duration-300 min-h-[40px]">
@@ -442,7 +442,7 @@ function LoginContent() {
               <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto shadow-sm">
                 <KeyRound className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-extrabold text-slate-900">
+              <h3 className="font-heading text-xl font-semibold text-slate-900">
                 ลืมรหัสผ่าน?
               </h3>
               <p className="text-xs sm:text-sm text-slate-500">

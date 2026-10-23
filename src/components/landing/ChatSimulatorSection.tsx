@@ -114,7 +114,7 @@ export default function ChatSimulatorSection() {
           <div className="text-xs font-bold tracking-[2px] uppercase text-blue-600 mb-2">
             ตัวอย่างแชทจริง
           </div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+          <h2 className="font-heading text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight">
             บอทตอบแทนคุณได้แบบนี้
           </h2>
           <p className="text-slate-600 text-sm sm:text-base leading-relaxed">

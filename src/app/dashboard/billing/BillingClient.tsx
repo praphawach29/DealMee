@@ -357,7 +357,7 @@ export default function BillingClient({
 
       {/* Plans */}
       <div className="space-y-3">
-        <h2 className="text-sm font-bold text-on-surface">แพ็กเกจรายเดือน (30 วัน)</h2>
+        <h2 className="font-heading text-sm font-semibold text-on-surface">แพ็กเกจรายเดือน (30 วัน)</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
           {paidPlans.map((plan) => {
             const isCurrent = plan.key === currentPlanKey
@@ -442,7 +442,7 @@ export default function BillingClient({
       {/* Add-on packs */}
       <div className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
         <div>
-          <h2 className="text-sm font-bold text-on-surface">แพ็กเสริม</h2>
+          <h2 className="font-heading text-sm font-semibold text-on-surface">แพ็กเสริม</h2>
           <p className="text-xs text-on-surface-variant mt-0.5">ใช้เมื่อโควตาของแพ็กเกจเดือนนั้นหมด อายุ 90 วันนับจากวันที่ซื้อ</p>
         </div>
         {([
@@ -480,7 +480,7 @@ export default function BillingClient({
       {/* Wallet history */}
       {transactions.length > 0 && (
         <div className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
-          <h2 className="text-sm font-bold text-on-surface">ความเคลื่อนไหวของกระเป๋าเงิน</h2>
+          <h2 className="font-heading text-sm font-semibold text-on-surface">ความเคลื่อนไหวของกระเป๋าเงิน</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -518,7 +518,7 @@ export default function BillingClient({
       {payments.length > 0 && (
         <div className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-on-surface">ประวัติการชำระเงินและใบเสร็จ</h2>
+            <h2 className="font-heading text-sm font-semibold text-on-surface">ประวัติการชำระเงินและใบเสร็จ</h2>
             <span className="text-[11px] text-on-surface-variant">แสดง {payments.length} รายการล่าสุด</span>
           </div>
 
@@ -656,7 +656,7 @@ function PurchaseConfirmCard({
               <ShoppingBag className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <h3 id="purchase-confirm-title" className="font-bold text-sm sm:text-base truncate">
+              <h3 id="purchase-confirm-title" className="font-heading font-semibold text-sm sm:text-base truncate">
                 {purchase.title}
               </h3>
               <p className="text-[11px] text-indigo-200">{purchase.detail}</p>

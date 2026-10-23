@@ -101,7 +101,7 @@ export default function FeaturesSection() {
           <div className="text-xs font-bold tracking-[2px] uppercase text-blue-600 mb-2">
             ฟีเจอร์หลัก
           </div>
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 leading-tight mb-3">
+          <h2 className="font-heading text-2xl sm:text-3xl lg:text-4xl font-semibold text-slate-900 leading-tight mb-3">
             ทุกอย่างที่ธุรกิจคุณต้องการ
           </h2>
           <p className="text-slate-600 text-sm sm:text-base max-w-xl mx-auto leading-relaxed">

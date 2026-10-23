@@ -47,7 +47,7 @@ export default function TermsPage() {
               <FileText className="w-3.5 h-3.5" />
               <span>ข้อตกลงการใช้งานทางกฎหมาย</span>
             </div>
-            <h1 className="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+            <h1 className="font-heading text-2xl sm:text-4xl font-semibold text-slate-900 tracking-tight">
               ข้อกำหนดและเงื่อนไขการให้บริการ
             </h1>
             <p className="text-xs sm:text-sm text-slate-500">
@@ -70,7 +70,7 @@ export default function TermsPage() {
           <div className="space-y-8 text-xs sm:text-sm text-slate-600 leading-relaxed">
             {/* Section 1 */}
             <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900">
                 1. บทนำและข้อมูลเกี่ยวกับผู้ให้บริการ
               </h2>
               <p>
@@ -80,7 +80,7 @@ export default function TermsPage() {
 
             {/* Section 2 */}
             <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900">
                 2. การสร้างบัญชีผู้ใช้งานและความปลอดภัย
               </h2>
               <ul className="list-disc pl-5 space-y-1.5">
@@ -92,7 +92,7 @@ export default function TermsPage() {
 
             {/* Section 3 */}
             <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900">
                 3. ขอบเขตการให้บริการและหน้าที่ของระบบ
               </h2>
               <p>ระบบของ DealMee AI มีฟังก์ชันการทำงานหลักดังนี้:</p>
@@ -130,7 +130,7 @@ export default function TermsPage() {
 
             {/* Section 4 */}
             <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900">
                 4. ข้อจำกัดและความรับผิดชอบเกี่ยวกับปัญญาประดิษฐ์ (AI)
               </h2>
               <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-900 space-y-2">
@@ -146,7 +146,7 @@ export default function TermsPage() {
 
             {/* Section 5 */}
             <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900">
                 5. ค่าบริการ การชำระเงิน และนโยบายการคืนเงิน
               </h2>
               <ul className="list-disc pl-5 space-y-1.5">
@@ -159,7 +159,7 @@ export default function TermsPage() {
 
             {/* Section 6 */}
             <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900">
                 6. การเชื่อมต่อบริการภายนอก (Third-Party Services)
               </h2>
               <p>
@@ -169,7 +169,7 @@ export default function TermsPage() {
 
             {/* Section 7 */}
             <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900">
                 7. ทรัพย์สินทางปัญญา
               </h2>
               <p>
@@ -179,7 +179,7 @@ export default function TermsPage() {
 
             {/* Section 8 */}
             <section className="space-y-3">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900">
                 8. กฎหมายที่ใช้บังคับและช่องทางติดต่อ
               </h2>
               <p>

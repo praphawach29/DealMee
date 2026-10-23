@@ -17,7 +17,7 @@ export default function CtaSection() {
     <section className="bg-gradient-to-r from-[#0a1532] via-[#0d224d] to-[#0a1532] py-20 px-4 sm:px-6 lg:px-8 overflow-hidden text-white border-t border-white/10">
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-10 items-center">
         <div className="text-center lg:text-left">
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-3">
+          <h2 className="font-heading text-2xl sm:text-3xl lg:text-4xl font-semibold text-white mb-3">
             พร้อมให้บอท AI ดูแลลูกค้าแทนคุณ?
           </h2>
           <p className="text-white/70 text-sm sm:text-base mb-8 max-w-xl mx-auto lg:mx-0 leading-relaxed">
@@ -30,7 +30,7 @@ export default function CtaSection() {
                 key={it.label}
                 className="bg-white/[0.08] border border-white/15 rounded-2xl px-5 py-4 text-center min-w-[130px]"
               >
-                <div className="text-2xl font-bold text-cyan-400 mb-0.5">{it.num}</div>
+                <div className="font-heading text-2xl font-semibold text-cyan-400 mb-0.5">{it.num}</div>
                 <div className="text-xs text-white/60">{it.label}</div>
               </div>
             ))}

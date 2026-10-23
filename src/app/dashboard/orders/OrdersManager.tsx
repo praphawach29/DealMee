@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createSampleOrder, updateOrderStatus } from './actions'
 import ShipOrderDialog from './ShipOrderDialog'
 import { carrierName } from '@/lib/orders/tracking'
+import { OrderStatusChip } from '@/components/dashboard/StatusChip'
 
 export interface OrderItem {
   id: string
@@ -52,18 +53,7 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
     if (res?.error) alert(res.error)
   }
 
-  const statusBadge = (st: string) => {
-    switch (st) {
-      case 'paid':
-        return <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">ชำระเงินแล้ว</span>
-      case 'shipped':
-        return <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-50 text-blue-700 border border-blue-200">จัดส่งแล้ว</span>
-      case 'cancelled':
-        return <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-50 text-rose-700 border border-rose-200">ยกเลิกแล้ว</span>
-      default:
-        return <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-50 text-amber-700 border border-amber-200">รอชำระเงิน</span>
-    }
-  }
+  const statusBadge = (st: string) => <OrderStatusChip status={st} />
 
   const shipButton = (ord: OrderItem) =>
     ord.status === 'cancelled' ? null : (
@@ -318,7 +308,7 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
             <div className="w-14 h-14 sm:w-16 sm:h-16 bg-electric-blue/10 rounded-2xl flex items-center justify-center mb-4 text-electric-blue">
               <span className="material-symbols-outlined text-2xl sm:text-3xl">receipt_long</span>
             </div>
-            <h3 className="text-base sm:text-lg font-bold text-on-surface mb-1">ยังไม่มีคำสั่งซื้อ</h3>
+            <h3 className="font-heading text-base sm:text-lg font-semibold text-on-surface mb-1">ยังไม่มีคำสั่งซื้อ</h3>
             <p className="text-xs sm:text-sm text-on-surface-variant max-w-sm mb-6">
               เมื่อมีคำสั่งซื้อทักเข้ามาจาก LINE หรือสร้างโดยบอท AI ออเดอร์จะมาปรากฏในหน้านี้ทันที
             </p>

@@ -310,7 +310,7 @@ export default function SettingsForm({ shop, onNavigateToChannels }: SettingsFor
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Share2 className="w-5 h-5 text-electric-blue shrink-0" />
-            <h3 className="text-sm sm:text-base font-bold text-on-surface">
+            <h3 className="font-heading text-sm sm:text-base font-semibold text-on-surface">
               ต้องการเชื่อมต่อ LINE Official Account หรือ Facebook Page?
             </h3>
           </div>

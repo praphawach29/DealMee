@@ -92,7 +92,7 @@ export default function PlatformLineAlertsCard({ status, webhookUrl }: { status:
         </div>
         <div className="flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">LINE แจ้งเตือนการชำระเงิน</h3>
+            <h3 className="font-heading font-semibold text-sm sm:text-base text-slate-900 dark:text-white">LINE แจ้งเตือนการชำระเงิน</h3>
             <span
               className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                 status.linked

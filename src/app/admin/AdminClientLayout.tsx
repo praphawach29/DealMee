@@ -19,23 +19,23 @@ export default function AdminClientLayout({
   return (
     <div className="bg-merchant-bg text-on-surface font-body-md min-h-screen">
       {/* 1. Desktop Sidebar */}
-      <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-slate-900 text-white z-50 flex-col border-r border-slate-800 shadow-2xl">
-        <div className="px-6 py-5 flex items-center justify-between border-b border-slate-800">
+      <aside className="hidden lg:flex fixed left-0 top-0 h-full w-[248px] bg-white text-on-surface z-50 flex-col border-r border-outline-variant">
+        <div className="px-5 h-16 flex items-center justify-between border-b border-outline-variant">
           <div className="flex items-center gap-3">
             <Image
               src="/logos/dealmee-icon.png"
               alt="DealMee Logo"
-              width={36}
-              height={36}
-              className="w-9 h-9 object-contain drop-shadow-md shrink-0"
+              width={32}
+              height={32}
+              className="w-8 h-8 object-contain shrink-0"
               priority
             />
             <div>
-              <span className="font-headline-md text-white font-extrabold tracking-tight text-base block leading-none">
-                <span className="text-blue-400">Deal</span><span className="text-cyan-400">Mee</span> <span className="text-xs text-slate-400 uppercase ml-0.5">AI</span>
+              <span className="font-heading font-semibold tracking-tight text-sm block leading-none text-on-surface">
+                DealMee
               </span>
-              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block mt-1.5 font-mono flex items-center gap-1">
-                <Crown className="h-3 w-3 inline text-amber-400" />
+              <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider block mt-1 flex items-center gap-1">
+                <Crown className="h-3 w-3 inline text-amber-500" />
                 <span>Super Admin</span>
               </span>
             </div>
@@ -48,38 +48,38 @@ export default function AdminClientLayout({
       {isMobileMenuOpen && (
         <div
           onClick={() => setIsMobileMenuOpen(false)}
-          className="lg:hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs transition-opacity animate-fade-in"
+          className="lg:hidden fixed inset-0 z-50 bg-slate-900/40 transition-opacity animate-fade-in"
         />
       )}
 
       {/* 3. Mobile Sliding Drawer Sidebar */}
       <aside
-        className={`lg:hidden fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white flex flex-col shadow-2xl border-r border-slate-800 transform transition-transform duration-300 ease-in-out ${
+        className={`lg:hidden fixed inset-y-0 left-0 z-50 w-[248px] bg-white text-on-surface flex flex-col shadow-xl border-r border-outline-variant transform transition-transform duration-300 ease-in-out ${
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="px-5 py-5 flex items-center justify-between border-b border-slate-800">
+        <div className="px-5 h-16 flex items-center justify-between border-b border-outline-variant">
           <div className="flex items-center gap-3">
             <Image
               src="/logos/dealmee-icon.png"
               alt="DealMee Logo"
-              width={36}
-              height={36}
-              className="w-9 h-9 object-contain drop-shadow-md shrink-0"
+              width={32}
+              height={32}
+              className="w-8 h-8 object-contain shrink-0"
             />
             <div>
-              <span className="font-headline-md text-white font-extrabold tracking-tight text-base block leading-none">
-                <span className="text-blue-400">Deal</span><span className="text-cyan-400">Mee</span> <span className="text-xs text-slate-400 uppercase ml-0.5">AI</span>
+              <span className="font-heading font-semibold tracking-tight text-sm block leading-none text-on-surface">
+                DealMee
               </span>
-              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block mt-1.5 font-mono flex items-center gap-1">
-                <Crown className="h-3 w-3 inline text-amber-400" />
+              <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider block mt-1 flex items-center gap-1">
+                <Crown className="h-3 w-3 inline text-amber-500" />
                 <span>Super Admin</span>
               </span>
             </div>
           </div>
           <button
             onClick={() => setIsMobileMenuOpen(false)}
-            className="p-2 rounded-lg text-slate-400 hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="p-2 rounded-lg text-on-surface-variant hover:text-on-surface min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label="Close admin menu"
           >
             <X className="h-5 w-5" />
@@ -91,9 +91,8 @@ export default function AdminClientLayout({
       </aside>
 
       {/* 4. Main Wrapper */}
-      <div className="lg:pl-64 flex flex-col min-h-screen relative">
-        {/* Top Navigation Header */}
-        <header className="fixed top-0 left-0 lg:left-64 right-0 h-16 bg-surface/90 backdrop-blur-xl z-40 flex items-center justify-between px-4 lg:px-8 shadow-[0_1px_8px_rgba(0,0,0,0.03)] border-b border-outline-variant/30">
+      <div className="lg:pl-[248px] flex flex-col min-h-screen relative">
+        <header className="sticky top-0 h-16 bg-white/90 backdrop-blur-xl z-40 flex items-center justify-between px-4 lg:px-8 border-b border-outline-variant">
           <div className="flex items-center gap-3">
             {/* Hamburger Button for Mobile */}
             <button
@@ -135,7 +134,7 @@ export default function AdminClientLayout({
         </header>
 
         {/* Page Main Body Container */}
-        <main className="pt-16 flex-1">
+        <main className="flex-1">
           <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6 max-w-[1440px] mx-auto w-full">
             {children}
           </div>

@@ -53,7 +53,7 @@ export default function DashboardShowcase() {
               <div className="text-xs font-bold tracking-[2px] uppercase text-blue-600 mb-2">
                 แดชบอร์ดจัดการร้าน
               </div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight mb-3">
+              <h2 className="font-heading text-2xl sm:text-3xl font-semibold text-slate-900 leading-tight mb-3">
                 จัดการทุกอย่างง่าย ครบในที่เดียว
               </h2>
               <p className="text-slate-600 text-sm sm:text-base leading-relaxed max-w-lg">

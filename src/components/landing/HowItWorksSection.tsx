@@ -64,7 +64,7 @@ export default function HowItWorksSection() {
               <div className="text-xs font-bold tracking-[2px] uppercase text-blue-600 mb-2">
                 วิธีทำงาน
               </div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">
+              <h2 className="font-heading text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">
                 ง่าย ไม่ซับซ้อน
               </h2>
               <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
@@ -98,7 +98,7 @@ export default function HowItWorksSection() {
             <div className="text-xs font-bold tracking-[2px] uppercase text-blue-600 mb-2">
               รองรับ
             </div>
-            <h3 className="text-xl sm:text-2xl font-bold text-slate-900">
+            <h3 className="font-heading text-xl sm:text-2xl font-semibold text-slate-900">
               ทุกประเภทธุรกิจ
             </h3>
           </div>

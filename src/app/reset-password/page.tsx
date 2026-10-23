@@ -144,7 +144,7 @@ function ResetPasswordContent() {
             <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto shadow-sm">
               <KeyRound className="w-6 h-6" />
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            <h1 className="font-heading text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight">
               ตั้งรหัสผ่านใหม่
             </h1>
             <p className="text-xs sm:text-sm text-slate-500">
@@ -163,7 +163,7 @@ function ResetPasswordContent() {
                 <CheckCircle2 className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-emerald-900">เปลี่ยนรหัสผ่านสำเร็จแล้ว!</h3>
+                <h3 className="font-heading text-sm font-semibold text-emerald-900">เปลี่ยนรหัสผ่านสำเร็จแล้ว!</h3>
                 <p className="text-xs text-emerald-700 mt-1">
                   กำลังนำคุณเข้าสู่แดชบอร์ด...
                 </p>

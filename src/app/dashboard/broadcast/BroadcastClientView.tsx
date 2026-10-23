@@ -227,7 +227,7 @@ export default function BroadcastClientView({
 
             {/* 2. Target Audience Filters */}
             <div className="p-4 bg-surface-container-low rounded-xl border border-outline-variant/30 space-y-3">
-              <h3 className="font-bold text-on-surface flex items-center gap-1.5 text-xs">
+              <h3 className="font-heading font-semibold text-on-surface flex items-center gap-1.5 text-xs">
                 <span className="material-symbols-outlined text-sm text-electric-blue">filter_alt</span>
                 กรองกลุ่มเป้าหมาย (AI Memory Targeting)
               </h3>
@@ -352,7 +352,7 @@ export default function BroadcastClientView({
           {/* Live Message Preview Card */}
           <div className="p-4 sm:p-5 bg-surface rounded-2xl border border-outline-variant/40 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-on-surface text-xs flex items-center gap-1.5">
+              <h3 className="font-heading font-semibold text-on-surface text-xs flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-[16px] text-electric-blue">visibility</span>
                 ตัวอย่างข้อความแชท
               </h3>

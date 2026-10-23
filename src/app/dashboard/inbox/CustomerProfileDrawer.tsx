@@ -45,7 +45,7 @@ export default function CustomerProfileDrawer({
       <div className="p-4 border-b border-outline-variant/30 flex items-center justify-between bg-surface-container-low">
         <div className="flex items-center gap-2 min-w-0">
           <span className="material-symbols-outlined text-electric-blue text-lg">person_search</span>
-          <h3 className="text-sm font-bold text-on-surface truncate">โปรไฟล์ลูกค้า (AI Memory)</h3>
+          <h3 className="font-heading text-sm font-semibold text-on-surface truncate">โปรไฟล์ลูกค้า (AI Memory)</h3>
         </div>
         <button
           onClick={onClose}
@@ -60,7 +60,7 @@ export default function CustomerProfileDrawer({
         {/* Customer Identity Card */}
         <div className="p-3 bg-surface rounded-xl border border-outline-variant/30 space-y-2">
           <div className="flex items-center justify-between">
-            <h4 className="font-bold text-on-surface text-sm">{customerName}</h4>
+            <h4 className="font-heading font-semibold text-on-surface text-sm">{customerName}</h4>
             {isVip && (
               <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 rounded border border-amber-300">
                 👑 VIP Customer
@@ -72,11 +72,11 @@ export default function CustomerProfileDrawer({
           <div className="grid grid-cols-2 gap-2 pt-2 border-t border-outline-variant/20 text-center">
             <div className="bg-surface-container-low p-2 rounded-lg">
               <span className="text-[10px] text-outline">ออเดอร์ทั้งหมด</span>
-              <p className="font-bold text-on-surface text-sm">{profile?.totalOrders || 0}</p>
+              <p className="font-heading font-semibold text-on-surface text-sm">{profile?.totalOrders || 0}</p>
             </div>
             <div className="bg-surface-container-low p-2 rounded-lg">
               <span className="text-[10px] text-outline">ยอดซื้อสะสม</span>
-              <p className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+              <p className="font-heading font-semibold text-emerald-600 dark:text-emerald-400 text-sm">
                 ฿{(profile?.totalSpend || 0).toLocaleString()}
               </p>
             </div>
@@ -92,7 +92,7 @@ export default function CustomerProfileDrawer({
           <>
             {/* Tags */}
             <div className="space-y-2">
-              <h5 className="font-bold text-on-surface text-xs flex items-center gap-1.5">
+              <h5 className="font-heading font-semibold text-on-surface text-xs flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-sm text-electric-blue">label</span>
                 Tags ประจำตัว
               </h5>
@@ -114,7 +114,7 @@ export default function CustomerProfileDrawer({
 
             {/* Preferences */}
             <div className="space-y-2">
-              <h5 className="font-bold text-on-surface text-xs flex items-center gap-1.5">
+              <h5 className="font-heading font-semibold text-on-surface text-xs flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-sm text-purple-500">favorite</span>
                 ความชอบ / สเปก (Preferences)
               </h5>
@@ -134,7 +134,7 @@ export default function CustomerProfileDrawer({
 
             {/* Notes Timeline */}
             <div className="space-y-2">
-              <h5 className="font-bold text-on-surface text-xs flex items-center gap-1.5">
+              <h5 className="font-heading font-semibold text-on-surface text-xs flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-sm text-amber-500">description</span>
                 ประวัติบันทึกย่อ (Notes Timeline)
               </h5>

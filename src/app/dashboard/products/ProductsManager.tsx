@@ -582,7 +582,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                   </div>
 
                   <div>
-                    <h3 className="font-bold text-xs sm:text-sm text-on-surface line-clamp-1">{product.name}</h3>
+                    <h3 className="font-heading font-semibold text-xs sm:text-sm text-on-surface line-clamp-1">{product.name}</h3>
                     {product.master_sku && (
                       <div className="mt-1 mb-1">
                         <span className="inline-block text-[10px] font-mono text-electric-blue bg-electric-blue/10 px-2 py-0.5 rounded-md font-bold border border-electric-blue/20">
