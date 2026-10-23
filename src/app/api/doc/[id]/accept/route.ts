@@ -1,5 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { verifyDocAcceptToken } from '@/lib/docs/acceptToken'
+
+async function readAcceptToken(req: NextRequest): Promise<string | null> {
+  const fromQuery = req.nextUrl.searchParams.get('accept') || req.nextUrl.searchParams.get('token')
+  if (fromQuery) return fromQuery
+  try {
+    const body = await req.json()
+    if (body && typeof body === 'object') {
+      if (typeof body.token === 'string') return body.token
+      if (typeof body.accept === 'string') return body.accept
+    }
+  } catch {
+    // The button posts JSON; an empty body is just a missing token.
+  }
+  return null
+}
 
 export async function POST(
   req: NextRequest,
@@ -7,6 +23,17 @@ export async function POST(
 ) {
   try {
     const { id } = await params
+    const tokenCheck = verifyDocAcceptToken(id, await readAcceptToken(req))
+    if (!tokenCheck.ok) {
+      const error =
+        tokenCheck.reason === 'expired'
+          ? 'ลิงก์ยืนยันหมดอายุแล้ว กรุณาขอลิงก์ใหม่จากร้าน'
+          : tokenCheck.reason === 'unconfigured'
+            ? 'ระบบยืนยันเอกสารยังไม่พร้อมใช้งาน'
+            : 'ลิงก์ยืนยันไม่ถูกต้องหรือไม่มีรหัส'
+      return NextResponse.json({ error }, { status: tokenCheck.reason === 'unconfigured' ? 503 : 401 })
+    }
+
     const supabase = createAdminClient()
 
     // 1. Fetch document
@@ -18,6 +45,16 @@ export async function POST(
 
     if (docError || !doc) {
       return NextResponse.json({ error: 'ไม่พบเอกสารใบเสนอราคาที่ต้องการอนุมัติ' }, { status: 404 })
+    }
+
+    const alreadyAccepted =
+      doc.status === 'accepted' || (typeof doc.notes === 'string' && doc.notes.includes('[STATUS:ACCEPTED'))
+    if (alreadyAccepted) {
+      return NextResponse.json({
+        success: true,
+        message: 'ยืนยันตกลงสั่งซื้อตามใบเสนอราคาเรียบร้อยแล้ว',
+        accepted_at: doc.accepted_at || doc.updated_at || null,
+      })
     }
 
     const nowIso = new Date().toISOString()
@@ -62,31 +99,15 @@ export async function POST(
         .eq('id', doc.shop_id)
         .single()
 
-      if (shop?.line_token && shop?.features?.admin_notify !== false) {
-        // Resolve target LINE User ID:
-        // Priority 1: shop.admin_line_user_id or features.admin_line_user_id
-        let targetLineUserId =
-          shop.admin_line_user_id ||
-          shop.owner_line_id ||
-          shop.features?.admin_line_user_id ||
-          shop.features?.admin_notify_user_id
+      // Only the shop's configured admin LINE account. Never the latest customer chat:
+      // that used to push the customer's name, phone and amount to a different person.
+      const targetLineUserId =
+        shop?.admin_line_user_id ||
+        shop?.owner_line_id ||
+        shop?.features?.admin_line_user_id ||
+        shop?.features?.admin_notify_user_id
 
-        // Priority 2: Most recent human-takeover or admin conversation
-        if (!targetLineUserId) {
-          const { data: conv } = await supabase
-            .from('conversations')
-            .select('user_id')
-            .eq('shop_id', shop.id)
-            .order('last_message_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-
-          if (conv?.user_id) {
-            targetLineUserId = conv.user_id
-          }
-        }
-
-        if (targetLineUserId) {
+      if (shop?.line_token && shop?.features?.admin_notify !== false && targetLineUserId) {
           const docNo = doc.doc_number || doc.doc_no || 'QT'
           const totalStr = Number(doc.total_amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.dealmee.app'
@@ -208,6 +229,37 @@ export async function POST(
             },
             body: JSON.stringify(flexPayload),
           })
+      }
+
+      // In-app notice on the conversation this quotation was issued in. No LINE push
+      // when the shop has not linked an admin account.
+      const conversationId =
+        doc.customer_info && typeof doc.customer_info === 'object'
+          ? (doc.customer_info as { conversation_id?: string }).conversation_id
+          : null
+      if (conversationId && shop?.id) {
+        const { data: conv } = await supabase
+          .from('conversations')
+          .select('id, platform')
+          .eq('id', conversationId)
+          .eq('shop_id', shop.id)
+          .maybeSingle()
+        if (conv) {
+          const docNo = doc.doc_number || doc.doc_no || 'QT'
+          const totalStr = Number(doc.total_amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })
+          const note = `ลูกค้ายืนยันใบเสนอราคา ${docNo} แล้ว ยอด ฿${totalStr}`
+          await supabase.from('chat_messages').insert({
+            conversation_id: conv.id,
+            shop_id: shop.id,
+            sender_type: 'agent',
+            sender_name: 'ระบบ DealMee',
+            message: note,
+            platform: conv.platform || 'line',
+          })
+          await supabase
+            .from('conversations')
+            .update({ last_message: note, last_message_at: nowIso })
+            .eq('id', conv.id)
         }
       }
     } catch (notifyErr) {

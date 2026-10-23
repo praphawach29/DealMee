@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import DocumentStudioClient from './DocumentStudioClient'
+import { trySignDocAcceptToken } from '@/lib/docs/acceptToken'
 
 export const metadata: Metadata = {
   title: 'เอกสารและใบเสนอราคาอัจฉริยะ (Smart Documents) | DealMee AI',
@@ -47,7 +48,10 @@ export default async function DocumentsPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <DocumentStudioClient
-        initialDocuments={documents || []}
+        initialDocuments={(documents || []).map((doc) => ({
+          ...doc,
+          accept_token: doc.doc_type === 'quotation' ? trySignDocAcceptToken(doc.id) : null,
+        }))}
         shopName={shop.name || 'ร้านค้า'}
         companyName={shop.company_name || shop.name}
         vatEnabled={shop.vat_enabled || false}

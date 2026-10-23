@@ -97,16 +97,18 @@ export default function MerchantDashboardClient({
     return rangeForPreset(preset)
   }, [preset, customFrom, customTo])
 
-  const currentOrders = useMemo(() => ordersInRange(orders, ranges.current), [orders, ranges])
-  const previousOrders = useMemo(() => ordersInRange(orders, ranges.previous), [orders, ranges])
+  const currentRange = ranges.current
+  const previousRange = ranges.previous
+  const currentOrders = useMemo(() => ordersInRange(orders, currentRange), [orders, currentRange])
+  const previousOrders = useMemo(() => ordersInRange(orders, previousRange), [orders, previousRange])
   const orderCount = countOrders(currentOrders)
   const previousOrderCount = countOrders(previousOrders)
   const revenue = sumRevenue(currentOrders)
   const previousRevenue = sumRevenue(previousOrders)
   const rate = paidRate(currentOrders)
   const previousRate = paidRate(previousOrders)
-  const series = useMemo(() => salesSeries(orders, ranges.current, ranges.previous), [orders, ranges])
-  const leaders = useMemo(() => topProducts(orders, products, ranges.current), [orders, products, ranges])
+  const series = useMemo(() => salesSeries(orders, currentRange, previousRange), [orders, currentRange, previousRange])
+  const leaders = useMemo(() => topProducts(orders, products, currentRange), [orders, products, currentRange])
   const lowStock = lowStockProducts(products)
   const latest = [...currentOrders].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at)).slice(0, 5)
   const revenueDelta = percentDelta(revenue, previousRevenue)

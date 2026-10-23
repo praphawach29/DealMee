@@ -1,6 +1,12 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+
+function stopAudioElement(audio: HTMLAudioElement | null) {
+  if (!audio) return
+  audio.pause()
+  audio.currentTime = 0
+}
 import {
   Radio,
   Copy,
@@ -56,10 +62,7 @@ export default function LiveStudioClient({ shop, initialLiveState }: LiveStudioC
   const [voiceSpeed, setVoiceSpeed] = useState<number>(1.15)
 
   const handleStopAudio = () => {
-    if (activeAudio) {
-      activeAudio.pause()
-      activeAudio.currentTime = 0
-    }
+    stopAudioElement(activeAudio)
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel()
     }

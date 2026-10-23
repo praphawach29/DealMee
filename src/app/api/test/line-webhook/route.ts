@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { startSalesAgentPlanning, continueSalesAgentPlanning, planningAckMessage } from '@/lib/ai/salesAgentEngine'
+import { authorizeSimulationShop, recordSimulationUsage } from '@/lib/test/authorizeSimulation'
 
 /**
  * Developer Simulation API Route — lets developers test AI agent planning,
@@ -12,11 +13,14 @@ import { startSalesAgentPlanning, continueSalesAgentPlanning, planningAckMessage
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { shop_id, user_id, message } = body
+    const { user_id, message } = body
+    const auth = await authorizeSimulationShop(body.shop_id)
+    if (auth.error) return auth.error
+    const shop_id = auth.shopId
 
-    if (!shop_id || !user_id || !message) {
+    if (!user_id || !message) {
       return NextResponse.json(
-        { error: 'Missing required parameters: shop_id, user_id, message' },
+        { error: 'Missing required parameters: user_id, message' },
         { status: 400 }
       )
     }
@@ -78,6 +82,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (planStart.done) {
+      await recordSimulationUsage(shop_id, planStart.result)
       return NextResponse.json({
         status: 'completed_single_step',
         ackSent: false,
@@ -89,6 +94,7 @@ export async function POST(request: NextRequest) {
     // 4. Multi-step execution path
     const ackText = planningAckMessage(planStart.state)
     const finalResult = await continueSalesAgentPlanning(planStart.state)
+    await recordSimulationUsage(shop_id, finalResult)
 
     return NextResponse.json({
       status: 'completed_multi_step',

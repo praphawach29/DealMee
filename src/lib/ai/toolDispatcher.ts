@@ -9,6 +9,7 @@ import { resolveCatalogProduct, describeUnresolved, parseQuantity, computeShippi
 import { highValueThreshold, highValueRefusal } from '@/lib/ai/salesModes'
 import { notifyShopAdmin } from '@/lib/billing/ownerAlerts'
 import { carrierName, trackingLink } from '@/lib/orders/tracking'
+import { quotationAcceptPath } from '@/lib/docs/acceptToken'
 
 const QR_BUCKET = 'qr-codes'
 
@@ -1556,7 +1557,7 @@ export async function executeTool(
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.dealmee.app'
-    const docUrl = `${baseUrl.replace(/\/$/, '')}/doc/quotation/${doc.id}`
+    const docUrl = `${baseUrl.replace(/\/$/, '')}${quotationAcceptPath(doc.id)}`
     const wordUrl = `${baseUrl.replace(/\/$/, '')}/api/doc/${doc.id}/download?format=docx`
     const excelUrl = `${baseUrl.replace(/\/$/, '')}/api/doc/${doc.id}/download?format=xlsx`
 
