@@ -1,7 +1,8 @@
 'use client'
 
 import React from 'react'
-import Image from 'next/image'
+import { TEMPLATES } from '@/app/onboarding/templates'
+import { SetupFlowMock } from './ProductVisuals'
 
 const steps = [
   {
@@ -16,8 +17,8 @@ const steps = [
   },
   {
     num: 3,
-    title: 'เชื่อมต่อระบบใน 5 นาที',
-    desc: 'ตั้งค่าโปรไฟล์บอท กำหนดเสียงพูด และเปิดระบบได้ทันทีโดยไม่ต้องเขียนโค้ด',
+    title: 'ตั้งค่าบอทแล้วเปิดใช้',
+    desc: 'ตั้งชื่อบอท เลือกน้ำเสียงการตอบ แล้วเปิดใช้ได้โดยไม่ต้องเขียนโค้ด',
   },
   {
     num: 4,
@@ -26,20 +27,6 @@ const steps = [
   },
 ]
 
-const bizTypes = [
-  { icon: '🖨️', name: 'ปริ้นเตอร์/IT' },
-  { icon: '✨', name: 'คลินิกความงาม' },
-  { icon: '💆', name: 'สปา & นวด' },
-  { icon: '🏥', name: 'คลินิก/แพทย์' },
-  { icon: '🍜', name: 'ร้านอาหาร/คาเฟ่' },
-  { icon: '🏋️', name: 'ฟิตเนส' },
-  { icon: '🚗', name: 'อู่ซ่อมรถ' },
-  { icon: '🐾', name: 'คลินิกสัตว์' },
-  { icon: '🏠', name: 'อสังหาริมทรัพย์' },
-  { icon: '💧', name: 'ตู้น้ำดื่ม' },
-  { icon: '🛒', name: 'ร้านค้าทั่วไป' },
-  { icon: '📚', name: 'สถาบันกวดวิชา' },
-]
 
 export default function HowItWorksSection() {
   return (
@@ -47,15 +34,8 @@ export default function HowItWorksSection() {
       <div className="max-w-6xl mx-auto">
         {/* Top: Image + 4 Steps */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center mb-16">
-          {/* Left: How it works artwork */}
           <div className="flex justify-center">
-            <Image
-              src="/landing/how-it-works.png"
-              alt="ขั้นตอนการทำงานของ DealMee AI Chatbot (DealMee.app)"
-              width={460}
-              height={460}
-              className="w-full max-w-[420px] drop-shadow-lg rounded-2xl"
-            />
+            <SetupFlowMock />
           </div>
 
           {/* Right: Steps */}
@@ -92,26 +72,28 @@ export default function HowItWorksSection() {
           </div>
         </div>
 
-        {/* Bottom: Supported Business Types */}
         <div className="pt-8 border-t border-slate-200/80">
           <div className="text-center mb-8">
             <div className="text-xs font-bold tracking-[2px] uppercase text-blue-600 mb-2">
-              รองรับ
+              ตอนสมัคร
             </div>
             <h3 className="font-heading text-xl sm:text-2xl font-semibold text-slate-900">
-              ทุกประเภทธุรกิจ
+              เทมเพลต {TEMPLATES.length} แบบ
             </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              เลือกแบบร้านตอนเริ่มใช้งาน ระบบจะเปิดหน้าสินค้าหรือหน้าจองให้ตรงกับประเภทนั้น
+            </p>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {bizTypes.map((b) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-3">
+            {TEMPLATES.map((template) => (
               <div
-                key={b.name}
-                className="bg-white border border-slate-200 rounded-xl py-4 px-3 text-center transition-all duration-200 hover:border-blue-500 hover:bg-blue-50/40 hover:-translate-y-0.5 shadow-sm"
+                key={template.id}
+                className="bg-white border border-slate-200 rounded-[14px] py-4 px-3 text-center shadow-card"
               >
-                <span className="text-2xl block mb-1.5">{b.icon}</span>
+                <span className="text-2xl block mb-1.5" aria-hidden="true">{template.emoji}</span>
                 <div className="text-xs sm:text-sm font-semibold text-slate-700">
-                  {b.name}
+                  {template.label}
                 </div>
               </div>
             ))}

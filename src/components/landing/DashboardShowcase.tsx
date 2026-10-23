@@ -1,44 +1,32 @@
 'use client'
 
 import React from 'react'
-import Image from 'next/image'
+import { DashboardMock } from './ProductVisuals'
 
-const sheets = [
+const modules = [
   {
-    icon: '📋',
-    name: 'Orders (คำสั่งซื้อ)',
-    desc: 'บันทึกออเดอร์ทุกรายการ สถานะชำระเงิน และ Tracking ขนส่งอัตโนมัติ',
-    color: 'border-l-blue-600',
+    name: 'ออเดอร์',
+    desc: 'บอทบันทึกเลขที่ออเดอร์ รายการสินค้า สถานะชำระเงิน และที่อยู่ ร้านใส่เลขพัสดุแล้วบอทส่งให้ลูกค้าในแชท',
   },
   {
-    icon: '📅',
-    name: 'Bookings (การจอง)',
-    desc: 'ระบบนัดหมายบริการ เช็คคิวว่างแบบ Real-time พร้อมแจ้งเตือนล่วงหน้า',
-    color: 'border-l-cyan-500',
+    name: 'การจอง',
+    desc: 'เช็คเวลาว่าง จอง เลื่อน และยกเลิกคิว แล้วเตือนลูกค้าก่อนถึงเวลานัด ใช้ได้เมื่อเปิดระบบจอง',
   },
   {
-    icon: '👥',
-    name: 'Customers (ลูกค้า)',
-    desc: 'ชื่อ เบอร์โทร ที่อยู่จัดส่ง และประวัติการสั่งซื้อของลูกค้าทุกคน',
-    color: 'border-l-emerald-500',
+    name: 'สินค้า',
+    desc: 'แคตตาล็อก ราคา รูป และสต็อก บอทค้นจากรายการนี้แล้วส่งเป็นการ์ดในแชท',
   },
   {
-    icon: '🛍️',
-    name: 'Products (สินค้า)',
-    desc: 'แคตตาล็อกสินค้า ราคา รูปภาพ และจำนวนสต็อกคงเหลือ',
-    color: 'border-l-amber-500',
+    name: 'กล่องข้อความ',
+    desc: 'ดูแชทจาก LINE, Facebook และ Instagram พร้อมโปรไฟล์ลูกค้า บันทึก แท็ก และยอดซื้อสะสม',
   },
   {
-    icon: '📣',
-    name: 'Promotions (บรอดแคสต์)',
-    desc: 'ส่งโปรโมชั่น ข่าวสาร และข้อความแจ้งเตือนหาลูกค้าผ่าน LINE OA',
-    color: 'border-l-purple-600',
+    name: 'บรอดแคสต์',
+    desc: 'ส่งข้อความหาลูกค้าบน LINE และ Facebook จากหน้าบรอดแคสต์ของร้าน',
   },
   {
-    icon: '📊',
-    name: 'Analytics (รายงาน)',
-    desc: 'สรุปยอดขาย ออเดอร์ประจำวัน และ Log บทสนทนาทั้งหมดตรวจสอบได้',
-    color: 'border-l-indigo-600',
+    name: 'คลังความรู้',
+    desc: 'ใส่คำถามที่พบบ่อยหรือไฟล์ของร้าน บอทค้นจากคลังนี้ตอนตอบลูกค้า',
   },
 ]
 
@@ -57,39 +45,29 @@ export default function DashboardShowcase() {
                 จัดการทุกอย่างง่าย ครบในที่เดียว
               </h2>
               <p className="text-slate-600 text-sm sm:text-base leading-relaxed max-w-lg">
-                ไม่ต้องเรียนรู้ระบบใหม่ที่ซับซ้อน — บอท AI ซิงก์ข้อมูลออเดอร์ ลูกค้า สินค้า และการเงินลงแดชบอร์ดแบบ Real-time
+                ออเดอร์ สินค้า การจอง และแชทอยู่ในแดชบอร์ดของร้าน เปิดดูได้จากหน้านี้เลย
               </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {sheets.map((s) => (
+              {modules.map((item) => (
                 <div
-                  key={s.name}
-                  className={`bg-white rounded-xl p-4 border border-slate-200/90 border-l-4 shadow-sm hover:shadow-md transition-all duration-200 ${s.color}`}
+                  key={item.name}
+                  className="bg-white rounded-[14px] p-4 border border-slate-200/90 border-l-4 border-l-primary shadow-card"
                 >
-                  <div className="text-sm font-bold text-slate-900 mb-1 flex items-center gap-1.5">
-                    <span>{s.icon}</span>
-                    <span>{s.name}</span>
+                  <div className="text-sm font-bold text-slate-900 mb-1">
+                    {item.name}
                   </div>
                   <div className="text-xs text-slate-500 leading-relaxed">
-                    {s.desc}
+                    {item.desc}
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Right: Dashboard Preview Image */}
           <div className="flex justify-center">
-            <div className="relative">
-              <Image
-                src="/landing/dashboard-preview.png"
-                alt="แดชบอร์ดจัดการออเดอร์และข้อมูลลูกค้า DealMee.app"
-                width={560}
-                height={380}
-                className="w-full max-w-[520px] drop-shadow-xl rounded-xl border border-slate-200/80 bg-white"
-              />
-            </div>
+            <DashboardMock />
           </div>
         </div>
       </div>

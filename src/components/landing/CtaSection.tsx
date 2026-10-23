@@ -1,15 +1,15 @@
 'use client'
 
 import React from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { TRIAL_DAYS } from '@/lib/billing/trial'
 import { DEALMEE_LINE_OA } from './data'
+import { AdminAlertMock } from './ProductVisuals'
 
 const items = [
   { num: `${TRIAL_DAYS} วัน`, label: 'ทดลองใช้งานฟรี' },
-  { num: '5 นาที', label: 'ติดตั้งเชื่อมต่อเสร็จ' },
-  { num: '0 บาท', label: 'ไม่มีค่าธรรมเนียมแอบแฝง' },
+  { num: '3 ช่องทาง', label: 'LINE, Facebook, Instagram' },
+  { num: 'แดชบอร์ด', label: 'ตั้งค่าเองได้ ไม่ต้องเขียนโค้ด' },
 ]
 
 export default function CtaSection() {
@@ -54,18 +54,8 @@ export default function CtaSection() {
           </div>
         </div>
 
-        {/* Robot Image */}
         <div className="flex justify-center order-first lg:order-last">
-          <div className="relative">
-            <div className="absolute inset-0 bg-cyan-500/20 blur-2xl rounded-full scale-90" />
-            <Image
-              src="/landing/cta-robot.png"
-              alt="DealMee AI Robot Assistant"
-              width={260}
-              height={260}
-              className="relative w-36 sm:w-48 lg:w-60 drop-shadow-[0_16px_40px_rgba(6,182,212,0.3)] animate-float-slow"
-            />
-          </div>
+          <AdminAlertMock />
         </div>
       </div>
     </section>

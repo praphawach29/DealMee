@@ -1,13 +1,14 @@
 'use client'
 
 import React from 'react'
-import Image from 'next/image'
+import { HeroChatMock } from './ProductVisuals'
+import { TEMPLATES } from '@/app/onboarding/templates'
 
 const stats = [
-  { num: '10+', label: 'ประเภทธุรกิจ' },
-  { num: '24/7', label: 'พร้อมให้บริการ' },
-  { num: '5 นาที', label: 'ติดตั้งเสร็จ' },
-  { num: 'ทันที', label: 'ตรวจสลิปกับธนาคาร' },
+  { num: '24 ชม.', label: 'บอทตอบแชท' },
+  { num: '3', label: 'ช่องทางแชทที่เชื่อมได้' },
+  { num: String(TEMPLATES.length), label: 'เทมเพลตตอนสมัคร' },
+  { num: 'ตรวจสลิป', label: 'กับข้อมูลธนาคาร' },
 ]
 
 export default function HeroSection() {
@@ -58,7 +59,7 @@ export default function HeroSection() {
               href="#demo"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-white/30 hover:border-white/60 text-white font-semibold text-sm sm:text-base px-7 py-3 rounded-full hover:bg-white/[0.08] transition-all duration-200 active:scale-95"
             >
-              <span>ดูตัวอย่างแชทจริง</span>
+              <span>ดูตัวอย่างการทำงาน</span>
             </a>
           </div>
 
@@ -73,20 +74,8 @@ export default function HeroSection() {
           </div>
         </div>
 
-        {/* Right Column: Hero Visual Graphic (Floating 3D Chatbot Art from original) */}
         <div className="flex justify-center items-center order-first lg:order-last">
-          <div className="relative">
-            {/* Soft backdrop glow behind the 3D phone */}
-            <div className="absolute inset-0 bg-cyan-500/15 blur-3xl rounded-full scale-90" />
-            <Image
-              src="/landing/hero-chatbot.png"
-              alt="AI Chatbot บนสมาร์ทโฟนพร้อมไอคอนฟีเจอร์ต่าง ๆ"
-              width={520}
-              height={520}
-              className="relative w-64 sm:w-80 lg:w-full lg:max-w-[480px] drop-shadow-[0_20px_50px_rgba(6,182,212,0.25)] animate-float-slow"
-              priority
-            />
-          </div>
+          <HeroChatMock />
         </div>
       </div>
     </section>
