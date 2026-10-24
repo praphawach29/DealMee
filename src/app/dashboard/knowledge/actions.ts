@@ -15,6 +15,7 @@ import {
   type IndexReport,
   type KnowledgeEntryRow,
 } from '@/lib/knowledge/indexKnowledge'
+import { PAID_ORDER_STATUSES } from '@/lib/orders/paymentState'
 
 /** Roughly the ceiling on what a shop owner might reasonably upload; larger files are almost always the wrong document. */
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
@@ -435,7 +436,7 @@ export async function triggerScanGoldenClosers() {
     .from('orders')
     .select('id, conversation_id, total_amount')
     .eq('shop_id', resolved.shop.id)
-    .eq('payment_status', 'paid')
+    .in('status', [...PAID_ORDER_STATUSES])
     .not('conversation_id', 'is', null)
     .order('created_at', { ascending: false })
     .limit(8)

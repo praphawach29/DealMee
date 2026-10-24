@@ -13,6 +13,7 @@ import { adminPausePayload } from '@/lib/inbox/adminPause'
 import { quotationAcceptPath } from '@/lib/docs/acceptToken'
 import { searchKnowledgeForTool } from '@/lib/knowledge/retrieve'
 import { toProductCards } from '@/lib/ai/productCards'
+import { orderPaymentLabel, PAID_ORDER_STATUSES } from '@/lib/orders/paymentState'
 
 const QR_BUCKET = 'qr-codes'
 
@@ -885,7 +886,7 @@ export async function executeTool(
     // Without an order number, the conversation's latest orders ("ของถึงไหนแล้ว").
     let query = supabase
       .from('orders')
-      .select('order_no,status,payment_status,tracking_no,tracking_carrier,tracking_url,product_name,items_summary,total_amount')
+      .select('order_no,status,tracking_no,tracking_carrier,tracking_url,product_name,items_summary,total_amount')
       .eq('shop_id', shopId)
       .eq('conversation_id', conversationId)
     if (oid) query = query.or(`order_no.ilike.%${oid}%${UUID_RE.test(oid) ? `,id.eq.${oid}` : ''}`)
@@ -899,14 +900,13 @@ export async function executeTool(
       }
     }
     const sMap: Record<string, string> = { pending: 'รอดำเนินการ', confirmed: 'ยืนยันแล้ว', processing: 'กำลังดำเนินการ', paid: 'ชำระแล้ว รอจัดส่ง', shipped: 'จัดส่งแล้ว', delivered: 'ส่งถึงแล้ว', cancelled: 'ยกเลิก' }
-    const pMap: Record<string, string> = { pending: 'รอชำระ', paid: 'ชำระแล้ว', failed: 'ล้มเหลว' }
     const lines = found.map((ord: any) => {
       const carrier = carrierName(ord.tracking_carrier)
       const link = trackingLink(ord.tracking_carrier, ord.tracking_url)
       const tracking = ord.tracking_no
         ? `, ขนส่ง ${carrier || 'ไม่ระบุ'} เลขพัสดุ ${ord.tracking_no}${link ? ` ติดตามที่ ${link}` : ''}`
         : ord.status === 'shipped' ? ', ยังไม่มีเลขพัสดุในระบบ' : ''
-      return `ออเดอร์ ${ord.order_no}: สินค้า ${ord.product_name || ord.items_summary || '-'}, ยอด ${Number(ord.total_amount).toLocaleString()} บาท, สถานะ ${sMap[ord.status] ?? ord.status}, ชำระเงิน ${pMap[ord.payment_status] ?? ord.payment_status}${tracking}`
+      return `ออเดอร์ ${ord.order_no}: สินค้า ${ord.product_name || ord.items_summary || '-'}, ยอด ${Number(ord.total_amount).toLocaleString()} บาท, สถานะ ${sMap[ord.status] ?? ord.status}, ชำระเงิน ${orderPaymentLabel(ord.status)}${tracking}`
     })
     return {
       resultForAi: `${lines.join('\n')}\nบอกเลขพัสดุและลิงก์ตามข้อมูลนี้เท่านั้น ห้ามเดาสถานะระหว่างทางหรือวันที่ถึง เพราะระบบไม่มีข้อมูลจากขนส่ง ถ้ายังไม่มีเลขพัสดุ บอกลูกค้าว่าร้านจะแจ้งเลขพัสดุในแชทนี้เมื่อส่งของแล้ว`,
@@ -1253,7 +1253,7 @@ export async function executeTool(
   }
 
   if (toolName === 'check_loyalty_points') {
-    const { data: paidOrds } = await supabase.from('orders').select('total_amount').eq('shop_id', shopId).eq('conversation_id', conversationId).eq('payment_status', 'paid')
+    const { data: paidOrds } = await supabase.from('orders').select('total_amount').eq('shop_id', shopId).eq('conversation_id', conversationId).in('status', [...PAID_ORDER_STATUSES])
     const total = paidOrds?.reduce((s: number, o: any) => s + Number(o.total_amount), 0) ?? 0
     const pts = Math.floor(total / 100)
     return {

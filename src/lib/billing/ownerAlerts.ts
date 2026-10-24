@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { TRIAL_DAYS, trialStatus } from './trial'
+import { isOrderPaid } from '@/lib/orders/paymentState'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.dealmee.app'
 const UPGRADE_URL = `${APP_URL}/dashboard/billing`
@@ -47,12 +48,12 @@ async function trialResults(shopId: string, since: Date) {
   const admin = createAdminClient()
   const { data } = await admin
     .from('orders')
-    .select('total_amount, payment_status')
+    .select('total_amount, status')
     .eq('shop_id', shopId)
     .gte('created_at', since.toISOString())
   const orders = data?.length || 0
   const revenue = (data || [])
-    .filter((o: any) => o.payment_status === 'paid')
+    .filter((o: any) => isOrderPaid(o.status))
     .reduce((sum: number, o: any) => sum + (Number(o.total_amount) || 0), 0)
   return { orders, revenue }
 }

@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendFacebookMessage } from '@/lib/facebook/messengerHelper'
+import { isOrderSettled } from '@/lib/orders/paymentState'
 
 export interface FollowUpConfig {
   qr_recovery_enabled?: boolean
@@ -520,15 +521,24 @@ export async function processDueFollowUpTasks(limit = 25): Promise<{
 
       if (task.task_type === 'qr_recovery' && task.reference_id) {
         // Orders are keyed by order_no and settled via status (the slip flow sets status='paid')
-        const { data: order } = await supabase
+        const { data: order, error: orderError } = await supabase
           .from('orders')
-          .select('status, payment_status')
+          .select('status')
           .eq('shop_id', task.shop_id)
           .eq('order_no', task.reference_id)
           .maybeSingle()
 
-        const settled = ['paid', 'verified', 'completed', 'shipped', 'cancelled']
-        if (order && (settled.includes(order.status) || settled.includes(order.payment_status))) {
+        // A failed read must not count as "unpaid": nagging a customer who already paid is worse
+        // than one missed reminder (the old select named a column production doesn't have)
+        if (orderError) {
+          console.error('[qr_recovery] could not read order, skipping reminder:', orderError.message)
+          await supabase
+            .from('follow_up_tasks')
+            .update({ status: 'failed', executed_at: nowIso, error_message: `Order lookup failed: ${orderError.message}` })
+            .eq('id', task.id)
+          continue
+        }
+        if (order && isOrderSettled(order.status)) {
           await supabase
             .from('follow_up_tasks')
             .update({ status: 'cancelled', executed_at: nowIso, error_message: 'Order already paid' })

@@ -358,7 +358,6 @@ export async function seedSampleShopData() {
         quantity: '2',
         total_amount: 518.00,
         status: 'paid',
-        payment_status: 'paid',
         payment_method: 'promptpay',
       },
       {
@@ -373,7 +372,6 @@ export async function seedSampleShopData() {
         quantity: '1',
         total_amount: 590.00,
         status: 'shipped',
-        payment_status: 'paid',
         payment_method: 'promptpay',
       },
       {
@@ -388,7 +386,6 @@ export async function seedSampleShopData() {
         quantity: '1',
         total_amount: 890.00,
         status: 'pending',
-        payment_status: 'pending',
         payment_method: 'promptpay',
       },
     ]

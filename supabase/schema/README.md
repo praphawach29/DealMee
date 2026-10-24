@@ -22,5 +22,10 @@ migration ที่เขียนจากไฟล์อย่างเดี�
 npm run schema:check                      # migration ที่ใหม่กว่า snapshot
 node scripts/schema-snapshot.mjs check supabase/migrations/<ไฟล์>.sql
 ```
-ตรวจว่า `insert into ... (คอลัมน์)` และ `update ... set คอลัมน์ =` ใช้เฉพาะคอลัมน์ที่มีจริง
-(หรือคอลัมน์ที่ไฟล์เดียวกันเพิ่มเองด้วย `add column`) — ยังไม่ได้ตรวจ select/where/function body
+ตรวจสองอย่าง:
+- migration ที่ branch นี้เพิ่ม/แก้: `insert into ... (คอลัมน์)` และ `update ... set คอลัมน์ =` ใช้เฉพาะคอลัมน์ที่มีจริง
+  (หรือคอลัมน์ที่ไฟล์เดียวกันเพิ่มเองด้วย `add column`)
+- โค้ดใน `src/`: `.from('ตาราง').select('...')` และ `.eq('คอลัมน์', …)` / `.order(…)` ฯลฯ ใช้เฉพาะตาราง/คอลัมน์ที่มีจริง
+  (ตัวนี้คือที่เจอ `orders.payment_status` ซึ่งทำให้ลูกค้าที่จ่ายแล้วโดนทวงเงิน)
+
+ยังไม่ได้ตรวจ: คอลัมน์ใน `.insert({...})`/`.update({...})` ของโค้ด, `.or('...')`, และตัวฟังก์ชันใน SQL

@@ -12,17 +12,18 @@
  *   node scripts/schema-snapshot.mjs check [files…]   check migrations against the snapshot
  *
  * `import` writes supabase/schema/production.json (full) and production.md (one table per
- * section, for reading). `check` with no files checks migrations newer than the snapshot.
- * Exit code 1 when a migration names a column the snapshot doesn't have and the same file
- * doesn't add it.
+ * section, for reading). `check` with no files checks the migrations this branch adds or
+ * changes compared with origin/main.
+ * `check` also scans src/ for supabase-js chains that name a table or column production
+ * doesn't have. Exit code 1 on any problem.
  */
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
+import { execSync } from 'node:child_process'
 import { join, dirname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const SCHEMA_DIR = join(ROOT, 'supabase', 'schema')
-const MIGRATIONS = join(ROOT, 'supabase', 'migrations')
 const SNAPSHOT_JSON = join(SCHEMA_DIR, 'production.json')
 const SNAPSHOT_MD = join(SCHEMA_DIR, 'production.md')
 
@@ -143,23 +144,36 @@ function createdInFile(sql) {
   return { tables, columns }
 }
 
+function changedMigrations() {
+  const run = (cmd) => {
+    try {
+      return execSync(cmd, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean)
+    } catch {
+      return []
+    }
+  }
+  const names = new Set([
+    ...run('git diff --name-only origin/main...HEAD -- supabase/migrations'),
+    ...run('git diff --name-only HEAD -- supabase/migrations'),
+    ...run('git ls-files --others --exclude-standard -- supabase/migrations'),
+  ])
+  return [...names].filter((f) => f.endsWith('.sql') && existsSync(join(ROOT, f))).map((f) => join(ROOT, f))
+}
+
 function check(files) {
   const schema = JSON.parse(readFileSync(SNAPSHOT_JSON, 'utf8'))
   const live = new Map(schema.tables.map((t) => [t.name, new Set(t.columns.map((c) => c.name))]))
 
   if (files.length === 0) {
-    // Migrations dated after the snapshot are the ones that haven't met the real database yet
-    const capturedStamp = new Date(schema.captured_at).toISOString().replace(/[-:T]/g, '').slice(0, 14)
-    files = readdirSync(MIGRATIONS)
-      .filter((f) => f.endsWith('.sql') && f.slice(0, 14) > capturedStamp)
-      .map((f) => join(MIGRATIONS, f))
+    // The migrations this branch adds or changes. File names here are not real dates (some
+    // are dated ahead of when they ran), so they can't tell what production has already seen.
+    files = changedMigrations()
   }
+  let problems = checkCode(live)
   if (files.length === 0) {
-    console.log('No migrations newer than the snapshot.')
-    return 0
+    console.log('No new or changed migrations on this branch (compared with origin/main).')
   }
 
-  let problems = 0
   for (const file of files) {
     const sql = stripComments(readFileSync(file, 'utf8'))
     const made = createdInFile(sql)
@@ -175,8 +189,61 @@ function check(files) {
       }
     }
   }
-  console.log(problems ? `\n${problems} problem(s). See supabase/schema/production.md for what each table has.` : `✓ ${files.length} migration(s) only touch columns production has.`)
+  console.log(problems ? `\n${problems} problem(s). See supabase/schema/production.md for what each table has.` : `✓ src/ and ${files.length} migration(s) only use columns production has.`)
   return problems ? 1 : 0
+}
+
+
+// ─── code check ───────────────────────────────────────────────────────────────
+
+/**
+ * Columns the app names in supabase-js chains: .from('t').select('a, b') and filters like
+ * .eq('col', …). A heuristic (one chain, up to the next ';' or .from), but it is what found
+ * orders.payment_status, broadcasts.recipient_count and the copilot's wrong column names.
+ */
+function checkCode(live) {
+  const files = []
+  const walk = (dir) => {
+    for (const name of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, name.name)
+      if (name.isDirectory()) walk(full)
+      else if (/\.(ts|tsx)$/.test(name.name)) files.push(full)
+    }
+  }
+  walk(join(ROOT, 'src'))
+  let problems = 0
+  for (const file of files) {
+    const code = readFileSync(file, 'utf8')
+    for (const m of code.matchAll(/\.from\(\s*'([a-z_]+)'\s*\)/g)) {
+      const table = m[1]
+      const cols = live.get(table)
+      const rel = file.slice(ROOT.length + 1)
+      if (!cols) {
+        console.log(`✗ ${rel}: table "${table}" is not in production`)
+        problems++
+        continue
+      }
+      let chain = code.slice(m.index + m[0].length, m.index + m[0].length + 1500)
+      const stops = [chain.indexOf(';'), chain.indexOf('.from(')].filter((i) => i >= 0)
+      if (stops.length) chain = chain.slice(0, Math.min(...stops))
+      const named = new Set()
+      for (const sel of chain.matchAll(/\.select\(\s*'([^']*)'/g)) {
+        for (const part of sel[1].split(',')) {
+          const p = part.trim()
+          if (!p || p === '*' || /[(:!.]/.test(p)) continue
+          named.add(p.split(/\s/)[0])
+        }
+      }
+      for (const f of chain.matchAll(/\.(?:eq|neq|in|gt|gte|lt|lte|is|not|ilike|like|order|contains)\(\s*'([a-z_]+)'/g)) named.add(f[1])
+      for (const col of named) {
+        if (!cols.has(col)) {
+          console.log(`✗ ${rel}: column "${table}.${col}" is not in production`)
+          problems++
+        }
+      }
+    }
+  }
+  return problems
 }
 
 // ─── main ─────────────────────────────────────────────────────────────────────
