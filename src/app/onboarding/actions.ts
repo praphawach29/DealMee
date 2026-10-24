@@ -7,13 +7,15 @@ import { createClient } from '@/utils/supabase/server'
 import { randomUUID } from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { businessTypeForTemplate } from './templates'
+import { loginUrl, onboardingResumePath, safeNextPath } from '@/lib/auth/safeNext'
 
 export async function submitOnboarding(formData: FormData) {
   const supabase = await createClient()
+  const requested = safeNextPath(String(formData.get('next') || ''), '')
 
   const { data: { user }, error: userError } = await supabase.auth.getUser()
   if (!user || userError) {
-    redirect('/login')
+    redirect(loginUrl({ next: requested || '/onboarding' }))
   }
 
   const shopName = formData.get('shopName') as string
@@ -51,7 +53,9 @@ export async function submitOnboarding(formData: FormData) {
 
     if (insertError) {
       console.error('[Onboarding] Could not create shop:', insertError)
-      redirect('/onboarding?error=create_failed')
+      const params = new URLSearchParams({ error: 'create_failed' })
+      if (requested) params.set('next', requested)
+      redirect(`/onboarding?${params.toString()}`)
     }
 
     // Link only if still unlinked, so a double submit can't orphan a second shop
@@ -84,5 +88,5 @@ export async function submitOnboarding(formData: FormData) {
   }
 
   revalidatePath('/dashboard', 'layout')
-  redirect('/dashboard')
+  redirect(onboardingResumePath(requested))
 }

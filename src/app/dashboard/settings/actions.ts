@@ -424,6 +424,31 @@ export async function updateCompanySettings(formData: FormData) {
 }
 
 
+export async function getPlaygroundCatalogStatus(): Promise<{ products: number; knowledge: number; services: number } | null> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop?.id) return null
+
+  const [products, knowledge, services] = await Promise.all([
+    supabase.from('products').select('*', { count: 'exact', head: true }).eq('shop_id', shop.id),
+    supabase.from('knowledge_base').select('*', { count: 'exact', head: true }).eq('shop_id', shop.id),
+    supabase.from('services').select('*', { count: 'exact', head: true }).eq('shop_id', shop.id),
+  ])
+
+  if (products.error || knowledge.error) return null
+
+  return {
+    products: products.count || 0,
+    knowledge: knowledge.count || 0,
+    // -1 means the services count could not be read, so the playground must not
+    // treat the shop as empty and hide the real bot.
+    services: services.error ? -1 : services.count || 0,
+  }
+}
+
 export async function getPlaygroundGreeting() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

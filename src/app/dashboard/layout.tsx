@@ -1,7 +1,9 @@
+import { headers } from 'next/headers'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { isSuperAdminEmail } from '@/lib/auth/superAdmin'
+import { loginUrl, REQUEST_PATH_HEADER, safeNextPath } from '@/lib/auth/safeNext'
 import DashboardClientLayout, { type ShellNotification } from './DashboardClientLayout'
 import { planLabel } from '@/lib/billing/planLabel'
 import TrialBanner from './components/TrialBanner'
@@ -18,15 +20,19 @@ export default async function DashboardLayout({
     error,
   } = await supabase.auth.getUser()
 
+  const requested = safeNextPath((await headers()).get(REQUEST_PATH_HEADER), '/dashboard')
+
   if (error || !user) {
-    redirect('/login')
+    redirect(loginUrl({ next: requested }))
   }
 
   const shop = await getOrCreateShopForUser(supabase, user)
   // Accounts not linked to a shop yet set one up first, rather than browsing a
-  // dashboard whose pages expect a shop
+  // dashboard whose pages expect a shop. The path they asked for (for example
+  // the playground) is carried through onboarding.
   if (!shop) {
-    redirect('/onboarding')
+    const resume = requested.startsWith('/dashboard') ? requested : '/dashboard'
+    redirect(`/onboarding?next=${encodeURIComponent(resume)}`)
   }
 
   const bizType = shop?.business_type || 'retail'

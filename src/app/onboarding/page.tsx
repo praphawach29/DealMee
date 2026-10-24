@@ -3,14 +3,18 @@ import { TEMPLATES } from './templates'
 import { Button } from '@/components/ui/button'
 import { Check } from 'lucide-react'
 import Image from 'next/image'
+import { safeNextPath } from '@/lib/auth/safeNext'
 
 
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ error?: string }>
+  searchParams?: Promise<{ error?: string; next?: string }>
 }) {
-  const { error } = (await searchParams) || {}
+  const params = (await searchParams) || {}
+  const error = params.error
+  const next = safeNextPath(params.next, '')
+  const opensPlayground = next.includes('playground=1')
 
   return (
     <div className="min-h-screen bg-merchant-bg py-12 px-4 sm:px-6 lg:px-8 flex justify-center items-center">
@@ -30,7 +34,11 @@ export default async function OnboardingPage({
             </span>
           </div>
           <h2 className="text-3xl font-bold text-on-surface font-headline-lg">ตั้งค่าร้านค้าของคุณ</h2>
-          <p className="mt-2 text-on-surface-variant font-body-lg">กรุณากรอกข้อมูลเบื้องต้นเพื่อเริ่มต้นใช้งาน</p>
+          <p className="mt-2 text-on-surface-variant font-body-lg">
+            {opensPlayground
+              ? 'ตั้งค่าร้านสั้น ๆ แล้วระบบจะเปิดหน้าทดสอบสนทนากับบอทจริงให้ทันที'
+              : 'กรุณากรอกข้อมูลเบื้องต้นเพื่อเริ่มต้นใช้งาน'}
+          </p>
         </div>
 
         <div className="bg-surface rounded-3xl p-6 sm:p-8 shadow-sm border border-outline-variant">
@@ -40,6 +48,7 @@ export default async function OnboardingPage({
             </div>
           )}
           <form action={submitOnboarding} className="space-y-8">
+            {next ? <input type="hidden" name="next" value={next} /> : null}
             {/* Step 1 */}
             <div>
               <h3 className="text-xl font-bold text-on-surface mb-4 font-headline-md flex items-center gap-2">

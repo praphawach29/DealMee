@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Menu, X, ArrowRight } from 'lucide-react'
+import { Menu, X } from 'lucide-react'
+import TryRealBotLink from './TryRealBotLink'
 
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
@@ -93,13 +94,7 @@ export default function Navbar() {
           >
             เข้าสู่ระบบ
           </Link>
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-bold text-base px-5 py-2.5 rounded-xl shadow-md shadow-blue-500/25 transition-all duration-200 active:scale-95"
-          >
-            <span>ทดลองใช้ฟรี</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
+          <TryRealBotLink />
         </div>
 
         {/* Mobile Hamburger Toggle */}
@@ -159,13 +154,7 @@ export default function Navbar() {
             >
               เข้าสู่ระบบ
             </Link>
-            <a
-              href="#pricing"
-              onClick={() => setMobileMenuOpen(false)}
-              className="text-center py-3 font-semibold text-white bg-gradient-to-r from-blue-600 to-cyan-500 rounded-xl shadow-md"
-            >
-              ทดลองใช้งาน
-            </a>
+            <TryRealBotLink className="w-full" />
           </div>
         </div>
       )}
