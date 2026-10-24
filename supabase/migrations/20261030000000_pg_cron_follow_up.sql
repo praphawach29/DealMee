@@ -66,7 +66,7 @@ end;
 $$;
 
 -- Only the scheduler runs this. It holds the secret, so no app role may call it.
-revoke execute on function public.run_follow_up_cron() from public;
+revoke execute on function public.run_follow_up_cron() from public, anon, authenticated;
 grant execute on function public.run_follow_up_cron() to postgres;
 
 -- Re-running this migration re-schedules rather than adding a second job
