@@ -2,12 +2,8 @@
 
 import React from 'react'
 
-/** Channels the sales bot actually replies on. */
-const CHANNELS = [
-  { name: 'LINE OA', color: '#06C755' },
-  { name: 'Facebook Messenger', color: '#1877F2' },
-  { name: 'Instagram', color: '#E4405F' },
-] as const
+/** The channel a shop can connect today. Messenger is still waiting on Meta's App Review. */
+const CHANNELS = [{ name: 'LINE OA', color: '#06C755' }] as const
 
 function ChannelPill({ name, color }: { name: string; color: string }) {
   return (
@@ -77,8 +73,8 @@ export function HeroChatMock() {
 
 const SETUP_STEPS = [
   {
-    title: 'เชื่อมช่องทางแชท',
-    body: 'ใส่ Token ของ LINE OA หรือเชื่อม Facebook Page ข้อความจาก Instagram เข้าทางแอป Meta เดียวกัน',
+    title: 'เชื่อม LINE OA ของร้าน',
+    body: 'ใส่ Channel Access Token กับ Channel Secret ของ LINE OA แล้ววาง Webhook URL ที่ระบบสร้างให้',
   },
   {
     title: 'ใส่ข้อมูลร้าน',
@@ -110,7 +106,7 @@ export function SetupFlowMock() {
           <p className="text-sm leading-relaxed text-slate-600">{step.body}</p>
         </div>
       ))}
-      <SampleNote>ช่องทางที่บอทตอบได้วันนี้ คือ LINE, Facebook Messenger และ Instagram</SampleNote>
+      <SampleNote>ช่องทางที่บอทตอบได้วันนี้คือ LINE OA ของร้าน</SampleNote>
     </div>
   )
 }

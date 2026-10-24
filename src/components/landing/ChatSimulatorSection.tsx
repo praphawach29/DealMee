@@ -114,7 +114,7 @@ export default function ChatSimulatorSection() {
   )
 
   return (
-    <section id="demo" className="py-20 px-4 sm:px-6 lg:px-8 bg-white relative">
+    <section id="chat-sample" className="py-20 px-4 sm:px-6 lg:px-8 bg-white relative">
       <style>{`
         .demo-switcher .demo-panel { display: none; }
         ${ordered
