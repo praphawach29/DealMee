@@ -58,7 +58,13 @@ export default function Navbar() {
             href="#demo"
             className="hover:text-cyan-400 transition-colors duration-200"
           >
-            ตัวอย่างการทำงาน
+            ดูคลิป
+          </a>
+          <a
+            href="#try"
+            className="hover:text-cyan-400 transition-colors duration-200"
+          >
+            ลองใช้เลย
           </a>
           <a
             href="#features"
@@ -94,7 +100,7 @@ export default function Navbar() {
           >
             เข้าสู่ระบบ
           </Link>
-          <TryRealBotLink />
+          <TryRealBotLink label="ทดลองใช้ฟรี" />
         </div>
 
         {/* Mobile Hamburger Toggle */}
@@ -117,6 +123,13 @@ export default function Navbar() {
             className="block py-2.5 text-base font-medium text-slate-200 hover:text-cyan-400 border-b border-white/5"
           >
             🔍 ตัวอย่างการทำงาน
+          </a>
+          <a
+            href="#try"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block py-2.5 text-base font-medium text-slate-200 hover:text-cyan-400 border-b border-white/5"
+          >
+            💬 ลองคุยกับบอทเลย
           </a>
           <a
             href="#features"
