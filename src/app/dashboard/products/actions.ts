@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { platformSecret } from '@/lib/platformSecrets'
 import { effectivePlanKey } from '@/lib/billing/trial'
+import { embedderForShop } from '@/lib/knowledge/embedAuth'
+import { indexKnowledgeEntries } from '@/lib/knowledge/indexKnowledge'
 
 export async function createProduct(formData: FormData) {
   const supabase = await createClient()
@@ -414,7 +416,18 @@ export async function seedSampleShopData() {
         category: 'นโยบายร้าน',
       },
     ]
-    await supabase.from('knowledge_base').insert(sampleKb)
+    const { data: insertedKb, error: kbError } = await supabase
+      .from('knowledge_base')
+      .insert(sampleKb)
+      .select('id, title, content, status, source, source_ref')
+    if (!kbError && insertedKb && insertedKb.length > 0) {
+      try {
+        const { embedder } = await embedderForShop(shopId)
+        await indexKnowledgeEntries({ supabase, shopId, entries: insertedKb, embedder })
+      } catch (err) {
+        console.error('[sample knowledge] index failed:', err instanceof Error ? err.message : err)
+      }
+    }
   }
 
   revalidatePath('/dashboard')

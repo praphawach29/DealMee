@@ -9,7 +9,7 @@ import KnowledgeManager from './KnowledgeManager'
  * the 10s a Vercel function gets by default — the import would be killed
  * mid-way with nothing saved.
  */
-export const maxDuration = 60
+export const maxDuration = 120
 
 export default async function KnowledgePage() {
   const supabase = await createClient()
