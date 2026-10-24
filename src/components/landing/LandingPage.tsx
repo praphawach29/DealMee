@@ -8,6 +8,7 @@ import HowItWorksSection from './HowItWorksSection'
 import ChatSimulatorSection from './ChatSimulatorSection'
 import DemoVideoSection from './DemoVideoSection'
 import LiveDemoSection from './LiveDemoSection'
+import { LandingActionsProvider } from './demo/LandingActions'
 import DashboardShowcase from './DashboardShowcase'
 import PricingSection from './PricingSection'
 import PricingComparison from './PricingComparison'
@@ -15,8 +16,9 @@ import CtaSection from './CtaSection'
 import ContactFaqSection from './ContactFaqSection'
 import Footer from './Footer'
 
-export default function LandingPage() {
+export default function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
   return (
+    <LandingActionsProvider isLoggedIn={isLoggedIn}>
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 selection:bg-cyan-500/20 selection:text-cyan-800">
       {/* 1. Header Navigation */}
       <Navbar />
@@ -27,7 +29,7 @@ export default function LandingPage() {
       {/* 3. The promo clips, one chapter at a time */}
       <DemoVideoSection />
 
-      {/* Live demo: chat with the real engine in a sample shop, no account */}
+      {/* Two ways in: the no-account demo chat, or the real trial */}
       <LiveDemoSection />
 
       {/* 4. 12 Core Features Grid */}
@@ -57,5 +59,6 @@ export default function LandingPage() {
       {/* 12. Minimalist Footer */}
       <Footer />
     </div>
+    </LandingActionsProvider>
   )
 }

@@ -4,7 +4,7 @@ import React from 'react'
 import { TRIAL_DAYS } from '@/lib/billing/trial'
 import { DEALMEE_LINE_OA } from './data'
 import { AdminAlertMock } from './ProductVisuals'
-import TryRealBotLink from './TryRealBotLink'
+import { DemoButton, SignupButton } from './demo/LandingActions'
 
 const items = [
   { num: `${TRIAL_DAYS} วัน`, label: 'ทดลองใช้งานฟรี' },
@@ -37,7 +37,8 @@ export default function CtaSection() {
           </div>
 
           <div className="flex gap-3.5 justify-center lg:justify-start flex-wrap">
-            <TryRealBotLink size="lg" />
+            <SignupButton size="lg" />
+            <DemoButton size="lg" tone="dark" />
             <a
               href={DEALMEE_LINE_OA.url}
               target="_blank"

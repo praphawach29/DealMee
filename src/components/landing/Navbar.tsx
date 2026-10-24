@@ -4,11 +4,12 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Menu, X } from 'lucide-react'
-import TryRealBotLink from './TryRealBotLink'
+import { SignupButton, useLandingActions } from './demo/LandingActions'
 
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const { isLoggedIn, openDemo } = useLandingActions()
 
   useEffect(() => {
     const handleScroll = () => {
@@ -60,12 +61,13 @@ export default function Navbar() {
           >
             ดูคลิป
           </a>
-          <a
-            href="#try"
+          <button
+            type="button"
+            onClick={() => openDemo()}
             className="hover:text-cyan-400 transition-colors duration-200"
           >
-            ลองใช้เลย
-          </a>
+            ลองคุยกับบอท
+          </button>
           <a
             href="#features"
             className="hover:text-cyan-400 transition-colors duration-200"
@@ -94,13 +96,15 @@ export default function Navbar() {
 
         {/* Right CTA / Auth Buttons */}
         <div className="hidden md:flex items-center gap-3">
-          <Link
-            href="/login"
-            className="px-4 py-2 text-base font-medium text-slate-200 hover:text-white transition-colors duration-200"
-          >
-            เข้าสู่ระบบ
-          </Link>
-          <TryRealBotLink label="ทดลองใช้ฟรี" />
+          {!isLoggedIn && (
+            <Link
+              href="/login"
+              className="px-4 py-2 text-base font-medium text-slate-200 hover:text-white transition-colors duration-200"
+            >
+              เข้าสู่ระบบ
+            </Link>
+          )}
+          <SignupButton />
         </div>
 
         {/* Mobile Hamburger Toggle */}
@@ -124,13 +128,16 @@ export default function Navbar() {
           >
             🔍 ตัวอย่างการทำงาน
           </a>
-          <a
-            href="#try"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block py-2.5 text-base font-medium text-slate-200 hover:text-cyan-400 border-b border-white/5"
+          <button
+            type="button"
+            onClick={() => {
+              setMobileMenuOpen(false)
+              openDemo()
+            }}
+            className="block w-full text-left py-2.5 text-base font-medium text-slate-200 hover:text-cyan-400 border-b border-white/5"
           >
-            💬 ลองคุยกับบอทเลย
-          </a>
+            💬 ลองคุยกับบอท (ไม่ต้องสมัคร)
+          </button>
           <a
             href="#features"
             onClick={() => setMobileMenuOpen(false)}
@@ -161,13 +168,15 @@ export default function Navbar() {
           </a>
 
           <div className="pt-3 flex flex-col gap-2.5">
-            <Link
-              href="/login"
-              className="text-center py-2.5 font-semibold text-slate-200 bg-white/5 rounded-xl border border-white/10"
-            >
-              เข้าสู่ระบบ
-            </Link>
-            <TryRealBotLink className="w-full" />
+            {!isLoggedIn && (
+              <Link
+                href="/login"
+                className="text-center py-2.5 font-semibold text-slate-200 bg-white/5 rounded-xl border border-white/10"
+              >
+                เข้าสู่ระบบ
+              </Link>
+            )}
+            <SignupButton className="w-full" />
           </div>
         </div>
       )}

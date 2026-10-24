@@ -2,7 +2,7 @@ import React from 'react'
 import { scenarios } from './data'
 import { ChatMessage, ProductFlexData, QuotationFlexData } from './types'
 import { FileText } from 'lucide-react'
-import TryRealBotLink from './TryRealBotLink'
+import { DemoButton, SignupButton } from './demo/LandingActions'
 
 const SCENARIO_ORDER = ['search', 'order', 'slip', 'quotation', 'booking', 'memory', 'handoff'] as const
 
@@ -202,17 +202,14 @@ export default function ChatSimulatorSection() {
 
           <div className="mt-8 rounded-[14px] border border-[#2F6BFF]/20 bg-[#F4F7FB] px-5 py-6 text-center font-sans">
             <p className="text-xs font-bold tracking-wide text-[#2F6BFF]">ตัวอย่างด้านบน ไม่ใช่บอทที่ตอบคุณ</p>
-            <h3 className="font-heading mt-2 text-xl font-semibold text-slate-900">อยากคุยกับบอทจริงของร้านคุณ</h3>
+            <h3 className="font-heading mt-2 text-xl font-semibold text-slate-900">อยากพิมพ์คุยกับบอทเอง?</h3>
             <p className="mx-auto mt-2 max-w-lg text-sm leading-relaxed text-slate-600">
-              บทสนทนาในกรอบนี้เป็นตัวอย่างลำดับการทำงาน ปุ่มด้านล่างเปิดหน้าทดสอบสนทนาในแดชบอร์ด
-              บอทตอบจากสินค้าและคลังความรู้ที่คุณใส่เอง
+              ลองคุยกับบอทในร้านตัวอย่างได้เลยโดยไม่ต้องสมัคร หรือสมัครทดลองใช้ แล้วให้บอทตอบจากสินค้าของร้านคุณเอง
             </p>
-            <div className="mt-4 flex justify-center">
-              <TryRealBotLink size="lg" className="w-full sm:w-auto" />
+            <div className="mt-4 flex flex-col sm:flex-row gap-3 justify-center">
+              <DemoButton size="lg" />
+              <SignupButton size="lg" />
             </div>
-            <p className="mt-3 text-xs leading-relaxed text-slate-500">
-              ถ้ายังไม่ได้เข้าสู่ระบบ ระบบจะพาไปสมัครหรือเข้าสู่ระบบ แล้วเปิดหน้าทดสอบสนทนาให้ทันที
-            </p>
           </div>
         </div>
       </div>
