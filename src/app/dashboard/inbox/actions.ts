@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { synthesizeFaqFromConversation } from '@/lib/ai/faqSynthesis'
 import { SupportedPlatform, AiMode, normalizePlatform } from '@/types/omnichannel'
+import { adminPausePayload } from '@/lib/inbox/adminPause'
 
 export async function sendMessage(conversationId: string, messageText: string) {
   const supabase = await createClient()
@@ -131,18 +132,21 @@ export async function sendMessage(conversationId: string, messageText: string) {
     return { error: `บันทึกข้อความไม่สำเร็จ: ${msgError.message}` }
   }
 
-  // 4. Update conversation last_message, status to 'human', and ai_mode to 'manual'
-  const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString()
-  await supabase
+  // 4. Update conversation last_message and hand the chat to the admin for an hour
+  const { error: takeoverError } = await supabase
     .from('conversations')
     .update({
       last_message: trimmedText,
       last_message_at: new Date().toISOString(),
-      status: 'human', // Auto switch to Human when admin replies
-      ai_mode: 'manual',
-      paused_until: pausedUntil,
+      ...adminPausePayload(), // Auto switch to Human when admin replies
     })
     .eq('id', conversationId)
+
+  // Not fatal — the message is sent and saved — but the bot would keep answering over
+  // the admin, so it has to be visible rather than swallowed.
+  if (takeoverError) {
+    console.error('[Inbox Actions] Could not switch conversation to admin mode:', takeoverError.message)
+  }
 
   // 5. Trigger Hermes-inspired continuous learning in background
   synthesizeFaqFromConversation({
@@ -172,18 +176,10 @@ export async function toggleHandoffStatus(conversationId: string, newStatus: 'ai
     return { error: 'ไม่พบข้อมูลร้านค้า' }
   }
 
-  const pausedUntil = newStatus === 'human'
-    ? new Date(Date.now() + 60 * 60 * 1000).toISOString()
-    : null
-
-  const newAiMode: AiMode = newStatus === 'human' ? 'manual' : 'auto'
-
   const { error } = await supabase
     .from('conversations')
     .update({
-      status: newStatus,
-      ai_mode: newAiMode,
-      paused_until: pausedUntil,
+      ...(newStatus === 'human' ? adminPausePayload() : { status: newStatus, ai_mode: 'auto' as AiMode, paused_until: null }),
       updated_at: new Date().toISOString(),
     })
     .eq('id', conversationId)
@@ -215,17 +211,12 @@ export async function toggleAiMode(conversationId: string, newMode: AiMode) {
     return { error: 'ไม่พบข้อมูลร้านค้า' }
   }
 
-  const newStatus = newMode === 'manual' ? 'human' : 'ai'
-  const pausedUntil = newMode === 'manual'
-    ? new Date(Date.now() + 60 * 60 * 1000).toISOString()
-    : null
-
   const { error } = await supabase
     .from('conversations')
     .update({
-      ai_mode: newMode,
-      status: newStatus,
-      paused_until: pausedUntil,
+      ...(newMode === 'manual'
+        ? adminPausePayload()
+        : { ai_mode: newMode, status: 'ai' as const, paused_until: null }),
       updated_at: new Date().toISOString(),
     })
     .eq('id', conversationId)

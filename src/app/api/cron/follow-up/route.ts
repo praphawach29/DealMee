@@ -3,6 +3,7 @@ import { processDueFollowUpTasks } from '@/lib/ai/proactiveFollowUp'
 import { expirePendingOrders } from '@/lib/orders/expirePendingOrders'
 import { sendTrialReminders } from '@/lib/billing/ownerAlerts'
 import { processWalletRenewals } from '@/lib/billing/walletRenewal'
+import { expirePausedConversations } from '@/lib/inbox/adminPause'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // Allow up to 60s for batch processing
@@ -31,6 +32,9 @@ async function handleFollowUpCron(req: NextRequest) {
     const orders = await expirePendingOrders()
     const trialReminders = await sendTrialReminders()
     const walletRenewals = await processWalletRenewals()
+    // Hands chats back to the bot when the admin's hour is up, without waiting for the
+    // customer to write again
+    const adminPauses = await expirePausedConversations()
 
     return NextResponse.json({
       success: true,
@@ -39,6 +43,7 @@ async function handleFollowUpCron(req: NextRequest) {
       orders,
       trialReminders,
       walletRenewals,
+      adminPauses,
     })
   } catch (err: any) {
     console.error('[FollowUpCron] Exception during cron job:', err)

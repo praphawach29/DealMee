@@ -6,8 +6,10 @@ const { chromium } = require('playwright-core')
 const { spawn, execFileSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
-const clips = require('./clips')
-const overview = require('./overview')
+const clips = require(process.env.CLIPS || './clips')
+const overview = require(process.env.SEGMENTS || './overview')
+const LONG_NAME = process.env.OUTNAME || 'dealmee-00-overview'
+const LONG_TITLE = process.env.TITLE || 'DealMee ภาพรวม (คลิปแรก)'
 
 const FPS = 30
 const XF = 0.4 // overview crossfade
@@ -160,7 +162,7 @@ async function main() {
       filter += `${last}[${i}:v]xfade=transition=fade:duration=${XF}:offset=${offs[i].toFixed(3)}${label};`
       last = label
     }
-    const joined = path.join(WORK, 'overview-video.mp4')
+    const joined = path.join(WORK, `${LONG_NAME}-video.mp4`)
     run('ffmpeg', ['-y', '-loglevel', 'error', ...inputs, '-filter_complex', filter.replace(/;$/, ''), '-map', '[v]',
       '-c:v', 'libx264', '-preset', 'medium', '-crf', '17', '-pix_fmt', 'yuv420p', '-r', String(FPS), joined])
 
@@ -172,10 +174,10 @@ async function main() {
     })
     const lastSeg = overview[overview.length - 1]
     const end = offs[overview.length - 1] + endStartOf(lastSeg)
-    const name = 'dealmee-00-overview'
+    const name = LONG_NAME
     const wav = writeMusic(cues, total, end, name)
     mux(joined, wav, path.join(OUT, `${name}.mp4`))
-    writeVoiceover(name, 'DealMee ภาพรวม (คลิปแรก)', total, overview.map((s, i) => ({
+    writeVoiceover(name, LONG_TITLE, total, overview.map((s, i) => ({
       from: offs[i],
       to: i < overview.length - 1 ? offs[i + 1] : total,
       scene: strip(s.hook.title),

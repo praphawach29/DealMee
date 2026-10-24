@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import { botMayReplyNow } from '@/lib/shop/businessHours'
 import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
 import { linkPlatformOwnerFromShopOa } from '@/lib/billing/platformLineAlerts'
+import { adminPausePayload, isPauseExpired, resumePayload } from '@/lib/inbox/adminPause'
 import { verifyLineSignature } from '@/lib/line/signature'
 import { processSalesAgentChat, type AgentResult } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
@@ -73,7 +74,9 @@ export async function POST(
     const lineSecret = shop.line_secret ? shop.line_secret.trim() : undefined
     const features = (shop.features as Record<string, boolean>) || {}
     // Off when switched off, or while the shop is open and answers customers itself (business hours)
-    const isAutoReplyEnabled = features.auto_reply !== false && botMayReplyNow(features)
+    const autoReplySwitchedOff = features.auto_reply === false
+    const mutedByBusinessHours = !autoReplySwitchedOff && !botMayReplyNow(features)
+    const isAutoReplyEnabled = !autoReplySwitchedOff && !mutedByBusinessHours
 
     // Reject when the shop has no Channel Secret or the signature does not match.
     // A missing secret used to log a warning and still run the bot.
@@ -87,7 +90,7 @@ export async function POST(
     // planning steps; holding the webhook open that long made LINE time out and redeliver.
     after(async () => {
       try {
-        await processLineEvents({ events, shop, shopId: shop_id, lineToken, features, isAutoReplyEnabled })
+        await processLineEvents({ events, shop, shopId: shop_id, lineToken, features, isAutoReplyEnabled, mutedByBusinessHours })
       } catch (err) {
         console.error('[LINE Webhook] Background processing failed:', err)
       }
@@ -103,7 +106,7 @@ export async function POST(
 // ─── Event processing (runs in after(), once LINE has its 200) ────────────────
 
 async function processLineEvents({
-  events, shop, shopId: shop_id, lineToken, features, isAutoReplyEnabled,
+  events, shop, shopId: shop_id, lineToken, features, isAutoReplyEnabled, mutedByBusinessHours,
 }: {
   events: any[]
   shop: Record<string, any>
@@ -111,6 +114,7 @@ async function processLineEvents({
   lineToken: string | undefined
   features: Record<string, boolean>
   isAutoReplyEnabled: boolean
+  mutedByBusinessHours: boolean
 }) {
   // Process each LINE event
   for (const event of events) {
@@ -284,12 +288,7 @@ async function processLineEvents({
 
       if (isPauseCommand) {
         console.log(`[Webhook] Explicit pause command detected for ${userId}`)
-        const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString()
-        await supabase.from('conversations').update({ 
-          status: 'human', 
-          ai_mode: 'manual', 
-          paused_until: pausedUntil 
-        }).eq('id', conv.id)
+        await supabase.from('conversations').update(adminPausePayload()).eq('id', conv.id)
         if (replyToken && lineToken) {
           await sendLineReply(replyToken, 'รับเรื่องเรียบร้อยแล้วค่ะ น้องบอทได้หยุดการตอบชั่วคราวและประสานงานเจ้าหน้าที่แอดมินให้แล้วนะคะ สักครู่จะมีเจ้าหน้าที่เข้ามาดูแลค่ะ 😊', lineToken)
         }
@@ -297,20 +296,13 @@ async function processLineEvents({
       }
 
       if (conv.status === 'human') {
-        // Check if Smart Auto-Pause timer (1 hour) has expired OR if last chat was >1 hour ago (e.g. overnight)
-        const now = new Date()
-        const isPauseExpired = conv.paused_until
-          ? now > new Date(conv.paused_until)
-          : (conv.last_message_at ? (now.getTime() - new Date(conv.last_message_at).getTime() > 60 * 60 * 1000) : true)
-        const isExplicitReset = cleanText.startsWith('/ai') || isPauseExpired
+        // Hand the chat back once the admin's hour is up (the cron does the same for
+        // chats whose customer never writes again)
+        const isExplicitReset = cleanText.startsWith('/ai') || (await isPauseExpired(supabase, conv))
 
         if (isExplicitReset) {
           console.log(`[Webhook] Auto-resuming AI mode for ${userId} (1-Hour Auto-Pause expired or explicit reset)`)
-          await supabase.from('conversations').update({ 
-            status: 'ai', 
-            ai_mode: 'auto', 
-            paused_until: null 
-          }).eq('id', conv.id)
+          await supabase.from('conversations').update(resumePayload()).eq('id', conv.id)
           conv.status = 'ai'
           conv.ai_mode = 'auto'
           if (cleanText.startsWith('/ai') && replyToken && lineToken) {
@@ -324,7 +316,12 @@ async function processLineEvents({
       }
 
       if (!isAutoReplyEnabled) {
-        console.log(`[Webhook] Skipping AI reply for shop ${shop_id} (Auto-Reply feature disabled)`)
+        // Two very different reasons: the owner switched the bot off, or the shop is open
+        // and answers customers itself. Saying which one saves an hour of guessing.
+        const why = mutedByBusinessHours
+          ? 'bot set to reply outside business hours only, and the shop is open now'
+          : 'Auto-Reply switched off in settings'
+        console.log(`[Webhook] Skipping AI reply for shop ${shop_id} (${why})`)
         continue
       }
 

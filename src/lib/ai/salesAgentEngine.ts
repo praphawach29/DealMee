@@ -1522,8 +1522,15 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
   if (state.step === MAX_PLANNING_STEPS - 1) {
     // Reached maximum allowed planning steps without generating final text.
     // Transfer conversation to human handoff rather than leaking internal raw tool results to the customer.
+    // Through request_human_agent, so the pause carries its one-hour timer and the shop's
+    // admin gets a LINE alert: flipping the row to 'human' on its own left the bot silent
+    // with nobody told, until the owner happened to open the inbox (23 Oct 2026).
     try {
-      await state.toolCtx.supabase.from('conversations').update({ status: 'human' }).eq('id', state.conversationId)
+      await state.executor(
+        'request_human_agent',
+        { reason: 'บอทตอบคำถามนี้เองไม่ได้ (ใช้ขั้นตอนวางแผนครบแล้ว) จึงส่งต่อให้แอดมิน' },
+        state.toolCtx
+      )
     } catch (err) {
       console.error('[Planning Layer] Failed to flip conversation to human handoff:', err)
     }

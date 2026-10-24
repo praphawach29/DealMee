@@ -9,6 +9,7 @@ import { resolveCatalogProduct, describeUnresolved, parseQuantity, computeShippi
 import { highValueThreshold, highValueRefusal } from '@/lib/ai/salesModes'
 import { notifyShopAdmin } from '@/lib/billing/ownerAlerts'
 import { carrierName, trackingLink } from '@/lib/orders/tracking'
+import { adminPausePayload } from '@/lib/inbox/adminPause'
 import { quotationAcceptPath } from '@/lib/docs/acceptToken'
 import { searchKnowledgeForTool } from '@/lib/knowledge/retrieve'
 import { toProductCards } from '@/lib/ai/productCards'
@@ -745,10 +746,7 @@ export async function executeTool(
     // Paused for an hour like the customer's own "/admin" command. Without paused_until the
     // webhooks measure the pause from the previous message, so a customer who kept writing
     // within the hour kept the bot silent for good (Messenger, 20 Oct 2026).
-    await supabase
-      .from('conversations')
-      .update({ status: 'human', paused_until: new Date(Date.now() + 60 * 60 * 1000).toISOString() })
-      .eq('id', conversationId)
+    await supabase.from('conversations').update(adminPausePayload()).eq('id', conversationId)
 
     const customerName = String(args.customer_name || '').trim()
     const phone = String(args.phone || '').trim()

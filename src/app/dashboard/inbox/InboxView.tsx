@@ -19,12 +19,24 @@ import { MARKETPLACE_CHANNELS_ENABLED } from '@/lib/channels/availability'
 export type Conversation = ConversationOmnichannel
 export type ChatMessage = ChatMessageOmnichannel
 
+/** Why the bot is not answering anyone in this shop right now (null = it is working) */
+export type BotMuted = { reason: 'auto_reply_off' | 'business_hours'; detail: string } | null
+
 interface InboxViewProps {
   conversations: Conversation[]
   messagesMap: Record<string, ChatMessage[]>
+  botMuted?: BotMuted
 }
 
-export default function InboxView({ conversations, messagesMap }: InboxViewProps) {
+/** "14:42 น." for the moment the bot takes a paused chat back */
+function resumeTimeText(pausedUntil?: string | null): string {
+  if (!pausedUntil) return ''
+  const at = new Date(pausedUntil)
+  if (Number.isNaN(at.getTime()) || at.getTime() <= Date.now()) return ''
+  return at.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.'
+}
+
+export default function InboxView({ conversations, messagesMap, botMuted = null }: InboxViewProps) {
   const router = useRouter()
   const [selectedConvId, setSelectedConvId] = useState<string | null>(
     conversations.length > 0 ? conversations[0].id : null
@@ -142,6 +154,17 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
   }
 
   return (
+    <div className="space-y-3">
+    {/* The bot is off for the whole shop: say so here, where the silence is noticed */}
+    {botMuted && (
+      <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-800 dark:text-amber-200">
+        <span className="material-symbols-outlined text-[18px] text-amber-600 shrink-0">smart_toy</span>
+        <div>
+          <p className="font-bold">ตอนนี้บอทไม่ได้ตอบลูกค้าอัตโนมัติ</p>
+          <p className="mt-0.5 opacity-90">{botMuted.detail}</p>
+        </div>
+      </div>
+    )}
     <div className="h-[calc(100vh-8.5rem)] sm:h-[calc(100vh-9.5rem)] min-h-[550px] flex border border-outline-variant/40 bg-surface rounded-2xl shadow-sm overflow-hidden">
       
       {/* Pane 1: Conversations List */}
@@ -542,11 +565,16 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
           </div>
 
           {/* Pause Status Alert Banner */}
-          {activeConv.status === 'human' && (
+          {activeConv.status === 'human' && (() => {
+            const resumeAt = resumeTimeText(activeConv.paused_until)
+            return (
             <div className="bg-amber-500/10 border-b border-amber-500/20 px-3.5 sm:px-4 py-2 flex items-center justify-between text-xs text-amber-700 dark:text-amber-300 shrink-0">
               <div className="flex items-center gap-1.5 font-medium">
                 <span className="material-symbols-outlined text-[17px] text-amber-600">pause_circle</span>
-                <span>โหมดแอดมินคุยแทน: บอท AI หยุดตอบชั่วคราว (เมื่อคุยเสร็จสามารถสลับกลับเป็น Auto ได้ทันที)</span>
+                <span>
+                  โหมดแอดมินคุยแทน: บอท AI หยุดตอบชั่วคราว
+                  {resumeAt ? ` และจะกลับมาตอบเองเวลา ${resumeAt}` : ' และจะกลับมาตอบเองภายใน 1 ชั่วโมง'}
+                </span>
               </div>
               <button
                 onClick={() => handleToggleAiMode('auto')}
@@ -556,7 +584,8 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
                 เปิด Auto ทันที
               </button>
             </div>
-          )}
+            )
+          })()}
 
           {/* Messages Feed */}
           <div className="flex-1 p-3.5 sm:p-6 overflow-y-auto space-y-3 sm:space-y-4">
@@ -779,6 +808,6 @@ export default function InboxView({ conversations, messagesMap }: InboxViewProps
         </div>
       )}
     </div>
+    </div>
   )
 }
-
