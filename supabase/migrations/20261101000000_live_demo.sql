@@ -65,9 +65,14 @@ grant execute on function public.claim_demo_message(text, int, int) to service_r
 -- ─── Sample shops ───────────────────────────────────────────────────────────
 -- Fixed ids: the app refers to them (src/lib/demo/shops.ts). Paid plan with no end date so the
 -- sales tools are on and no renewal or trial job ever picks them up.
+-- The PromptPay columns the app reads (shop.promptpay_id || shop.promptpay_number). Production has
+-- promptpay_number but not promptpay_id, so the seed writes promptpay_number and makes sure it exists.
+alter table public.shops add column if not exists promptpay_number text;
+alter table public.shops add column if not exists promptpay_name text;
+
 insert into public.shops (
   id, name, business_type, ai_template, plan, plan_key,
-  bot_name, greeting_message, personality, promptpay_id, promptpay_name, features
+  bot_name, greeting_message, personality, promptpay_number, promptpay_name, features
 ) values
   ('d3300000-0000-4000-8000-000000000001', 'Sunday Clothing (ร้านตัวอย่าง)', 'retail', 'retail', 'pro', 'pro',
    'น้องซันเดย์', 'สวัสดีค่ะ ร้าน Sunday Clothing ยินดีต้อนรับค่ะ สนใจเสื้อผ้าแบบไหนบอกได้เลยนะคะ',
@@ -90,7 +95,7 @@ on conflict (id) do update set
   bot_name = excluded.bot_name,
   greeting_message = excluded.greeting_message,
   personality = excluded.personality,
-  promptpay_id = excluded.promptpay_id,
+  promptpay_number = excluded.promptpay_number,
   promptpay_name = excluded.promptpay_name,
   features = excluded.features;
 
@@ -100,15 +105,16 @@ set line_token = null, line_secret = null, owner_line_id = null
 where id in ('d3300000-0000-4000-8000-000000000001', 'd3300000-0000-4000-8000-000000000002', 'd3300000-0000-4000-8000-000000000003');
 
 -- Products: Sunday Clothing
-insert into public.products (id, shop_id, name, category, price, stock, description, status) values
-  ('d3300000-0000-4000-8001-000000000001', 'd3300000-0000-4000-8000-000000000001', 'เสื้อเชิ้ตลินิน สีขาว', 'เสื้อ', 590, 50, 'ผ้าลินินผสมคอตตอน ใส่สบาย ระบายอากาศดี มีไซซ์ S M L XL', 'active'),
-  ('d3300000-0000-4000-8001-000000000002', 'd3300000-0000-4000-8000-000000000001', 'เสื้อเชิ้ตลินิน สีครีม', 'เสื้อ', 590, 50, 'ผ้าลินินผสมคอตตอน โทนอบอุ่น มีไซซ์ S M L XL', 'active'),
-  ('d3300000-0000-4000-8001-000000000003', 'd3300000-0000-4000-8000-000000000001', 'เสื้อยืด Oversize สีดำ', 'เสื้อ', 350, 50, 'คอตตอน 100% ทรงโอเวอร์ไซซ์ ไซซ์ M L XL', 'active'),
-  ('d3300000-0000-4000-8001-000000000004', 'd3300000-0000-4000-8000-000000000001', 'กางเกงขากว้าง ผ้าพลีท', 'กางเกง', 690, 50, 'เอวยางยืด ผ้าพลีทไม่ต้องรีด ยาวคลุมข้อเท้า ฟรีไซซ์ เอว 24-34 นิ้ว', 'active'),
-  ('d3300000-0000-4000-8001-000000000005', 'd3300000-0000-4000-8000-000000000001', 'กระโปรงยีนส์ทรงเอ', 'กระโปรง', 490, 50, 'ยีนส์ฟอกนุ่ม ยาวเหนือเข่า ไซซ์ S M L', 'active'),
-  ('d3300000-0000-4000-8001-000000000006', 'd3300000-0000-4000-8000-000000000001', 'เดรสผ้าฝ้าย ลายดอกเล็ก', 'เดรส', 890, 50, 'ผ้าฝ้ายเนื้อนุ่ม มีซับใน ผูกเอวได้ ไซซ์ S M L', 'active'),
-  ('d3300000-0000-4000-8001-000000000007', 'd3300000-0000-4000-8000-000000000001', 'หมวกบักเก็ต ผ้าลินิน', 'เครื่องประดับ', 290, 50, 'ปีกกว้าง กันแดด พับเก็บได้', 'active'),
-  ('d3300000-0000-4000-8001-000000000008', 'd3300000-0000-4000-8000-000000000001', 'กระเป๋าผ้าแคนวาส', 'กระเป๋า', 390, 50, 'แคนวาสหนา มีช่องซิปด้านใน ใส่โน้ตบุ๊ก 14 นิ้วได้', 'active')
+-- Only the columns the app itself writes (products/actions.ts): production's products table has no status
+insert into public.products (id, shop_id, name, category, price, stock, description) values
+  ('d3300000-0000-4000-8001-000000000001', 'd3300000-0000-4000-8000-000000000001', 'เสื้อเชิ้ตลินิน สีขาว', 'เสื้อ', 590, 50, 'ผ้าลินินผสมคอตตอน ใส่สบาย ระบายอากาศดี มีไซซ์ S M L XL'),
+  ('d3300000-0000-4000-8001-000000000002', 'd3300000-0000-4000-8000-000000000001', 'เสื้อเชิ้ตลินิน สีครีม', 'เสื้อ', 590, 50, 'ผ้าลินินผสมคอตตอน โทนอบอุ่น มีไซซ์ S M L XL'),
+  ('d3300000-0000-4000-8001-000000000003', 'd3300000-0000-4000-8000-000000000001', 'เสื้อยืด Oversize สีดำ', 'เสื้อ', 350, 50, 'คอตตอน 100% ทรงโอเวอร์ไซซ์ ไซซ์ M L XL'),
+  ('d3300000-0000-4000-8001-000000000004', 'd3300000-0000-4000-8000-000000000001', 'กางเกงขากว้าง ผ้าพลีท', 'กางเกง', 690, 50, 'เอวยางยืด ผ้าพลีทไม่ต้องรีด ยาวคลุมข้อเท้า ฟรีไซซ์ เอว 24-34 นิ้ว'),
+  ('d3300000-0000-4000-8001-000000000005', 'd3300000-0000-4000-8000-000000000001', 'กระโปรงยีนส์ทรงเอ', 'กระโปรง', 490, 50, 'ยีนส์ฟอกนุ่ม ยาวเหนือเข่า ไซซ์ S M L'),
+  ('d3300000-0000-4000-8001-000000000006', 'd3300000-0000-4000-8000-000000000001', 'เดรสผ้าฝ้าย ลายดอกเล็ก', 'เดรส', 890, 50, 'ผ้าฝ้ายเนื้อนุ่ม มีซับใน ผูกเอวได้ ไซซ์ S M L'),
+  ('d3300000-0000-4000-8001-000000000007', 'd3300000-0000-4000-8000-000000000001', 'หมวกบักเก็ต ผ้าลินิน', 'เครื่องประดับ', 290, 50, 'ปีกกว้าง กันแดด พับเก็บได้'),
+  ('d3300000-0000-4000-8001-000000000008', 'd3300000-0000-4000-8000-000000000001', 'กระเป๋าผ้าแคนวาส', 'กระเป๋า', 390, 50, 'แคนวาสหนา มีช่องซิปด้านใน ใส่โน้ตบุ๊ก 14 นิ้วได้')
 on conflict (id) do nothing;
 
 -- Services: Moonlight Spa (booking)
