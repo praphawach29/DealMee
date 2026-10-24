@@ -23,6 +23,7 @@ import {
   retrieveWinningTrajectories,
   formatGoldenClosersPromptContext,
 } from '@/lib/ai/salesTrajectory'
+import { orderPaymentLabel } from '@/lib/orders/paymentState'
 
 const supabase = createAdminClient()
 
@@ -1132,7 +1133,7 @@ async function preparePlanningState({
   // to quote instead of inventing one.
   const { data: myOrders } = await db
     .from('orders')
-    .select('order_no, product_name, quantity, total_amount, status, payment_status')
+    .select('order_no, product_name, quantity, total_amount, status')
     .eq('shop_id', shop.id)
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
@@ -1142,7 +1143,7 @@ async function preparePlanningState({
     ? `\n\n[ออเดอร์ที่บันทึกจริงแล้วของลูกค้ารายนี้]\n` +
       myOrders.map((o: any) =>
         `- ${o.order_no}: ${o.product_name || '-'}${o.quantity ? ` x${o.quantity}` : ''} ` +
-        `${Number(o.total_amount || 0).toLocaleString()} บาท (สถานะ ${o.status}, ชำระเงิน ${o.payment_status || '-'})`
+        `${Number(o.total_amount || 0).toLocaleString()} บาท (สถานะ ${o.status}, ชำระเงิน ${orderPaymentLabel(o.status)})`
       ).join('\n') +
       `\n(ใช้เลขที่ออเดอร์จากรายการนี้เท่านั้น ห้ามแต่งเลขใหม่)`
     : `\n\n[ออเดอร์ที่บันทึกจริงแล้วของลูกค้ารายนี้]\nยังไม่มีออเดอร์ที่บันทึกจริงเลย — ถ้ายังไม่ได้เรียก take_order สำเร็จในเทิร์นนี้ ห้ามบอกลูกค้าว่ารับออเดอร์แล้วเด็ดขาด`

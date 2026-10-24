@@ -161,7 +161,7 @@ async function executeCopilotTool(name: string, args: Record<string, any>, shopI
       const limit = Number(args.limit) || 5
       const { data: products, error } = await supabase
         .from('products')
-        .select('id, name, price, stock, is_active')
+        .select('id, name, price, stock')
         .eq('shop_id', shopId)
         .order('price', { ascending: false })
         .limit(limit)
@@ -213,7 +213,7 @@ async function executeCopilotTool(name: string, args: Record<string, any>, shopI
 
       const { data: bookings, error } = await supabase
         .from('bookings')
-        .select('id, booking_no, customer_name, customer_phone, booking_date, booking_time, party_size, status, created_at')
+        .select('id, booking_no, customer_name, phone, booking_date, booking_time, party_size, status, created_at')
         .eq('shop_id', shopId)
         .gte('created_at', sinceDate)
         .order('booking_date', { ascending: true })
@@ -235,9 +235,10 @@ async function executeCopilotTool(name: string, args: Record<string, any>, shopI
       let dbQuery = supabase.from('customer_profiles').select('*').eq('shop_id', shopId).limit(limit)
 
       if (query) {
-        dbQuery = dbQuery.or(`display_name.ilike.%${query}%,phone.ilike.%${query}%,notes.ilike.%${query}%`)
+        // customer_profiles has customer_name (no display_name/phone, and notes is jsonb)
+        dbQuery = dbQuery.ilike('customer_name', `%${query}%`)
       } else {
-        dbQuery = dbQuery.order('total_spent', { ascending: false })
+        dbQuery = dbQuery.order('total_spend', { ascending: false })
       }
 
       const { data: customers, error } = await dbQuery
@@ -252,7 +253,7 @@ async function executeCopilotTool(name: string, args: Record<string, any>, shopI
     if (name === 'get_follow_up_engine_stats') {
       const { data: tasks, error } = await supabase
         .from('follow_up_tasks')
-        .select('id, task_type, status, scheduled_at, completed_at')
+        .select('id, task_type, status, trigger_at, executed_at')
         .eq('shop_id', shopId)
 
       if (error) return { error: error.message }
