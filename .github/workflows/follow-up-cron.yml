@@ -1,13 +1,16 @@
 name: Follow-up scheduler
 
-# Delivers queued bot follow-ups (QR payment reminders, booking reminders,
-# scheduled messages) by calling the app's cron endpoint every 5 minutes.
-# Needs repository secrets APP_URL (e.g. https://app.dealmee.app) and CRON_SECRET
-# (same value as the CRON_SECRET env var on Vercel).
+# MANUAL ONLY. The schedule now lives in the database (pg_cron + pg_net, migration
+# 20261030000000_pg_cron_follow_up.sql) — see docs/guides/scheduler-pg-cron.md.
+# This repo is private, so every 5 minutes cost ~8,640 Actions minutes a month against a
+# 2,000-minute free quota; the quota ran out and GitHub stopped starting the job, which
+# silently stopped payment reminders, order expiry and wallet renewals (24 Oct 2026).
+#
+# Kept as a manual fallback: run it from the Actions tab if the database scheduler is
+# ever down. Needs repository secrets APP_URL (e.g. https://app.dealmee.app) and
+# CRON_SECRET (same value as the CRON_SECRET env var on Vercel).
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
