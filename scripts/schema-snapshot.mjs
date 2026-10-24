@@ -176,6 +176,14 @@ function check(files) {
 
   for (const file of files) {
     const sql = stripComments(readFileSync(file, 'utf8'))
+    // Supabase grants EXECUTE to anon/authenticated directly, so "from public" alone leaves them
+    for (const m of sql.matchAll(/revoke\s+(?:execute|all)\s+on\s+function\s+([^;]+?)\s+from\s+([^;]+);/gi)) {
+      const roles = m[2].toLowerCase()
+      if (/\bpublic\b/.test(roles) && (!roles.includes('anon') || !roles.includes('authenticated'))) {
+        console.log(`✗ ${basename(file)}: revoke on ${m[1].trim()} misses anon/authenticated (Supabase grants them directly)`)
+        problems++
+      }
+    }
     const made = createdInFile(sql)
     for (const ref of referencedColumns(sql)) {
       if (made.tables.has(ref.table) || made.columns.has(`${ref.table}.${ref.column}`)) continue

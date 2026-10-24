@@ -59,7 +59,7 @@ begin
 end;
 $$;
 
-revoke execute on function public.claim_demo_message(text, int, int) from public;
+revoke execute on function public.claim_demo_message(text, int, int) from public, anon, authenticated;
 grant execute on function public.claim_demo_message(text, int, int) to service_role;
 
 -- ─── Sample shops ───────────────────────────────────────────────────────────
@@ -211,5 +211,5 @@ begin
 end;
 $$;
 
-revoke execute on function public.cleanup_demo_shops(int) from public;
+revoke execute on function public.cleanup_demo_shops(int) from public, anon, authenticated;
 grant execute on function public.cleanup_demo_shops(int) to service_role;
