@@ -160,11 +160,7 @@ export default function DemoChat({
         {bubbles.map((b, i) => (
           <BubbleView key={i} b={b} />
         ))}
-        {busy && (
-          <div className="self-start bg-white rounded-2xl rounded-bl-xs px-4 py-3 text-sm text-slate-400 shadow-xs">
-            กำลังพิมพ์…
-          </div>
-        )}
+        {busy && <TypingIndicator />}
       </div>
 
       {bubbles.length === 0 && (
@@ -213,6 +209,25 @@ export default function DemoChat({
       <div className="px-4 pb-3 text-[11px] text-slate-400 bg-white leading-relaxed">
         ลองได้ {DEMO_MESSAGES_PER_VISITOR} ข้อความต่อวัน · QR ในเดโมเป็นภาพตัวอย่าง · ไม่ต้องใส่ชื่อหรือเบอร์จริง
       </div>
+    </div>
+  )
+}
+
+/** Three bouncing dots, like a chat app while the other side is typing */
+function TypingIndicator() {
+  return (
+    <div
+      className="self-start bg-white rounded-2xl rounded-bl-xs border border-slate-200/60 px-4 py-3.5 shadow-xs flex items-center gap-1.5"
+      role="status"
+      aria-label="บอทกำลังพิมพ์"
+    >
+      {[0, 150, 300].map((delay) => (
+        <span
+          key={delay}
+          className="h-2 w-2 rounded-full bg-slate-400 animate-bounce motion-reduce:animate-none"
+          style={{ animationDelay: `${delay}ms` }}
+        />
+      ))}
     </div>
   )
 }
