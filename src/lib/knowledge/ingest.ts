@@ -1,4 +1,4 @@
-import { parseCsv } from './extract'
+import { MAX_EXTRACT_CHARS, parseCsv } from './extract'
 import { platformSecret } from '@/lib/platformSecrets'
 
 export interface KnowledgeEntry {
@@ -7,11 +7,9 @@ export interface KnowledgeEntry {
 }
 
 /**
- * Ceiling on entries produced by one import. This is a cost control, not a
- * storage limit: `knowledgeContext` puts entries straight into the system
- * prompt of every customer message, so an unbounded import of a long PDF
- * would be re-sent, and re-billed, on every turn forever. Capping the
- * extraction makes the model summarise rather than transcribe.
+ * Ceiling on Q&A rows produced by one import. Those rows are what the merchant
+ * sees and edits. The full document is stored separately as chunks, so this
+ * cap no longer throws away the only copy of a long file.
  */
 export const MAX_ENTRIES_PER_IMPORT = 30
 
@@ -132,8 +130,10 @@ function fallbackTextChunking(text: string): KnowledgeEntry[] {
  * Uses Gemini or Claude with graceful fallback to heuristic chunking.
  */
 export async function toKnowledgeEntries(text: string, shopName: string): Promise<KnowledgeEntry[]> {
+  // The model only needs a summary. Callers keep the longer text for chunking.
+  const sourceText = text.length > MAX_EXTRACT_CHARS ? text.slice(0, MAX_EXTRACT_CHARS) : text
   // If the text has markdown headings, parse directly first
-  const directMd = markdownToEntriesDirect(text)
+  const directMd = markdownToEntriesDirect(sourceText)
   if (directMd && directMd.length >= 2) {
     return directMd
   }
@@ -156,7 +156,7 @@ export async function toKnowledgeEntries(text: string, shopName: string): Promis
 
 ข้อความดิบ:
 """
-${text}
+${sourceText}
 """`
 
   // 1. Try Gemini if configured
@@ -229,7 +229,7 @@ ${text}
   }
 
   // 3. Last-resort graceful fallback: direct chunking
-  const fallback = fallbackTextChunking(text)
+  const fallback = fallbackTextChunking(sourceText)
   if (fallback.length > 0) {
     return fallback
   }

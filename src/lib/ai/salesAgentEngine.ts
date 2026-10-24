@@ -4,7 +4,7 @@ import { effectivePlanKey, salesAutomationEnabled, SALES_AUTOMATION_TOOLS, SALES
 import { getShopAiKey } from '@/lib/billing/shopAiKey'
 import { highValueThreshold, isHighValue, HIGH_VALUE_TAG, INFO_ONLY_PROMPT, highValuePrompt } from '@/lib/ai/salesModes'
 import { getPlanLimits, getAddonRemaining, consumeAddonCredit } from '@/lib/billing/planLimits'
-import { selectRelevantKnowledge } from '@/lib/ai/knowledgeSelect'
+import { loadKnowledgeContext } from '@/lib/knowledge/retrieve'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { platformSecret } from '@/lib/platformSecrets'
 import { buildBusinessPromptContext } from '@/lib/businessGreeting'
@@ -170,11 +170,9 @@ export const MAX_PLANNING_STEPS = 6
 export const MAX_OUTPUT_TOKENS = 4096
 
 /**
- * How much of the knowledge base rides along in every system prompt. The
- * remainder stays reachable through search_knowledge_base, so a shop can
- * import a whole catalogue without every customer message carrying it. Thai
- * costs roughly one token per character, so the character budget is close
- * enough to a token budget to reason about.
+ * Legacy ceilings from when every knowledge row was loaded into the prompt.
+ * Retrieval now sends only the chunks that match the message (about 6,000
+ * characters) and leaves the rest to search_knowledge_base.
  */
 export const KNOWLEDGE_INLINE_MAX_ITEMS = 150
 export const KNOWLEDGE_INLINE_MAX_CHARS = 50000
@@ -544,7 +542,7 @@ const MASTER_TOOLS = [
   // ── 🧠 Knowledge ──────────────────────────────────────────────────────────────
   {
     name: 'search_knowledge_base',
-    description: 'ค้นหาข้อมูลจาก Knowledge Base ของร้าน เช่น นโยบายร้าน วิธีใช้งาน สเปคสินค้าเชิงลึก ใช้เมื่อลูกค้าถามเรื่องที่ไม่มีในสต็อก',
+    description: 'ค้นหาคลังความรู้ของร้าน ทั้งคำถาม-คำตอบที่ร้านเขียนเองและเนื้อหาเต็มจากไฟล์ที่อัปโหลด ใช้ก่อนตอบนโยบาย ราคา รหัสสินค้า หรือรายละเอียดที่ไม่มีในแคตตาล็อก ถ้าไม่พบ ห้ามเดา ให้เรียก request_human_agent',
     parameters: {
       type: 'object',
       properties: {
@@ -951,22 +949,9 @@ async function preparePlanningState({
 
   const modelName = shop.custom_ai_model || shop.ai_model || (await platformSecret('GEMINI_MODEL')) || 'gemini-3.8-flash'
 
-  // 1. Knowledge Base — inlined up to a character budget, with the rest
-  // reachable through search_knowledge_base. Every entry used to be inlined
-  // with no limit, which was survivable while owners typed FAQs by hand but
-  // stopped being so once a whole website or PDF could be imported: the
-  // entire document would ride along on every customer message and be billed
-  // again each turn.
-  const { data: knowledgeItems } = await db
-    .from('knowledge_base')
-    .select('title, content')
-    .eq('shop_id', shop.id)
-    .or('status.eq.active,status.is.null')
-    .order('created_at', { ascending: true })
-    .limit(KNOWLEDGE_INLINE_MAX_ITEMS)
-
-  // The knowledge block is built after the chat history below, so it can be
-  // narrowed to the entries relevant to what this customer is asking about.
+  // Knowledge is filled in after chat history, from hybrid retrieval
+  // (vector + keyword over chunks). A shop with no chunks yet still uses the
+  // legacy in-memory selector so this deploy does not blank the bot.
   let knowledgeContext = ''
 
   // 2. Products
@@ -1085,17 +1070,20 @@ async function preparePlanningState({
     }
   }
 
-  // Knowledge base: inline only the entries related to this conversation
-  // (whole KB when it is small); everything else via search_knowledge_base.
-  if (knowledgeItems && knowledgeItems.length > 0) {
-    const { blocks, omitted } = selectRelevantKnowledge(knowledgeItems, userQuery, recentCustomerMessages)
-    knowledgeContext =
-      `\n\n[คลังข้อมูลความรู้ของร้าน (เฉพาะส่วนที่เกี่ยวข้อง)]\n` +
-      blocks.join('\n\n') +
-      (omitted > 0
-        ? `\n\n(ยังมีข้อมูลอีก ${omitted} ข้อที่ไม่ได้แสดงตรงนี้ ถ้าลูกค้าถามเรื่องที่ไม่มีข้างบน ให้เรียก search_knowledge_base ค้นหาก่อนตอบว่าไม่รู้)`
-        : '')
-  }
+  // Hybrid retrieval: merchant Q&A outranks document chunks, and a miss tells
+  // the model to search once more and then hand off instead of guessing.
+  const loadedKnowledge = await loadKnowledgeContext({
+    supabase: db,
+    shopId: String(shop.id || ''),
+    query: userQuery,
+    recentMessages: recentCustomerMessages,
+    byok,
+    shopProvider: byok ? shopProvider : null,
+    shopKey: byok ? shopKey : null,
+    platformGeminiKey: byok ? undefined : geminiKey,
+    platformOpenaiKey: byok ? undefined : openAiKey,
+  })
+  knowledgeContext = loadedKnowledge.text
 
   // 4. Payment Info
   const promptpayId = shop.promptpay_id || shop.promptpay_number

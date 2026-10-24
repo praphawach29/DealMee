@@ -10,6 +10,7 @@ import { highValueThreshold, highValueRefusal } from '@/lib/ai/salesModes'
 import { notifyShopAdmin } from '@/lib/billing/ownerAlerts'
 import { carrierName, trackingLink } from '@/lib/orders/tracking'
 import { quotationAcceptPath } from '@/lib/docs/acceptToken'
+import { searchKnowledgeForTool } from '@/lib/knowledge/retrieve'
 import { toProductCards } from '@/lib/ai/productCards'
 
 const QR_BUCKET = 'qr-codes'
@@ -1273,79 +1274,21 @@ export async function executeTool(
     if (!rawQuery) {
       return { resultForAi: 'ยังไม่มีคำค้นหา ให้ถามลูกค้าว่าอยากทราบเรื่องอะไร', immediateMessages: [] }
     }
-
-    // Clean Thai stopwords and conversational particles
-    const stopWords = [
-      'ครับ', 'ค่ะ', 'คะ', 'นะ', 'นะครับ', 'นะคะ', 'ละครับ', 'ละคะ', 'แล้ว', 'ถ้า',
-      'คิด', 'เท่าไหร่', 'เท่าไร', 'ขอ', 'สอบถาม', 'หน่อย', 'จ้า', 'ได้ไหม', 'ได้มั้ย',
-      'ไหม', 'มั้ย', 'บ้าง', 'ยังไง', 'อย่างไร', 'ทำยังไง', 'ทำอย่างไร', 'หรือเปล่า', 'หรือยัง',
-      'อยากทราบ', 'รบกวน', 'วิธี', 'ขั้นตอน'
-    ]
-    let cleanQuery = rawQuery
-    for (const sw of stopWords) {
-      cleanQuery = cleanQuery.split(sw).join(' ')
-    }
-    const searchTokens = cleanQuery
-      .split(/\s+/)
-      .map((w) => w.trim().toLowerCase())
-      .filter((w) => w.length > 0)
-
-    // 1. Fetch available active/unspecified status KB items for this shop
-    const { data: allItems } = await supabase
-      .from('knowledge_base')
-      .select('id, title, content')
-      .eq('shop_id', shopId)
-      .or('status.eq.active,status.is.null')
-      .limit(150)
-
-    let matchedItems: { title: string; content: string; score: number }[] = []
-
-    if (allItems && allItems.length > 0) {
-      matchedItems = allItems.map((item: any) => {
-        let score = 0
-        const titleLower = (item.title || '').toLowerCase()
-        const contentLower = (item.content || '').toLowerCase()
-
-        // Exact phrase bonus
-        if (titleLower.includes(rawQuery.toLowerCase())) score += 50
-        if (contentLower.includes(rawQuery.toLowerCase())) score += 20
-
-        // Token match scoring
-        for (const token of searchTokens) {
-          if (token.length < 2) continue
-          if (titleLower.includes(token)) score += 15
-          else if (token.length >= 4 && titleLower.split('').some(() => titleLower.includes(token.slice(0, 4)))) score += 5
-          if (contentLower.includes(token)) score += 5
-        }
-
-        // Deprioritize meta-guidelines (e.g. "วิธีตอบ", "ห้ามพูด / ห้ามสัญญา", "เมื่อไหร่ต้องส่งต่อให้คน")
-        // so actual product/pricing/service answers surface first unless asked specifically
-        const isMetaGuideline =
-          titleLower.includes('วิธีตอบ') ||
-          titleLower.includes('ห้ามพูด') ||
-          titleLower.includes('ห้ามสัญญา') ||
-          titleLower.includes('เมื่อไหร่ต้องส่งต่อ')
-        if (isMetaGuideline && !rawQuery.includes('วิธีตอบ') && !rawQuery.includes('ห้ามพูด')) {
-          score -= 15
-        }
-
-        return { title: item.title, content: item.content, score }
-      })
-      .filter((item: any) => item.score > 0)
-      .sort((a: any, b: any) => b.score - a.score)
-      .slice(0, 5)
-    }
-
-    if (matchedItems.length === 0) {
+    if (!shopId) {
       return {
-        resultForAi: `ไม่พบข้อมูลเรื่อง "${rawQuery}" ในคลังความรู้ของร้าน ห้ามเดาคำตอบ ให้บอกลูกค้าว่าจะให้แอดมินช่วยตรวจสอบ หรือเรียก request_human_agent`,
+        resultForAi: 'ไม่พบร้านสำหรับค้นหาคลังความรู้ ห้ามเดาคำตอบ ให้เรียก request_human_agent',
         immediateMessages: [],
       }
     }
-
-    return {
-      resultForAi: `ข้อมูลจากคลังความรู้:\n` + matchedItems.map((k: any) => `[หัวข้อ: ${k.title}]\n${k.content}`).join('\n\n'),
-      immediateMessages: [],
+    try {
+      const resultForAi = await searchKnowledgeForTool(supabase, shopId, rawQuery)
+      return { resultForAi, immediateMessages: [] }
+    } catch (err) {
+      console.error('[search_knowledge_base]', err)
+      return {
+        resultForAi: `ค้นคลังความรู้ไม่สำเร็จ ห้ามเดาคำตอบ ให้บอกลูกค้าว่าจะให้แอดมินช่วยตรวจสอบ หรือเรียก request_human_agent`,
+        immediateMessages: [],
+      }
     }
   }
 

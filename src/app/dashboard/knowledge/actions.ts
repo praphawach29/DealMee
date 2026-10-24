@@ -3,11 +3,49 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
-import { extractFromUrl, extractFromPdf, extractFromCsv, extractUniversalDocument, type ExtractedSource } from '@/lib/knowledge/extract'
+import { extractFromUrl, extractUniversalDocument, type ExtractedSource } from '@/lib/knowledge/extract'
 import { toKnowledgeEntries, csvToEntriesDirect, markdownToEntriesDirect, type KnowledgeEntry } from '@/lib/knowledge/ingest'
+import { embedderForShop } from '@/lib/knowledge/embedAuth'
+import { isMissingKnowledgeSchema } from '@/lib/knowledge/hybrid'
+import {
+  forgetDocument,
+  forgetKnowledgeEntry,
+  indexImportedKnowledge,
+  indexKnowledgeEntry,
+  type IndexReport,
+  type KnowledgeEntryRow,
+} from '@/lib/knowledge/indexKnowledge'
 
 /** Roughly the ceiling on what a shop owner might reasonably upload; larger files are almost always the wrong document. */
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+
+function indexNote(report: IndexReport | null, err?: unknown): string | null {
+  if (err) {
+    console.error('[knowledge] index failed:', err instanceof Error ? err.message : err)
+    if (isMissingKnowledgeSchema(err)) {
+      return 'บันทึกคำถาม-คำตอบแล้ว แต่ยังไม่ได้ติดตั้งตารางชิ้นส่วนความรู้ จึงค้นจากคำถาม-คำตอบแบบเดิม'
+    }
+    return 'บันทึกคำถาม-คำตอบแล้ว แต่จัดเก็บเนื้อหาเต็มไม่สำเร็จ ระบบจะค้นจากคำถาม-คำตอบไปก่อน'
+  }
+  if (!report) return null
+  if (report.failed > 0) return 'บันทึกเนื้อหาเต็มแล้ว แต่สร้างดัชนีความหมายไม่ครบ จะค้นด้วยคำสำคัญไปก่อน'
+  if (report.pending > 0 && report.embedded === 0) return 'บันทึกเนื้อหาเต็มแล้ว ยังไม่มีคีย์ embedding จึงค้นด้วยคำสำคัญไปก่อน'
+  return null
+}
+
+function withIndexNote(message: string, note: string | null) {
+  return note ? `${message} ${note}` : message
+}
+
+async function indexRows(supabase: Awaited<ReturnType<typeof createClient>>, shopId: string, entries: KnowledgeEntryRow[]) {
+  const { embedder } = await embedderForShop(shopId)
+  let note: string | null = null
+  for (const entry of entries) {
+    const report = await indexKnowledgeEntry({ supabase, shopId, entry, embedder })
+    note = indexNote(report) || note
+  }
+  return note
+}
 
 export async function createKnowledgeItem(formData: FormData) {
   const supabase = await createClient()
@@ -30,7 +68,7 @@ export async function createKnowledgeItem(formData: FormData) {
     return { error: 'กรุณากรอกหัวข้อและรายละเอียดข้อมูล' }
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('knowledge_base')
     .insert({
       shop_id: shop.id,
@@ -38,14 +76,23 @@ export async function createKnowledgeItem(formData: FormData) {
       content,
       category,
     })
+    .select('id, title, content, status, source, source_ref')
+    .single()
 
-  if (error) {
-    return { error: `เพิ่มข้อมูลไม่สำเร็จ: ${error.message}` }
+  if (error || !data) {
+    return { error: `เพิ่มข้อมูลไม่สำเร็จ: ${error?.message || 'ไม่ทราบสาเหตุ'}` }
+  }
+
+  let note: string | null = null
+  try {
+    note = await indexRows(supabase, shop.id, [data])
+  } catch (err) {
+    note = indexNote(null, err)
   }
 
   revalidatePath('/dashboard/knowledge')
   revalidatePath('/dashboard')
-  return { success: 'เพิ่มข้อมูลความรู้เรียบร้อยแล้ว!' }
+  return { success: withIndexNote('เพิ่มข้อมูลความรู้เรียบร้อยแล้ว!', note) }
 }
 
 /**
@@ -59,7 +106,8 @@ async function saveImportedEntries(
   shopId: string,
   entries: KnowledgeEntry[],
   source: string,
-  sourceRef: string
+  sourceRef: string,
+  rawText: string | null = null
 ) {
   await supabase
     .from('knowledge_base')
@@ -68,7 +116,7 @@ async function saveImportedEntries(
     .eq('source', source)
     .eq('source_ref', sourceRef)
 
-  const { error } = await supabase.from('knowledge_base').insert(
+  const { data, error } = await supabase.from('knowledge_base').insert(
     entries.map((entry) => ({
       shop_id: shopId,
       title: entry.title,
@@ -77,13 +125,30 @@ async function saveImportedEntries(
       source,
       source_ref: sourceRef,
     }))
-  )
+  ).select('id, title, content, status, source, source_ref')
 
-  if (error) return { error: `บันทึกข้อมูลไม่สำเร็จ: ${error.message}` }
+  if (error || !data) return { error: `บันทึกข้อมูลไม่สำเร็จ: ${error?.message || 'ไม่ทราบสาเหตุ'}` }
+
+  let note: string | null = null
+  try {
+    const { embedder } = await embedderForShop(shopId)
+    const report = await indexImportedKnowledge({
+      supabase,
+      shopId,
+      source,
+      sourceRef,
+      fullText: rawText,
+      entries: data,
+      embedder,
+    })
+    note = indexNote(report)
+  } catch (err) {
+    note = indexNote(null, err)
+  }
 
   revalidatePath('/dashboard/knowledge')
   revalidatePath('/dashboard')
-  return { success: `เพิ่มข้อมูลจาก ${sourceRef} จำนวน ${entries.length} ข้อเรียบร้อยแล้ว!` }
+  return { success: withIndexNote(`เพิ่มข้อมูลจาก ${sourceRef} จำนวน ${entries.length} ข้อเรียบร้อยแล้ว!`, note) }
 }
 
 async function resolveShop(supabase: Awaited<ReturnType<typeof createClient>>) {
@@ -107,7 +172,7 @@ export async function importKnowledgeFromUrl(formData: FormData) {
   try {
     const source = await extractFromUrl(url)
     const entries = await toKnowledgeEntries(source.text, resolved.shop.name || 'ร้านค้า')
-    return await saveImportedEntries(supabase, resolved.shop.id, entries, 'url', source.label)
+    return await saveImportedEntries(supabase, resolved.shop.id, entries, 'url', source.label, source.text)
   } catch (err: any) {
     return { error: err.message || 'ดึงข้อมูลจากลิงก์ไม่สำเร็จ' }
   }
@@ -143,22 +208,24 @@ export async function importKnowledgeFromFile(formData: FormData) {
     // as-is: exact, free, and it keeps the shop's own wording rather than
     // letting a model paraphrase a policy.
     if (lowerName.endsWith('.csv')) {
-      const direct = csvToEntriesDirect(await file.text())
+      const csvText = await file.text()
+      const direct = csvToEntriesDirect(csvText)
       if (direct && direct.length > 0) {
-        return await saveImportedEntries(supabase, resolved.shop.id, direct, 'csv', file.name)
+        return await saveImportedEntries(supabase, resolved.shop.id, direct, 'csv', file.name, csvText)
       }
     }
 
     if (lowerName.endsWith('.md') || lowerName.endsWith('.markdown')) {
-      const direct = markdownToEntriesDirect(await file.text())
+      const markdownText = await file.text()
+      const direct = markdownToEntriesDirect(markdownText)
       if (direct && direct.length > 0) {
-        return await saveImportedEntries(supabase, resolved.shop.id, direct, 'markdown', file.name)
+        return await saveImportedEntries(supabase, resolved.shop.id, direct, 'markdown', file.name, markdownText)
       }
     }
 
     const source: ExtractedSource = await extractUniversalDocument(file)
     const entries = await toKnowledgeEntries(source.text, resolved.shop.name || 'ร้านค้า')
-    return await saveImportedEntries(supabase, resolved.shop.id, entries, sourceTag, source.label)
+    return await saveImportedEntries(supabase, resolved.shop.id, entries, sourceTag, source.label, source.text)
   } catch (err: any) {
     return { error: err.message || 'อ่านไฟล์ไม่สำเร็จ' }
   }
@@ -169,6 +236,12 @@ export async function deleteKnowledgeSource(source: string, sourceRef: string) {
   const supabase = await createClient()
   const resolved = await resolveShop(supabase)
   if ('error' in resolved) return { error: resolved.error }
+
+  try {
+    await forgetDocument(supabase, resolved.shop.id, source, sourceRef)
+  } catch (err) {
+    console.error('[knowledge] document delete failed:', err instanceof Error ? err.message : err)
+  }
 
   const { error } = await supabase
     .from('knowledge_base')
@@ -186,11 +259,20 @@ export async function deleteKnowledgeSource(source: string, sourceRef: string) {
 
 export async function deleteKnowledgeItem(id: string) {
   const supabase = await createClient()
+  const resolved = await resolveShop(supabase)
+  if ('error' in resolved) return { error: resolved.error }
+
+  try {
+    await forgetKnowledgeEntry(supabase, resolved.shop.id, id)
+  } catch (err) {
+    console.error('[knowledge] chunk delete failed:', err instanceof Error ? err.message : err)
+  }
 
   const { error } = await supabase
     .from('knowledge_base')
     .delete()
     .eq('id', id)
+    .eq('shop_id', resolved.shop.id)
 
   if (error) {
     return { error: `ลบไม่สำเร็จ: ${error.message}` }
@@ -206,19 +288,28 @@ export async function approveDraftFaq(id: string) {
   const resolved = await resolveShop(supabase)
   if ('error' in resolved) return { error: resolved.error }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('knowledge_base')
     .update({ status: 'active' })
     .eq('id', id)
     .eq('shop_id', resolved.shop.id)
+    .select('id, title, content, status, source, source_ref')
+    .single()
 
-  if (error) {
-    return { error: `อนุมัติข้อมูลไม่สำเร็จ: ${error.message}` }
+  if (error || !data) {
+    return { error: `อนุมัติข้อมูลไม่สำเร็จ: ${error?.message || 'ไม่ทราบสาเหตุ'}` }
+  }
+
+  let note: string | null = null
+  try {
+    note = await indexRows(supabase, resolved.shop.id, [data])
+  } catch (err) {
+    note = indexNote(null, err)
   }
 
   revalidatePath('/dashboard/knowledge')
   revalidatePath('/dashboard')
-  return { success: 'อนุมัติเพิ่มเข้าคลังความรู้ของร้านเรียบร้อยแล้ว!' }
+  return { success: withIndexNote('อนุมัติเพิ่มเข้าคลังความรู้ของร้านเรียบร้อยแล้ว!', note) }
 }
 
 export async function updateKnowledgeItem(id: string, formData: FormData) {
@@ -245,23 +336,31 @@ export async function updateKnowledgeItem(id: string, formData: FormData) {
     updatePayload.status = 'active'
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('knowledge_base')
     .update(updatePayload)
     .eq('id', id)
     .eq('shop_id', resolved.shop.id)
+    .select('id, title, content, status, source, source_ref')
+    .single()
 
-  if (error) {
-    return { error: `บันทึกการแก้ไขไม่สำเร็จ: ${error.message}` }
+  if (error || !data) {
+    return { error: `บันทึกการแก้ไขไม่สำเร็จ: ${error?.message || 'ไม่ทราบสาเหตุ'}` }
+  }
+
+  let note: string | null = null
+  try {
+    note = await indexRows(supabase, resolved.shop.id, [data])
+  } catch (err) {
+    note = indexNote(null, err)
   }
 
   revalidatePath('/dashboard/knowledge')
   revalidatePath('/dashboard')
-  return {
-    success: approveImmediately
-      ? 'บันทึกและอนุมัติเข้าคลังความรู้เรียบร้อยแล้ว!'
-      : 'บันทึกการแก้ไขเรียบร้อยแล้ว!',
-  }
+  const saved = approveImmediately
+    ? 'บันทึกและอนุมัติเข้าคลังความรู้เรียบร้อยแล้ว!'
+    : 'บันทึกการแก้ไขเรียบร้อยแล้ว!'
+  return { success: withIndexNote(saved, note) }
 }
 
 export async function triggerChatFaqScan() {
