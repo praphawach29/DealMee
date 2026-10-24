@@ -65,9 +65,14 @@ grant execute on function public.claim_demo_message(text, int, int) to service_r
 -- ─── Sample shops ───────────────────────────────────────────────────────────
 -- Fixed ids: the app refers to them (src/lib/demo/shops.ts). Paid plan with no end date so the
 -- sales tools are on and no renewal or trial job ever picks them up.
+-- The PromptPay columns the app reads (shop.promptpay_id || shop.promptpay_number). Production has
+-- promptpay_number but not promptpay_id, so the seed writes promptpay_number and makes sure it exists.
+alter table public.shops add column if not exists promptpay_number text;
+alter table public.shops add column if not exists promptpay_name text;
+
 insert into public.shops (
   id, name, business_type, ai_template, plan, plan_key,
-  bot_name, greeting_message, personality, promptpay_id, promptpay_name, features
+  bot_name, greeting_message, personality, promptpay_number, promptpay_name, features
 ) values
   ('d3300000-0000-4000-8000-000000000001', 'Sunday Clothing (ร้านตัวอย่าง)', 'retail', 'retail', 'pro', 'pro',
    'น้องซันเดย์', 'สวัสดีค่ะ ร้าน Sunday Clothing ยินดีต้อนรับค่ะ สนใจเสื้อผ้าแบบไหนบอกได้เลยนะคะ',
@@ -90,7 +95,7 @@ on conflict (id) do update set
   bot_name = excluded.bot_name,
   greeting_message = excluded.greeting_message,
   personality = excluded.personality,
-  promptpay_id = excluded.promptpay_id,
+  promptpay_number = excluded.promptpay_number,
   promptpay_name = excluded.promptpay_name,
   features = excluded.features;
 
