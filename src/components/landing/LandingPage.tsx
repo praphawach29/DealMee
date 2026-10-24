@@ -5,7 +5,6 @@ import Navbar from './Navbar'
 import HeroSection from './HeroSection'
 import FeaturesSection from './FeaturesSection'
 import HowItWorksSection from './HowItWorksSection'
-import ChatSimulatorSection from './ChatSimulatorSection'
 import DemoVideoSection from './DemoVideoSection'
 import LiveDemoSection from './LiveDemoSection'
 import { LandingActionsProvider } from './demo/LandingActions'
@@ -38,8 +37,6 @@ export default function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boole
       {/* 5. How It Works (Steps & Business Types) */}
       <HowItWorksSection />
 
-      {/* 6. Simulated chat of real tools */}
-      <ChatSimulatorSection />
 
       {/* 7. Merchant dashboard showcase */}
       <DashboardShowcase />

@@ -1,35 +1,3 @@
-export type ProductFlexData = {
-  title: string
-  price: string
-  stock: string
-  desc: string
-}
-
-export type QuotationFlexData = {
-  docNo: string
-  customer: string
-  items: string
-  total: string
-  vatNote: string
-}
-
-export type ChatMessage = {
-  type: 'user' | 'bot'
-  text: string
-  time: string
-  flexType?: 'product_carousel' | 'quotation' | 'payment_qr'
-  flexData?: ProductFlexData | QuotationFlexData
-}
-
-export type Scenario = {
-  key: string
-  label: string
-  subtitle: string
-  botName: string
-  botEmoji: string
-  messages: ChatMessage[]
-}
-
 // Mirrors the `plans` table (keys, prices, monthly allowances)
 export type PlanKey = 'starter' | 'pro' | 'agency' | 'byok'
 

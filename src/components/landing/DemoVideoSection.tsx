@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { Play } from 'lucide-react'
+import { DemoButton, SignupButton } from './demo/LandingActions'
 
 /**
  * The landing page's demo: the promo clips, one chapter at a time.
@@ -155,6 +156,15 @@ export default function DemoVideoSection() {
                   </button>
                 )
               })}
+            </div>
+
+            {/* After watching: try it, or sign up */}
+            <div className="mt-6 rounded-[14px] border border-slate-200/90 bg-slate-50 p-4">
+              <div className="text-sm font-semibold text-slate-900 mb-3">อยากลองพิมพ์คุยกับบอทเอง?</div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <DemoButton />
+                <SignupButton />
+              </div>
             </div>
           </div>
         </div>
