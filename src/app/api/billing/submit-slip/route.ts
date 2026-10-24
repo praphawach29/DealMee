@@ -13,6 +13,7 @@ import {
   MIN_TOPUP_AMOUNT,
   MAX_TOPUP_AMOUNT,
 } from '@/lib/billing/manualBilling'
+import { SLIP_BUCKET } from '@/lib/billing/slipStorage'
 
 /**
  * Wallet top-up by PromptPay transfer: the shop sends the slip, and a slip that
@@ -81,19 +82,15 @@ export async function POST(req: NextRequest) {
     const filePath = `${shop.id}/${Date.now()}-${safeFileName}`
 
     const { error: uploadError } = await admin.storage
-      .from('payment-slips')
+      .from(SLIP_BUCKET)
       .upload(filePath, buffer, {
         contentType: mimeType,
         upsert: true,
       })
 
-    let slipUrl = ''
-    if (!uploadError) {
-      const { data: publicUrlData } = admin.storage
-        .from('payment-slips')
-        .getPublicUrl(filePath)
-      slipUrl = publicUrlData.publicUrl
-    }
+    // The bucket is private: keep the path, the admin page signs a link when it shows the slip
+    const slipUrl = uploadError ? '' : filePath
+    if (uploadError) console.error('[SubmitSlip] Slip upload failed:', uploadError.message)
 
     // 3. Check EasySlip if key exists
     let autoVerified = false
