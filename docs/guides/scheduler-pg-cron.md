@@ -65,6 +65,17 @@ order by created desc limit 5;
 - **ไม่มีแถวใน `cron.job_run_details`** → pg_cron ไม่ได้รัน (extension ถูกปิด หรือ job ถูก unschedule)
 - **`cron.job_run_details` succeeded แต่ไม่มีแถวใน `net._http_response`** → ยิงไม่ออก (ปกติคือ Vault ว่าง ดู warning ใน Postgres logs)
 - **`status_code` = 401** → `dealmee_cron_secret` ไม่ตรงกับ `CRON_SECRET` บน Vercel
+  (ทั้งสองฝั่ง `trim()` ให้แล้ว ถ้ายัง 401 แปลว่าค่าต่างกันจริง ไม่ใช่แค่ช่องว่าง) เทียบความยาวก่อนโดยไม่ต้องเปิดเผยค่า:
+  ```sql
+  select length(decrypted_secret) from vault.decrypted_secrets where name = 'dealmee_cron_secret';
+  ```
+  เขียนทับใหม่:
+  ```sql
+  select vault.update_secret(
+    (select id from vault.secrets where name = 'dealmee_cron_secret'),
+    trim('<CRON_SECRET จาก Vercel>')
+  );
+  ```
 - **`status_code` = 503** → Vercel ไม่มี env `CRON_SECRET`
 - **`status_code` = 307/308** → `dealmee_app_url` ไม่ใช่ origin จริง (ต้องเป็น `https://app.dealmee.app` ไม่ใช่ `dealmee.app` และไม่ใช่ `http://`)
 

@@ -20,11 +20,14 @@ async function handleFollowUpCron(req: NextRequest) {
   try {
     // The proxy lets /api/cron through without a login, so the shared secret is the only
     // gate: refuse to run at all when it isn't configured.
-    const cronSecret = process.env.CRON_SECRET
+    // Trimmed on both sides: a secret pasted into the Vercel dashboard or a secret store
+    // easily carries a trailing newline, and the scheduler then gets 401 forever with a
+    // value that looks identical to the eye (24 Oct 2026).
+    const cronSecret = process.env.CRON_SECRET?.trim()
     if (!cronSecret) {
       return NextResponse.json({ error: 'CRON_SECRET is not configured' }, { status: 503 })
     }
-    if (req.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+    if (req.headers.get('authorization')?.trim() !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
