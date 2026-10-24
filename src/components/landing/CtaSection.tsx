@@ -1,10 +1,10 @@
 'use client'
 
 import React from 'react'
-import Link from 'next/link'
 import { TRIAL_DAYS } from '@/lib/billing/trial'
 import { DEALMEE_LINE_OA } from './data'
 import { AdminAlertMock } from './ProductVisuals'
+import TryRealBotLink from './TryRealBotLink'
 
 const items = [
   { num: `${TRIAL_DAYS} วัน`, label: 'ทดลองใช้งานฟรี' },
@@ -37,12 +37,7 @@ export default function CtaSection() {
           </div>
 
           <div className="flex gap-3.5 justify-center lg:justify-start flex-wrap">
-            <Link
-              href="/login"
-              className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-7 py-3 rounded-full font-bold text-sm sm:text-base inline-flex items-center gap-2 hover:opacity-95 shadow-lg shadow-cyan-500/25 transition-all duration-200 active:scale-95"
-            >
-              🚀 ทดลองใช้ฟรี {TRIAL_DAYS} วัน
-            </Link>
+            <TryRealBotLink size="lg" />
             <a
               href={DEALMEE_LINE_OA.url}
               target="_blank"

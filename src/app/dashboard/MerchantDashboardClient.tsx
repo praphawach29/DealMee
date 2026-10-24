@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   CalendarRange,
   ChevronDown,
@@ -56,6 +57,7 @@ export interface MerchantDashboardProps {
   setupChecklist?: SetupChecklistItem[]
   orders?: DashboardOrder[]
   products?: DashboardProduct[]
+  initialPlaygroundOpen?: boolean
 }
 
 const PRESETS: { id: PeriodPreset; label: string }[] = [
@@ -83,8 +85,16 @@ export default function MerchantDashboardClient({
   },
   orders = [],
   products = [],
+  initialPlaygroundOpen = false,
 }: MerchantDashboardProps) {
-  const [isPlaygroundOpen, setIsPlaygroundOpen] = useState(false)
+  const router = useRouter()
+  const [isPlaygroundOpen, setIsPlaygroundOpen] = useState(initialPlaygroundOpen)
+  const closePlayground = () => {
+    setIsPlaygroundOpen(false)
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('playground') === '1') {
+      router.replace('/dashboard', { scroll: false })
+    }
+  }
   const [preset, setPreset] = useState<PeriodPreset | 'custom'>('30')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -405,7 +415,12 @@ export default function MerchantDashboardClient({
         </p>
       </section>
 
-      <ChatPlaygroundModal isOpen={isPlaygroundOpen} onClose={() => setIsPlaygroundOpen(false)} initialBotName={botName} />
+      <ChatPlaygroundModal
+        isOpen={isPlaygroundOpen}
+        onClose={closePlayground}
+        initialBotName={botName}
+        initialCatalog={{ products: productsCount, knowledge: knowledgeCount }}
+      />
     </div>
   )
 }
