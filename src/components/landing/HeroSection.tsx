@@ -3,7 +3,6 @@
 import React from 'react'
 import { HeroChatMock } from './ProductVisuals'
 import { TEMPLATES } from '@/app/onboarding/templates'
-import TryRealBotLink from './TryRealBotLink'
 
 const stats = [
   { num: '24 ชม.', label: 'บอทตอบแชท' },
@@ -50,7 +49,12 @@ export default function HeroSection() {
 
           {/* Action CTAs */}
           <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3.5 pt-1">
-            <TryRealBotLink size="lg" className="w-full sm:w-auto" />
+            <a
+              href="#try"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-12 px-7 py-3 rounded-[14px] bg-[#2F6BFF] hover:bg-[#2457d6] text-white font-semibold text-sm sm:text-base shadow-lg shadow-[#2F6BFF]/25 transition-all duration-200 active:scale-95"
+            >
+              ลองคุยกับบอทเลย ไม่ต้องสมัคร
+            </a>
             <a
               href="#demo"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-white/30 hover:border-white/60 text-white font-semibold text-sm sm:text-base px-7 py-3 rounded-[14px] hover:bg-white/[0.08] transition-all duration-200 active:scale-95"
@@ -78,7 +82,12 @@ export default function HeroSection() {
 
         <div className="order-first flex flex-col items-center gap-4 lg:order-last">
           <HeroChatMock />
-          <TryRealBotLink size="lg" className="w-full max-w-[400px] lg:hidden" />
+          <a
+            href="#try"
+            className="w-full max-w-[400px] lg:hidden inline-flex items-center justify-center min-h-12 px-7 py-3 rounded-[14px] bg-[#2F6BFF] text-white font-semibold text-sm shadow-lg shadow-[#2F6BFF]/25"
+          >
+            ลองคุยกับบอทเลย ไม่ต้องสมัคร
+          </a>
         </div>
       </div>
     </section>

@@ -7,6 +7,7 @@ import FeaturesSection from './FeaturesSection'
 import HowItWorksSection from './HowItWorksSection'
 import ChatSimulatorSection from './ChatSimulatorSection'
 import DemoVideoSection from './DemoVideoSection'
+import LiveDemoSection from './LiveDemoSection'
 import DashboardShowcase from './DashboardShowcase'
 import PricingSection from './PricingSection'
 import PricingComparison from './PricingComparison'
@@ -25,6 +26,9 @@ export default function LandingPage() {
 
       {/* 3. The promo clips, one chapter at a time */}
       <DemoVideoSection />
+
+      {/* Live demo: chat with the real engine in a sample shop, no account */}
+      <LiveDemoSection />
 
       {/* 4. 12 Core Features Grid */}
       <FeaturesSection />

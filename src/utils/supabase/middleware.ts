@@ -76,6 +76,8 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/facebook/data-deletion') &&
     !request.nextUrl.pathname.startsWith('/api/billing/webhook') &&
     !request.nextUrl.pathname.startsWith('/api/cron') &&
+    // The landing page's live demo: no account, capped per visitor in the database
+    !request.nextUrl.pathname.startsWith('/api/demo') &&
     !request.nextUrl.pathname.startsWith('/doc') &&
     !request.nextUrl.pathname.startsWith('/api/doc') &&
     request.nextUrl.pathname !== '/'

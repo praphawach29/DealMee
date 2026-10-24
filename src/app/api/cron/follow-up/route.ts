@@ -4,6 +4,7 @@ import { expirePendingOrders } from '@/lib/orders/expirePendingOrders'
 import { sendTrialReminders } from '@/lib/billing/ownerAlerts'
 import { processWalletRenewals } from '@/lib/billing/walletRenewal'
 import { expirePausedConversations } from '@/lib/inbox/adminPause'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // Allow up to 60s for batch processing
@@ -38,6 +39,9 @@ async function handleFollowUpCron(req: NextRequest) {
     // Hands chats back to the bot when the admin's hour is up, without waiting for the
     // customer to write again
     const adminPauses = await expirePausedConversations()
+    // Landing-page demo: clear what visitors left in the sample shops, put stock back
+    const { data: demoCleanup, error: demoError } = await createAdminClient().rpc('cleanup_demo_shops', { p_hours: 6 })
+    if (demoError) console.error('[FollowUpCron] Demo cleanup failed:', demoError.message)
 
     return NextResponse.json({
       success: true,
@@ -47,6 +51,7 @@ async function handleFollowUpCron(req: NextRequest) {
       trialReminders,
       walletRenewals,
       adminPauses,
+      demoCleanup: demoError ? null : demoCleanup,
     })
   } catch (err: any) {
     console.error('[FollowUpCron] Exception during cron job:', err)
