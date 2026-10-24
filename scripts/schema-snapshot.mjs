@@ -176,10 +176,17 @@ function check(files) {
 
   for (const file of files) {
     const sql = stripComments(readFileSync(file, 'utf8'))
-    // Supabase grants EXECUTE to anon/authenticated directly, so "from public" alone leaves them
+    // Supabase grants EXECUTE to anon/authenticated directly, so "from public" alone leaves them.
+    // A role the same file grants back on that function is left out on purpose.
+    const granted = (fn) =>
+      [...sql.matchAll(/grant\s+execute\s+on\s+function\s+([^;]+?)\s+to\s+([^;]+);/gi)]
+        .filter((g) => g[1].trim() === fn)
+        .map((g) => g[2].toLowerCase())
+        .join(' ')
     for (const m of sql.matchAll(/revoke\s+(?:execute|all)\s+on\s+function\s+([^;]+?)\s+from\s+([^;]+);/gi)) {
       const roles = m[2].toLowerCase()
-      if (/\bpublic\b/.test(roles) && (!roles.includes('anon') || !roles.includes('authenticated'))) {
+      const covered = (role) => roles.includes(role) || granted(m[1].trim()).includes(role)
+      if (/\bpublic\b/.test(roles) && (!covered('anon') || !covered('authenticated'))) {
         console.log(`✗ ${basename(file)}: revoke on ${m[1].trim()} misses anon/authenticated (Supabase grants them directly)`)
         problems++
       }
