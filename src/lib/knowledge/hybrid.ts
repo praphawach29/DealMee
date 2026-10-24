@@ -247,7 +247,7 @@ export const NO_KNOWLEDGE_TOOL_RESULT = (query: string) =>
 
 export function renderToolResult(query: string, chunks: RankedChunk[]): string {
   if (chunks.length === 0) return NO_KNOWLEDGE_TOOL_RESULT(query)
-  return `ข้อมูลจากคลังความรู้ (อ้างอิง chunk_id เมื่อตอบ):\n` + chunks.map(formatRetrievedChunk).join('\n\n')
+  return `ข้อมูลจากคลังความรู้ ถ้าใช้ข้อความนี้ให้ปิดท้ายด้วย [[cite:chunk:<chunk_id>]]:\n` + chunks.map(formatRetrievedChunk).join('\n\n')
 }
 
 export function renderKnowledgeSection(input: {
@@ -269,7 +269,7 @@ export function renderKnowledgeSection(input: {
     : ''
   return {
     text:
-      '\n\n[คลังข้อมูลความรู้ของร้าน (เฉพาะส่วนที่เกี่ยวข้อง)]\nตอบจากข้อความด้านล่างหรือจากผล search_knowledge_base เท่านั้น ถ้าไม่มีข้อมูล ห้ามเดา ให้เรียก request_human_agent\n' +
+      '\n\n[คลังข้อมูลความรู้ของร้าน (เฉพาะส่วนที่เกี่ยวข้อง)]\nตอบข้อเท็จจริงจากข้อความด้านล่างหรือจากผล search_knowledge_base เท่านั้น ถ้าใช้ข้อความนี้ให้ปิดท้ายด้วย [[cite:chunk:<chunk_id>]] ถ้าไม่มีข้อมูล ห้ามเดา ให้เรียก request_human_agent\n' +
       formatted.blocks.join('\n\n') +
       tail,
     citations: formatted.citations,
@@ -287,7 +287,8 @@ export function isMissingKnowledgeSchema(error: unknown): boolean {
     message.includes('knowledge_chunks') ||
     message.includes('knowledge_documents') ||
     message.includes('match_knowledge_chunks') ||
-    message.includes('search_knowledge_chunks_keyword')
+    message.includes('search_knowledge_chunks_keyword') ||
+    message.includes('knowledge_gaps')
   )
 }
 
