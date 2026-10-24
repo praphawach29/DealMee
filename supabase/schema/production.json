@@ -212,260 +212,6 @@
     },
     {
       "rls": true,
-      "name": "ai_usage_ledger",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "uuid",
-          "default": "gen_random_uuid()",
-          "nullable": false
-        },
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "tokens_used",
-          "type": "integer",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "model",
-          "type": "character varying(100)",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "action_type",
-          "type": "character varying(50)",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "description",
-          "type": "text",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        "CREATE UNIQUE INDEX ai_usage_ledger_pkey ON public.ai_usage_ledger USING btree (id)"
-      ],
-      "policies": [
-        {
-          "cmd": "ALL",
-          "name": "Service Role can manage all ai_usage_ledger",
-          "check": null,
-          "roles": [
-            "public"
-          ],
-          "using": "(auth.role() = 'service_role'::text)"
-        },
-        {
-          "cmd": "SELECT",
-          "name": "Tenants can view own ai_usage_ledger",
-          "check": null,
-          "roles": [
-            "public"
-          ],
-          "using": "(shop_id = ( SELECT auth.uid() AS uid))"
-        }
-      ],
-      "constraints": [
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "ai_usage_ledger_pkey"
-        },
-        {
-          "def": "FOREIGN KEY (shop_id) REFERENCES shops(id)",
-          "name": "ai_usage_ledger_shop_id_fkey"
-        }
-      ]
-    },
-    {
-      "rls": true,
-      "name": "billing",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "integer",
-          "default": "nextval('billing_id_seq'::regclass)",
-          "nullable": false
-        },
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "package_name",
-          "type": "text",
-          "default": "'Pro'::text",
-          "nullable": false
-        },
-        {
-          "name": "amount",
-          "type": "integer",
-          "default": "0",
-          "nullable": false
-        },
-        {
-          "name": "period_start",
-          "type": "date",
-          "default": "CURRENT_DATE",
-          "nullable": false
-        },
-        {
-          "name": "period_end",
-          "type": "date",
-          "default": "(CURRENT_DATE + '30 days'::interval)",
-          "nullable": false
-        },
-        {
-          "name": "status",
-          "type": "text",
-          "default": "'pending'::text",
-          "nullable": false
-        },
-        {
-          "name": "payment_method",
-          "type": "text",
-          "default": "''::text",
-          "nullable": true
-        },
-        {
-          "name": "payment_ref",
-          "type": "text",
-          "default": "''::text",
-          "nullable": true
-        },
-        {
-          "name": "payment_slip_url",
-          "type": "text",
-          "default": "''::text",
-          "nullable": true
-        },
-        {
-          "name": "paid_at",
-          "type": "timestamp with time zone",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "confirmed_by",
-          "type": "text",
-          "default": "''::text",
-          "nullable": true
-        },
-        {
-          "name": "note",
-          "type": "text",
-          "default": "''::text",
-          "nullable": true
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        },
-        {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        },
-        {
-          "name": "gateway",
-          "type": "text",
-          "default": "''::text",
-          "nullable": true
-        },
-        {
-          "name": "gateway_session_id",
-          "type": "text",
-          "default": "''::text",
-          "nullable": true
-        },
-        {
-          "name": "gateway_charge_id",
-          "type": "text",
-          "default": "''::text",
-          "nullable": true
-        },
-        {
-          "name": "gateway_subscription_id",
-          "type": "text",
-          "default": "''::text",
-          "nullable": true
-        },
-        {
-          "name": "currency",
-          "type": "text",
-          "default": "'THB'::text",
-          "nullable": true
-        },
-        {
-          "name": "invoice_number",
-          "type": "text",
-          "default": "''::text",
-          "nullable": true
-        },
-        {
-          "name": "auto_renew",
-          "type": "boolean",
-          "default": "false",
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        "CREATE UNIQUE INDEX billing_pkey ON public.billing USING btree (id)",
-        "CREATE INDEX idx_billing_gateway ON public.billing USING btree (gateway)",
-        "CREATE INDEX idx_billing_invoice ON public.billing USING btree (invoice_number)",
-        "CREATE INDEX idx_billing_shop ON public.billing USING btree (shop_id)",
-        "CREATE INDEX idx_billing_shop_status ON public.billing USING btree (shop_id, status)",
-        "CREATE INDEX idx_billing_status ON public.billing USING btree (status)"
-      ],
-      "policies": [
-        {
-          "cmd": "ALL",
-          "name": "billing_all",
-          "check": "true",
-          "roles": [
-            "public"
-          ],
-          "using": "true"
-        }
-      ],
-      "constraints": [
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "billing_pkey"
-        }
-      ]
-    },
-    {
-      "rls": true,
       "name": "billing_payments",
       "grants": {
         "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
@@ -663,96 +409,6 @@
         {
           "def": "PRIMARY KEY (provider, event_id)",
           "name": "billing_webhook_events_pkey"
-        }
-      ]
-    },
-    {
-      "rls": true,
-      "name": "booking_slots",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "uuid",
-          "default": "gen_random_uuid()",
-          "nullable": false
-        },
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "day",
-          "type": "text",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "time_slot",
-          "type": "text",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "service",
-          "type": "text",
-          "default": "'ทุกบริการ'::text",
-          "nullable": true
-        },
-        {
-          "name": "max_slots",
-          "type": "integer",
-          "default": "1",
-          "nullable": true
-        },
-        {
-          "name": "status",
-          "type": "text",
-          "default": "'open'::text",
-          "nullable": true
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        },
-        {
-          "name": "location",
-          "type": "text",
-          "default": "''::text",
-          "nullable": false
-        }
-      ],
-      "indexes": [
-        "CREATE UNIQUE INDEX booking_slots_pkey ON public.booking_slots USING btree (id)",
-        "CREATE INDEX idx_slots_shop ON public.booking_slots USING btree (shop_id)"
-      ],
-      "policies": [
-        {
-          "cmd": "ALL",
-          "name": "Shop isolation on booking_slots",
-          "check": null,
-          "roles": [
-            "public"
-          ],
-          "using": "(is_superadmin() OR (shop_id = get_user_shop_id()))"
-        }
-      ],
-      "constraints": [
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "booking_slots_pkey"
-        },
-        {
-          "def": "CHECK ((status = ANY (ARRAY['open'::text, 'blocked'::text])))",
-          "name": "booking_slots_status_check"
         }
       ]
     },
@@ -1079,68 +735,6 @@
     },
     {
       "rls": true,
-      "name": "botify_knowledge_base",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "uuid",
-          "default": "gen_random_uuid()",
-          "nullable": false
-        },
-        {
-          "name": "workspace_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "content",
-          "type": "text",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "metadata",
-          "type": "jsonb",
-          "default": "'{}'::jsonb",
-          "nullable": true
-        },
-        {
-          "name": "embedding",
-          "type": "vector(768)",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        "CREATE INDEX botify_knowledge_base_embedding_idx ON public.botify_knowledge_base USING hnsw (embedding vector_cosine_ops)",
-        "CREATE UNIQUE INDEX botify_knowledge_base_pkey ON public.botify_knowledge_base USING btree (id)"
-      ],
-      "policies": [],
-      "constraints": [
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "botify_knowledge_base_pkey"
-        },
-        {
-          "def": "FOREIGN KEY (workspace_id) REFERENCES shops(id) ON DELETE CASCADE",
-          "name": "botify_knowledge_base_workspace_id_fkey"
-        }
-      ]
-    },
-    {
-      "rls": true,
       "name": "broadcasts",
       "grants": {
         "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
@@ -1213,6 +807,48 @@
           "type": "integer",
           "default": "0",
           "nullable": true
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "default": null,
+          "nullable": true
+        },
+        {
+          "name": "target_tag",
+          "type": "text",
+          "default": null,
+          "nullable": true
+        },
+        {
+          "name": "target_pref_key",
+          "type": "text",
+          "default": null,
+          "nullable": true
+        },
+        {
+          "name": "target_pref_value",
+          "type": "text",
+          "default": null,
+          "nullable": true
+        },
+        {
+          "name": "recipient_count",
+          "type": "integer",
+          "default": "0",
+          "nullable": false
+        },
+        {
+          "name": "sent_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "nullable": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "nullable": false
         }
       ],
       "indexes": [
@@ -1403,162 +1039,6 @@
     },
     {
       "rls": true,
-      "name": "chat_history",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "uuid",
-          "default": "gen_random_uuid()",
-          "nullable": false
-        },
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "user_key",
-          "type": "text",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "messages",
-          "type": "jsonb",
-          "default": "'[]'::jsonb",
-          "nullable": true
-        },
-        {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        "CREATE UNIQUE INDEX chat_history_pkey ON public.chat_history USING btree (id)",
-        "CREATE UNIQUE INDEX chat_history_shop_id_user_key_key ON public.chat_history USING btree (shop_id, user_key)",
-        "CREATE INDEX idx_chat_shop ON public.chat_history USING btree (shop_id)"
-      ],
-      "policies": [
-        {
-          "cmd": "ALL",
-          "name": "Shop isolation on chat_history",
-          "check": null,
-          "roles": [
-            "public"
-          ],
-          "using": "(is_superadmin() OR (shop_id = get_user_shop_id()))"
-        }
-      ],
-      "constraints": [
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "chat_history_pkey"
-        },
-        {
-          "def": "UNIQUE (shop_id, user_key)",
-          "name": "chat_history_shop_id_user_key_key"
-        }
-      ]
-    },
-    {
-      "rls": true,
-      "name": "chat_logs",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "uuid",
-          "default": "gen_random_uuid()",
-          "nullable": false
-        },
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "platform",
-          "type": "text",
-          "default": "'LINE'::text",
-          "nullable": false
-        },
-        {
-          "name": "user_id",
-          "type": "text",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "user_name",
-          "type": "text",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "direction",
-          "type": "text",
-          "default": "'in'::text",
-          "nullable": false
-        },
-        {
-          "name": "message",
-          "type": "text",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "msg_type",
-          "type": "text",
-          "default": "'text'::text",
-          "nullable": true
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        },
-        {
-          "name": "metadata",
-          "type": "jsonb",
-          "default": null,
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        "CREATE UNIQUE INDEX chat_logs_pkey ON public.chat_logs USING btree (id)",
-        "CREATE INDEX idx_chat_logs_created ON public.chat_logs USING btree (created_at DESC)",
-        "CREATE INDEX idx_chat_logs_platform ON public.chat_logs USING btree (platform)",
-        "CREATE INDEX idx_chat_logs_shop ON public.chat_logs USING btree (shop_id)",
-        "CREATE INDEX idx_chat_logs_user ON public.chat_logs USING btree (user_id)"
-      ],
-      "policies": [],
-      "constraints": [
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "chat_logs_pkey"
-        },
-        {
-          "def": "FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE",
-          "name": "chat_logs_shop_id_fkey"
-        }
-      ]
-    },
-    {
-      "rls": true,
       "name": "chat_messages",
       "grants": {
         "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
@@ -1682,55 +1162,6 @@
         {
           "def": "FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE",
           "name": "chat_messages_shop_id_fkey"
-        }
-      ]
-    },
-    {
-      "rls": true,
-      "name": "chat_sessions",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "line_id",
-          "type": "text",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "history",
-          "type": "jsonb",
-          "default": "'[]'::jsonb",
-          "nullable": true
-        },
-        {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        "CREATE UNIQUE INDEX chat_sessions_pkey ON public.chat_sessions USING btree (shop_id, line_id)"
-      ],
-      "policies": [],
-      "constraints": [
-        {
-          "def": "PRIMARY KEY (shop_id, line_id)",
-          "name": "chat_sessions_pkey"
-        },
-        {
-          "def": "FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE",
-          "name": "chat_sessions_shop_id_fkey"
         }
       ]
     },
@@ -2801,15 +2232,6 @@
       ],
       "policies": [
         {
-          "cmd": "SELECT",
-          "name": "Allow public read access for document links",
-          "check": null,
-          "roles": [
-            "public"
-          ],
-          "using": "true"
-        },
-        {
           "cmd": "ALL",
           "name": "Allow shop owners to manage documents",
           "check": null,
@@ -2939,80 +2361,6 @@
         {
           "def": "FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE",
           "name": "follow_up_tasks_shop_id_fkey"
-        }
-      ]
-    },
-    {
-      "rls": true,
-      "name": "inquiries",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "uuid",
-          "default": "gen_random_uuid()",
-          "nullable": false
-        },
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "platform",
-          "type": "text",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "user_id",
-          "type": "text",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "user_message",
-          "type": "text",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "ai_response",
-          "type": "text",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        "CREATE INDEX idx_inquiries_shop ON public.inquiries USING btree (shop_id)",
-        "CREATE UNIQUE INDEX inquiries_pkey ON public.inquiries USING btree (id)"
-      ],
-      "policies": [
-        {
-          "cmd": "ALL",
-          "name": "Shop isolation on inquiries",
-          "check": null,
-          "roles": [
-            "public"
-          ],
-          "using": "(is_superadmin() OR (shop_id = get_user_shop_id()))"
-        }
-      ],
-      "constraints": [
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "inquiries_pkey"
         }
       ]
     },
@@ -3419,118 +2767,6 @@
         {
           "def": "FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE",
           "name": "knowledge_documents_shop_id_fkey"
-        }
-      ]
-    },
-    {
-      "rls": true,
-      "name": "knowledge_gaps",
-      "grants": {
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "uuid",
-          "default": "gen_random_uuid()",
-          "nullable": false
-        },
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "conversation_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "question",
-          "type": "text",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "question_key",
-          "type": "text",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "reason",
-          "type": "text",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "status",
-          "type": "text",
-          "default": "'open'::text",
-          "nullable": false
-        },
-        {
-          "name": "ask_count",
-          "type": "integer",
-          "default": "1",
-          "nullable": false
-        },
-        {
-          "name": "last_asked_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": false
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": false
-        }
-      ],
-      "indexes": [
-        "CREATE UNIQUE INDEX knowledge_gaps_pkey ON public.knowledge_gaps USING btree (id)",
-        "CREATE INDEX knowledge_gaps_shop_open ON public.knowledge_gaps USING btree (shop_id, last_asked_at DESC) WHERE (status = 'open'::text)",
-        "CREATE UNIQUE INDEX knowledge_gaps_shop_question ON public.knowledge_gaps USING btree (shop_id, question_key)"
-      ],
-      "policies": [
-        {
-          "cmd": "ALL",
-          "name": "Shop members manage own rows",
-          "check": "(shop_id IN ( SELECT users.workspace_id\n   FROM users\n  WHERE (users.id = auth.uid())))",
-          "roles": [
-            "public"
-          ],
-          "using": "(shop_id IN ( SELECT users.workspace_id\n   FROM users\n  WHERE (users.id = auth.uid())))"
-        }
-      ],
-      "constraints": [
-        {
-          "def": "CHECK ((ask_count >= 1))",
-          "name": "knowledge_gaps_ask_count_check"
-        },
-        {
-          "def": "FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL",
-          "name": "knowledge_gaps_conversation_id_fkey"
-        },
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "knowledge_gaps_pkey"
-        },
-        {
-          "def": "CHECK ((reason = ANY (ARRAY['unsupported_shop_fact'::text, 'invented_citation'::text, 'unanswered'::text])))",
-          "name": "knowledge_gaps_reason_check"
-        },
-        {
-          "def": "FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE",
-          "name": "knowledge_gaps_shop_id_fkey"
-        },
-        {
-          "def": "CHECK ((status = ANY (ARRAY['open'::text, 'dismissed'::text])))",
-          "name": "knowledge_gaps_status_check"
         }
       ]
     },
@@ -4405,189 +3641,6 @@
     },
     {
       "rls": true,
-      "name": "payment_events",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "bigint",
-          "default": "nextval('payment_events_id_seq'::regclass)",
-          "nullable": false
-        },
-        {
-          "name": "gateway",
-          "type": "text",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "event_type",
-          "type": "text",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "event_id",
-          "type": "text",
-          "default": "''::text",
-          "nullable": true
-        },
-        {
-          "name": "payload",
-          "type": "jsonb",
-          "default": "'{}'::jsonb",
-          "nullable": true
-        },
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "billing_id",
-          "type": "integer",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "processed",
-          "type": "boolean",
-          "default": "false",
-          "nullable": true
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        "CREATE INDEX idx_payment_events_gateway ON public.payment_events USING btree (gateway, event_type)",
-        "CREATE INDEX idx_payment_events_shop ON public.payment_events USING btree (shop_id)",
-        "CREATE UNIQUE INDEX payment_events_pkey ON public.payment_events USING btree (id)"
-      ],
-      "policies": [
-        {
-          "cmd": "ALL",
-          "name": "payment_events_all",
-          "check": null,
-          "roles": [
-            "public"
-          ],
-          "using": "true"
-        }
-      ],
-      "constraints": [
-        {
-          "def": "FOREIGN KEY (billing_id) REFERENCES billing(id) ON DELETE SET NULL",
-          "name": "payment_events_billing_id_fkey"
-        },
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "payment_events_pkey"
-        }
-      ]
-    },
-    {
-      "rls": true,
-      "name": "payment_ledger",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "uuid",
-          "default": "gen_random_uuid()",
-          "nullable": false
-        },
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "amount",
-          "type": "numeric(10,2)",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "currency",
-          "type": "character varying(10)",
-          "default": "'THB'::character varying",
-          "nullable": true
-        },
-        {
-          "name": "payment_method",
-          "type": "character varying(50)",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "transaction_id",
-          "type": "character varying(100)",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "status",
-          "type": "character varying(20)",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        "CREATE UNIQUE INDEX payment_ledger_pkey ON public.payment_ledger USING btree (id)"
-      ],
-      "policies": [
-        {
-          "cmd": "ALL",
-          "name": "Service Role can manage all payment_ledger",
-          "check": null,
-          "roles": [
-            "public"
-          ],
-          "using": "(auth.role() = 'service_role'::text)"
-        },
-        {
-          "cmd": "SELECT",
-          "name": "Tenants can view own payment_ledger",
-          "check": null,
-          "roles": [
-            "public"
-          ],
-          "using": "(shop_id = ( SELECT auth.uid() AS uid))"
-        }
-      ],
-      "constraints": [
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "payment_ledger_pkey"
-        },
-        {
-          "def": "FOREIGN KEY (shop_id) REFERENCES shops(id)",
-          "name": "payment_ledger_shop_id_fkey"
-        }
-      ]
-    },
-    {
-      "rls": true,
       "name": "payment_slips",
       "grants": {
         "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
@@ -4676,108 +3729,6 @@
         {
           "def": "UNIQUE (shop_id, trans_ref)",
           "name": "payment_slips_shop_id_trans_ref_key"
-        }
-      ]
-    },
-    {
-      "rls": true,
-      "name": "payments",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "uuid",
-          "default": "gen_random_uuid()",
-          "nullable": false
-        },
-        {
-          "name": "workspace_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "amount",
-          "type": "integer",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "currency",
-          "type": "text",
-          "default": "'THB'::text",
-          "nullable": true
-        },
-        {
-          "name": "plan",
-          "type": "text",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "status",
-          "type": "text",
-          "default": "'pending'::text",
-          "nullable": false
-        },
-        {
-          "name": "provider",
-          "type": "text",
-          "default": "'omise'::text",
-          "nullable": false
-        },
-        {
-          "name": "provider_charge_id",
-          "type": "text",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "metadata",
-          "type": "jsonb",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "paid_at",
-          "type": "timestamp with time zone",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        "CREATE INDEX idx_payments_workspace ON public.payments USING btree (workspace_id)",
-        "CREATE UNIQUE INDEX payments_pkey ON public.payments USING btree (id)"
-      ],
-      "policies": [],
-      "constraints": [
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "payments_pkey"
-        },
-        {
-          "def": "FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE",
-          "name": "payments_shop_id_fkey"
-        },
-        {
-          "def": "FOREIGN KEY (workspace_id) REFERENCES shops(id) ON DELETE CASCADE",
-          "name": "payments_workspace_id_fkey"
         }
       ]
     },
@@ -5348,9 +4299,9 @@
       "rls": true,
       "name": "profiles",
       "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
+        "anon": "REFERENCES,SELECT,TRIGGER",
         "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+        "authenticated": "REFERENCES,SELECT,TRIGGER"
       },
       "columns": [
         {
@@ -5451,15 +4402,6 @@
         {
           "cmd": "SELECT",
           "name": "Users read own profile",
-          "check": null,
-          "roles": [
-            "public"
-          ],
-          "using": "(id = auth.uid())"
-        },
-        {
-          "cmd": "UPDATE",
-          "name": "Users update own profile",
           "check": null,
           "roles": [
             "public"
@@ -6197,79 +5139,6 @@
         {
           "def": "UNIQUE (shop_id)",
           "name": "shop_booking_configs_shop_id_key"
-        }
-      ]
-    },
-    {
-      "rls": true,
-      "name": "shop_knowledge",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "uuid",
-          "default": "gen_random_uuid()",
-          "nullable": false
-        },
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "type",
-          "type": "character varying(50)",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "title",
-          "type": "character varying(255)",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "raw_content",
-          "type": "text",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "file_url",
-          "type": "text",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "embedding",
-          "type": "vector(768)",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        "CREATE UNIQUE INDEX shop_knowledge_pkey ON public.shop_knowledge USING btree (id)"
-      ],
-      "policies": [],
-      "constraints": [
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "shop_knowledge_pkey"
-        },
-        {
-          "def": "FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE",
-          "name": "shop_knowledge_shop_id_fkey"
         }
       ]
     },
@@ -7075,196 +5944,6 @@
     },
     {
       "rls": true,
-      "name": "slip_checks",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "uuid",
-          "default": "gen_random_uuid()",
-          "nullable": false
-        },
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "order_id",
-          "type": "text",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "amount",
-          "type": "numeric(10,2)",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "status",
-          "type": "text",
-          "default": "'pending'::text",
-          "nullable": true
-        },
-        {
-          "name": "slip_url",
-          "type": "text",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "api_response",
-          "type": "jsonb",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        "CREATE UNIQUE INDEX slip_checks_pkey ON public.slip_checks USING btree (id)"
-      ],
-      "policies": [],
-      "constraints": [
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "slip_checks_pkey"
-        },
-        {
-          "def": "FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE",
-          "name": "slip_checks_shop_id_fkey"
-        }
-      ]
-    },
-    {
-      "rls": true,
-      "name": "subscriptions",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "uuid",
-          "default": "gen_random_uuid()",
-          "nullable": false
-        },
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "package_id",
-          "type": "integer",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "gateway",
-          "type": "text",
-          "default": "'manual'::text",
-          "nullable": false
-        },
-        {
-          "name": "gateway_subscription_id",
-          "type": "text",
-          "default": "''::text",
-          "nullable": true
-        },
-        {
-          "name": "status",
-          "type": "text",
-          "default": "'active'::text",
-          "nullable": false
-        },
-        {
-          "name": "current_period_start",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        },
-        {
-          "name": "current_period_end",
-          "type": "timestamp with time zone",
-          "default": "(now() + '30 days'::interval)",
-          "nullable": true
-        },
-        {
-          "name": "cancel_at_period_end",
-          "type": "boolean",
-          "default": "false",
-          "nullable": true
-        },
-        {
-          "name": "canceled_at",
-          "type": "timestamp with time zone",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "trial_end",
-          "type": "timestamp with time zone",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "auto_renew",
-          "type": "boolean",
-          "default": "true",
-          "nullable": true
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        },
-        {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        "CREATE INDEX idx_subscriptions_shop_id ON public.subscriptions USING btree (shop_id)",
-        "CREATE INDEX idx_subscriptions_status ON public.subscriptions USING btree (status)",
-        "CREATE UNIQUE INDEX subscriptions_pkey ON public.subscriptions USING btree (id)"
-      ],
-      "policies": [
-        {
-          "cmd": "ALL",
-          "name": "subscriptions_all",
-          "check": null,
-          "roles": [
-            "public"
-          ],
-          "using": "true"
-        }
-      ],
-      "constraints": [
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "subscriptions_pkey"
-        }
-      ]
-    },
-    {
-      "rls": true,
       "name": "usage_logs",
       "grants": {
         "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
@@ -7572,96 +6251,6 @@
           "name": "wallet_transactions_shop_id_fkey"
         }
       ]
-    },
-    {
-      "rls": true,
-      "name": "webhook_events",
-      "grants": {
-        "anon": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "service_role": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-        "authenticated": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
-      },
-      "columns": [
-        {
-          "name": "id",
-          "type": "uuid",
-          "default": "gen_random_uuid()",
-          "nullable": false
-        },
-        {
-          "name": "provider",
-          "type": "character varying(50)",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "shop_id",
-          "type": "uuid",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "payload",
-          "type": "jsonb",
-          "default": null,
-          "nullable": false
-        },
-        {
-          "name": "status",
-          "type": "character varying(20)",
-          "default": "'pending'::character varying",
-          "nullable": true
-        },
-        {
-          "name": "retry_count",
-          "type": "integer",
-          "default": "0",
-          "nullable": true
-        },
-        {
-          "name": "error_message",
-          "type": "text",
-          "default": null,
-          "nullable": true
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        },
-        {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "default": "now()",
-          "nullable": true
-        }
-      ],
-      "indexes": [
-        "CREATE INDEX idx_webhook_events_status ON public.webhook_events USING btree (status)",
-        "CREATE UNIQUE INDEX webhook_events_pkey ON public.webhook_events USING btree (id)"
-      ],
-      "policies": [
-        {
-          "cmd": "ALL",
-          "name": "Service Role can manage all webhook_events",
-          "check": null,
-          "roles": [
-            "public"
-          ],
-          "using": "(auth.role() = 'service_role'::text)"
-        }
-      ],
-      "constraints": [
-        {
-          "def": "PRIMARY KEY (id)",
-          "name": "webhook_events_pkey"
-        },
-        {
-          "def": "FOREIGN KEY (shop_id) REFERENCES shops(id)",
-          "name": "webhook_events_shop_id_fkey"
-        }
-      ]
     }
   ],
   "postgres": "17.6",
@@ -7670,11 +6259,6 @@
       "def": "CREATE TRIGGER trg_bookings_updated BEFORE UPDATE ON public.bookings FOR EACH ROW EXECUTE FUNCTION update_updated_at()",
       "name": "trg_bookings_updated",
       "table": "bookings"
-    },
-    {
-      "def": "CREATE TRIGGER trg_chat_updated BEFORE UPDATE ON public.chat_history FOR EACH ROW EXECUTE FUNCTION update_updated_at()",
-      "name": "trg_chat_updated",
-      "table": "chat_history"
     },
     {
       "def": "CREATE TRIGGER trg_profiles_updated BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at()",
@@ -7848,24 +6432,10 @@
       "security_definer": true
     },
     {
-      "def": "CREATE OR REPLACE FUNCTION public.match_botify_knowledge(query_embedding vector, match_count integer DEFAULT NULL::integer, filter jsonb DEFAULT '{}'::jsonb)\n RETURNS TABLE(id uuid, workspace_id uuid, content text, metadata jsonb, similarity double precision)\n LANGUAGE plpgsql\nAS $function$\r\n#variable_conflict use_column\r\nBEGIN\r\n  RETURN query\r\n  SELECT\r\n    id,\r\n    workspace_id,\r\n    content,\r\n    metadata,\r\n    1 - (botify_knowledge_base.embedding <=> query_embedding) as similarity\r\n  FROM botify_knowledge_base\r\n  WHERE metadata @> filter\r\n  ORDER BY botify_knowledge_base.embedding <=> query_embedding\r\n  LIMIT match_count;\r\nEND;\r\n$function$\n",
-      "args": "query_embedding vector, match_count integer, filter jsonb",
-      "name": "match_botify_knowledge",
-      "returns": "TABLE(id uuid, workspace_id uuid, content text, metadata jsonb, similarity double precision)",
-      "security_definer": false
-    },
-    {
       "def": "CREATE OR REPLACE FUNCTION public.match_knowledge_chunks(p_shop_id uuid, p_query_embedding vector, p_match_count integer DEFAULT 20)\n RETURNS TABLE(id uuid, shop_id uuid, content text, source_file text, section text, source_kind text, priority smallint, chunk_index integer, knowledge_base_id uuid, document_id uuid, vector_score real)\n LANGUAGE plpgsql\n STABLE\n SET search_path TO 'public', 'extensions'\nAS $function$\r\nDECLARE\r\n  match_count INTEGER := LEAST(GREATEST(COALESCE(p_match_count, 20), 1), 50);\r\nBEGIN\r\n  IF p_shop_id IS NULL THEN\r\n    RAISE EXCEPTION 'shop id is required';\r\n  END IF;\r\n  IF p_query_embedding IS NULL OR vector_dims(p_query_embedding) <> 768 THEN\r\n    RAISE EXCEPTION 'query embedding must be 768 dimensions';\r\n  END IF;\r\n\r\n  BEGIN\r\n    PERFORM set_config('hnsw.iterative_scan', 'strict_order', true);\r\n    PERFORM set_config('hnsw.ef_search', '100', true);\r\n  EXCEPTION WHEN OTHERS THEN\r\n    NULL;\r\n  END;\r\n\r\n  RETURN QUERY\r\n  SELECT\r\n    c.id,\r\n    c.shop_id,\r\n    c.content,\r\n    c.source_file,\r\n    c.section,\r\n    c.source_kind,\r\n    c.priority,\r\n    c.chunk_index,\r\n    c.knowledge_base_id,\r\n    c.document_id,\r\n    (1 - (c.embedding <=> p_query_embedding))::REAL AS vector_score\r\n  FROM public.knowledge_chunks c\r\n  WHERE c.shop_id = p_shop_id\r\n    AND c.embedding IS NOT NULL\r\n    AND c.embedding_status = 'ready'\r\n  ORDER BY c.embedding <=> p_query_embedding\r\n  LIMIT match_count;\r\nEND;\r\n$function$\n",
       "args": "p_shop_id uuid, p_query_embedding vector, p_match_count integer",
       "name": "match_knowledge_chunks",
       "returns": "TABLE(id uuid, shop_id uuid, content text, source_file text, section text, source_kind text, priority smallint, chunk_index integer, knowledge_base_id uuid, document_id uuid, vector_score real)",
-      "security_definer": false
-    },
-    {
-      "def": "CREATE OR REPLACE FUNCTION public.match_shop_knowledge(query_embedding vector, match_threshold double precision, match_count integer, p_shop_id uuid)\n RETURNS TABLE(id uuid, title character varying, raw_content text, file_url text, similarity double precision)\n LANGUAGE sql\nAS $function$\r\n  SELECT\r\n    id,\r\n    title,\r\n    raw_content,\r\n    file_url,\r\n    1 - (embedding <=> query_embedding) AS similarity\r\n  FROM shop_knowledge\r\n  WHERE shop_id = p_shop_id\r\n  AND 1 - (embedding <=> query_embedding) > match_threshold\r\n  ORDER BY embedding <=> query_embedding\r\n  LIMIT match_count;\r\n$function$\n",
-      "args": "query_embedding vector, match_threshold double precision, match_count integer, p_shop_id uuid",
-      "name": "match_shop_knowledge",
-      "returns": "TABLE(id uuid, title character varying, raw_content text, file_url text, similarity double precision)",
       "security_definer": false
     },
     {
@@ -8035,7 +6605,7 @@
       "version": "0.8.0"
     }
   ],
-  "captured_at": "2026-10-24T17:35:35.805892+00:00",
+  "captured_at": "2026-10-24T18:20:54.311291+00:00",
   "storage_buckets": [
     {
       "id": "botify_audio",
@@ -8043,7 +6613,7 @@
     },
     {
       "id": "payment-slips",
-      "public": true
+      "public": false
     },
     {
       "id": "qr-codes",
