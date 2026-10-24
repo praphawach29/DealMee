@@ -37,6 +37,8 @@ export interface ConversationOmnichannel {
   unread_count: number
   status: 'ai' | 'human' | 'closed'
   ai_mode?: AiMode
+  /** While the admin is on the chat: when the bot takes it back by itself */
+  paused_until?: string | null
   platform_sender_id?: string | null
   channel_account_id?: string | null
   metadata?: Record<string, any>

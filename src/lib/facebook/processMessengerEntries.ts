@@ -5,6 +5,7 @@
  * from the page id). Both verify the request, answer Meta, then call this in after().
  */
 import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
+import { adminPausePayload, isPauseExpired, resumePayload } from '@/lib/inbox/adminPause'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   sendFacebookMessage,
@@ -153,11 +154,7 @@ export async function processMessengerEntries({
 
       if (isPauseCommand) {
         console.log(`[Facebook Webhook] Explicit pause command detected for PSID: ${senderPsid}`)
-        const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString()
-        await supabase
-          .from('conversations')
-          .update({ status: 'human', paused_until: pausedUntil })
-          .eq('id', conv.id)
+        await supabase.from('conversations').update(adminPausePayload()).eq('id', conv.id)
 
         if (pageToken) {
           await sendFacebookMessage(
@@ -171,19 +168,11 @@ export async function processMessengerEntries({
 
       // 7. Check if Admin Takeover is active
       if (conv.status === 'human') {
-        const now = new Date()
-        const isPauseExpired = conv.paused_until
-          ? now > new Date(conv.paused_until)
-          : (conv.last_message_at ? now.getTime() - new Date(conv.last_message_at).getTime() > 60 * 60 * 1000 : true)
-        const isExplicitReset = cleanText.startsWith('/ai') || isPauseExpired
+        const isExplicitReset = cleanText.startsWith('/ai') || (await isPauseExpired(supabase, conv))
 
         if (isExplicitReset) {
           console.log(`[Facebook Webhook] Auto-resuming AI mode for PSID ${senderPsid}`)
-          await supabase.from('conversations').update({ 
-            status: 'ai', 
-            ai_mode: 'auto', 
-            paused_until: null 
-          }).eq('id', conv.id)
+          await supabase.from('conversations').update(resumePayload()).eq('id', conv.id)
           conv.status = 'ai'
           conv.ai_mode = 'auto'
           if (cleanText.startsWith('/ai') && pageToken) {
