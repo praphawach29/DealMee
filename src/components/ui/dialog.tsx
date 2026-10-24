@@ -68,7 +68,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
 function DialogTitle({ className, ...props }: React.ComponentProps<"h2">) {
   return (
     <h2
-      className={cn("font-headline-md text-lg sm:text-xl font-bold text-on-surface", className)}
+      className={cn("font-heading text-lg sm:text-xl font-semibold text-on-surface", className)}
       {...props}
     />
   )

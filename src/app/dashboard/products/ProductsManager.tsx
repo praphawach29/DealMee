@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import {
   createProduct,
+  updateProduct,
   deleteProduct,
   generateAiProductDescription,
   bulkImportProducts,
@@ -31,6 +32,7 @@ export interface ProductItem {
 
 export default function ProductsManager({ products }: { products: ProductItem[] }) {
   const [isOpenModal, setIsOpenModal] = useState(false)
+  const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null)
   const [isOpenImportModal, setIsOpenImportModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [isAiGenerating, setIsAiGenerating] = useState(false)
@@ -83,6 +85,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
 
   // Reset form when modal opens
   const handleOpenAddModal = () => {
+    setEditingProduct(null)
     setProductName('')
     setSelectedCategory('ทั่วไป')
     setCustomCategory('')
@@ -97,6 +100,29 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
     setIsOpenModal(true)
   }
 
+  const handleOpenEditModal = (product: ProductItem) => {
+    const category = product.category || 'ทั่วไป'
+    const hasExistingCategory = allCategories.includes(category)
+    setEditingProduct(product)
+    setProductName(product.name)
+    setSelectedCategory(hasExistingCategory ? category : 'ทั่วไป')
+    setCustomCategory(hasExistingCategory ? '' : category)
+    setIsCustomCategoryMode(!hasExistingCategory)
+    setProductPrice(String(product.price ?? 0))
+    setProductStock(String(product.stock ?? 0))
+    setProductDescription(product.description || '')
+    setImageInputType(product.image_url?.startsWith('http') ? 'url' : 'upload')
+    setImageUrl(product.image_url || '')
+    setImagePreview(product.image_url || null)
+    setMessage(null)
+    setIsOpenModal(true)
+  }
+
+  const handleCloseProductModal = () => {
+    if (loading) return
+    setIsOpenModal(false)
+    setEditingProduct(null)
+  }
   // Handle local image file selection
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -123,9 +149,13 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
       return
     }
 
-    const targetCategory = isCustomCategoryMode ? customCategory : selectedCategory
+    if (!editingProduct?.id) {
+      alert('กรุณาบันทึกสินค้าให้เรียบร้อยก่อน แล้วจึงให้ AI เขียนจากข้อมูลสินค้าจริงของร้าน')
+      return
+    }
+
     setIsAiGenerating(true)
-    const res = await generateAiProductDescription(productName, targetCategory)
+    const res = await generateAiProductDescription(editingProduct.id)
     setIsAiGenerating(false)
 
     if (res.error) {
@@ -136,7 +166,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
   }
 
   // Submit Add Product Form
-  async function handleAddSubmit(e: React.FormEvent) {
+  async function handleProductSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setMessage(null)
@@ -153,7 +183,9 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
     formData.append('description', productDescription)
     formData.append('image_url', imageUrl)
 
-    const res = await createProduct(formData)
+    const res = editingProduct
+      ? await updateProduct(editingProduct.id, formData)
+      : await createProduct(formData)
     setLoading(false)
 
     if (res?.error) {
@@ -299,9 +331,9 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
   }
 
   return (
-    <div className="flex flex-col w-full relative space-y-5 sm:space-y-6">
+    <div className={`flex flex-col w-full relative space-y-5 sm:space-y-6 ${isOpenModal ? 'xl:pr-[420px]' : ''}`}>
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
+      <div className={`flex flex-col justify-between gap-3 sm:gap-4 ${isOpenModal ? 'xl:items-start' : 'md:flex-row md:items-center'}`}>
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-on-surface font-headline-md leading-tight">จัดการสินค้า</h1>
           <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5 font-body-md">
@@ -309,7 +341,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
           </p>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap">
+        <div className={`flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap ${isOpenModal ? 'xl:hidden' : ''}`}>
           <button
             type="button"
             onClick={() => setIsOpenSyncModal(true)}
@@ -498,17 +530,22 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
-          {filteredProducts.map(product => {
+        <div className="rounded-2xl border border-outline-variant/40 bg-surface divide-y divide-outline-variant/25 overflow-hidden">
+          <div className="hidden sm:grid grid-cols-[72px_minmax(0,1fr)_auto] gap-x-3 items-center h-10 px-4 bg-surface-container-low text-[10px] font-bold uppercase tracking-[0.08em] text-outline">
+            <span />
+            <span>สินค้า</span>
+            <span className="pr-1">ราคา / สต๊อก</span>
+          </div>                    {filteredProducts.map(product => {
             const isOutOfStock = product.stock <= 0
 
             return (
               <div
                 key={product.id}
-                className="bg-surface border border-outline-variant/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between space-y-3 hover:shadow-md transition-all relative group"
+                onClick={() => handleOpenEditModal(product)}
+                className="grid grid-cols-[64px_minmax(0,1fr)_auto] sm:grid-cols-[72px_minmax(0,1fr)_auto] gap-x-3 items-center min-h-[88px] px-3 sm:px-4 bg-surface hover:bg-electric-blue/[0.035] transition-colors relative group cursor-pointer"
               >
-                <div className="space-y-2.5">
-                  <div className="aspect-video w-full rounded-xl bg-merchant-bg border border-outline-variant/30 overflow-hidden relative flex items-center justify-center">
+                <div className="contents">
+                  <div className="row-span-2 h-16 sm:h-[72px] w-16 sm:w-[72px] rounded-lg bg-merchant-bg border border-outline-variant/25 overflow-hidden relative flex items-center justify-center">
                     {product.image_url ? (
                       <img
                         src={product.image_url}
@@ -523,7 +560,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                     )}
 
                     {/* Platform Badge (Top-Left) */}
-                    <div className="absolute top-2 left-2 flex items-center gap-1 z-10">
+                    <div className="hidden">
                       {product.source_platform === 'tiktok' ? (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/90 backdrop-blur-xs text-white border border-slate-700 shadow-xs flex items-center gap-1">
                           <span>⚫ TikTok Shop</span>
@@ -539,13 +576,13 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                       )}
                     </div>
 
-                    <span className="absolute top-2 right-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-900/80 backdrop-blur-xs text-white z-10">
+                    <span className="hidden">
                       {product.category || 'ทั่วไป'}
                     </span>
                   </div>
 
                   <div>
-                    <h3 className="font-bold text-sm text-on-surface line-clamp-1">{product.name}</h3>
+                    <h3 className="font-heading font-semibold text-xs sm:text-sm text-on-surface line-clamp-1">{product.name}</h3>
                     {product.master_sku && (
                       <div className="mt-1 mb-1">
                         <span className="inline-block text-[10px] font-mono text-electric-blue bg-electric-blue/10 px-2 py-0.5 rounded-md font-bold border border-electric-blue/20">
@@ -553,15 +590,15 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                         </span>
                       </div>
                     )}
-                    <p className="text-xs text-on-surface-variant line-clamp-2 mt-0.5 min-h-[32px]">
+                    <p className="text-xs text-on-surface-variant line-clamp-1 mt-0.5">
                       {product.description || 'ไม่มีรายละเอียดสินค้า'}
                     </p>
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-outline-variant/20 flex items-center justify-between">
+                <div className="col-start-3 row-span-2 self-center flex flex-col-reverse sm:flex-row items-end sm:items-center gap-2 border-0 pt-0">
                   <div>
-                    <span className="text-xs font-bold text-electric-blue font-mono">
+                    <span className="text-sm font-bold text-electric-blue font-mono">
                       ฿{(product.price ?? 0).toLocaleString()}
                     </span>
                   </div>
@@ -569,7 +606,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => handleOpenEditStock(product)}
+                      onClick={(event) => { event.stopPropagation(); handleOpenEditStock(product) }}
                       className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 cursor-pointer transition-all hover:scale-105 active:scale-95 ${
                         isOutOfStock
                           ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
@@ -582,7 +619,18 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                     </button>
 
                     <button
-                      onClick={() => handleDelete(product.id)}
+                      type="button"
+                      onClick={(event) => { event.stopPropagation(); handleOpenEditModal(product) }}
+                      className="p-1 rounded-lg text-outline hover:text-electric-blue hover:bg-electric-blue/10 transition-colors cursor-pointer"
+                      title="แก้ไขสินค้า"
+                      aria-label={'แก้ไขสินค้า ' + product.name}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">edit</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(event) => { event.stopPropagation(); handleDelete(product.id) }}
                       className="p-1 rounded-lg text-outline hover:text-error-red hover:bg-error-red/10 transition-colors cursor-pointer"
                       title="ลบสินค้า"
                     >
@@ -596,33 +644,33 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
         </div>
       )}
 
-      {/* 1. Add Product Modal */}
+      {/* 1. Add / Edit Product Drawer */}
       {isOpenModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
-          <div className="bg-slate-900 text-slate-100 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="shrink-0 px-6 py-4 border-b border-slate-700/80 flex items-center justify-between bg-slate-800/90">
+        <div className="fixed top-16 right-0 bottom-0 z-30 w-full max-w-[420px] bg-transparent pointer-events-none">
+          <div className="absolute inset-0 bg-white text-on-surface border-l border-outline-variant/35 shadow-[-18px_0_45px_rgba(20,27,48,0.12)] flex flex-col overflow-hidden pointer-events-auto animate-in slide-in-from-right duration-300">
+            <div className="shrink-0 px-5 py-4 border-b border-outline-variant/35 flex items-center justify-between bg-white">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-electric-blue/20 flex items-center justify-center text-electric-blue">
-                  <span className="material-symbols-outlined text-[20px]">add_shopping_cart</span>
+                <div className="w-9 h-9 rounded-xl bg-electric-blue/10 flex items-center justify-center text-electric-blue">
+                  <span className="material-symbols-outlined text-[20px]">{editingProduct ? 'edit_square' : 'add_shopping_cart'}</span>
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-slate-100 font-headline-md leading-tight">
-                    เพิ่มรายการสินค้าใหม่
+                  <h3 className="font-bold text-base text-on-surface font-headline-md leading-tight">
+                    {editingProduct ? 'แก้ไขสินค้า' : 'เพิ่มรายการสินค้าใหม่'}
                   </h3>
-                  <p className="text-[11px] text-slate-400">กรอกข้อมูลสินค้าเพื่อให้ AI นำไปใช้เชียร์ขายหน้าร้าน</p>
+                  <p className="text-[11px] text-outline">{editingProduct ? 'บันทึกครั้งเดียว แล้วซิงค์ข้อมูลไปทุกช่องทาง' : 'กรอกข้อมูลสินค้าเพื่อให้ AI นำไปใช้เชียร์ขายหน้าร้าน'}</p>
                 </div>
               </div>
               <button
-                onClick={() => setIsOpenModal(false)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+                onClick={handleCloseProductModal}
+                className="p-1.5 rounded-xl text-outline hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
 
-            <form onSubmit={handleAddSubmit} className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-900">
+            <form onSubmit={handleProductSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 bg-white">
               <div>
-                <label className="block text-xs font-bold text-slate-200 mb-1.5 font-label-md">
+                <label className="block text-xs font-bold text-on-surface mb-1.5 font-label-md">
                   ชื่อสินค้า *
                 </label>
                 <input
@@ -631,7 +679,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                   onChange={(e) => setProductName(e.target.value)}
                   required
                   placeholder="เช่น เสื้อยืด Oversize สีดำ, เซรั่มหน้าใส"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm focus:border-electric-blue focus:ring-2 focus:ring-electric-blue/20 outline-none transition-colors placeholder:text-slate-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-outline-variant/65 bg-surface text-on-surface text-xs sm:text-sm focus:border-electric-blue focus:ring-2 focus:ring-electric-blue/20 outline-none transition-colors placeholder:text-outline"
                 />
               </div>
 
@@ -639,7 +687,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold text-slate-200 font-label-md">
+                    <label className="block text-xs font-bold text-on-surface font-label-md">
                       หมวดหมู่
                     </label>
                     <button
@@ -658,23 +706,23 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                       onChange={(e) => setCustomCategory(e.target.value)}
                       placeholder="พิมพ์หมวดหมู่ใหม่ที่ต้องการ..."
                       required
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-electric-blue bg-slate-800 text-slate-100 text-xs sm:text-sm outline-none placeholder:text-slate-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-electric-blue bg-surface text-on-surface text-xs sm:text-sm outline-none placeholder:text-outline"
                     />
                   ) : (
                     <select
                       value={selectedCategory}
                       onChange={(e) => setSelectedCategory(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm font-medium focus:border-electric-blue outline-none transition-colors cursor-pointer"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-outline-variant/65 bg-surface text-on-surface text-xs sm:text-sm font-medium focus:border-electric-blue outline-none transition-colors cursor-pointer"
                     >
                       {allCategories.map(cat => (
-                        <option key={cat} value={cat} className="bg-slate-800 text-slate-100">{cat}</option>
+                        <option key={cat} value={cat} className="bg-surface text-on-surface">{cat}</option>
                       ))}
                     </select>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-200 mb-1.5 font-label-md">
+                  <label className="block text-xs font-bold text-on-surface mb-1.5 font-label-md">
                     ราคา (บาท) *
                   </label>
                   <input
@@ -684,7 +732,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                     onChange={(e) => setProductPrice(e.target.value)}
                     required
                     placeholder="390"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm focus:border-electric-blue outline-none font-mono transition-colors placeholder:text-slate-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-outline-variant/65 bg-surface text-on-surface text-xs sm:text-sm focus:border-electric-blue outline-none font-mono transition-colors placeholder:text-outline"
                   />
                 </div>
               </div>
@@ -692,7 +740,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
               {/* Stock and Image Selection */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-200 mb-1.5 font-label-md">
+                  <label className="block text-xs font-bold text-on-surface mb-1.5 font-label-md">
                     จำนวนสต๊อก (ชิ้น) *
                   </label>
                   <input
@@ -701,27 +749,27 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                     onChange={(e) => setProductStock(e.target.value)}
                     required
                     min={0}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm focus:border-electric-blue outline-none font-mono transition-colors"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-outline-variant/65 bg-surface text-on-surface text-xs sm:text-sm focus:border-electric-blue outline-none font-mono transition-colors"
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold text-slate-200 font-label-md">
+                    <label className="block text-xs font-bold text-on-surface font-label-md">
                       รูปภาพสินค้า
                     </label>
                     <div className="flex gap-2 text-[10px] font-bold">
                       <button
                         type="button"
                         onClick={() => setImageInputType('upload')}
-                        className={`cursor-pointer ${imageInputType === 'upload' ? 'text-electric-blue underline' : 'text-slate-400'}`}
+                        className={`cursor-pointer ${imageInputType === 'upload' ? 'text-electric-blue underline' : 'text-outline'}`}
                       >
                         📁 อัปโหลด
                       </button>
                       <button
                         type="button"
                         onClick={() => setImageInputType('url')}
-                        className={`cursor-pointer ${imageInputType === 'url' ? 'text-electric-blue underline' : 'text-slate-400'}`}
+                        className={`cursor-pointer ${imageInputType === 'url' ? 'text-electric-blue underline' : 'text-outline'}`}
                       >
                         🔗 URL
                       </button>
@@ -755,12 +803,12 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                         setImagePreview(e.target.value)
                       }}
                       placeholder="https://..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs focus:border-electric-blue outline-none placeholder:text-slate-500"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-outline-variant/65 bg-surface text-on-surface text-xs focus:border-electric-blue outline-none placeholder:text-outline"
                     />
                   )}
 
                   {imagePreview && (
-                    <div className="mt-2 relative w-16 h-16 rounded-xl border border-slate-700 overflow-hidden">
+                    <div className="mt-2 relative w-16 h-16 rounded-xl border border-outline-variant/65 overflow-hidden">
                       <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
                       <button
                         type="button"
@@ -780,7 +828,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
               {/* Description & AI Copywriter Feature */}
               <div className="space-y-1.5 pt-2">
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-slate-200 font-label-md">
+                  <label className="block text-xs font-bold text-on-surface font-label-md">
                     รายละเอียดสินค้า
                   </label>
                   <button
@@ -798,14 +846,14 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                   value={productDescription}
                   onChange={(e) => setProductDescription(e.target.value)}
                   placeholder="กรอกรายละเอียด จุดเด่น หรือขนาดสินค้า (หรือกดปุ่ม AI ช่วยเขียนด้านบน)..."
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 text-xs sm:text-sm focus:border-electric-blue outline-none resize-none transition-colors placeholder:text-slate-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-outline-variant/65 bg-surface text-on-surface text-xs sm:text-sm focus:border-electric-blue outline-none resize-none transition-colors placeholder:text-outline"
                 />
               </div>
 
-              <div className="shrink-0 px-0 pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+              <div className="shrink-0 px-5 py-4 border-t border-outline-variant/35 bg-surface-container-low flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsOpenModal(false)}
+                  onClick={handleCloseProductModal}
                   className="px-4 py-2 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   ยกเลิก
@@ -836,7 +884,7 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
                   <span className="material-symbols-outlined text-[20px]">file_upload</span>
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-slate-100 font-headline-md leading-tight">
+                  <h3 className="font-bold text-base text-on-surface font-headline-md leading-tight">
                     นำเข้าสินค้าจาก CSV / Excel
                   </h3>
                   <p className="text-[11px] text-slate-400">ดาวน์โหลดตัวอย่างไฟล์และอัปโหลดเพื่อเพิ่มสินค้าจำนวนมาก</p>
@@ -908,13 +956,13 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
       {isOpenSyncModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
           <div className="bg-slate-900 text-slate-100 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="shrink-0 px-6 py-4 border-b border-slate-700/80 flex items-center justify-between bg-slate-800/90">
+            <div className="shrink-0 px-5 py-4 border-b border-outline-variant/35 flex items-center justify-between bg-white">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400">
                   <span className="material-symbols-outlined text-[20px]">sync_alt</span>
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-slate-100 font-headline-md leading-tight">
+                  <h3 className="font-bold text-base text-on-surface font-headline-md leading-tight">
                     ซิงค์สินค้า & คลังสต็อกกลาง (Marketplace Sync)
                   </h3>
                   <p className="text-[11px] text-slate-400">ดึงสินค้าจาก TikTok Shop และ Shopee พร้อมเปิดระบบสต็อกรวม</p>
@@ -1018,13 +1066,13 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
       {isOpenStockModal && selectedStockProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
           <div className="bg-slate-900 text-slate-100 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="shrink-0 px-6 py-4 border-b border-slate-700/80 flex items-center justify-between bg-slate-800/90">
+            <div className="shrink-0 px-5 py-4 border-b border-outline-variant/35 flex items-center justify-between bg-white">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
                   <span className="material-symbols-outlined text-[20px]">tune</span>
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-slate-100 font-headline-md leading-tight">
+                  <h3 className="font-bold text-base text-on-surface font-headline-md leading-tight">
                     ปรับยอดสต็อกกลาง (Central Stock)
                   </h3>
                   <p className="text-[11px] text-slate-400">ซิงค์อัปเดตไปทุกหน้าร้านค้าและ AI ทันที</p>
@@ -1113,13 +1161,13 @@ export default function ProductsManager({ products }: { products: ProductItem[] 
       {isOpenLogsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
           <div className="bg-slate-900 text-slate-100 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="shrink-0 px-6 py-4 border-b border-slate-700/80 flex items-center justify-between bg-slate-800/90">
+            <div className="shrink-0 px-5 py-4 border-b border-outline-variant/35 flex items-center justify-between bg-white">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-400">
                   <span className="material-symbols-outlined text-[20px]">history</span>
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-slate-100 font-headline-md leading-tight">
+                  <h3 className="font-bold text-base text-on-surface font-headline-md leading-tight">
                     ประวัติการตัดสต็อกข้ามช่องทาง (Cross-Channel Stock Logs)
                   </h3>
                   <p className="text-[11px] text-slate-400">บันทึกทุกการเคลื่อนไหวของสต็อกกลางจากทุกแพลตฟอร์ม</p>

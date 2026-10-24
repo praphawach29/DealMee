@@ -155,7 +155,7 @@ export default function SystemSettingsClient({
   return (
     <>
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">ตั้งค่าระบบ (API Keys)</h1>
+        <h1 className="font-heading text-xl sm:text-2xl font-semibold text-slate-900 dark:text-white">ตั้งค่าระบบ (API Keys)</h1>
         <p className="text-xs sm:text-sm text-slate-500 mt-1">
           ค่าที่ตั้งในหน้านี้ใช้แทนค่าใน Vercel ทันที (ภายใน 1 นาที) ไม่ต้อง redeploy · key ถูกเข้ารหัสก่อนเก็บ และแสดงแค่ 4 ตัวท้าย
         </p>
@@ -175,7 +175,7 @@ export default function SystemSettingsClient({
 
       {GROUPS.map((group) => (
         <div key={group.key} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-1">{group.title}</h2>
+          <h2 className="font-heading text-sm font-semibold text-slate-900 dark:text-white mb-1">{group.title}</h2>
           {statuses
             .filter((s) => s.group === group.key)
             .map((s) => (
@@ -185,7 +185,7 @@ export default function SystemSettingsClient({
       ))}
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5">
-        <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-3">ประวัติการเปลี่ยนแปลง</h2>
+        <h2 className="font-heading text-sm font-semibold text-slate-900 dark:text-white mb-3">ประวัติการเปลี่ยนแปลง</h2>
         {log.length === 0 ? (
           <p className="text-xs text-slate-500">ยังไม่มี</p>
         ) : (

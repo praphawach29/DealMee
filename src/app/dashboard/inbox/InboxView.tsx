@@ -462,7 +462,7 @@ export default function InboxView({ conversations, messagesMap, botMuted = null 
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <h2 className="text-xs sm:text-sm font-bold text-on-surface flex items-center gap-1.5 truncate">
+                      <h2 className="font-heading text-xs sm:text-sm font-semibold text-on-surface flex items-center gap-1.5 truncate">
                         <span className="truncate">{activeConv.customer_name}</span>
                         <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold border shrink-0 ${activePlatConfig.badgeClass}`}>
                           {activePlatConfig.name}
@@ -723,7 +723,7 @@ export default function InboxView({ conversations, messagesMap, botMuted = null 
           <div className="w-14 h-14 bg-electric-blue/10 rounded-full flex items-center justify-center text-electric-blue mb-4">
             <span className="material-symbols-outlined text-2xl">chat</span>
           </div>
-          <h2 className="text-base font-bold text-on-surface mb-1">เลือกรายการแชทเพื่อเริ่มสนทนา</h2>
+          <h2 className="font-heading text-base font-semibold text-on-surface mb-1">เลือกรายการแชทเพื่อเริ่มสนทนา</h2>
           <p className="text-xs text-outline max-w-xs mb-6">
             คลิกเลือกชื่อลูกค้าจากแถบซ้ายมือเพื่อดูประวัติการสนทนาและพิมพ์ตอบกลับ
           </p>
@@ -772,7 +772,7 @@ export default function InboxView({ conversations, messagesMap, botMuted = null 
                 </div>
 
                 <div className="space-y-3.5 text-xs">
-                  <h4 className="font-bold text-outline uppercase tracking-wider text-[10px]">รายละเอียดลูกค้า</h4>
+                  <h4 className="font-heading font-semibold text-outline uppercase tracking-wider text-[10px]">รายละเอียดลูกค้า</h4>
                   
                   <div className="space-y-1">
                     <p className="text-outline">Platform ID:</p>

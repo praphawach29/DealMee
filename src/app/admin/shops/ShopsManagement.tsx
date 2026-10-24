@@ -151,7 +151,7 @@ export default function ShopsManagement({ initialShops }: { initialShops: ShopIt
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2 border-b border-outline-variant/20 pb-3">
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-bold text-sm sm:text-base text-on-surface truncate">{shop.name}</h3>
+                    <h3 className="font-heading font-semibold text-sm sm:text-base text-on-surface truncate">{shop.name}</h3>
                     <div className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 font-medium mt-1 truncate">
                       <Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                       <span className="truncate select-all">{shop.owner_email || 'ไม่ระบุอีเมล'}</span>

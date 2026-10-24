@@ -39,29 +39,25 @@ export async function POST(req: NextRequest) {
     }
 
     const admin = createAdminClient()
+    // Charge status was re-fetched from Omise above. The RPC claims this charge id
+    // once and, when the plan is still active, extends from that expiry rather than from now.
+    const { data, error } = await admin.rpc('apply_omise_charge_once', {
+      p_shop_id: shopId,
+      p_plan_key: planKey,
+      p_charge_id: chargeId,
+      p_amount: (charge.amount || 0) / 100,
+      p_currency: (charge.currency || 'thb').toUpperCase(),
+    })
 
-    const expiresAt = new Date()
-    expiresAt.setMonth(expiresAt.getMonth() + 1)
+    if (error) {
+      console.error('[Omise Webhook] Could not apply charge:', error.message)
+      return NextResponse.json({ error: 'apply failed' }, { status: 500 })
+    }
 
-    await admin
-      .from('shops')
-      .update({
-        plan_key: planKey,
-        plan: planKey,
-        package_name: planKey,
-        subscription_provider: 'omise',
-        subscription_id: null,
-        subscription_status: 'active',
-        plan_expires_at: expiresAt.toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', shopId)
-
-    await admin
-      .from('billing_payments')
-      .update({ status: 'succeeded' })
-      .eq('provider_ref', chargeId)
-      .eq('provider', 'omise')
+    const applied = data as { applied?: boolean; reason?: string } | null
+    if (applied && applied.applied === false && applied.reason && applied.reason !== 'duplicate' && applied.reason !== 'already_succeeded') {
+      console.error('[Omise Webhook] Charge not applied:', chargeId, applied.reason)
+    }
 
     return NextResponse.json({ received: true })
   } catch (err) {

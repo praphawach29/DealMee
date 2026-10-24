@@ -19,6 +19,12 @@ import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 import { settleSlipImage } from '@/lib/slip/settleSlip'
+import {
+  isKeywordProductQuery,
+  isProductCardSuppressed,
+  mergeProductCards,
+  resolveChannelProductCards,
+} from '@/lib/ai/productCards'
 import { scheduleCustomerMessage } from '@/lib/ai/proactiveFollowUp'
 
 const supabase = createAdminClient()
@@ -210,50 +216,27 @@ export async function processMessengerEntries({
 
       const aiReplyText = agentResult?.text?.trim() || ''
 
-      // Send Facebook Product Carousel if products were searched/recommended OR specifically requested
-      let fbProducts = agentResult.productsData || []
-
-      const isDocOrQuotation =
-        /(ใบเสนอราคา|เสนอราคา|quotation|หนังสือราชการ|บันทึกข้อความ|เอกสารทางการ)/i.test(cleanText) ||
-        agentResult.toolCallsExecuted.some(
-          (t) => t.name === 'create_quotation' || t.name === 'create_official_letter'
-        )
-
-      if (features.product_recommend === false || isDocOrQuotation) {
-        fbProducts = []
-      } else if (fbProducts.length === 0 && pageToken) {
-        const rawUserQuery = cleanText.toLowerCase().trim()
-        // Explicit product inquiry keywords like "มีเสื้อยืดไหม", "ขอดูเสื้อ", "มีสินค้าอะไรบ้าง"
-        const isExplicitProductQuery =
-          /(มี|ขอ|ดู|ค้นหา|แนะนำ|ซื้อ|สั่ง|ขาย)\s*(เสื้อ|กางเกง|กระเป๋า|รองเท้า|หมวก|เคส|ผ้าพันคอ|กระบอกน้ำ|สินค้า|แคตตาล็อก)/i.test(rawUserQuery) ||
-          /(มี.*ไหม|มี.*มั้ย|ขอดู.*หน่อย|ราคาเท่าไหร่|มีแบบไหนบ้าง)/i.test(rawUserQuery)
-
-        if (isExplicitProductQuery) {
-          const { data: shopProducts } = await supabase
-            .from('products')
-            .select('id, name, price, stock, category, description, image_url')
-            .eq('shop_id', shop_id)
-            .limit(10)
-
-          if (shopProducts && shopProducts.length > 0) {
-            const matched = shopProducts.filter((p: any) => {
-              const pName = (p.name || '').toLowerCase()
-              const pCat = (p.category || '').toLowerCase()
-              return (
-                rawUserQuery.includes(pName) ||
-                (pCat && rawUserQuery.includes(pCat)) ||
-                pName.split(' ').some((w: string) => w.length >= 2 && rawUserQuery.includes(w))
-              )
-            })
-
-            if (matched.length > 0) {
-              fbProducts = matched
-            } else if (/(สินค้าทั้งหมด|มีอะไรบ้าง|มีอะไรขายบ้าง|ขอดูสินค้า|แนะนำสินค้า)/i.test(rawUserQuery)) {
-              fbProducts = shopProducts.slice(0, 5)
-            }
-          }
-        }
+      // Same carousel choice as LINE: tool rows first, keyword fallback only when
+      // search_products / check_stock returned nothing. One carousel per reply.
+      const toolNames = (agentResult.toolCallsExecuted || []).map((t) => t.name)
+      const suppressProductCards =
+        features.product_recommend === false || isProductCardSuppressed(cleanText, toolNames)
+      const toolCards = suppressProductCards ? [] : mergeProductCards([], agentResult.productsData)
+      let keywordCatalog: unknown[] = []
+      if (!suppressProductCards && toolCards.length === 0 && pageToken && isKeywordProductQuery(cleanText)) {
+        const { data: shopProducts } = await supabase
+          .from('products')
+          .select('id, name, price, stock, category, description, image_url')
+          .eq('shop_id', shop_id)
+          .limit(10)
+        keywordCatalog = shopProducts || []
       }
+      const fbProducts = resolveChannelProductCards({
+        suppress: suppressProductCards,
+        toolProducts: agentResult.productsData,
+        userText: cleanText,
+        catalogProducts: keywordCatalog,
+      })
 
       // 10. Check conversation ai_mode:
       // - 'copilot': Save draft suggestion in chat_messages for admin approval

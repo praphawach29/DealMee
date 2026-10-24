@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { convertDocumentToQuotationDraft } from '@/lib/ai/documentToQuotation'
+import { quotationAcceptPath } from '@/lib/docs/acceptToken'
 
 export async function POST(req: NextRequest) {
   try {
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || ''
-    const docUrl = `${baseUrl}/doc/quotation/${doc.id}`
+    const docUrl = `${baseUrl}${quotationAcceptPath(doc.id)}`
 
     return NextResponse.json({
       success: true,

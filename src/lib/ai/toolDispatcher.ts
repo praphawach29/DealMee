@@ -10,6 +10,9 @@ import { highValueThreshold, highValueRefusal } from '@/lib/ai/salesModes'
 import { notifyShopAdmin } from '@/lib/billing/ownerAlerts'
 import { carrierName, trackingLink } from '@/lib/orders/tracking'
 import { adminPausePayload } from '@/lib/inbox/adminPause'
+import { quotationAcceptPath } from '@/lib/docs/acceptToken'
+import { searchKnowledgeForTool } from '@/lib/knowledge/retrieve'
+import { toProductCards } from '@/lib/ai/productCards'
 
 const QR_BUCKET = 'qr-codes'
 
@@ -57,7 +60,7 @@ export interface ToolExecutionResult {
   immediateMessages: CustomerMessage[]
   /** Only schedule_followup uses this — the caller (webhook route) is responsible for the actual setTimeout + LINE push, since this module has no channel/push capability of its own. */
   scheduledMessage?: { delayMs: number; message: CustomerMessage }
-  /** Optional product items returned by search_products, used to render LINE Flex Carousel product cards. */
+  /** Catalog rows from search_products or check_stock. The channel sends one carousel from these. */
   productsData?: Array<{
     id: string
     name: string
@@ -831,31 +834,45 @@ export async function executeTool(
   // ── 📦 PRODUCT TOOLS ─────────────────────────────────────────────
   if (toolName === 'search_products') {
     const limit = Math.min(Number(args.limit) || 5, 10)
-    const baseQuery = supabase.from('products').select('name,price,stock,description,category').eq('shop_id', shopId).limit(limit)
+    const baseQuery = supabase.from('products').select('id, name, price, stock, description, category, image_url').eq('shop_id', shopId).limit(limit)
     const { query, keyword } = applyProductSearchFilters(baseQuery, args)
     const { data: prods } = await query
     if (!prods || prods.length === 0) {
       return { resultForAi: `ไม่พบสินค้าที่ตรงกับ "${keyword || args.keyword || ''}" ให้แจ้งลูกค้าและชวนลองคำค้นอื่น`, immediateMessages: [] }
     }
+    const cards = toProductCards(prods)
+    const cardNote = cards.length > 0
+      ? '\nระบบแนบการ์ดสินค้าจากรายการนี้ให้ลูกค้าแล้ว (LINE เป็น Flex carousel, Facebook และ Instagram เป็นการ์ด Messenger) ตอบสั้นๆ ได้ ไม่ต้องพิมพ์รายการทั้งก้อนซ้ำ'
+      : ''
     return {
-      resultForAi: `สินค้าที่พบ: ${prods.map((p: any) => `${p.name} ราคา ${Number(p.price).toLocaleString()} บาท ${p.stock > 0 ? `เหลือ ${p.stock} ชิ้น` : 'หมดสต๊อก'}`).join('; ')}`,
+      resultForAi: `สินค้าที่พบ: ${prods.map((p: any) => `${p.name} ราคา ${Number(p.price).toLocaleString()} บาท ${p.stock > 0 ? `เหลือ ${p.stock} ชิ้น` : 'หมดสต๊อก'}`).join('; ')}${cardNote}`,
       immediateMessages: [],
+      ...(cards.length > 0 ? { productsData: cards } : {}),
     }
   }
 
   if (toolName === 'check_stock') {
+    const productName = String(args.product_name || '').trim()
+    if (!productName) {
+      return { resultForAi: 'กรุณาระบุชื่อสินค้าที่ต้องการเช็กสต็อก', immediateMessages: [] }
+    }
     const { data: prods } = await supabase
       .from('products')
-      .select('name,stock,price,master_sku,source_platform')
+      .select('id, name, stock, price, description, image_url, master_sku, source_platform')
       .eq('shop_id', shopId)
-      .or(`name.ilike.%${args.product_name}%,master_sku.ilike.%${args.product_name}%`)
+      .or(`name.ilike.%${productName}%,master_sku.ilike.%${productName}%`)
       .limit(3)
     if (!prods || prods.length === 0) {
-      return { resultForAi: `ไม่พบสินค้า "${args.product_name}" ให้แจ้งลูกค้าตามนี้`, immediateMessages: [] }
+      return { resultForAi: `ไม่พบสินค้า "${productName}" ให้แจ้งลูกค้าตามนี้`, immediateMessages: [] }
     }
+    const cards = toProductCards(prods)
+    const cardNote = cards.length > 0
+      ? '\nระบบแนบการ์ดของสินค้าที่พบให้ลูกค้าแล้ว ตอบจำนวนคงเหลือสั้นๆ ได้'
+      : ''
     return {
-      resultForAi: prods.map((p: any) => `${p.name} (รหัส SKU: ${p.master_sku || 'กลาง'}): ${p.stock > 0 ? `มีสินค้าพร้อมส่ง ${p.stock} ชิ้น` : 'สินค้าหมดสต๊อกชั่วคราว'}, ราคา ${Number(p.price).toLocaleString()} บาท`).join('; '),
+      resultForAi: prods.map((p: any) => `${p.name} (รหัส SKU: ${p.master_sku || 'กลาง'}): ${p.stock > 0 ? `มีสินค้าพร้อมส่ง ${p.stock} ชิ้น` : 'สินค้าหมดสต๊อกชั่วคราว'}, ราคา ${Number(p.price).toLocaleString()} บาท`).join('; ') + cardNote,
       immediateMessages: [],
+      ...(cards.length > 0 ? { productsData: cards } : {}),
     }
   }
 
@@ -1255,170 +1272,23 @@ export async function executeTool(
     if (!rawQuery) {
       return { resultForAi: 'ยังไม่มีคำค้นหา ให้ถามลูกค้าว่าอยากทราบเรื่องอะไร', immediateMessages: [] }
     }
-
-    // Clean Thai stopwords and conversational particles
-    const stopWords = [
-      'ครับ', 'ค่ะ', 'คะ', 'นะ', 'นะครับ', 'นะคะ', 'ละครับ', 'ละคะ', 'แล้ว', 'ถ้า',
-      'คิด', 'เท่าไหร่', 'เท่าไร', 'ขอ', 'สอบถาม', 'หน่อย', 'จ้า', 'ได้ไหม', 'ได้มั้ย',
-      'ไหม', 'มั้ย', 'บ้าง', 'ยังไง', 'อย่างไร', 'ทำยังไง', 'ทำอย่างไร', 'หรือเปล่า', 'หรือยัง',
-      'อยากทราบ', 'รบกวน', 'วิธี', 'ขั้นตอน'
-    ]
-    let cleanQuery = rawQuery
-    for (const sw of stopWords) {
-      cleanQuery = cleanQuery.split(sw).join(' ')
-    }
-    const searchTokens = cleanQuery
-      .split(/\s+/)
-      .map((w) => w.trim().toLowerCase())
-      .filter((w) => w.length > 0)
-
-    // 1. Fetch available active/unspecified status KB items for this shop
-    const { data: allItems } = await supabase
-      .from('knowledge_base')
-      .select('id, title, content')
-      .eq('shop_id', shopId)
-      .or('status.eq.active,status.is.null')
-      .limit(150)
-
-    let matchedItems: { title: string; content: string; score: number }[] = []
-
-    if (allItems && allItems.length > 0) {
-      matchedItems = allItems.map((item: any) => {
-        let score = 0
-        const titleLower = (item.title || '').toLowerCase()
-        const contentLower = (item.content || '').toLowerCase()
-
-        // Exact phrase bonus
-        if (titleLower.includes(rawQuery.toLowerCase())) score += 50
-        if (contentLower.includes(rawQuery.toLowerCase())) score += 20
-
-        // Token match scoring
-        for (const token of searchTokens) {
-          if (token.length < 2) continue
-          if (titleLower.includes(token)) score += 15
-          else if (token.length >= 4 && titleLower.split('').some(() => titleLower.includes(token.slice(0, 4)))) score += 5
-          if (contentLower.includes(token)) score += 5
-        }
-
-        // Deprioritize meta-guidelines (e.g. "วิธีตอบ", "ห้ามพูด / ห้ามสัญญา", "เมื่อไหร่ต้องส่งต่อให้คน")
-        // so actual product/pricing/service answers surface first unless asked specifically
-        const isMetaGuideline =
-          titleLower.includes('วิธีตอบ') ||
-          titleLower.includes('ห้ามพูด') ||
-          titleLower.includes('ห้ามสัญญา') ||
-          titleLower.includes('เมื่อไหร่ต้องส่งต่อ')
-        if (isMetaGuideline && !rawQuery.includes('วิธีตอบ') && !rawQuery.includes('ห้ามพูด')) {
-          score -= 15
-        }
-
-        return { title: item.title, content: item.content, score }
-      })
-      .filter((item: any) => item.score > 0)
-      .sort((a: any, b: any) => b.score - a.score)
-      .slice(0, 5)
-    }
-
-    if (matchedItems.length === 0) {
+    if (!shopId) {
       return {
-        resultForAi: `ไม่พบข้อมูลเรื่อง "${rawQuery}" ในคลังความรู้ของร้าน ห้ามเดาคำตอบ ให้บอกลูกค้าว่าจะให้แอดมินช่วยตรวจสอบ หรือเรียก request_human_agent`,
+        resultForAi: 'ไม่พบร้านสำหรับค้นหาคลังความรู้ ห้ามเดาคำตอบ ให้เรียก request_human_agent',
         immediateMessages: [],
       }
     }
-
-    return {
-      resultForAi: `ข้อมูลจากคลังความรู้:\n` + matchedItems.map((k: any) => `[หัวข้อ: ${k.title}]\n${k.content}`).join('\n\n'),
-      immediateMessages: [],
-    }
-  }
-
-  // ── 📦 PRODUCT TOOLS ─────────────────────────────────────────────
-  const GENERIC_PRODUCT_SEARCH_WORDS = ['สินค้า', 'ทั้งหมด', 'รายการ', 'ของ', 'ดู', 'มีอะไรบ้าง', 'ขอชม', 'ขอดู']
-
-  function normalizeProductSearchKeyword(raw: string): string {
-    if (!raw) return ''
-    return raw
-      .replace(/^(ขอดู|ขอชม|ขอรูป|อยากดู|อยากชม|แนะนำ|มี|ขาย|ขอดูรูปภาพ|ขอดูภาพ|ขอ)/gi, '')
-      .replace(/(หน่อย|ครับ|ค่ะ|คะ|นะ|บ้าง|ไหม|มั้ย|ด้วย|จ้า|จ้าา)$/gi, '')
-      .trim()
-  }
-
-  if ((toolName as string) === 'search_products') {
-    const rawKeyword = String(args.keyword || args.query || args.search || '').trim()
-    const keyword = normalizeProductSearchKeyword(rawKeyword) || rawKeyword
-
-    let query = supabase
-      .from('products')
-      .select('id, name, price, stock, category, description, image_url')
-      .eq('shop_id', shopId)
-
-    // Apply specific keyword filter only if it's not a generic word like 'สินค้า'
-    const isGenericKeyword = !keyword || GENERIC_PRODUCT_SEARCH_WORDS.some((w) => rawKeyword.toLowerCase().includes(w))
-    if (!isGenericKeyword && keyword) {
-      query = query.or(`name.ilike.%${keyword}%,description.ilike.%${keyword}%,category.ilike.%${keyword}%`)
-    }
-
-    let { data: products } = await query.limit(12)
-
-    // Fallback: If filtered search yielded 0 products, fetch all products of the shop
-    if (!products || products.length === 0) {
-      const { data: allProducts } = await supabase
-        .from('products')
-        .select('id, name, price, stock, category, description, image_url')
-        .eq('shop_id', shopId)
-        .limit(12)
-      products = allProducts
-    }
-
-    if (!products || products.length === 0) {
+    try {
+      const resultForAi = await searchKnowledgeForTool(supabase, shopId, rawQuery)
+      return { resultForAi, immediateMessages: [] }
+    } catch (err) {
+      console.error('[search_knowledge_base]', err)
       return {
-        resultForAi: `ขณะนี้ทางร้านยังไม่ได้ลงรายการสินค้าในระบบ ให้สอบถามลูกค้าเพิ่มเติมหรือแจ้งแอดมิน`,
+        resultForAi: `ค้นคลังความรู้ไม่สำเร็จ ห้ามเดาคำตอบ ให้บอกลูกค้าว่าจะให้แอดมินช่วยตรวจสอบ หรือเรียก request_human_agent`,
         immediateMessages: [],
       }
     }
-
-    const list = products.map((p: any) => {
-      const stockStr = p.stock !== null && p.stock !== undefined ? `${p.stock} ชิ้น` : 'มีพร้อมส่ง'
-      return `- ${p.name} (ราคา ${Number(p.price || 0).toLocaleString()} บาท, คงเหลือ ${stockStr})${p.description ? `: ${p.description}` : ''}`
-    }).join('\n')
-
-    return {
-      resultForAi: `รายการสินค้าของทางร้าน:\n${list}`,
-      immediateMessages: [],
-      productsData: products,
-    }
   }
-
-  if ((toolName as string) === 'check_stock') {
-    const productName = String(args.product_name || args.product || args.name || '').trim()
-    if (!productName) {
-      return { resultForAi: 'กรุณาระบุชื่อสินค้าที่ต้องการเช็กสต็อก', immediateMessages: [] }
-    }
-
-    const { data: products } = await supabase
-      .from('products')
-      .select('id, name, price, stock')
-      .eq('shop_id', shopId)
-      .ilike('name', `%${productName}%`)
-      .limit(5)
-
-    if (!products || products.length === 0) {
-      return {
-        resultForAi: `ไม่พบสินค้าชื่อ "${productName}" ในระบบ`,
-        immediateMessages: [],
-      }
-    }
-
-    const info = products.map((p: any) => {
-      const stockStr = p.stock !== null && p.stock !== undefined ? `${p.stock} ชิ้น` : 'มีสินค้าพร้อมส่ง'
-      return `${p.name}: คงเหลือ ${stockStr} (ราคา ${Number(p.price || 0).toLocaleString()} บาท)`
-    }).join('; ')
-
-    return {
-      resultForAi: `ข้อมูลสต็อกสินค้า: ${info}`,
-      immediateMessages: [],
-    }
-  }
-
 
   if ((toolName as string) === 'calculate_shipping') {
     const addressInput = String(args.province || args.address || '').trim()
@@ -1554,7 +1424,7 @@ export async function executeTool(
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.dealmee.app'
-    const docUrl = `${baseUrl.replace(/\/$/, '')}/doc/quotation/${doc.id}`
+    const docUrl = `${baseUrl.replace(/\/$/, '')}${quotationAcceptPath(doc.id)}`
     const wordUrl = `${baseUrl.replace(/\/$/, '')}/api/doc/${doc.id}/download?format=docx`
     const excelUrl = `${baseUrl.replace(/\/$/, '')}/api/doc/${doc.id}/download?format=xlsx`
 

@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { platformSecret } from '@/lib/platformSecrets'
 import { effectivePlanKey } from '@/lib/billing/trial'
+import { embedderForShop } from '@/lib/knowledge/embedAuth'
+import { indexKnowledgeEntries } from '@/lib/knowledge/indexKnowledge'
 
 export async function createProduct(formData: FormData) {
   const supabase = await createClient()
@@ -54,14 +56,36 @@ export async function createProduct(formData: FormData) {
 export async function updateProduct(id: string, formData: FormData) {
   const supabase = await createClient()
 
-  const name = formData.get('name') as string
-  const category = formData.get('category') as string || 'ทั่วไป'
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return { error: 'กรุณาเข้าสู่ระบบอีกครั้ง' }
+  }
+
+  const shop = await getOrCreateShopForUser(supabase, user)
+  if (!shop?.id) {
+    return { error: 'ไม่พบข้อมูลร้านค้า' }
+  }
+
+  const name = String(formData.get('name') || '').trim()
+  const category = String(formData.get('category') || '').trim() || 'ทั่วไป'
   const price = parseFloat(formData.get('price') as string || '0')
   const stock = parseInt(formData.get('stock') as string || '0', 10)
-  const description = formData.get('description') as string
-  const image_url = formData.get('image_url') as string
+  const description = String(formData.get('description') || '').trim()
+  const image_url = String(formData.get('image_url') || '').trim()
 
-  const { error } = await supabase
+  if (!id || !name) {
+    return { error: 'กรุณากรอกชื่อสินค้า' }
+  }
+
+  if (!Number.isFinite(price) || price < 0) {
+    return { error: 'กรุณากรอกราคาสินค้าให้ถูกต้อง' }
+  }
+
+  if (!Number.isInteger(stock) || stock < 0) {
+    return { error: 'กรุณากรอกจำนวนสต็อกเป็นเลขจำนวนเต็มตั้งแต่ 0 ขึ้นไป' }
+  }
+
+  const { data: updatedProduct, error } = await supabase
     .from('products')
     .update({
       name,
@@ -73,6 +97,13 @@ export async function updateProduct(id: string, formData: FormData) {
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
+    .eq('shop_id', shop.id)
+    .select('id')
+    .maybeSingle()
+
+  if (!error && !updatedProduct) {
+    return { error: 'ไม่พบสินค้านี้ หรือคุณไม่มีสิทธิ์แก้ไขสินค้า' }
+  }
 
   if (error) {
     return { error: `แก้ไขสินค้าไม่สำเร็จ: ${error.message}` }
@@ -100,7 +131,7 @@ export async function deleteProduct(id: string) {
   return { success: true }
 }
 
-export async function generateAiProductDescription(name: string, category?: string) {
+export async function generateAiProductDescription(productId: string) {
   const supabase = await createClient()
 
   const { data: { user }, error: userError } = await supabase.auth.getUser()
@@ -109,47 +140,39 @@ export async function generateAiProductDescription(name: string, category?: stri
   }
 
   const shop = await getOrCreateShopForUser(supabase, user)
-  if (!shop) {
+  if (!shop?.id) {
     return { error: 'ไม่พบข้อมูลร้านค้า' }
   }
 
-  // Effective plan, so trial shops (all Pro features) can use it too
-  const userPlan = effectivePlanKey(shop)
-  const allowedPlans = ['pro', 'agency', 'byok', 'trial']
+  if (!['pro', 'agency', 'byok', 'trial'].includes(effectivePlanKey(shop))) {
+    return { error: 'AI Copywriter ใช้ได้กับแพ็กเกจ Pro, Business และ BYOK กรุณาอัปเกรดแพ็กเกจก่อนใช้งาน' }
+  }
 
-  if (!allowedPlans.includes(userPlan)) {
-    return {
-      error: 'ฟีเจอร์ AI Copywriter ใช้ได้กับแพ็กเกจ Pro, Business และ BYOK กรุณาอัปเกรดแพ็กเกจที่หน้าแพ็กเกจก่อนใช้งาน',
-    }
+  const { data: product, error: productError } = await supabase
+    .from('products')
+    .select('name, category, price, stock, description')
+    .eq('id', productId)
+    .eq('shop_id', shop.id)
+    .maybeSingle()
+
+  if (productError || !product) {
+    return { error: 'ไม่พบสินค้านี้ หรือคุณไม่มีสิทธิ์ใช้งาน' }
   }
 
   const apiKey = await platformSecret('GEMINI_API_KEY')
   const modelName = (await platformSecret('GEMINI_MODEL')) || 'gemini-2.5-flash'
-
   if (!apiKey) {
     return { error: 'ระบบไม่ได้ตั้งค่า GEMINI_API_KEY กรุณาติดต่อแอดมิน' }
   }
 
+  const prompt = `You are a Thai e-commerce copywriter. Write a short Thai product description using only this verified product record from the store:\n${JSON.stringify(product, null, 2)}\n\nRules:\n- Treat this record as the only source of truth.\n- Never invent ingredients, benefits, skin suitability, medical claims, materials, sizes, certifications, promotions, shipping, warranty, or availability details.\n- If product attributes are missing, write a concise neutral description from the name, category, and price only.\n- Write 2-4 natural Thai sentences. No markdown heading and no bullet list.`
+
   try {
-    const prompt = `คุณคือสถาปนิกนักเขียนคอนเทนต์และนักการตลาดมืออาชีพประจำร้านค้า E-commerce
-ช่วยเขียนคำอธิบายสินค้าที่สั้น กระชับ น่าซื้อ ดึงดูดลูกค้า สำหรับนำไปใส่ในแคตตาล็อกสินค้าของร้านค้า
-
-ข้อมูลสินค้า:
-ชื่อสินค้า: "${name}"
-หมวดหมู่: "${category || 'ทั่วไป'}"
-
-คำแนะนำ:
-1. เขียนให้น่าซื้อ สุภาพ เป็นกันเอง ภาษาทันสมัย
-2. สรุปจุดเด่น สเปก หรือวิธีใช้เป็นหัวข้อสั้นๆ
-3. ความยาวประมาณ 3-5 บรรทัด พอดีสายตา`
-
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      }),
+      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }),
     })
 
     if (!res.ok) {
@@ -158,17 +181,15 @@ export async function generateAiProductDescription(name: string, category?: stri
 
     const data = await res.json()
     const description = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
-
     if (!description) {
       return { error: 'AI ไม่ได้ส่งคำตอบกลับมา กรุณาลองใหม่อีกครั้ง' }
     }
 
     return { success: true, description }
-  } catch (err: any) {
-    return { error: `เกิดข้อผิดพลาด: ${err.message}` }
+  } catch (error) {
+    return { error: error instanceof Error ? `เกิดข้อผิดพลาด: ${error.message}` : 'เกิดข้อผิดพลาดขณะสร้างรายละเอียดสินค้า' }
   }
 }
-
 export async function bulkImportProducts(productsList: Array<{
   name: string
   category?: string
@@ -395,7 +416,18 @@ export async function seedSampleShopData() {
         category: 'นโยบายร้าน',
       },
     ]
-    await supabase.from('knowledge_base').insert(sampleKb)
+    const { data: insertedKb, error: kbError } = await supabase
+      .from('knowledge_base')
+      .insert(sampleKb)
+      .select('id, title, content, status, source, source_ref')
+    if (!kbError && insertedKb && insertedKb.length > 0) {
+      try {
+        const { embedder } = await embedderForShop(shopId)
+        await indexKnowledgeEntries({ supabase, shopId, entries: insertedKb, embedder })
+      } catch (err) {
+        console.error('[sample knowledge] index failed:', err instanceof Error ? err.message : err)
+      }
+    }
   }
 
   revalidatePath('/dashboard')

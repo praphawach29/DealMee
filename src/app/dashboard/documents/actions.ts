@@ -6,6 +6,7 @@ import { convertDocumentToQuotationDraft, ExtractedQuotationData } from '@/lib/a
 import { parseDocumentWithMarkItDown } from '@/lib/documentProcessor'
 import { revalidatePath } from 'next/cache'
 import { platformSecret } from '@/lib/platformSecrets'
+import { quotationAcceptPath } from '@/lib/docs/acceptToken'
 
 export interface OfficialLetterDraft {
   doc_number: string
@@ -118,7 +119,7 @@ export async function saveQuotationAction(data: {
     success: true,
     docId: doc.id,
     docNumber: doc.doc_number,
-    docUrl: `/doc/quotation/${doc.id}`,
+    docUrl: quotationAcceptPath(doc.id),
   }
 }
 

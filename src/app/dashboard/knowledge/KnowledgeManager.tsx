@@ -301,14 +301,14 @@ export default function KnowledgeManager({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+            <h1 className="font-heading text-xl sm:text-2xl font-semibold text-on-surface tracking-tight">
               คลังความรู้ AI (Knowledge Base)
             </h1>
             <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
               RAG 2.0
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-on-surface-variant mt-1">
             เพิ่มข้อมูลเอกสาร ถาม-ตอบ หรือเงื่อนไขร้านค้า เพื่อให้ AI นำไปใช้อ้างอิงตอบคำถามลูกค้าได้อย่างแม่นยำ 24 ชม.
           </p>
         </div>
@@ -357,7 +357,7 @@ export default function KnowledgeManager({
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+              <h2 className="font-heading text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
                 นำเข้าข้อมูลอัตโนมัติ (Smart Ingestion)
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -427,7 +427,7 @@ export default function KnowledgeManager({
                   <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
                     <UploadCloud className="w-6 h-6" />
                   </div>
-                  <h3 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-200">
+                  <h3 className="font-heading text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-200">
                     คลิกเพื่อเลือกไฟล์เอกสาร หรือลากไฟล์มาวางที่นี่
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md">
@@ -628,7 +628,7 @@ export default function KnowledgeManager({
           </div>
 
           <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-2xl sm:text-3xl font-extrabold font-mono text-slate-900 dark:text-slate-100 tracking-tight">
+            <span className="font-heading text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
               {items.length}
             </span>
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
@@ -659,7 +659,7 @@ export default function KnowledgeManager({
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
             </span>
-            <span className="text-xl sm:text-2xl font-bold text-emerald-600 dark:text-emerald-400 tracking-tight">
+            <span className="font-heading text-xl sm:text-2xl font-semibold text-emerald-600 dark:text-emerald-400 tracking-tight">
               พร้อมใช้งาน
             </span>
           </div>
@@ -683,7 +683,7 @@ export default function KnowledgeManager({
           </div>
 
           <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-2xl sm:text-3xl font-extrabold font-mono text-slate-900 dark:text-slate-100 tracking-tight">
+            <span className="font-heading text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
               {totalCharacters.toLocaleString()}
             </span>
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
@@ -983,7 +983,7 @@ export default function KnowledgeManager({
               <div className="w-14 h-14 bg-purple-50 dark:bg-purple-950/60 rounded-2xl flex items-center justify-center mb-3 text-purple-600 dark:text-purple-400">
                 <Trophy className="w-7 h-7" />
               </div>
-              <h3 className="text-base font-bold text-slate-800 dark:text-slate-200 mb-1">
+              <h3 className="font-heading text-base font-semibold text-slate-800 dark:text-slate-200 mb-1">
                 ยังไม่มีบทสนทนาปิดการขาย (Golden Closers)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mb-5">
@@ -1072,7 +1072,7 @@ export default function KnowledgeManager({
                       </div>
                     </div>
 
-                    <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 leading-snug">
+                    <h3 className="font-heading text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100 leading-snug">
                       {item.title}
                     </h3>
 
@@ -1144,7 +1144,7 @@ export default function KnowledgeManager({
             <div className="w-14 h-14 bg-blue-50 dark:bg-blue-950/60 rounded-2xl flex items-center justify-center mb-3 text-blue-600 dark:text-blue-400">
               <BookOpen className="w-7 h-7" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">
+            <h3 className="font-heading text-base font-semibold text-slate-900 dark:text-slate-100 mb-1">
               {searchTerm ? 'ไม่พบข้อมูลความรู้ที่ตรงกับการค้นหา' : 'ยังไม่มีข้อมูลในคลังความรู้'}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mb-5">
@@ -1174,7 +1174,7 @@ export default function KnowledgeManager({
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 leading-tight">
+                  <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 leading-tight">
                     เพิ่มข้อมูลความรู้ให้ AI
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -1285,7 +1285,7 @@ export default function KnowledgeManager({
                   )}
                 </div>
                 <div>
-                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 leading-tight">
+                  <h2 className="font-heading text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 leading-tight">
                     {editingItem.status === 'draft' || editingItem.source === 'ai_synthesis'
                       ? 'แก้ไขร่าง FAQ จาก AI'
                       : 'แก้ไขข้อมูลความรู้'}

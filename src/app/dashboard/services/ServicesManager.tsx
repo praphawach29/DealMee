@@ -93,7 +93,7 @@ function ServiceModal({ service, loading, onClose, onSubmit }: {
       <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[92vh] overflow-hidden shadow-2xl border border-slate-200 flex flex-col">
         <div className="flex items-start justify-between px-5 sm:px-7 py-5 border-b border-slate-200">
           <div>
-            <h2 className="text-lg sm:text-xl font-bold text-slate-950">{service ? 'แก้ไขแม่แบบการจอง' : 'เพิ่มแม่แบบการจอง'}</h2>
+            <h2 className="font-heading text-lg sm:text-xl font-semibold text-slate-950">{service ? 'แก้ไขแม่แบบการจอง' : 'เพิ่มแม่แบบการจอง'}</h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">ตั้งค่าประเภทการจอง วันเวลา ความจุ และข้อมูลที่บอทต้องถามลูกค้า</p>
           </div>
           <button type="button" onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors" aria-label="ปิด">
@@ -277,7 +277,7 @@ export default function ServicesManager({ services }: { services: ServiceItem[] 
                         <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${svc.status === 'inactive' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>{svc.status === 'inactive' ? 'ปิดชั่วคราว' : 'เปิดรับจอง'}</span>
                         <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-50 text-electric-blue border border-blue-200">{getBookingTypeLabel(svc.booking_type)}</span>
                       </div>
-                      <h3 className="font-bold text-on-surface text-base sm:text-lg truncate">{svc.name}</h3>
+                      <h3 className="font-heading font-semibold text-on-surface text-base sm:text-lg truncate">{svc.name}</h3>
                       <p className="text-xs text-on-surface-variant mt-1">{svc.resource_label || svc.staff_name ? `ทรัพยากร: ${svc.resource_label || svc.staff_name}` : 'ใช้คิวรวม ไม่ระบุทรัพยากร'}</p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
@@ -304,12 +304,12 @@ export default function ServicesManager({ services }: { services: ServiceItem[] 
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-20 text-center"><div className="w-16 h-16 bg-electric-blue/10 rounded-2xl flex items-center justify-center mb-4 text-electric-blue"><span className="material-symbols-outlined text-3xl">event_available</span></div><h3 className="text-lg font-bold text-on-surface mb-1">ยังไม่มีแม่แบบการจอง</h3><p className="text-sm text-on-surface-variant max-w-sm mb-6">เพิ่มแม่แบบแรกเพื่อให้บอทเริ่มเช็กเวลาว่างและเปิดจองให้ลูกค้าได้</p><button onClick={openCreateModal} className="flex items-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-5 py-2.5 rounded-xl shadow-md shadow-electric-blue/20"><span className="material-symbols-outlined text-[20px]">add</span><span>เพิ่มแม่แบบแรก</span></button></div>
+            <div className="flex flex-col items-center justify-center py-20 text-center"><div className="w-16 h-16 bg-electric-blue/10 rounded-2xl flex items-center justify-center mb-4 text-electric-blue"><span className="material-symbols-outlined text-3xl">event_available</span></div><h3 className="font-heading text-lg font-semibold text-on-surface mb-1">ยังไม่มีแม่แบบการจอง</h3><p className="text-sm text-on-surface-variant max-w-sm mb-6">เพิ่มแม่แบบแรกเพื่อให้บอทเริ่มเช็กเวลาว่างและเปิดจองให้ลูกค้าได้</p><button onClick={openCreateModal} className="flex items-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-5 py-2.5 rounded-xl shadow-md shadow-electric-blue/20"><span className="material-symbols-outlined text-[20px]">add</span><span>เพิ่มแม่แบบแรก</span></button></div>
           )}
         </div>
 
         <aside className="bg-surface border border-outline-variant/40 rounded-2xl p-5 shadow-sm h-fit space-y-4">
-          <div><h2 className="font-bold text-on-surface">ตัวอย่างธุรกิจ</h2><p className="text-xs text-on-surface-variant mt-1">ใช้ระบบเดียว แต่เปลี่ยนกติกาตามประเภทการจอง</p></div>
+          <div><h2 className="font-heading font-semibold text-on-surface">ตัวอย่างธุรกิจ</h2><p className="text-xs text-on-surface-variant mt-1">ใช้ระบบเดียว แต่เปลี่ยนกติกาตามประเภทการจอง</p></div>
           <div className="space-y-3 text-sm">
             <div className="rounded-xl bg-slate-50 border border-slate-100 p-4"><div className="font-bold text-slate-900">ร้านอาหาร</div><div className="text-slate-600 mt-1">จองโต๊ะ, รับจำนวนคน, จำกัด 20 คนต่อรอบ</div></div>
             <div className="rounded-xl bg-slate-50 border border-slate-100 p-4"><div className="font-bold text-slate-900">ร้านตัดผม</div><div className="text-slate-600 mt-1">ตัดผม, ช่างเอ, จ-ศ 11:00-20:00</div></div>

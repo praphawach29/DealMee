@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { platformSecret } from '@/lib/platformSecrets'
 import { getCompetitorQuota } from '@/lib/billing/competitorQuota'
 import { requireShop } from '@/lib/auth/requireShop'
+import { forgetKnowledgeEntry } from '@/lib/knowledge/indexKnowledge'
 
 const supabase = createAdminClient()
 
@@ -124,6 +125,10 @@ ${verdict ? `\n## ภาพรวม\n${verdict}\n` : ''}
           .single()
 
         if (updateError) throw updateError
+        // A revised battlecard goes back to draft, so the bot must stop quoting the previous text.
+        await forgetKnowledgeEntry(supabase, shop_id, existing.id).catch((err) => {
+          console.warn('[knowledge] could not drop draft chunks:', err instanceof Error ? err.message : err)
+        })
 
         return NextResponse.json({
           success: true,

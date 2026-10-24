@@ -28,7 +28,7 @@ export default function ContactFaqSection() {
               <div className="text-xs font-bold tracking-[2px] uppercase text-blue-600 mb-2">
                 ติดต่อทีมงาน
               </div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+              <h2 className="font-heading text-2xl sm:text-3xl font-semibold text-slate-900 tracking-tight">
                 มีคำถามหรือต้องการคำแนะนำ?
               </h2>
               <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
@@ -110,7 +110,7 @@ export default function ContactFaqSection() {
               <div className="text-xs font-bold tracking-[2px] uppercase text-blue-600 mb-2">
                 FAQ
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+              <h3 className="font-heading text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">
                 คำถามที่พบบ่อย
               </h3>
             </div>

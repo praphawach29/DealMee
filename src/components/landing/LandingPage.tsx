@@ -19,7 +19,7 @@ export default function LandingPage() {
       {/* 1. Header Navigation */}
       <Navbar />
 
-      {/* 2. Hero Section with Floating 3D Chatbot Art */}
+      {/* 2. Hero: sample LINE chat of the real sales flow */}
       <HeroSection />
 
       {/* 3. 12 Core Features Grid */}
@@ -28,10 +28,10 @@ export default function LandingPage() {
       {/* 4. How It Works (Steps & Business Types) */}
       <HowItWorksSection />
 
-      {/* 5. Live LINE Chat Simulator */}
+      {/* 5. Simulated chat of real tools */}
       <ChatSimulatorSection />
 
-      {/* 6. Dashboard & Sheets Showcase */}
+      {/* 6. Merchant dashboard showcase */}
       <DashboardShowcase />
 
       {/* 7. Pricing Plans (4 Tiers) */}
@@ -40,7 +40,7 @@ export default function LandingPage() {
       {/* 8. Feature Comparison Matrix */}
       <PricingComparison />
 
-      {/* 9. CTA Section with 3D Robot */}
+      {/* 9. CTA with the admin LINE alert the product actually sends */}
       <CtaSection />
 
       {/* 10. Contact Info & FAQ */}

@@ -106,7 +106,7 @@ export default function AdminOverview({
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-lg sm:text-2xl font-bold text-on-surface font-headline-lg font-mono">
+            <span className="text-lg sm:text-2xl font-bold text-on-surface font-heading">
               {totalMessages.toLocaleString()}
             </span>
             <span className="text-[10px] text-purple-600 font-bold">ข้อความ</span>
@@ -125,7 +125,7 @@ export default function AdminOverview({
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-lg sm:text-2xl font-bold text-on-surface font-headline-lg font-mono">
+            <span className="text-lg sm:text-2xl font-bold text-on-surface font-heading">
               {(totalTokens / 1000000).toFixed(1)}M
             </span>
             <span className="text-[10px] text-amber-600 font-bold">Tokens</span>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { verifyDocAcceptToken } from '@/lib/docs/acceptToken'
 
 export async function GET(
   req: NextRequest,
@@ -95,7 +96,16 @@ export async function GET(
       minute: '2-digit',
     }) : ''
 
-    const publicUrl = `https://app.dealmee.app/doc/quotation/${id}`
+    const suppliedToken = (url.searchParams.get('accept') || url.searchParams.get('token') || '').trim()
+    const tokenCheck = verifyDocAcceptToken(id, suppliedToken)
+    const acceptToken = tokenCheck.ok ? suppliedToken : ''
+    const acceptBlockedMessage =
+      !tokenCheck.ok && tokenCheck.reason === 'expired'
+        ? 'ลิงก์ยืนยันหมดอายุแล้ว กรุณาขอลิงก์ใหม่จากร้านค้าเพื่อกดตกลงสั่งซื้อ'
+        : 'หน้านี้เปิดดูได้อย่างเดียว กดยืนยันสั่งซื้อได้จากลิงก์ที่ร้านค้าส่งให้ (มีรหัสยืนยัน)'
+    const publicUrl = acceptToken
+      ? `https://app.dealmee.app/doc/quotation/${id}?accept=${encodeURIComponent(acceptToken)}`
+      : `https://app.dealmee.app/doc/quotation/${id}`
     const lineShareText = `📄 ใบเสนอราคา ${docNo}\n🏢 จาก: ${companyName}\n👤 ผู้รับ: ${doc.customer_name || 'คุณลูกค้า'}\n💰 ยอดสุทธิทั้งสิ้น: ฿${total.toLocaleString('th-TH', { minimumFractionDigits: 2 })}\n\n🔗 เปิดดูใบเสนอราคาและดาวน์โหลด:\n${publicUrl}`
     const lineShareUrl = `https://line.me/R/msg/text/?${encodeURIComponent(lineShareText)}`
 
@@ -160,6 +170,10 @@ export async function GET(
     }
 
     const thaiBahtText = formatThaiBaht(total)
+
+    const acceptActionHtml = acceptToken
+      ? '<button id="btnAcceptQuote" onclick="handleAcceptQuotation()" class="w-full sm:w-auto px-6 py-3 bg-white hover:bg-emerald-50 text-emerald-800 font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-95 shrink-0 flex items-center justify-center gap-2 cursor-pointer"><svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>✅ ยืนยันตกลงสั่งซื้อ (Approve)</span></button>'
+      : `<p class="text-xs text-emerald-50 max-w-xs text-center sm:text-right leading-relaxed">${acceptBlockedMessage}</p>`
 
     const html = `<!DOCTYPE html>
 <html lang="th">
@@ -390,10 +404,7 @@ export async function GET(
             หากตรวจสอบรายการสินค้าและยอดเงินถูกต้องแล้ว สามารถกดยืนยันเพื่อสั่งซื้อได้ทันที ทางร้านค้าจะได้รับแจ้งเตือนเพื่อเตรียมจัดส่งหรือเริ่มงานให้ค่ะ
           </p>
         </div>
-        <button id="btnAcceptQuote" onclick="handleAcceptQuotation()" class="w-full sm:w-auto px-6 py-3 bg-white hover:bg-emerald-50 text-emerald-800 font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-95 shrink-0 flex items-center justify-center gap-2 cursor-pointer">
-          <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-          <span>✅ ยืนยันตกลงสั่งซื้อ (Approve)</span>
-        </button>
+        ${acceptActionHtml}
       </div>
     ` : `
       <div class="p-3.5 sm:p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 shadow-xs flex items-center justify-between gap-3">
@@ -858,7 +869,11 @@ export async function GET(
 
   <script>
     function handleCopyQuotationLink() {
-      const url = window.location.href.split('?')[0];
+      const current = new URL(window.location.href);
+      const accept = current.searchParams.get('accept');
+      const url = accept
+        ? current.origin + current.pathname + '?accept=' + encodeURIComponent(accept)
+        : current.origin + current.pathname;
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url).then(() => {
           showCopySuccess();
@@ -898,7 +913,11 @@ export async function GET(
         btn.innerHTML = '⏳ กำลังบันทึกการยืนยัน...';
       }
       try {
-        const res = await fetch('/api/doc/${id}/accept', { method: 'POST' });
+        const res = await fetch('/api/doc/${id}/accept', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: ${JSON.stringify(acceptToken)} }),
+        });
         const data = await res.json();
         if (res.ok && data.success) {
           alert('🎉 ขอบพระคุณค่ะ! ยืนยันตกลงสั่งซื้อตามใบเสนอราคาเรียบร้อยแล้ว ทางร้านค้าจะดำเนินการต่อไปให้ทันทีค่ะ');

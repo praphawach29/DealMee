@@ -104,7 +104,7 @@ export default function ReceiptDocument({
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center font-black text-sm shadow-xs">
                 D
               </div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900">
+              <h1 className="font-heading text-xl font-semibold tracking-tight text-slate-900">
                 {platform.account_name}
               </h1>
             </div>
@@ -125,7 +125,7 @@ export default function ReceiptDocument({
           <div className="sm:text-right space-y-2 shrink-0">
             <div>
               {/* VAT Registration Rule Check: If false -> Strictly ใบเสร็จรับเงิน (Receipt) */}
-              <h2 className="text-xl sm:text-2xl font-black text-indigo-900 tracking-tight">
+              <h2 className="font-heading text-xl sm:text-2xl font-semibold text-indigo-900 tracking-tight">
                 {platform.is_vat_registered
                   ? 'ใบเสร็จรับเงิน / ใบกำกับภาษี'
                   : 'ใบเสร็จรับเงิน'}

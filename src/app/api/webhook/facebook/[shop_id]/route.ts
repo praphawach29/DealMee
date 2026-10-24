@@ -73,13 +73,9 @@ export async function GET(
     const { verifyToken } = await getFacebookCredentials(shop_id, shop)
 
     // Check subscribe mode and verify token
-    if (mode === 'subscribe') {
-      // If shop has configured a verify token, ensure it matches
-      if (verifyToken && token !== verifyToken) {
-        console.warn(`[Facebook Webhook Verification] Token mismatch for shop ${shop_id}. Expected: ${verifyToken}, Received: ${token}`)
-        return new NextResponse('Forbidden: Token mismatch', { status: 403 })
-      }
-
+    // A shop with no verify token must not accept Meta's handshake: otherwise anyone
+    // who knows the URL can subscribe and, with no app secret, post unsigned events.
+    if (mode === 'subscribe' && verifyToken && token === verifyToken) {
       console.log(`[Facebook Webhook Verification] Successfully verified webhook for shop ${shop_id}`)
       return new NextResponse(challenge || '', {
         status: 200,
@@ -87,7 +83,7 @@ export async function GET(
       })
     }
 
-    return new NextResponse('Forbidden: Invalid mode', { status: 403 })
+    return new NextResponse('Forbidden', { status: 403 })
   } catch (err: any) {
     console.error('[Facebook Webhook GET Error]:', err)
     return new NextResponse(err?.message || 'Internal Server Error', { status: 500 })
@@ -119,14 +115,11 @@ export async function POST(
 
     const { pageToken, appSecret } = await getFacebookCredentials(shop_id, shop)
 
-    // 2. Signature verification
+    // Same rule as LINE: no app secret, or a bad signature, means the event is dropped.
     const signature = req.headers.get('x-hub-signature-256')
-    if (appSecret) {
-      const isValid = verifyFacebookSignature(rawBody, signature, appSecret)
-      if (!isValid) {
-        console.error(`[Facebook Security] Invalid signature for shop ${shop_id}`)
-        return NextResponse.json({ error: 'Unauthorized signature' }, { status: 403 })
-      }
+    if (!appSecret || !verifyFacebookSignature(rawBody, signature, appSecret)) {
+      console.error(`[Facebook Security] Missing or invalid signature for shop ${shop_id}`)
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     let body: any

@@ -48,7 +48,7 @@ export default async function ReceiptPage({ params }: PageProps) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center space-y-2">
-          <h1 className="text-lg font-bold text-red-600">ปฏิเสธการเข้าถึง</h1>
+          <h1 className="font-heading text-lg font-semibold text-red-600">ปฏิเสธการเข้าถึง</h1>
           <p className="text-xs text-slate-500">คุณไม่มีสิทธิ์เข้าถึงใบเสร็จรับเงินรายการนี้</p>
         </div>
       </div>

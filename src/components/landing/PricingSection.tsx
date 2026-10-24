@@ -18,7 +18,7 @@ export default function PricingSection() {
           <div className="text-xs font-bold tracking-[2px] uppercase text-cyan-400 mb-2">
             ราคาแพ็กเกจ
           </div>
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-3">
+          <h2 className="font-heading text-2xl sm:text-3xl lg:text-4xl font-semibold text-white mb-3">
             แผนราคาที่เหมาะกับทุกธุรกิจ
           </h2>
           <p className="text-white/60 text-sm sm:text-base max-w-lg mx-auto leading-relaxed">

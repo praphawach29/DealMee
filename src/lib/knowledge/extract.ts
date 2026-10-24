@@ -5,8 +5,11 @@
  * Q&A entries is `toKnowledgeEntries()` in ./ingest.ts.
  */
 
-/** Beyond this the text is truncated: the extraction model has a context limit, and a shop's useful facts sit near the top of a page far more often than the bottom. */
+/** How much text the Q&A summariser sees. The rest is still chunked for retrieval. */
 export const MAX_EXTRACT_CHARS = 60_000
+
+/** Upper bound on text stored as chunks from one upload, so one file cannot create an unbounded embedding bill. */
+export const MAX_INDEX_CHARS = 200_000
 
 export interface ExtractedSource {
   text: string
@@ -23,7 +26,7 @@ function collapseWhitespace(text: string) {
 }
 
 function truncate(text: string) {
-  return text.length > MAX_EXTRACT_CHARS ? text.slice(0, MAX_EXTRACT_CHARS) : text
+  return text.length > MAX_INDEX_CHARS ? text.slice(0, MAX_INDEX_CHARS) : text
 }
 
 /**

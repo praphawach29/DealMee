@@ -2,25 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState, useEffect } from 'react'
-import {
-  LayoutDashboard,
-  Package,
-  Receipt,
-  Calendar,
-  Sparkles,
-  Utensils,
-  CreditCard,
-  Bot,
-  Database,
-  FileSpreadsheet,
-  Blocks,
-  MessageSquare,
-  ShieldAlert,
-  Radar,
-  Radio,
-  BookOpen,
-} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ArrowUpRight } from 'lucide-react'
+import { dashboardNavItems, type DashboardNavItem } from '@/lib/dashboard/nav'
 
 interface SidebarNavProps {
   bizType: string
@@ -30,236 +14,116 @@ interface SidebarNavProps {
   onNavStart?: () => void
 }
 
+function NavLink({
+  item,
+  active,
+  onClick,
+  onHover,
+}: {
+  item: DashboardNavItem
+  active: boolean
+  onClick: () => void
+  onHover: () => void
+}) {
+  const Icon = item.icon
+  const admin = item.tone === 'admin'
+  return (
+    <Link
+      href={item.href}
+      prefetch
+      onMouseEnter={onHover}
+      onClick={onClick}
+      className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition-colors ${
+        admin
+          ? 'bg-amber-50 font-semibold text-amber-700 hover:bg-amber-100'
+          : active
+            ? 'bg-primary/10 font-semibold text-primary'
+            : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+      }`}
+    >
+      <Icon className={`h-[18px] w-[18px] shrink-0 ${admin ? 'text-amber-600' : active ? 'text-primary' : 'text-outline'}`} />
+      <span className="truncate">{item.label}</span>
+    </Link>
+  )
+}
+
 export default function SidebarNav({ bizType, features = {}, isSuperAdmin = false, onNavClick, onNavStart }: SidebarNavProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [activePath, setActivePath] = useState(pathname)
+  const { main, footer } = dashboardNavItems({ bizType, features, isSuperAdmin })
 
   useEffect(() => {
     setActivePath(pathname)
   }, [pathname])
 
-  const isBookingBiz = bizType === 'booking' || bizType === 'service'
-  const showBookingTools = isBookingBiz || features.booking_system === true
+  const isActive = (item: DashboardNavItem) => (item.exact ? activePath === item.href : activePath.startsWith(item.href))
 
-  const isActive = (path: string) => {
-    if (path === '/dashboard') {
-      return activePath === '/dashboard'
-    }
-    return activePath.startsWith(path)
-  }
-
-  const handleLinkClick = (path: string) => {
-    setActivePath(path)
-    if (path !== pathname && onNavStart) {
-      onNavStart()
-    }
-    if (onNavClick) onNavClick()
-  }
-
-  const handleMouseEnter = (path: string) => {
-    try {
-      router.prefetch(path)
-    } catch (_) {}
-  }
-
-  const linkClass = (path: string) => {
-    const active = isActive(path)
-    return `flex items-center px-3.5 py-2.5 rounded-xl transition-all duration-150 group font-label-md text-xs sm:text-sm active:scale-[0.98] ${
-      active
-        ? 'bg-electric-blue text-white font-bold shadow-sm shadow-electric-blue/25'
-        : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-    }`
+  const handleClick = (href: string) => {
+    setActivePath(href)
+    if (href !== pathname) onNavStart?.()
+    onNavClick?.()
   }
 
   return (
-    <nav className="flex-1 px-3 space-y-1 overflow-y-auto py-3">
-      <Link
-        href="/dashboard"
-        prefetch={true}
-        onMouseEnter={() => handleMouseEnter('/dashboard')}
-        onClick={() => handleLinkClick('/dashboard')}
-        className={linkClass('/dashboard')}
-      >
-        <LayoutDashboard className="mr-2.5 h-[18px] w-[18px] shrink-0" />
-        <span>แดชบอร์ด</span>
-      </Link>
-      
-      {(bizType === 'retail' || bizType === 'restaurant') && (
-        <>
-          <Link
-            href="/dashboard/products"
-            prefetch={true}
-            onMouseEnter={() => handleMouseEnter('/dashboard/products')}
-            onClick={() => handleLinkClick('/dashboard/products')}
-            className={linkClass('/dashboard/products')}
-          >
-            <Package className="mr-2.5 h-[18px] w-[18px] shrink-0" />
-            <span>สินค้า</span>
-          </Link>
-          <Link
-            href="/dashboard/orders"
-            prefetch={true}
-            onMouseEnter={() => handleMouseEnter('/dashboard/orders')}
-            onClick={() => handleLinkClick('/dashboard/orders')}
-            className={linkClass('/dashboard/orders')}
-          >
-            <Receipt className="mr-2.5 h-[18px] w-[18px] shrink-0" />
-            <span>ออเดอร์</span>
-          </Link>
-          <Link
-            href="/dashboard/competitors"
-            prefetch={true}
-            onMouseEnter={() => handleMouseEnter('/dashboard/competitors')}
-            onClick={() => handleLinkClick('/dashboard/competitors')}
-            className={linkClass('/dashboard/competitors')}
-          >
-            <Radar className="mr-2.5 h-[18px] w-[18px] shrink-0" />
-            <span>ส่องร้านคู่แข่ง</span>
-          </Link>
-          {features.live_studio === true && (
-          <Link
-            href="/dashboard/live-studio"
-            prefetch={true}
-            onMouseEnter={() => handleMouseEnter('/dashboard/live-studio')}
-            onClick={() => handleLinkClick('/dashboard/live-studio')}
-            className={linkClass('/dashboard/live-studio')}
-          >
-            <Radio className="mr-2.5 h-[18px] w-[18px] shrink-0 text-rose-500" />
-            <span>AI Live Studio</span>
-          </Link>
-          )}
-        </>
-      )}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <nav className="dm-scroll flex-1 space-y-1 overflow-y-auto px-3 py-3">
+        {main.map((item) => (
+          <NavLink
+            key={item.href}
+            item={item}
+            active={isActive(item)}
+            onClick={() => handleClick(item.href)}
+            onHover={() => {
+              try {
+                router.prefetch(item.href)
+              } catch {
+                /* prefetch is best-effort */
+              }
+            }}
+          />
+        ))}
+      </nav>
 
-      {showBookingTools && (
-        <>
-          <Link
-            href="/dashboard/bookings"
-            prefetch={true}
-            onMouseEnter={() => handleMouseEnter('/dashboard/bookings')}
-            onClick={() => handleLinkClick('/dashboard/bookings')}
-            className={linkClass('/dashboard/bookings')}
-          >
-            <Calendar className="mr-2.5 h-[18px] w-[18px] shrink-0" />
-            <span>การจอง</span>
-          </Link>
-          <Link
-            href="/dashboard/services"
-            prefetch={true}
-            onMouseEnter={() => handleMouseEnter('/dashboard/services')}
-            onClick={() => handleLinkClick('/dashboard/services')}
-            className={linkClass('/dashboard/services')}
-          >
-            <Sparkles className="mr-2.5 h-[18px] w-[18px] shrink-0" />
-            <span>บริการ</span>
-          </Link>
-        </>
-      )}
+      <div className="space-y-2 px-3 pb-4">
+        <div className="space-y-1 border-t border-outline-variant pt-3">
+          {footer.map((item) => (
+            <NavLink
+              key={item.href}
+              item={item}
+              active={isActive(item)}
+              onClick={() => handleClick(item.href)}
+              onHover={() => {
+                try {
+                  router.prefetch(item.href)
+                } catch {
+                  /* prefetch is best-effort */
+                }
+              }}
+            />
+          ))}
+        </div>
 
-      {bizType === 'restaurant' && (
         <Link
-          href="/dashboard/menu"
-          prefetch={true}
-          onMouseEnter={() => handleMouseEnter('/dashboard/menu')}
-          onClick={() => handleLinkClick('/dashboard/menu')}
-          className={linkClass('/dashboard/menu')}
+          href="/dashboard/billing"
+          onClick={() => handleClick('/dashboard/billing')}
+          className="group block rounded-2xl border border-primary/15 bg-gradient-to-br from-[#EAF2FF] to-[#F4FBFF] p-4"
         >
-          <Utensils className="mr-2.5 h-[18px] w-[18px] shrink-0" />
-          <span>เมนูอาหาร</span>
+          <p className="font-heading text-sm font-semibold text-on-surface">เติบโตไปด้วยกันกับ DealMee</p>
+          <p className="mt-1 text-xs leading-relaxed text-on-surface-variant">เครื่องมือครบสำหรับผู้ขายไทย</p>
+          <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary">
+            ดูแพ็กเกจ
+            <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+          </span>
+          <span className="mt-3 flex h-8 items-end gap-1" aria-hidden>
+            <span className="h-3 w-2 rounded-sm bg-primary/25" />
+            <span className="h-5 w-2 rounded-sm bg-primary/45" />
+            <span className="h-4 w-2 rounded-sm bg-cyan-400/70" />
+            <span className="h-7 w-2 rounded-sm bg-primary" />
+            <span className="h-6 w-2 rounded-sm bg-primary/70" />
+          </span>
         </Link>
-      )}
-
-      <Link
-        href="/dashboard/billing"
-        prefetch={true}
-        onMouseEnter={() => handleMouseEnter('/dashboard/billing')}
-        onClick={() => handleLinkClick('/dashboard/billing')}
-        className={linkClass('/dashboard/billing')}
-      >
-        <CreditCard className="mr-2.5 h-[18px] w-[18px] shrink-0" />
-        <span>แพ็กเกจและการชำระเงิน</span>
-      </Link>
-
-      <Link
-        href="/dashboard/settings"
-        prefetch={true}
-        onMouseEnter={() => handleMouseEnter('/dashboard/settings')}
-        onClick={() => handleLinkClick('/dashboard/settings')}
-        className={linkClass('/dashboard/settings')}
-      >
-        <Bot className="mr-2.5 h-[18px] w-[18px] shrink-0" />
-        <span>ตั้งค่าบอท</span>
-      </Link>
-
-      <Link
-        href="/dashboard/knowledge"
-        prefetch={true}
-        onMouseEnter={() => handleMouseEnter('/dashboard/knowledge')}
-        onClick={() => handleLinkClick('/dashboard/knowledge')}
-        className={linkClass('/dashboard/knowledge')}
-      >
-        <Database className="mr-2.5 h-[18px] w-[18px] shrink-0" />
-        <span>คลังความรู้</span>
-      </Link>
-
-      <Link
-        href="/dashboard/documents"
-        prefetch={true}
-        onMouseEnter={() => handleMouseEnter('/dashboard/documents')}
-        onClick={() => handleLinkClick('/dashboard/documents')}
-        className={linkClass('/dashboard/documents')}
-      >
-        <FileSpreadsheet className="mr-2.5 h-[18px] w-[18px] shrink-0" />
-        <span>เอกสาร & ใบเสนอราคา</span>
-      </Link>
-
-      <Link
-        href="/dashboard/modules"
-        prefetch={true}
-        onMouseEnter={() => handleMouseEnter('/dashboard/modules')}
-        onClick={() => handleLinkClick('/dashboard/modules')}
-        className={linkClass('/dashboard/modules')}
-      >
-        <Blocks className="mr-2.5 h-[18px] w-[18px] shrink-0" />
-        <span>เครื่องมือ</span>
-      </Link>
-
-      <Link
-        href="/dashboard/inbox"
-        prefetch={true}
-        onMouseEnter={() => handleMouseEnter('/dashboard/inbox')}
-        onClick={() => handleLinkClick('/dashboard/inbox')}
-        className={linkClass('/dashboard/inbox')}
-      >
-        <MessageSquare className="mr-2.5 h-[18px] w-[18px] shrink-0" />
-        <span>กล่องข้อความ</span>
-      </Link>
-      
-      <div className="pt-3 mt-3 border-t border-outline-variant/30 space-y-1">
-        <Link
-          href="/dashboard/help"
-          prefetch={true}
-          onMouseEnter={() => handleMouseEnter('/dashboard/help')}
-          onClick={() => handleLinkClick('/dashboard/help')}
-          className={linkClass('/dashboard/help')}
-        >
-          <BookOpen className="mr-2.5 h-[18px] w-[18px] shrink-0" />
-          <span>คู่มือการใช้งาน</span>
-        </Link>
-
-        {isSuperAdmin && (
-          <Link
-            href="/admin"
-            prefetch={true}
-            onClick={() => handleLinkClick('/admin')}
-            className="flex items-center px-3.5 py-2.5 rounded-xl transition-all font-label-md bg-amber-500/10 text-amber-600 font-bold text-xs sm:text-sm border border-amber-500/30 hover:bg-amber-500/20 active:scale-[0.98]"
-          >
-            <ShieldAlert className="mr-2.5 h-[18px] w-[18px] text-amber-500 shrink-0" />
-            <span>พอร์ทัล Super Admin</span>
-          </Link>
-        )}
       </div>
-    </nav>
+    </div>
   )
 }

@@ -1,6 +1,12 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+
+function stopAudioElement(audio: HTMLAudioElement | null) {
+  if (!audio) return
+  audio.pause()
+  audio.currentTime = 0
+}
 import {
   Radio,
   Copy,
@@ -56,10 +62,7 @@ export default function LiveStudioClient({ shop, initialLiveState }: LiveStudioC
   const [voiceSpeed, setVoiceSpeed] = useState<number>(1.15)
 
   const handleStopAudio = () => {
-    if (activeAudio) {
-      activeAudio.pause()
-      activeAudio.currentTime = 0
-    }
+    stopAudioElement(activeAudio)
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel()
     }
@@ -302,7 +305,7 @@ export default function LiveStudioClient({ shop, initialLiveState }: LiveStudioC
               <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
               <span>DealMee 24/7 AI Live Studio (Virtual Streamer & Auto-CF)</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
+            <h1 className="font-heading text-2xl sm:text-3xl font-semibold tracking-tight text-white flex items-center gap-2.5">
               สตูดิโอ AI ไลฟ์สดขายของ & ดูด CF อัตโนมัติ 24 ชม.
             </h1>
             <p className="mt-2 text-sm sm:text-base text-slate-300 max-w-2xl">
@@ -500,7 +503,7 @@ export default function LiveStudioClient({ shop, initialLiveState }: LiveStudioC
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-rose-500" />
-                <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                <h3 className="font-heading font-semibold text-slate-900 dark:text-white text-base">
                   ตัวทดสอบคอมเมนต์สด & ดูด CF (Live Comment & CF Simulator)
                 </h3>
               </div>
@@ -649,7 +652,7 @@ export default function LiveStudioClient({ shop, initialLiveState }: LiveStudioC
               <Volume2 className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-extrabold text-base text-white flex items-center gap-2">
+              <h3 className="font-heading font-semibold text-base text-white flex items-center gap-2">
                 <span>AI Live Host Teleprompter (สคริปต์พูดสดสำหรับสตรีมเมอร์)</span>
                 <span className="px-2 py-0.5 rounded-md bg-indigo-500/30 text-indigo-300 text-[10px] font-bold">
                   Gemini 3.8 Flash
@@ -891,7 +894,7 @@ export default function LiveStudioClient({ shop, initialLiveState }: LiveStudioC
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-4">
           <div className="flex items-center gap-2">
             <Layers className="w-5 h-5 text-blue-600" />
-            <h3 className="font-bold text-slate-900 dark:text-white text-base">
+            <h3 className="font-heading font-semibold text-slate-900 dark:text-white text-base">
               ผังตะกร้าสินค้าในไลฟ์ (Live Basket Lineup)
             </h3>
           </div>
@@ -1066,7 +1069,7 @@ export default function LiveStudioClient({ shop, initialLiveState }: LiveStudioC
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <Database className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-base">คำสั่ง SQL สำหรับ DealMee Live Studio</h3>
+                <h3 className="font-heading font-semibold text-base">คำสั่ง SQL สำหรับ DealMee Live Studio</h3>
               </div>
               <button
                 onClick={() => setShowSqlModal(false)}

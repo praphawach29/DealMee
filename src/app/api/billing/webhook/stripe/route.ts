@@ -31,29 +31,18 @@ export async function POST(req: NextRequest) {
         const planKey = session.metadata?.plan_key
         if (!shopId || !planKey) break
 
-        await admin
-          .from('shops')
-          .update({
-            plan_key: planKey,
-            plan: planKey,
-            package_name: planKey,
-            subscription_provider: 'stripe',
-            subscription_id: typeof session.subscription === 'string' ? session.subscription : session.subscription?.id,
-            subscription_status: 'active',
-            stripe_customer_id: typeof session.customer === 'string' ? session.customer : session.customer?.id,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', shopId)
-
-        await admin.from('billing_payments').insert({
-          shop_id: shopId,
-          provider: 'stripe',
-          plan_key: planKey,
-          amount: (session.amount_total || 0) / 100,
-          currency: (session.currency || 'thb').toUpperCase(),
-          status: 'succeeded',
-          provider_ref: session.id,
+        const { error } = await admin.rpc('apply_stripe_checkout_once', {
+          p_event_id: event.id,
+          p_shop_id: shopId,
+          p_plan_key: planKey,
+          p_amount: (session.amount_total || 0) / 100,
+          p_currency: (session.currency || 'thb').toUpperCase(),
+          p_session_id: session.id,
+          p_subscription_id:
+            typeof session.subscription === 'string' ? session.subscription : session.subscription?.id || null,
+          p_customer_id: typeof session.customer === 'string' ? session.customer : session.customer?.id || null,
         })
+        if (error) throw error
         break
       }
 
@@ -102,19 +91,14 @@ export async function POST(req: NextRequest) {
           .maybeSingle()
 
         if (shop) {
-          await admin
-            .from('shops')
-            .update({ subscription_status: 'past_due', updated_at: new Date().toISOString() })
-            .eq('id', shop.id)
-
-          await admin.from('billing_payments').insert({
-            shop_id: shop.id,
-            provider: 'stripe',
-            amount: (invoice.amount_due || 0) / 100,
-            currency: (invoice.currency || 'thb').toUpperCase(),
-            status: 'failed',
-            provider_ref: invoice.id,
+          const { error } = await admin.rpc('apply_stripe_invoice_failed_once', {
+            p_event_id: event.id,
+            p_invoice_id: invoice.id,
+            p_subscription_id: subscriptionId,
+            p_amount: (invoice.amount_due || 0) / 100,
+            p_currency: (invoice.currency || 'thb').toUpperCase(),
           })
+          if (error) throw error
         }
         break
       }
@@ -125,8 +109,9 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     console.error('[Stripe Webhook] Handler error:', err)
-    // Still return 200 to avoid Stripe retry storms once signature is verified;
-    // the underlying DB issue should be caught via server logs/alerting.
+    // Idempotent handlers are safe to retry. A 500 asks Stripe to send the event again
+    // instead of dropping a payment that never got recorded.
+    return NextResponse.json({ error: 'handler failed' }, { status: 500 })
   }
 
   return NextResponse.json({ received: true })

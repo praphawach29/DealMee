@@ -37,22 +37,35 @@ function overlap(a: Set<string>, b: Set<string>): number {
 export interface KnowledgeItem {
   title: string | null
   content: string | null
+  id?: string | null
+  source?: string | null
+  source_ref?: string | null
 }
 
 /**
- * Returns the prompt blocks to inline (most relevant first) and how many
- * entries were left out. A knowledge base that already fits the budget is
- * inlined whole, exactly as before.
+ * Legacy in-memory selector, used only when the chunk tables are not installed
+ * or this shop has not been backfilled yet. Live answers go through hybrid
+ * retrieval in src/lib/knowledge/retrieve.ts.
+ *
+ * `inline` keeps the old prompt behaviour (a small base is sent whole, and a
+ * message that matches nothing still gets a little shop context). `search`
+ * returns only positive matches, so the tool can say "nothing found" instead
+ * of handing the model an unrelated FAQ.
  */
 export function selectRelevantKnowledge(
   items: KnowledgeItem[],
   currentMessage: string,
   recentMessages: string[] = [],
-  maxChars = KNOWLEDGE_RELEVANT_MAX_CHARS
-): { blocks: string[]; omitted: number } {
+  maxChars = KNOWLEDGE_RELEVANT_MAX_CHARS,
+  mode: 'inline' | 'search' = 'inline',
+  maxItems = Number.POSITIVE_INFINITY
+): { blocks: string[]; omitted: number; indexes: number[] } {
   const blocks = items.map((it) => `Q: ${it.title || ''}\nA: ${it.content || ''}`)
   const total = blocks.reduce((sum, b) => sum + b.length, 0)
-  if (total <= maxChars) return { blocks, omitted: 0 }
+  if (mode === 'inline' && total <= maxChars) {
+    const indexes = items.map((_, index) => index).slice(0, maxItems)
+    return { blocks: indexes.map((index) => blocks[index]), omitted: items.length - indexes.length, indexes }
+  }
 
   const current = bigrams(currentMessage)
   const recent = bigrams(recentMessages.slice(-4).join(' '))
@@ -78,7 +91,8 @@ export function selectRelevantKnowledge(
   }
   // Nothing related to this message: keep a little general context (the first
   // entries, usually shop basics) instead of an empty knowledge section.
-  if (chosen.length === 0) {
+  // Search mode must not do this — an unrelated FAQ is how the bot starts guessing.
+  if (chosen.length === 0 && mode === 'inline') {
     let generalBudget = Math.min(2000, maxChars)
     for (let i = 0; i < blocks.length; i++) {
       if (blocks[i].length > generalBudget) continue
@@ -87,5 +101,6 @@ export function selectRelevantKnowledge(
     }
   }
 
-  return { blocks: chosen.map((i) => blocks[i]), omitted: items.length - chosen.length }
+  const limited = chosen.slice(0, maxItems)
+  return { blocks: limited.map((i) => blocks[i]), omitted: items.length - limited.length, indexes: limited }
 }

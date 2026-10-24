@@ -26,7 +26,7 @@ export default async function LiveStudioPage() {
     return (
       <div className="px-4 sm:px-6 md:px-8 py-10 max-w-xl mx-auto w-full">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 text-center space-y-2">
-          <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">AI Live Studio — เร็ว ๆ นี้</h1>
+          <h1 className="font-heading text-lg font-semibold text-slate-900 dark:text-slate-100">AI Live Studio — เร็ว ๆ นี้</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             ระบบช่วยไลฟ์ขายของกำลังพัฒนา จะเปิดให้ใช้เมื่อรับคอมเมนต์จากไลฟ์จริงได้
           </p>

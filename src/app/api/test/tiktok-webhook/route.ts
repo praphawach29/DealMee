@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
+import { authorizeSimulationShop, recordSimulationUsage } from '@/lib/test/authorizeSimulation'
 
 /**
  * Developer Simulation API Route for TikTok Shop
@@ -13,11 +14,14 @@ import { upsertCustomerProfile } from '@/lib/customerMemory'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { shop_id, user_id, message, ai_mode } = body
+    const { user_id, message, ai_mode } = body
+    const auth = await authorizeSimulationShop(body.shop_id)
+    if (auth.error) return auth.error
+    const shop_id = auth.shopId
 
-    if (!shop_id || !message) {
+    if (!message) {
       return NextResponse.json(
-        { error: 'Missing required parameters: shop_id, message' },
+        { error: 'Missing required parameters: message' },
         { status: 400 }
       )
     }
@@ -107,6 +111,7 @@ export async function POST(request: NextRequest) {
       conversationId: conv.id,
       supabaseClient: admin,
     })
+    await recordSimulationUsage(shop_id, agentResult)
 
     let aiText = agentResult.text?.trim() || ''
     if (!aiText) {

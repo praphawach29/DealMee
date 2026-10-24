@@ -23,7 +23,7 @@ export default function FeaturesBento() {
             <Sparkles className="w-4 h-4 text-cyan-600" />
             <span>ความสามารถที่ใช้งานได้จริงวันนี้</span>
           </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+          <h2 className="font-heading text-3xl sm:text-4xl font-semibold text-slate-900 tracking-tight">
             ครบทุกมิติงานขายและการบริการบน LINE OA
           </h2>
           <p className="text-slate-600 text-lg sm:text-xl leading-relaxed">
@@ -46,7 +46,7 @@ export default function FeaturesBento() {
                 <span className="text-cyan-400 text-sm font-bold uppercase tracking-wider">
                   Core Sales Engine
                 </span>
-                <h3 className="text-2xl sm:text-3xl font-bold text-white">
+                <h3 className="font-heading text-2xl sm:text-3xl font-semibold text-white">
                   ปิดการขาย รับออเดอร์ & คำนวณค่าส่งอัตโนมัติ
                 </h3>
               </div>
@@ -81,7 +81,7 @@ export default function FeaturesBento() {
                 <span className="text-emerald-700 text-xs sm:text-sm font-bold uppercase tracking-wider">
                   Bank-Grade Verification
                 </span>
-                <h3 className="text-xl sm:text-2xl font-bold text-slate-900">
+                <h3 className="font-heading text-xl sm:text-2xl font-semibold text-slate-900">
                   ตรวจสลิปโอนเงินอัตโนมัติ
                 </h3>
               </div>
@@ -106,7 +106,7 @@ export default function FeaturesBento() {
                 <span className="text-amber-700 text-xs sm:text-sm font-bold uppercase tracking-wider">
                   Enterprise & B2B
                 </span>
-                <h3 className="text-xl sm:text-2xl font-bold text-slate-900">
+                <h3 className="font-heading text-xl sm:text-2xl font-semibold text-slate-900">
                   ออกใบเสนอราคา B2B (PDF)
                 </h3>
               </div>
@@ -131,7 +131,7 @@ export default function FeaturesBento() {
                 <span className="text-blue-700 text-xs sm:text-sm font-bold uppercase tracking-wider">
                   Service & Appointments
                 </span>
-                <h3 className="text-xl sm:text-2xl font-bold text-slate-900">
+                <h3 className="font-heading text-xl sm:text-2xl font-semibold text-slate-900">
                   ระบบจองคิวบริการอัตโนมัติ
                 </h3>
               </div>
@@ -156,7 +156,7 @@ export default function FeaturesBento() {
                 <span className="text-purple-700 text-xs sm:text-sm font-bold uppercase tracking-wider">
                   Personalization Memory
                 </span>
-                <h3 className="text-xl sm:text-2xl font-bold text-slate-900">
+                <h3 className="font-heading text-xl sm:text-2xl font-semibold text-slate-900">
                   Customer Memory Graph
                 </h3>
               </div>
@@ -178,7 +178,7 @@ export default function FeaturesBento() {
                 <ClockAlert className="w-4 h-4" />
                 <span>Proactive Sales Follow-up</span>
               </div>
-              <h3 className="text-2xl sm:text-3xl font-bold text-white">
+              <h3 className="font-heading text-2xl sm:text-3xl font-semibold text-white">
                 ระบบติดตามยอดค้างชำระ & ทักทายชวนซื้อซ้ำอัตโนมัติ
               </h3>
               <p className="text-slate-200 text-base sm:text-lg leading-relaxed">
