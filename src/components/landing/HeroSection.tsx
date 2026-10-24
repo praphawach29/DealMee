@@ -6,7 +6,7 @@ import { TEMPLATES } from '@/app/onboarding/templates'
 
 const stats = [
   { num: '24 ชม.', label: 'บอทตอบแชท' },
-  { num: '3', label: 'ช่องทางแชทที่เชื่อมได้' },
+  { num: 'LINE OA', label: 'ใช้ของร้านที่มีอยู่แล้ว' },
   { num: String(TEMPLATES.length), label: 'เทมเพลตตอนสมัคร' },
   { num: 'ตรวจสลิป', label: 'กับข้อมูลธนาคาร' },
 ]

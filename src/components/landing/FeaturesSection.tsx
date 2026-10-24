@@ -20,7 +20,7 @@ const features = [
   {
     icon: MessageCircle,
     title: 'ตอบคำถาม 24 ชม.',
-    desc: 'บอทตอบเรื่องสินค้า ราคา สต็อก และบริการบน LINE, Facebook Messenger และ Instagram',
+    desc: 'บอทตอบเรื่องสินค้า ราคา สต็อก และบริการใน LINE OA ของร้าน ตอบทันทีทุกเวลา ไม่มีวันหยุด',
   },
   {
     icon: Receipt,

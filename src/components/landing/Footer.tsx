@@ -27,7 +27,7 @@ export default function Footer() {
               </span>
             </Link>
             <p className="text-sm sm:text-base text-slate-300 max-w-sm leading-relaxed">
-              DealMee AI (DealMee.app) แพลตฟอร์ม AI Sales Agent อัจฉริยะสำหรับธุรกิจไทยบน LINE Official Account ช่วยตอบแชท รับออเดอร์ คำนวณค่าส่ง ตรวจสลิป และออกใบเสนอราคาตลอด 24 ชั่วโมง
+              DealMee AI (DealMee.app) แพลตฟอร์ม AI Sales Agent สำหรับธุรกิจไทยบน LINE Official Account ช่วยตอบแชท รับออเดอร์ คำนวณค่าส่ง ตรวจสลิป และออกใบเสนอราคาแทนแอดมิน
             </p>
             <div className="flex items-center gap-2 pt-1 text-emerald-400 text-sm font-semibold">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -43,7 +43,7 @@ export default function Footer() {
             <ul className="space-y-2.5 text-sm">
               <li>
                 <a href="#demo" className="hover:text-cyan-400 transition-colors">
-                  ตัวอย่างการทำงานของบอท
+                  คลิปตัวอย่างการใช้งาน
                 </a>
               </li>
               <li>
@@ -70,7 +70,7 @@ export default function Footer() {
               เทคโนโลยี & ความปลอดภัย
             </h4>
             <ul className="space-y-2.5 text-sm text-slate-400">
-              <li>LINE OA, Facebook Messenger และ Instagram</li>
+              <li>เชื่อมกับ LINE Official Account ของร้าน</li>
               <li>ตรวจสลิปผ่าน EasySlip, Thunder และ SlipOK</li>
               <li>Gemini เป็นหลัก สำรองด้วย OpenAI และ Claude</li>
             </ul>
@@ -88,8 +88,8 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <a href="mailto:support@dealmee.app" className="hover:text-cyan-400 transition-colors">
-                  ติดต่อทีมงาน (support@dealmee.app)
+                <a href="#faq" className="hover:text-cyan-400 transition-colors">
+                  ติดต่อทีมงานทาง LINE
                 </a>
               </li>
               <li>
