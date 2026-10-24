@@ -3,26 +3,21 @@ export type ProductFlexData = {
   price: string
   stock: string
   desc: string
-  tag: string
 }
 
 export type QuotationFlexData = {
   docNo: string
-  company: string
+  customer: string
   items: string
-  subtotal: string
-  vat: string
   total: string
-  validDays: string
+  vatNote: string
 }
 
 export type ChatMessage = {
   type: 'user' | 'bot'
   text: string
   time: string
-  options?: string[]
-  tool?: string
-  flexType?: 'product_carousel' | 'quotation'
+  flexType?: 'product_carousel' | 'quotation' | 'payment_qr'
   flexData?: ProductFlexData | QuotationFlexData
 }
 

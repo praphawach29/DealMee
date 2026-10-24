@@ -56,8 +56,8 @@ export function HeroChatMock() {
                 <span className="text-slate-500">สต็อกในระบบ</span>
                 <span className="font-semibold text-primary">ราคาตามที่ร้านตั้ง</span>
               </div>
-              <div className="mt-2 rounded-[10px] bg-primary py-1.5 text-center text-xs font-semibold text-white">
-                สั่งซื้อรายการนี้
+              <div className="mt-2 rounded-[10px] bg-[#06C755] py-1.5 text-center text-xs font-semibold text-white">
+                สั่งซื้อสินค้านี้
               </div>
             </div>
           </div>
