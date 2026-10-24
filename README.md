@@ -81,7 +81,7 @@
 | **Messaging Webhooks** | **LINE Messaging API** + **Facebook Messenger Webhook (Meta Graph API)** |
 | **Slip & Payments** | **EasySlip API**, **SlipOK**, **PromptPay QR**, **Stripe SDK** |
 | **Social Data Scraping** | **RapidAPI (TikTok & Social Media APIs)** |
-| **Scheduled Tasks** | **GitHub Actions Cron Workflow** (`/api/cron/follow-up`) |
+| **Scheduled Tasks** | **Supabase pg_cron + pg_net** → `/api/cron/follow-up` ([setup](docs/guides/scheduler-pg-cron.md)) |
 | **Hosting & CI/CD** | **Vercel Edge Platform** |
 
 ---
