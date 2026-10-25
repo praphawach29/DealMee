@@ -7,6 +7,7 @@
 import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
 import { adminPausePayload, isPauseExpired, resumePayload } from '@/lib/inbox/adminPause'
 import { isHandoffRequest } from '@/lib/ai/thaiMatch'
+import { alertIfUpset } from '@/lib/ai/upsetAlert'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   sendFacebookMessage,
@@ -43,6 +44,9 @@ export async function processMessengerEntries({
   isInstagram: boolean
   targetPlatform: 'facebook' | 'instagram'
 }) {
+  // Upset-customer checks run alongside the bot's reply; awaited at the end so after() keeps them alive
+  const upsetChecks: Promise<void>[] = []
+
   for (const entry of entries) {
     const messagingList = entry.messaging || []
 
@@ -150,6 +154,8 @@ export async function processMessengerEntries({
         })
         .select('id')
         .single()
+
+      upsetChecks.push(alertIfUpset({ shop, conversation: conv, message: cleanText }))
 
       // 6. Check for Pause/Admin Commands
       const isPauseCommand = isHandoffRequest(cleanText)
@@ -321,6 +327,8 @@ export async function processMessengerEntries({
       }
     }
   }
+
+  await Promise.allSettled(upsetChecks)
 }
 
 /**

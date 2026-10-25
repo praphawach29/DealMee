@@ -34,6 +34,7 @@ export default function ModulesView({
     slip_verify: initialFeatures?.slip_verify ?? true,
     product_recommend: initialFeatures?.product_recommend ?? true,
     admin_notify: initialFeatures?.admin_notify ?? true,
+    upset_alert: initialFeatures?.upset_alert ?? false,
     official_letters: initialFeatures?.official_letters ?? false,
   })
 
@@ -171,6 +172,13 @@ export default function ModulesView({
       description: 'ส่งการ์ดแจ้งเตือนเข้า LINE ส่วนตัวของเจ้าของร้าน เมื่อมีออเดอร์ใหม่หรือลูกค้าขอคุยกับคน',
       icon: 'notifications_active',
       color: 'text-rose-600 bg-rose-500/10',
+    },
+    {
+      id: 'upset_alert',
+      name: '😟 แจ้งเตือนเมื่อลูกค้าดูไม่พอใจ',
+      description: 'AI อ่านทุกข้อความลูกค้า ถ้าดูไม่พอใจ (ของช้า ส่งผิด รอนาน) จะส่ง LINE หาเจ้าของร้านทันที บอทยังตอบต่อตามปกติ แจ้งไม่เกินชั่วโมงละครั้งต่อแชท ต้องเปิด "แจ้งเตือนแอดมิน" ด้วย',
+      icon: 'sentiment_dissatisfied',
+      color: 'text-orange-600 bg-orange-500/10',
     },
     {
       id: 'official_letters',
