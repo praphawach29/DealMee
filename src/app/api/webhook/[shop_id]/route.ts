@@ -4,6 +4,7 @@ import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
 import { linkPlatformOwnerFromShopOa } from '@/lib/billing/platformLineAlerts'
 import { adminPausePayload, isPauseExpired, resumePayload } from '@/lib/inbox/adminPause'
 import { isHandoffRequest } from '@/lib/ai/thaiMatch'
+import { alertIfUpset } from '@/lib/ai/upsetAlert'
 import { verifyLineSignature } from '@/lib/line/signature'
 import { processSalesAgentChat, type AgentResult } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
@@ -117,6 +118,9 @@ async function processLineEvents({
   isAutoReplyEnabled: boolean
   mutedByBusinessHours: boolean
 }) {
+  // Upset-customer checks run alongside the bot's reply; awaited at the end so after() keeps them alive
+  const upsetChecks: Promise<void>[] = []
+
   // Process each LINE event
   for (const event of events) {
     const userId = event.source?.userId
@@ -210,6 +214,8 @@ async function processLineEvents({
         })
         .select('id')
         .single()
+
+      upsetChecks.push(alertIfUpset({ shop, conversation: conv, message: userText }))
 
       // 4. Check if Admin Takeover is active OR Auto-Reply is disabled
       const cleanText = userText.trim()
@@ -382,6 +388,8 @@ async function processLineEvents({
       }
     }
   }
+
+  await Promise.allSettled(upsetChecks)
 }
 
 // ─── Deliver a finished AgentResult (sync or from a background continuation) ──
