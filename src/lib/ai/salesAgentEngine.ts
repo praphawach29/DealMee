@@ -8,6 +8,7 @@ import { loadKnowledgeContext } from '@/lib/knowledge/retrieve'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { platformSecret } from '@/lib/platformSecrets'
 import { buildBusinessPromptContext } from '@/lib/businessGreeting'
+import { containsThaiKeyword } from '@/lib/ai/thaiMatch'
 import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
 import { getGeminiPromptCache, dropGeminiPromptCache } from '@/lib/ai/geminiCache'
@@ -755,8 +756,8 @@ export function computeComplexityScore({
   const text = userQuery.toLowerCase().trim()
   let score = 0
 
-  const matchedNegotiation = NEGOTIATION_KEYWORDS.filter((k) => text.includes(k))
-  const matchedObjections = HESITATION_AND_OBJECTION_KEYWORDS.filter((k) => text.includes(k))
+  const matchedNegotiation = NEGOTIATION_KEYWORDS.filter((k) => containsThaiKeyword(text, k))
+  const matchedObjections = HESITATION_AND_OBJECTION_KEYWORDS.filter((k) => containsThaiKeyword(text, k))
   
   // Combine unique matched triggers
   const uniqueMatches = Array.from(new Set([...matchedNegotiation, ...matchedObjections]))
@@ -768,8 +769,8 @@ export function computeComplexityScore({
   for (const msg of recentCustomerMessages.slice(-3)) {
     const priorText = msg.toLowerCase()
     if (
-      NEGOTIATION_KEYWORDS.some((k) => priorText.includes(k)) ||
-      HESITATION_AND_OBJECTION_KEYWORDS.some((k) => priorText.includes(k))
+      NEGOTIATION_KEYWORDS.some((k) => containsThaiKeyword(priorText, k)) ||
+      HESITATION_AND_OBJECTION_KEYWORDS.some((k) => containsThaiKeyword(priorText, k))
     ) {
       score += 1
     }
