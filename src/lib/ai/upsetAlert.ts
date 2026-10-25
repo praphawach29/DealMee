@@ -28,11 +28,19 @@ export async function alertIfUpset({
   message: string
 }): Promise<void> {
   try {
+    // Shops with the switch off are the norm: no log for them. Every other outcome logs one line,
+    // so "no alert" can be traced to its reason.
     if (shop?.features?.upset_alert !== true || !worthChecking(message)) return
-    if (!cooldownOver(conversation.metadata?.upset_alert_at)) return
+    if (!cooldownOver(conversation.metadata?.upset_alert_at)) {
+      console.log(`[UpsetAlert] cooldown, not checked (conversation ${conversation.id})`)
+      return
+    }
 
     const key = await platformSecret('TYPESAFE_API_KEY')
-    if (!key) return
+    if (!key) {
+      console.warn(`[UpsetAlert] shop ${shop.id} has the switch on but TYPESAFE_API_KEY is not set`)
+      return
+    }
 
     const res = await fetch(TYPESAFE_URL, {
       method: 'POST',
@@ -45,7 +53,10 @@ export async function alertIfUpset({
       return
     }
     const p = upsetProbability(await res.json())
-    if (p === null || p < UPSET_THRESHOLD) return
+    if (p === null || p < UPSET_THRESHOLD) {
+      console.log(`[UpsetAlert] p=${p === null ? 'no answer' : p.toFixed(2)}, below ${UPSET_THRESHOLD}: no alert`)
+      return
+    }
 
     // Claim the cooldown before sending, re-reading metadata so other keys written meanwhile survive
     const admin = createAdminClient()
