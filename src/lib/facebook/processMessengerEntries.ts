@@ -6,6 +6,7 @@
  */
 import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
 import { adminPausePayload, isPauseExpired, resumePayload } from '@/lib/inbox/adminPause'
+import { isHandoffRequest } from '@/lib/ai/thaiMatch'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   sendFacebookMessage,
@@ -151,12 +152,7 @@ export async function processMessengerEntries({
         .single()
 
       // 6. Check for Pause/Admin Commands
-      const lowerText = cleanText.toLowerCase()
-      const isPauseCommand =
-        ['/pause', '/stop', '/admin', '/human'].includes(lowerText) ||
-        cleanText === 'ขอคุยกับแอดมิน' ||
-        cleanText === 'ขอคุยกับเจ้าหน้าที่' ||
-        cleanText === 'ติดต่อเจ้าหน้าที่'
+      const isPauseCommand = isHandoffRequest(cleanText)
 
       if (isPauseCommand) {
         console.log(`[Facebook Webhook] Explicit pause command detected for PSID: ${senderPsid}`)

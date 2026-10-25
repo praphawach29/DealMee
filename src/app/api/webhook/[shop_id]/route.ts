@@ -3,6 +3,7 @@ import { botMayReplyNow } from '@/lib/shop/businessHours'
 import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
 import { linkPlatformOwnerFromShopOa } from '@/lib/billing/platformLineAlerts'
 import { adminPausePayload, isPauseExpired, resumePayload } from '@/lib/inbox/adminPause'
+import { isHandoffRequest } from '@/lib/ai/thaiMatch'
 import { verifyLineSignature } from '@/lib/line/signature'
 import { processSalesAgentChat, type AgentResult } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
@@ -212,7 +213,6 @@ async function processLineEvents({
 
       // 4. Check if Admin Takeover is active OR Auto-Reply is disabled
       const cleanText = userText.trim()
-      const lowerText = cleanText.toLowerCase()
 
       // 3.1 Handle Admin Instant Linking Command (e.g. /admin-link ADM-123456)
       if (cleanText.startsWith('/admin-link') || cleanText.startsWith('/link-admin')) {
@@ -283,8 +283,7 @@ async function processLineEvents({
         }
       }
 
-      const isPauseCommand = ['/pause', '/stop', '/admin', '/human'].includes(lowerText) ||
-        cleanText === 'ขอคุยกับแอดมิน' || cleanText === 'ขอคุยกับเจ้าหน้าที่' || cleanText === 'ติดต่อเจ้าหน้าที่'
+      const isPauseCommand = isHandoffRequest(cleanText)
 
       if (isPauseCommand) {
         console.log(`[Webhook] Explicit pause command detected for ${userId}`)

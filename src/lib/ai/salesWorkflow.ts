@@ -9,6 +9,8 @@
  * 5. post_sale  - ขอบคุณ ยืนยันการชำระเงิน/สลิป แนะนำสินค้าเสริม หรือขอรีวิว
  */
 
+import { hasUnnegatedMatch } from '@/lib/ai/thaiMatch'
+
 export type SalesStage = 'greeting' | 'discovery' | 'showcase' | 'closing' | 'post_sale'
 
 export interface StageDeterminationInput {
@@ -119,7 +121,8 @@ export function determineNextSalesStage({
   }
 
   // 3. Closing signals: Payment QR requested, checkout initiated, quotation issued
-  const hasOrderIntentWords = /(เอาเลย|เอาค่ะ|เอาครับ|สั่งเลย|สั่งซื้อ|พร้อมโอน|ขอเลขบัญชี|ขอคิวอาร์|ขอ qr|จ่ายเงิน|เก็บปลายทาง|ใบเสนอราคา|เสนอราคา|quotation)/.test(text)
+  // "ยังไม่เอาเลยค่ะ" is a refusal, not an order: a phrase right after ไม่ doesn't count
+  const hasOrderIntentWords = hasUnnegatedMatch(text, /(เอาเลย|เอาค่ะ|เอาครับ|สั่งเลย|สั่งซื้อ|พร้อมโอน|ขอเลขบัญชี|ขอคิวอาร์|ขอ qr|จ่ายเงิน|เก็บปลายทาง|ใบเสนอราคา|เสนอราคา|quotation)/)
   if (
     executedToolNames.includes('send_payment_qr') ||
     executedToolNames.includes('create_quotation') ||
