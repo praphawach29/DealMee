@@ -9,6 +9,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { platformSecret } from '@/lib/platformSecrets'
 import { buildBusinessPromptContext } from '@/lib/businessGreeting'
 import { containsThaiKeyword } from '@/lib/ai/thaiMatch'
+import { extractStageTag, STAGE_TAG_INSTRUCTION } from '@/lib/ai/stageMarker'
 import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
 import { getGeminiPromptCache, dropGeminiPromptCache } from '@/lib/ai/geminiCache'
@@ -1306,7 +1307,7 @@ ${paymentInfo}`
     }
   }
 
-  const salesStageContext = formatSalesStagePromptContext(initialSalesStage)
+  const salesStageContext = formatSalesStagePromptContext(initialSalesStage) + STAGE_TAG_INSTRUCTION
 
   // 5e. Golden Closers (Few-Shot Winning Sales Trajectories)
   const goldenTrajectories = await retrieveWinningTrajectories({
@@ -1591,8 +1592,11 @@ function finalizeAgentResult(state: PlanningState, finalText: string): AgentResu
   const firstUserTurn = state.turns.find((t) => t.role === 'user')
   const userQueryText = firstUserTurn && 'text' in firstUserTurn ? firstUserTurn.text : ''
 
+  // The model ends its reply with [[stage:...]]: take it off before anything is sent
+  const tagged = extractStageTag(finalText)
   const nextStage = determineNextSalesStage({
     currentStage: state.salesStage,
+    modelStage: tagged.stage,
     userQuery: userQueryText,
     executedToolNames: state.toolCallsExecuted.map((t) => t.name),
     hasPendingOrder: state.toolCallsExecuted.some((t) => t.name === 'send_payment_qr'),
@@ -1600,7 +1604,7 @@ function finalizeAgentResult(state: PlanningState, finalText: string): AgentResu
   })
 
   return {
-    text: toPlainText(finalText).trim(),
+    text: toPlainText(tagged.text).trim(),
     usage,
     immediateMessages: state.immediateMessages,
     toolCallsExecuted: state.toolCallsExecuted,
