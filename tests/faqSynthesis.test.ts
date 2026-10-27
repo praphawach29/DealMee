@@ -217,19 +217,51 @@ test('FIX-1: an admin answer at the END of a long chat is still seen (newest mes
   assert.doesNotMatch(gemini.calls[0].prompt, /ข้อความเก่า 0(?!\d)/)
 })
 
-test('GAP-2 (current): phone / bank account / slip number reach Gemini unredacted', async () => {
+// ── Fix 2: personal data is stripped in code before anything leaves for Gemini ──
+
+test('FIX-2: phone / bank account / slip number never reach Gemini', async () => {
   resetMock({
     chat_messages: [
       msg('user', 'โอนแล้วนะคะ เบอร์ 081-234-5678 บัญชี 123-4-56789-0 เลขสลิป 202610281234ABCD5678'),
-      msg('agent', 'ได้รับแล้วค่ะ'),
+      msg('agent', 'ได้รับแล้วค่ะ โทรกลับ 02-123-4567'),
     ],
   })
   gemini = installFakeGemini([[]])
   await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
   const p = gemini.calls[0].prompt
-  assert.match(p, /081-234-5678/)
-  assert.match(p, /123-4-56789-0/)
-  assert.match(p, /202610281234ABCD5678/)
+  for (const secret of ['081-234-5678', '123-4-56789-0', '202610281234ABCD5678', '02-123-4567', '5678', '56789']) {
+    assert.ok(!p.includes(secret), `prompt leaked ${secret}`)
+  }
+  assert.match(p, /โอนแล้วนะคะ เบอร์ \[ข้อมูลส่วนบุคคล\]/)
+})
+
+test('FIX-2: ordinary shop facts (days, prices) survive redaction', async () => {
+  resetMock({ chat_messages: [msg('user', 'ส่งกี่วัน ราคาเท่าไหร่'), msg('agent', 'ส่ง 2-3 วัน ราคา 1,290 บาทค่ะ')] })
+  gemini = installFakeGemini([[]])
+  await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.match(gemini.calls[0].prompt, /ส่ง 2-3 วัน ราคา 1,290 บาทค่ะ/)
+})
+
+test('FIX-2: a draft whose text still contains personal data is dropped (model ignored the rule)', async () => {
+  const db = resetMock({ chat_messages: adminAnswered() })
+  gemini = installFakeGemini([
+    [
+      faq('โอนเงินเข้าบัญชีไหนคะ', 'โอนเข้าบัญชี 123-4-56789-0 ค่ะ'),
+      faq('ติดต่อร้านทางโทรศัพท์ได้ไหม', 'โทร 081-234-5678 ได้เลยค่ะ'),
+      faq('ส่งต่างจังหวัดกี่วันถึง', 'ส่งต่างจังหวัด 2-3 วันทำการค่ะ'),
+    ],
+  ])
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.createdCount, 1)
+  assert.deepEqual(db.tables.knowledge_base.map((r) => r.title), ['ส่งต่างจังหวัดกี่วันถึง'])
+})
+
+test('FIX-2: a draft that copies the redaction placeholder is dropped', async () => {
+  const db = resetMock({ chat_messages: adminAnswered() })
+  gemini = installFakeGemini([[faq('โอนเข้าบัญชีไหน', 'โอนเข้า [ข้อมูลส่วนบุคคล] ได้เลยค่ะ')]])
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.createdCount, 0)
+  assert.equal(db.tables.knowledge_base?.length ?? 0, 0)
 })
 
 test('GAP-3 (current): a customer can forge speaker lines and close the quote block', async () => {

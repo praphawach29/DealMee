@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { platformSecret } from '@/lib/platformSecrets'
-import { selectSynthesisTurns } from '@/lib/ai/faqGuards'
+import { containsPii, redactPii, selectSynthesisTurns } from '@/lib/ai/faqGuards'
 
 export interface SynthesizedFaq {
   title: string
@@ -40,7 +40,7 @@ export async function synthesizeFaqFromConversation({
     // Only customer questions and real-admin answers may feed the synthesis. The bot's
     // own replies (and system notices) are dropped: a wrong bot answer must never be
     // turned into a "fact". No admin answer at all → nothing to learn, so no AI call.
-    const messages = selectSynthesisTurns([...recent].reverse())
+    const messages = selectSynthesisTurns([...recent].reverse()).map((m) => ({ ...m, text: redactPii(m.text).text }))
     if (!messages.some((m) => m.role === 'admin')) {
       return { success: true, createdCount: 0, message: 'ยังไม่มีคำตอบจากแอดมินในบทสนทนานี้' }
     }
@@ -130,6 +130,8 @@ ${transcript}
       return (
         cleanTitle.length > 3 &&
         cleanContent.length > 5 &&
+        !containsPii(cleanTitle) &&
+        !containsPii(cleanContent) &&
         !existingTitles.includes(cleanTitle)
       )
     })
