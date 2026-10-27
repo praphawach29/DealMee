@@ -71,3 +71,64 @@ export function redactPii(text: string): { text: string; redacted: boolean } {
 export function containsPii(text: string): boolean {
   return text.includes(PII_PLACEHOLDER) || redactPii(text).redacted
 }
+
+// ───────────────────────── prompt-injection hardening ─────────────────────────
+
+export const MAX_TURN_CHARS = 500
+export const MAX_DRAFTS_PER_RUN = 3
+export const MAX_TITLE_CHARS = 150
+export const MAX_CONTENT_CHARS = 1000
+/** share of a draft's character 3-grams that must also appear in the admin's own words */
+export const GROUNDING_MIN_OVERLAP = 0.4
+
+const CATEGORIES = ['faq', 'policy', 'product'] as const
+export type FaqCategory = (typeof CATEGORIES)[number]
+
+/** strip control characters and cap the length of one chat message */
+export function clipTurn(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  const clean = text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
+  return clean.length > MAX_TURN_CHARS ? `${clean.slice(0, MAX_TURN_CHARS)}…` : clean
+}
+
+/**
+ * The conversation as a JSON array. JSON.stringify escapes quotes and newlines, so a
+ * customer message cannot fake a new speaker line or close a quoted block — it stays
+ * one string value, tagged with the role WE assigned from sender_type.
+ */
+export function serializeTranscript(turns: SynthesisTurn[]): string {
+  return JSON.stringify(turns.map((t) => ({ role: t.role, text: clipTurn(t.text) })))
+}
+
+export function normalizeCategory(value: unknown): FaqCategory {
+  return CATEGORIES.includes(value as FaqCategory) ? (value as FaqCategory) : 'faq'
+}
+
+const squash = (s: string) => s.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '')
+
+function trigrams(s: string): Set<string> {
+  const out = new Set<string>()
+  for (let i = 0; i + 3 <= s.length; i++) out.add(s.slice(i, i + 3))
+  return out
+}
+
+function numbersIn(s: string): string[] {
+  return (s.replace(/(?<=\d),(?=\d{3})/g, '').match(/\d+(?:\.\d+)?/g) ?? []).map((n) => n.replace(/^0+(?=\d)/, ''))
+}
+
+/**
+ * A draft may only restate what an admin actually wrote. Code-level check, so it holds
+ * even if the model was talked into inventing something: every number in the draft must
+ * appear in the admin's messages, and the wording must overlap them enough.
+ */
+export function isGroundedInAdminText(content: string, adminTexts: string[]): boolean {
+  const admin = adminTexts.join('\n')
+  const adminNums = new Set(numbersIn(admin))
+  if (!numbersIn(content).every((n) => adminNums.has(n))) return false
+  const mine = trigrams(squash(content))
+  if (mine.size === 0) return false
+  const theirs = trigrams(squash(admin))
+  let hit = 0
+  for (const g of mine) if (theirs.has(g)) hit++
+  return hit / mine.size >= GROUNDING_MIN_OVERLAP
+}
