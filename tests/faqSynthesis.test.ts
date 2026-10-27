@@ -1,15 +1,21 @@
 import assert from 'node:assert/strict'
-import { afterEach, test } from 'node:test'
+import { afterEach, beforeEach, test } from 'node:test'
 import './helpers/alias.ts'
 import { installFakeGemini } from './helpers/fakeGemini.ts'
 import { mock, resetMock } from './helpers/mockState.ts'
 
 const { synthesizeFaqFromConversation, synthesizeFaqFromShopConversations } = await import('../src/lib/ai/faqSynthesis.ts')
+const { resetFaqThrottle, checkFaqThrottle, COOLDOWN_MS, MAX_CALLS_PER_HOUR, MAX_DRAFTS_PER_DAY, MAX_PENDING_DRAFTS } = await import(
+  '../src/lib/ai/faqThrottle.ts'
+)
 
 const SHOP = 'shop-1'
 const CONV = 'conv-1'
 let gemini: ReturnType<typeof installFakeGemini> | null = null
 
+beforeEach(() => {
+  resetFaqThrottle()
+})
 afterEach(() => {
   gemini?.restore()
   gemini = null
@@ -359,20 +365,158 @@ test('FIX-3: non-string title/content from the model does not crash the run', as
   assert.equal(db.tables.knowledge_base.length, 1)
 })
 
-test('GAP-4 (current): every call hits Gemini again — no per-conversation throttle', async () => {
+// ── Fix 4: frequency limit per conversation + quota per shop ──
+
+const kbRow = (over: Record<string, unknown>) => ({
+  shop_id: SHOP,
+  title: `t-${Math.random()}`,
+  content: 'x',
+  status: 'active',
+  source: 'ai_synthesis',
+  source_ref: 'some-conv',
+  created_at: new Date().toISOString(),
+  ...over,
+})
+const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString()
+
+test('FIX-4: repeated calls on one conversation hit Gemini once (cooldown)', async () => {
   resetMock({ chat_messages: adminAnswered() })
   gemini = installFakeGemini([[]])
-  for (let i = 0; i < 5; i++) await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
-  assert.equal(gemini.calls.length, 5)
+  const results = []
+  for (let i = 0; i < 5; i++) results.push(await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV }))
+  assert.equal(gemini.calls.length, 1)
+  assert.equal(results[0].skipped, undefined)
+  assert.deepEqual(results.slice(1).map((r) => r.skipped), ['cooldown', 'cooldown', 'cooldown', 'cooldown'])
+  assert.ok(results.every((r) => r.success === true))
 })
 
-test('GAP-4 (current): no shop quota — drafts keep being added with no ceiling', async () => {
-  const pending = Array.from({ length: 200 }, (_, i) => ({ shop_id: SHOP, title: `หัวข้อ ${i} เรื่องอื่น`, content: 'x', status: 'draft' }))
+test('FIX-4: the cooldown is per conversation — another conversation still runs', async () => {
+  resetMock({
+    chat_messages: [...adminAnswered(), ...adminAnswered().map((m) => ({ ...m, conversation_id: 'conv-2' }))],
+  })
+  gemini = installFakeGemini([[]])
+  await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: 'conv-2' })
+  assert.equal(gemini.calls.length, 2)
+})
+
+test('FIX-4: the cooldown expires', async () => {
+  const db = resetMock()
+  const t0 = 1_000_000_000_000
+  assert.equal(await checkFaqThrottle(db, { shopId: SHOP, conversationId: CONV, now: t0 }), null)
+  assert.equal(await checkFaqThrottle(db, { shopId: SHOP, conversationId: CONV, now: t0 + COOLDOWN_MS - 1 }), 'cooldown')
+  assert.equal(await checkFaqThrottle(db, { shopId: SHOP, conversationId: CONV, now: t0 + COOLDOWN_MS }), null)
+})
+
+test('FIX-4: a conversation that already produced drafts within the hour is skipped (survives restarts)', async () => {
+  resetMock({ chat_messages: adminAnswered(), knowledge_base: [kbRow({ source_ref: CONV, status: 'draft' })] })
+  gemini = installFakeGemini([[]])
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.skipped, 'conversation_recent')
+  assert.equal(gemini.calls.length, 0)
+})
+
+test('FIX-4: drafts older than the window do not block the conversation', async () => {
+  resetMock({ chat_messages: adminAnswered(), knowledge_base: [kbRow({ source_ref: CONV, status: 'draft', created_at: hoursAgo(3) })] })
+  gemini = installFakeGemini([[]])
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.skipped, undefined)
+  assert.equal(gemini.calls.length, 1)
+})
+
+test('FIX-4: shop with a full review queue gets no new Gemini calls', async () => {
+  const pending = Array.from({ length: MAX_PENDING_DRAFTS }, (_, i) => kbRow({ status: 'draft', created_at: hoursAgo(48), title: `คิว ${i}` }))
   const db = resetMock({ chat_messages: adminAnswered(), knowledge_base: pending })
   gemini = installFakeGemini([[faq('ส่งต่างจังหวัดกี่วันถึง', 'ส่งต่างจังหวัด 2-3 วันทำการค่ะ')]])
   const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
-  assert.equal(res.createdCount, 1)
-  assert.equal(db.tables.knowledge_base.length, 201)
+  assert.equal(res.skipped, 'pending_full')
+  assert.equal(gemini.calls.length, 0)
+  assert.equal(db.tables.knowledge_base.length, MAX_PENDING_DRAFTS)
+})
+
+test('FIX-4: one fewer than the pending cap still runs', async () => {
+  const pending = Array.from({ length: MAX_PENDING_DRAFTS - 1 }, (_, i) => kbRow({ status: 'draft', created_at: hoursAgo(48), title: `คิว ${i}` }))
+  resetMock({ chat_messages: adminAnswered(), knowledge_base: pending })
+  gemini = installFakeGemini([[]])
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.skipped, undefined)
+  assert.equal(gemini.calls.length, 1)
+})
+
+test('FIX-4: daily draft quota per shop (rows from the last 24h count, older ones do not)', async () => {
+  const today = Array.from({ length: MAX_DRAFTS_PER_DAY }, (_, i) => kbRow({ status: 'rejected', created_at: hoursAgo(2), title: `วันนี้ ${i}` }))
+  const old = Array.from({ length: 50 }, (_, i) => kbRow({ status: 'rejected', created_at: hoursAgo(72), title: `เก่า ${i}` }))
+  resetMock({ chat_messages: adminAnswered(), knowledge_base: [...old, ...today] })
+  gemini = installFakeGemini([[]])
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.skipped, 'daily_quota')
+  assert.equal(gemini.calls.length, 0)
+})
+
+test('FIX-4: another shop\'s drafts do not eat this shop\'s quota', async () => {
+  const theirs = Array.from({ length: 100 }, (_, i) => kbRow({ shop_id: 'other-shop', status: 'draft', title: `อื่น ${i}` }))
+  resetMock({ chat_messages: adminAnswered(), knowledge_base: theirs })
+  gemini = installFakeGemini([[]])
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.skipped, undefined)
+  assert.equal(gemini.calls.length, 1)
+})
+
+test('FIX-4: hourly Gemini-call ceiling per shop (this instance), resets after an hour', async () => {
+  const db = resetMock()
+  const t0 = 2_000_000_000_000
+  for (let i = 0; i < MAX_CALLS_PER_HOUR; i++) {
+    assert.equal(await checkFaqThrottle(db, { shopId: SHOP, conversationId: `c-${i}`, now: t0 + i }), null)
+  }
+  assert.equal(await checkFaqThrottle(db, { shopId: SHOP, conversationId: 'c-extra', now: t0 + 1000 }), 'hourly_calls')
+  assert.equal(await checkFaqThrottle(db, { shopId: 'shop-2', conversationId: 'c-x', now: t0 + 1000 }), null, 'other shop unaffected')
+  assert.equal(await checkFaqThrottle(db, { shopId: SHOP, conversationId: 'c-late', now: t0 + 3600_000 + 100 }), null)
+})
+
+test('FIX-4: if the quota lookup fails the run is skipped (fail closed), not sent to Gemini', async () => {
+  const db = resetMock({ chat_messages: adminAnswered() })
+  gemini = installFakeGemini([[]])
+  db.failOn.knowledge_base = 'db hiccup'
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.skipped, 'check_failed')
+  assert.equal(gemini.calls.length, 0)
+})
+
+test('FIX-4: a skipped run is not counted as a Gemini call, and a no-admin chat does not start a cooldown', async () => {
+  resetMock({ chat_messages: [msg('user', 'ส่งกี่วัน'), msg('bot', 'พรุ่งนี้ค่ะ')] })
+  gemini = installFakeGemini([[]])
+  await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  // admin answers a moment later — must not be blocked by the earlier no-op
+  mock.supabase.tables.chat_messages.push(msg('agent', 'ส่ง 2-3 วันค่ะ'))
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.skipped, undefined)
+  assert.equal(gemini.calls.length, 1)
+})
+
+test('FIX-4: shop scan stops at the first quota hit and says why', async () => {
+  const pending = Array.from({ length: MAX_PENDING_DRAFTS }, (_, i) => kbRow({ status: 'draft', created_at: hoursAgo(48), title: `คิว ${i}` }))
+  resetMock({
+    conversations: [1, 2, 3].map((n) => ({ id: `c${n}`, shop_id: SHOP, last_message_at: `2026-10-0${n}T00:00:00Z` })),
+    chat_messages: [1, 2, 3].flatMap((n) => adminAnswered().map((m) => ({ ...m, conversation_id: `c${n}` }))),
+    knowledge_base: pending,
+  })
+  gemini = installFakeGemini([[]])
+  const res = await synthesizeFaqFromShopConversations({ shopId: SHOP, limit: 3 })
+  assert.equal(gemini.calls.length, 0)
+  assert.equal(res.success, true)
+  assert.equal(res.totalCreated, 0)
+  assert.match(res.message, /รอตรวจอยู่มากแล้ว/)
+})
+
+test('FIX-4: shop scan over several conversations stays within the per-conversation rules (second pass is a no-op)', async () => {
+  resetMock({
+    conversations: [1, 2].map((n) => ({ id: `c${n}`, shop_id: SHOP, last_message_at: `2026-10-0${n}T00:00:00Z` })),
+    chat_messages: [1, 2].flatMap((n) => adminAnswered().map((m) => ({ ...m, conversation_id: `c${n}` }))),
+  })
+  gemini = installFakeGemini([[]])
+  await synthesizeFaqFromShopConversations({ shopId: SHOP, limit: 2 })
+  await synthesizeFaqFromShopConversations({ shopId: SHOP, limit: 2 })
+  assert.equal(gemini.calls.length, 2, 'second scan must not call Gemini again for the same conversations')
 })
 
 test('GAP-5 (current): a reworded duplicate title is NOT caught', async () => {

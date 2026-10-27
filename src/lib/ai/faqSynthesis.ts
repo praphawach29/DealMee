@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { platformSecret } from '@/lib/platformSecrets'
+import { checkFaqThrottle, type ThrottleReason } from '@/lib/ai/faqThrottle'
 import {
   MAX_CONTENT_CHARS,
   MAX_DRAFTS_PER_RUN,
@@ -30,7 +31,7 @@ export async function synthesizeFaqFromConversation({
 }: {
   shopId: string
   conversationId: string
-}): Promise<{ success: boolean; createdCount: number; message?: string }> {
+}): Promise<{ success: boolean; createdCount: number; message?: string; skipped?: ThrottleReason }> {
   try {
     const supabase = createAdminClient()
 
@@ -53,6 +54,12 @@ export async function synthesizeFaqFromConversation({
     const messages = selectSynthesisTurns([...recent].reverse()).map((m) => ({ ...m, text: redactPii(m.text).text }))
     if (!messages.some((m) => m.role === 'admin')) {
       return { success: true, createdCount: 0, message: 'ยังไม่มีคำตอบจากแอดมินในบทสนทนานี้' }
+    }
+
+    // Cost guard: one Gemini call per run, and this fires on every admin reply
+    const skipped = await checkFaqThrottle(supabase, { shopId, conversationId })
+    if (skipped) {
+      return { success: true, createdCount: 0, skipped, message: `ข้ามการสังเคราะห์ (${skipped})` }
     }
 
     // 2. Fetch existing knowledge base titles to prevent duplicates
@@ -210,6 +217,7 @@ export async function synthesizeFaqFromShopConversations({
     }
 
     let totalCreated = 0
+    let quotaHit: ThrottleReason | null = null
     for (const conv of conversations) {
       const res = await synthesizeFaqFromConversation({
         shopId,
@@ -217,6 +225,22 @@ export async function synthesizeFaqFromShopConversations({
       })
       if (res.success && res.createdCount > 0) {
         totalCreated += res.createdCount
+      }
+      // The shop's quota is spent — every further conversation would be skipped too
+      if (res.skipped === 'pending_full' || res.skipped === 'daily_quota' || res.skipped === 'hourly_calls') {
+        quotaHit = res.skipped
+        break
+      }
+    }
+
+    if (quotaHit && totalCreated === 0) {
+      return {
+        success: true,
+        totalCreated,
+        message:
+          quotaHit === 'pending_full'
+            ? 'มีคำถามแนะนำรอตรวจอยู่มากแล้ว กรุณาอนุมัติหรือลบก่อน แล้วค่อยสแกนใหม่'
+            : 'วันนี้สังเคราะห์คำถามแนะนำครบโควตาแล้ว ลองใหม่ภายหลัง',
       }
     }
 
