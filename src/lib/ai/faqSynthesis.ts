@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { platformSecret } from '@/lib/platformSecrets'
+import { selectSynthesisTurns } from '@/lib/ai/faqGuards'
 
 export interface SynthesizedFaq {
   title: string
@@ -23,16 +24,25 @@ export async function synthesizeFaqFromConversation({
   try {
     const supabase = createAdminClient()
 
-    // 1. Fetch recent messages in this conversation
-    const { data: messages, error: msgError } = await supabase
+    // 1. Fetch the most recent messages in this conversation (newest 40, then back to
+    //    chronological order — an admin answer given late in a long chat must not be cut off)
+    const { data: recent, error: msgError } = await supabase
       .from('chat_messages')
       .select('sender_type, message, created_at')
       .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
-      .limit(25)
+      .order('created_at', { ascending: false })
+      .limit(40)
 
-    if (msgError || !messages || messages.length < 2) {
+    if (msgError || !recent || recent.length < 2) {
       return { success: false, createdCount: 0, message: 'บทสนทนามีข้อความไม่เพียงพอสำหรับการวิเคราะห์' }
+    }
+
+    // Only customer questions and real-admin answers may feed the synthesis. The bot's
+    // own replies (and system notices) are dropped: a wrong bot answer must never be
+    // turned into a "fact". No admin answer at all → nothing to learn, so no AI call.
+    const messages = selectSynthesisTurns([...recent].reverse())
+    if (!messages.some((m) => m.role === 'admin')) {
+      return { success: true, createdCount: 0, message: 'ยังไม่มีคำตอบจากแอดมินในบทสนทนานี้' }
     }
 
     // 2. Fetch existing knowledge base titles to prevent duplicates
@@ -45,7 +55,7 @@ export async function synthesizeFaqFromConversation({
 
     // 3. Format transcript for Gemini
     const transcript = messages
-      .map((m) => `${m.sender_type === 'user' ? 'ลูกค้า' : m.sender_type === 'human' || m.sender_type === 'agent' ? 'แอดมินคนจริง' : 'บอท AI'}: ${m.message}`)
+      .map((m) => `${m.role === 'customer' ? 'ลูกค้า' : 'แอดมินคนจริง'}: ${m.text}`)
       .join('\n')
 
     const apiKey = await platformSecret('GEMINI_API_KEY')
@@ -56,7 +66,7 @@ export async function synthesizeFaqFromConversation({
 
     const model = (await platformSecret('GEMINI_MODEL')) || 'gemini-2.5-flash'
     const prompt = `คุณคือผู้เชี่ยวชาญการถอดบทเรียนและสร้างคลังความรู้ (Knowledge Synthesizer) สำหรับร้านค้า
-บทบาทของคุณคือวิเคราะห์บทสนทนาระหว่างลูกค้าและร้านค้าด้านล่างนี้ และตรวจสอบว่ามี "คำถามสำคัญที่ลูกค้าถาม และได้รับคำตอบที่ชัดเจนถูกต้อง" ซึ่งควรค่าแก่การเก็บเป็น FAQ ประจำร้านหรือไม่
+บทบาทของคุณคือวิเคราะห์บทสนทนาระหว่างลูกค้าและร้านค้าด้านล่างนี้ และตรวจสอบว่ามี "คำถามสำคัญที่ลูกค้าถาม และแอดมินคนจริงตอบไว้ชัดเจน" ซึ่งควรค่าแก่การเก็บเป็น FAQ ประจำร้านหรือไม่
 
 กติกาเข้มงวด:
 1. หากบทสนทนาเป็นเพียงการทักทายทั่วไป, การสั่งซื้อปกติที่ไม่มีคำถามพิเศษ, หรือยังไม่มีคำตอบที่ชัดเจน ให้ตอบเป็น Array ว่าง []

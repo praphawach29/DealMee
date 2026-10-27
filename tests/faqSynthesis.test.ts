@@ -169,20 +169,52 @@ test('a database insert error is reported', async () => {
 
 // ───────────────── characterization of the known gaps (these flip in step 3) ─────────────────
 
-test('GAP-1 (current): bot messages are sent to Gemini as "บอท AI" turns', async () => {
+// ── Fix 1: learn from the admin's answers only, never from the bot's own replies ──
+
+test('FIX-1: bot replies are never sent to Gemini', async () => {
   resetMock({
     chat_messages: [msg('user', 'ส่งกี่วัน'), msg('bot', 'ส่งภายใน 1 ชั่วโมงค่ะ'), msg('agent', 'ขออภัย จริง ๆ 2-3 วันค่ะ')],
   })
   gemini = installFakeGemini([[]])
   await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
-  assert.match(gemini.calls[0].prompt, /บอท AI: ส่งภายใน 1 ชั่วโมงค่ะ/)
+  assert.equal(gemini.calls.length, 1)
+  assert.doesNotMatch(gemini.calls[0].prompt, /ส่งภายใน 1 ชั่วโมงค่ะ/)
+  assert.doesNotMatch(gemini.calls[0].prompt, /บอท AI/)
+  assert.match(gemini.calls[0].prompt, /แอดมินคนจริง: ขออภัย จริง ๆ 2-3 วันค่ะ/)
 })
 
-test('GAP-1 (current): a conversation with NO admin message still goes to Gemini', async () => {
-  resetMock({ chat_messages: [msg('user', 'ส่งกี่วัน'), msg('bot', 'ส่งภายใน 1 ชั่วโมงค่ะ')] })
+test('FIX-1: system notices are dropped too', async () => {
+  resetMock({ chat_messages: [msg('user', 'ส่งกี่วัน'), msg('system', 'ลูกค้าขอคุยกับคน'), msg('agent', '2-3 วันค่ะ')] })
+  gemini = installFakeGemini([[]])
+  await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.doesNotMatch(gemini.calls[0].prompt, /ลูกค้าขอคุยกับคน/)
+})
+
+test('FIX-1: a conversation with no admin message makes no Gemini call and saves nothing', async () => {
+  const db = resetMock({ chat_messages: [msg('user', 'ส่งกี่วัน'), msg('bot', 'ส่งภายใน 1 ชั่วโมงค่ะ')] })
   gemini = installFakeGemini([[faq('ส่งกี่วันถึงคะ', 'ส่งภายใน 1 ชั่วโมงค่ะ')]])
   const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
-  assert.equal(res.createdCount, 1, 'the bot\'s own (wrong) answer becomes a draft FAQ')
+  assert.equal(res.success, true)
+  assert.equal(res.createdCount, 0)
+  assert.equal(gemini.calls.length, 0)
+  assert.equal(db.tables.knowledge_base?.length ?? 0, 0)
+})
+
+test('FIX-1: sender_type "human" counts as an admin', async () => {
+  resetMock({ chat_messages: [msg('user', 'ส่งกี่วัน'), msg('human', '2-3 วันค่ะ')] })
+  gemini = installFakeGemini([[]])
+  await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(gemini.calls.length, 1)
+})
+
+test('FIX-1: an admin answer at the END of a long chat is still seen (newest messages win)', async () => {
+  const early = Array.from({ length: 45 }, (_, i) => msg(i % 2 ? 'bot' : 'user', `ข้อความเก่า ${i}`))
+  resetMock({ chat_messages: [...early, msg('user', 'รับคืนสินค้าไหม'), msg('agent', 'รับคืนภายใน 7 วันค่ะ')] })
+  gemini = installFakeGemini([[]])
+  await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(gemini.calls.length, 1)
+  assert.match(gemini.calls[0].prompt, /รับคืนภายใน 7 วันค่ะ/)
+  assert.doesNotMatch(gemini.calls[0].prompt, /ข้อความเก่า 0(?!\d)/)
 })
 
 test('GAP-2 (current): phone / bank account / slip number reach Gemini unredacted', async () => {
