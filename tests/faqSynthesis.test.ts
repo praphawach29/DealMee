@@ -519,15 +519,112 @@ test('FIX-4: shop scan over several conversations stays within the per-conversat
   assert.equal(gemini.calls.length, 2, 'second scan must not call Gemini again for the same conversations')
 })
 
-test('GAP-5 (current): a reworded duplicate title is NOT caught', async () => {
-  const db = resetMock({
-    chat_messages: adminAnswered(),
-    knowledge_base: [{ shop_id: SHOP, title: 'ส่งต่างจังหวัดกี่วันถึง', content: 'x', status: 'active' }],
+// ── Fix 5: duplicate detection beyond exact title match ──
+
+const seed = (title: string, over: Record<string, unknown> = {}) => ({
+  shop_id: SHOP,
+  title,
+  content: 'เนื้อหาเดิมที่ไม่เกี่ยวข้อง',
+  status: 'active',
+  created_at: hoursAgo(72),
+  ...over,
+})
+
+for (const [existing, incoming] of [
+  ['ส่งต่างจังหวัดกี่วันถึง', 'ส่งต่างจังหวัดกี่วันถึงคะ'],
+  ['ส่งต่างจังหวัดกี่วันถึง', 'ส่งต่างจังหวัดกี่วันถึง?'],
+  ['ร้านมีบริการเก็บเงินปลายทางไหม', 'ร้านมีเก็บเงินปลายทางไหมคะ'],
+  ['สินค้ามีรับประกันกี่วัน', 'สินค้ารับประกันกี่วันครับ'],
+]) {
+  test(`FIX-5: "${incoming}" is a duplicate of "${existing}"`, async () => {
+    const db = resetMock({ chat_messages: adminAnswered(), knowledge_base: [seed(existing)] })
+    gemini = installFakeGemini([[faq(incoming, 'ส่งต่างจังหวัด 2-3 วันทำการค่ะ')]])
+    const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+    assert.equal(res.createdCount, 0)
+    assert.equal(db.tables.knowledge_base.length, 1)
   })
+}
+
+test('FIX-5: a rejected draft with the same question is not suggested again', async () => {
+  const db = resetMock({ chat_messages: adminAnswered(), knowledge_base: [seed('ส่งต่างจังหวัดกี่วันถึง', { status: 'rejected' })] })
   gemini = installFakeGemini([[faq('ส่งต่างจังหวัดกี่วันถึงคะ', 'ส่งต่างจังหวัด 2-3 วันทำการค่ะ')]])
   const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.createdCount, 0)
+  assert.equal(db.tables.knowledge_base.length, 1)
+})
+
+test('FIX-5: the same ANSWER under a different title is a duplicate', async () => {
+  const db = resetMock({
+    chat_messages: adminAnswered(),
+    knowledge_base: [seed('ระยะเวลาจัดส่งนอกกรุงเทพ', { content: 'ส่งต่างจังหวัด 2-3 วันทำการค่ะ' })],
+  })
+  gemini = installFakeGemini([[faq('ส่งต่างจังหวัดกี่วันถึง', 'ส่งต่างจังหวัด 2-3 วันทำการค่ะ')]])
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.createdCount, 0)
+})
+
+test('FIX-5: titles that differ in their numbers are different questions', async () => {
+  const db = resetMock({
+    chat_messages: [msg('user', 'รับคืนกี่วัน'), msg('agent', 'สินค้าทั่วไปรับคืนภายใน 7 วัน สินค้าพรีเมียมรับคืนภายใน 30 วันค่ะ')],
+    knowledge_base: [seed('รับคืนสินค้าทั่วไปภายใน 7 วันไหม', { content: 'อื่น ๆ ที่ไม่เหมือน' })],
+  })
+  gemini = installFakeGemini([[faq('รับคืนสินค้าทั่วไปภายใน 30 วันไหม', 'สินค้าพรีเมียมรับคืนภายใน 30 วันค่ะ')]])
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
   assert.equal(res.createdCount, 1)
-  assert.equal(db.tables.knowledge_base.length, 2)
+})
+
+test('FIX-5: an unrelated question is still saved', async () => {
+  const db = resetMock({ chat_messages: adminAnswered(), knowledge_base: [seed('ร้านเปิดกี่โมงและปิดกี่โมง')] })
+  gemini = installFakeGemini([[faq('ส่งต่างจังหวัดกี่วันถึง', 'ส่งต่างจังหวัด 2-3 วันทำการค่ะ')]])
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.createdCount, 1)
+})
+
+test('FIX-5: two near-identical drafts in the SAME batch are saved once', async () => {
+  const db = resetMock({ chat_messages: adminAnswered() })
+  gemini = installFakeGemini([
+    [faq('ส่งต่างจังหวัดกี่วันถึง', 'ส่งต่างจังหวัด 2-3 วันทำการค่ะ'), faq('ส่งต่างจังหวัดกี่วันถึงคะ', 'ส่งต่างจังหวัด 2-3 วันทำการค่ะ')],
+  ])
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.createdCount, 1)
+  assert.equal(db.tables.knowledge_base.length, 1)
+})
+
+test('FIX-5: only this shop\'s knowledge counts as "already known"', async () => {
+  const db = resetMock({ chat_messages: adminAnswered(), knowledge_base: [seed('ส่งต่างจังหวัดกี่วันถึง', { shop_id: 'other-shop' })] })
+  gemini = installFakeGemini([[faq('ส่งต่างจังหวัดกี่วันถึง', 'ส่งต่างจังหวัด 2-3 วันทำการค่ะ')]])
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.createdCount, 1)
+})
+
+test('FIX-5: if the existing knowledge cannot be read, no AI call is made (cannot dedupe)', async () => {
+  const db = resetMock({ chat_messages: adminAnswered() })
+  gemini = installFakeGemini([[faq('ส่งต่างจังหวัดกี่วันถึง', 'ส่งต่างจังหวัด 2-3 วันทำการค่ะ')]])
+  const realFrom = db.from.bind(db)
+  let kbReads = 0
+  db.from = (table: string) => {
+    const q: any = realFrom(table)
+    if (table === 'knowledge_base') {
+      const realSelect = q.select.bind(q)
+      q.select = (cols: string, opts?: any) => {
+        // the throttle's count queries pass; the title/content read fails
+        if (!opts?.head && ++kbReads === 1) db.failOn.knowledge_base = 'read failed'
+        return realSelect(cols, opts)
+      }
+    }
+    return q
+  }
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  delete db.failOn.knowledge_base
+  assert.equal(res.success, false)
+  assert.equal(gemini.calls.length, 0)
+})
+
+test('LIMIT (known): a true paraphrase with different words is not detected as a duplicate', async () => {
+  const db = resetMock({ chat_messages: adminAnswered(), knowledge_base: [seed('ส่งต่างจังหวัดกี่วันถึง')] })
+  gemini = installFakeGemini([[faq('ส่งต่างจังหวัดใช้เวลากี่วัน', 'ส่งต่างจังหวัด 2-3 วันทำการค่ะ')]])
+  const res = await synthesizeFaqFromConversation({ shopId: SHOP, conversationId: CONV })
+  assert.equal(res.createdCount, 1, 'needs embeddings to catch — owner review is the backstop')
 })
 
 // ───────────────────────── shop-wide scan ─────────────────────────

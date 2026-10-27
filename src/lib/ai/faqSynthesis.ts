@@ -5,7 +5,9 @@ import {
   MAX_CONTENT_CHARS,
   MAX_DRAFTS_PER_RUN,
   MAX_TITLE_CHARS,
+  type KnownFaq,
   containsPii,
+  isDuplicateFaq,
   isGroundedInAdminText,
   normalizeCategory,
   redactPii,
@@ -62,13 +64,23 @@ export async function synthesizeFaqFromConversation({
       return { success: true, createdCount: 0, skipped, message: `ข้ามการสังเคราะห์ (${skipped})` }
     }
 
-    // 2. Fetch existing knowledge base titles to prevent duplicates
-    const { data: existingKb } = await supabase
+    // 2. Fetch what the shop already has (any status, newest 300) to prevent duplicates.
+    //    Fail closed: without it we cannot dedupe, so do not spend the AI call.
+    const { data: existingKb, error: kbError } = await supabase
       .from('knowledge_base')
-      .select('title')
+      .select('title, content')
       .eq('shop_id', shopId)
+      .order('created_at', { ascending: false })
+      .limit(300)
+    if (kbError) {
+      return { success: false, createdCount: 0, message: 'อ่านคลังความรู้เดิมไม่สำเร็จ' }
+    }
 
-    const existingTitles = (existingKb || []).map((k) => k.title.toLowerCase().trim())
+    const knownFaqs: KnownFaq[] = (existingKb || [])
+      .filter((k: { title?: unknown }) => typeof k.title === 'string')
+      .map((k: { title: string; content?: string | null }) => ({ title: k.title, content: k.content ?? null }))
+    // only the newest 100 titles go into the prompt (cost); the code check above sees all 300
+    const existingTitles = knownFaqs.slice(0, 100).map((k) => k.title.toLowerCase().trim())
 
     // 3. The conversation goes in as DATA (a JSON array we build), the rules go in as the
     //    system instruction. A customer line can no longer pose as an instruction or as
@@ -145,21 +157,26 @@ ${transcript}`
     // Filter out duplicates, empty/oversized items, personal data, and anything the
     // admin did not actually say (checked in code — the model may have been talked into it)
     const adminTexts = messages.filter((m) => m.role === 'admin').map((m) => m.text)
+    const known: KnownFaq[] = [...knownFaqs] // grows as drafts are accepted, so the batch dedupes itself
     const candidates = parsed
       .filter((item) => {
         if (!item || typeof item.title !== 'string' || typeof item.content !== 'string') return false
-        const cleanTitle = item.title.toLowerCase().trim()
+        const cleanTitle = item.title.trim()
         const cleanContent = item.content.trim()
-        return (
-          cleanTitle.length > 3 &&
-          cleanTitle.length <= MAX_TITLE_CHARS &&
-          cleanContent.length > 5 &&
-          cleanContent.length <= MAX_CONTENT_CHARS &&
-          !containsPii(cleanTitle) &&
-          !containsPii(cleanContent) &&
-          isGroundedInAdminText(cleanContent, adminTexts) &&
-          !existingTitles.includes(cleanTitle)
-        )
+        if (
+          cleanTitle.length <= 3 ||
+          cleanTitle.length > MAX_TITLE_CHARS ||
+          cleanContent.length <= 5 ||
+          cleanContent.length > MAX_CONTENT_CHARS ||
+          containsPii(cleanTitle) ||
+          containsPii(cleanContent) ||
+          !isGroundedInAdminText(cleanContent, adminTexts) ||
+          isDuplicateFaq({ title: cleanTitle, content: cleanContent }, known)
+        ) {
+          return false
+        }
+        known.push({ title: cleanTitle, content: cleanContent })
+        return true
       })
       .slice(0, MAX_DRAFTS_PER_RUN)
 

@@ -132,3 +132,72 @@ export function isGroundedInAdminText(content: string, adminTexts: string[]): bo
   for (const g of mine) if (theirs.has(g)) hit++
   return hit / mine.size >= GROUNDING_MIN_OVERLAP
 }
+
+// ───────────────────────── duplicate detection ─────────────────────────
+
+/** titles at least this similar (character-bigram Dice) count as the same question */
+export const TITLE_DUPLICATE_THRESHOLD = 0.8
+/** answers at least this similar (character-trigram Dice) count as the same answer */
+export const CONTENT_DUPLICATE_THRESHOLD = 0.8
+
+// Polite particles / question words that Thai writers add or drop without changing the question
+const TITLE_TAIL = /(?:นะคะ|นะครับ|นะค่ะ|ไหมคะ|ไหมครับ|ไหมค่ะ|มั้ยคะ|มั้ยครับ|ไหม|มั้ย|หรือเปล่า|หรือไม่|หรือยัง|เปล่า|ป่าว|คะ|ครับ|ค่ะ|คับ|นะ)+$/u
+
+/** lower-case, drop spaces/punctuation and trailing polite/question particles */
+export function normalizeTitle(title: string): string {
+  const flat = title.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '')
+  return flat.replace(TITLE_TAIL, '') || flat
+}
+
+function ngrams(s: string, n: number): Map<string, number> {
+  const out = new Map<string, number>()
+  for (let i = 0; i + n <= s.length; i++) {
+    const g = s.slice(i, i + n)
+    out.set(g, (out.get(g) ?? 0) + 1)
+  }
+  return out
+}
+
+function dice(a: string, b: string, n: number): number {
+  if (a === b) return a.length > 0 ? 1 : 0
+  const A = ngrams(a, n)
+  const B = ngrams(b, n)
+  let inter = 0
+  for (const [g, c] of A) inter += Math.min(c, B.get(g) ?? 0)
+  const total = a.length - n + 1 + (b.length - n + 1)
+  return total > 0 ? (2 * inter) / total : 0
+}
+
+const digitsOf = (s: string) => (s.match(/\d+/g) ?? []).join(',')
+
+export interface KnownFaq {
+  title: string
+  content?: string | null
+}
+
+/**
+ * Same question or same answer as something already known (any status — a rejected
+ * draft counts, so the owner is not asked the same thing twice).
+ * Titles that differ in their numbers ("7 วัน" vs "30 วัน") are different questions.
+ */
+export function isDuplicateFaq(candidate: { title: string; content: string }, known: KnownFaq[]): boolean {
+  const t = normalizeTitle(candidate.title)
+  const c = squash(candidate.content)
+  for (const k of known) {
+    const kt = normalizeTitle(k.title)
+    if (t === kt) return true
+    if (
+      t.length >= 10 &&
+      kt.length >= 10 &&
+      digitsOf(candidate.title) === digitsOf(k.title) &&
+      dice(t, kt, 2) >= TITLE_DUPLICATE_THRESHOLD
+    ) {
+      return true
+    }
+    if (k.content) {
+      const kc = squash(k.content.slice(0, 1500))
+      if (c.length >= 12 && kc.length >= 12 && dice(c, kc, 3) >= CONTENT_DUPLICATE_THRESHOLD) return true
+    }
+  }
+  return false
+}
