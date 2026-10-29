@@ -1329,6 +1329,16 @@ ${paymentInfo}`
     ? await retrieveActiveShopSkills(shop.id, userQuery, 3)
     : []
   const shopSkillsContext = formatShopSkillsPromptContext(activeShopSkills)
+  // Phase 4: log skill exposures (fire-and-forget)
+  if (activeShopSkills.length > 0) {
+    import('@/lib/ai/skillExposure').then(({ logSkillExposures }) => {
+      logSkillExposures({
+        shopId: shop.id,
+        conversationId,
+        skills: activeShopSkills.map((s) => ({ id: s.id, version: s.version })),
+      }).catch(() => {})
+    }).catch(() => {})
+  }
 
   const dynamicSystemPrompt = `${salesStageContext}${goldenClosersContext ? `\n\n${goldenClosersContext}` : ''}
 ${shopSkillsContext ? `\n\n${shopSkillsContext}` : ''}${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}${businessHoursPromptContext(shop.features)}
