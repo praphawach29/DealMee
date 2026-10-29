@@ -271,7 +271,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_validate_shop_skill_source_scope ON public.shop_skill_sources;
 CREATE TRIGGER trg_validate_shop_skill_source_scope
+
   BEFORE INSERT OR UPDATE ON public.shop_skill_sources
   FOR EACH ROW EXECUTE FUNCTION public.validate_shop_skill_source_scope();
 
