@@ -1717,6 +1717,33 @@ export function detectIntent(query: string, executedTools: string[]): string {
  * anything else that just wants "give me the final answer".
  */
 export async function processSalesAgentChat(request: SalesAgentRequest): Promise<AgentResult> {
+  // Response cache: check if we have a cached response for this query
+  const shopId = request.shop?.id
+  const userQuery = request.userQuery?.trim()
+  const hasHistory = (request.conversationHistory?.length || 0) > 0
+
+  if (shopId && userQuery && !hasHistory && !request.isPlayground) {
+    try {
+      const { getCachedResponse } = await import('@/lib/ai/responseCache')
+      const cached = await getCachedResponse(shopId, userQuery)
+      if (cached) {
+        return {
+          text: cached,
+          immediateMessages: [],
+          toolCallsExecuted: [],
+          scheduledMessages: [],
+          productsData: [],
+          ai_confidence: 0.9,
+          intent: 'cached_response',
+          usage: undefined,
+          allUsage: [],
+        } as AgentResult
+      }
+    } catch (err) {
+      console.warn('[ResponseCache] lookup failed:', err)
+    }
+  }
+
   const prep = await preparePlanningState(request)
   if (prep.quotaExceeded) return quotaExceededResult(prep.language)
 
@@ -1729,7 +1756,19 @@ export async function processSalesAgentChat(request: SalesAgentRequest): Promise
       break
     }
   }
-  return finalizeAgentResult(state, finalText)
+  const result = finalizeAgentResult(state, finalText)
+
+  // Store in cache if no tools were called (simple text response)
+  if (shopId && userQuery && !hasHistory && !request.isPlayground && result.text && (!result.toolCallsExecuted || result.toolCallsExecuted.length === 0)) {
+    try {
+      const { setCachedResponse } = await import('@/lib/ai/responseCache')
+      await setCachedResponse(shopId, userQuery, result.text)
+    } catch (err) {
+      console.warn('[ResponseCache] store failed:', err)
+    }
+  }
+
+  return result
 }
 
 /**
