@@ -260,6 +260,15 @@ export async function processMessengerEntries({
       p_source: `${targetPlatform}_handoff`,
     })
     if (error) console.error('[FB Webhook] set_conversation_outcome failed:', error.message)
+
+    // Auto-extract candidate skill from handoff conversation
+    import('@/lib/ai/skillExtractor').then(({ extractSkillFromConversation }) => {
+      extractSkillFromConversation({
+        shopId: shop_id,
+        conversationId: conv.id,
+        outcome: 'handoff',
+      }).catch((err) => console.warn('[SkillExtractor] FB handoff auto-extract failed:', err))
+    }).catch(() => {})
   }
 
       if (conv.ai_mode === 'copilot') {

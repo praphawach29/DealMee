@@ -569,6 +569,15 @@ async function deliverAgentResult({
       p_source: 'line_handoff',
     })
     if (error) console.error('[Webhook] set_conversation_outcome failed:', error.message)
+
+    // Auto-extract candidate skill from handoff conversation
+    import('@/lib/ai/skillExtractor').then(({ extractSkillFromConversation }) => {
+      extractSkillFromConversation({
+        shopId,
+        conversationId: conv.id,
+        outcome: 'handoff',
+      }).catch((err) => console.warn('[SkillExtractor] handoff auto-extract failed:', err))
+    }).catch(() => {})
   }
 
   if (!immediateMessagesDelivered && lineToken) {
