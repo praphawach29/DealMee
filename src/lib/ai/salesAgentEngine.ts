@@ -1326,22 +1326,32 @@ ${paymentInfo}`
   const goldenClosersContext = formatGoldenClosersPromptContext(goldenTrajectories)
 
   const activeShopSkills = shopSkillsRetrievalEnabled(shop.features)
-    ? await retrieveActiveShopSkills(shop.id, userQuery, 3)
-    : []
-  const shopSkillsContext = formatShopSkillsPromptContext(activeShopSkills)
-  // Phase 4: log skill exposures (fire-and-forget)
-  if (activeShopSkills.length > 0) {
-    import('@/lib/ai/skillExposure').then(({ logSkillExposures }) => {
-      logSkillExposures({
-        shopId: shop.id,
-        conversationId,
-        skills: activeShopSkills.map((s) => ({ id: s.id, version: s.version })),
+      ? await retrieveActiveShopSkills(shop.id, userQuery, 3)
+      : []
+    const shopSkillsContext = formatShopSkillsPromptContext(activeShopSkills)
+    // Phase 4: log skill exposures (fire-and-forget)
+    if (activeShopSkills.length > 0) {
+      import('@/lib/ai/skillExposure').then(({ logSkillExposures }) => {
+        logSkillExposures({
+          shopId: shop.id,
+          conversationId,
+          skills: activeShopSkills.map((s) => ({ id: s.id, version: s.version })),
+        }).catch(() => {})
       }).catch(() => {})
-    }).catch(() => {})
-  }
+    }
+
+    // Phase 5/6: retrieve agent memories for prompt injection
+    let agentMemoryContext = ''
+    try {
+      const { retrieveAgentMemories, formatAgentMemoryContext } = await import('@/lib/ai/agentMemory')
+      const memories = await retrieveAgentMemories(shop.id, userQuery, 5)
+      agentMemoryContext = formatAgentMemoryContext(memories)
+    } catch {
+      // Non-critical
+    }
 
   const dynamicSystemPrompt = `${salesStageContext}${goldenClosersContext ? `\n\n${goldenClosersContext}` : ''}
-${shopSkillsContext ? `\n\n${shopSkillsContext}` : ''}${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}${businessHoursPromptContext(shop.features)}
+${shopSkillsContext ? `\n\n${shopSkillsContext}` : ''}${agentMemoryContext ? `\n\n${agentMemoryContext}` : ''}${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}${businessHoursPromptContext(shop.features)}
 ${historyContext}`
 
   // Free plan (incl. ended trials): sales automation is locked and orders go to the admin.
