@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 
 type Revision = {
   id: string
@@ -14,13 +14,13 @@ type Revision = {
   created_at: string
 }
 
-export default function SkillRevisionsPage({ params }: { params: { skillId: string } }) {
+export default function SkillRevisionsPage({ params }: { params: Promise<{ skillId: string }> }) {
   const [revisions, setRevisions] = useState<Revision[]>([])
   const [loading, setLoading] = useState(true)
   const [rolling, setRolling] = useState<string | null>(null)
   const [message, setMessage] = useState('')
 
-  const skillId = params.skillId
+  const { skillId } = use(params)
 
   const load = async () => {
     setLoading(true)
