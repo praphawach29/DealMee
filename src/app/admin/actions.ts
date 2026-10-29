@@ -133,7 +133,7 @@ export async function getPlans(): Promise<PlanItem[]> {
       slips: 100,
       description: 'สำหรับร้านเล็กที่เริ่มให้บอทปิดการขาย',
       badge_color: 'bg-electric-blue/10 text-electric-blue border border-electric-blue/20',
-      features: ['ข้อความ AI 1,000 ข้อความ/เดือน', 'ตรวจสลิปอัตโนมัติ 100 ครั้ง/เดือน', 'รับออเดอร์ ส่ง QR และติดตามการชำระเงิน', 'ใบเสนอราคาและส่วนลด'],
+      features: ['ข้อความ AI 1,000 ข้อความ/เดือน', 'ตรวจสลิปอัตโนมัติ 100 ครั้ง/เดือน', 'บันทึกสลิปผ่าน LINE เข้าแดชบอร์ดร้าน', 'Response caching สำหรับคำถามซ้ำ', 'รับออเดอร์ ส่ง QR และติดตามการชำระเงิน', 'ใบเสนอราคาและส่วนลด'],
     },
     {
       key: 'byok',
@@ -144,7 +144,7 @@ export async function getPlans(): Promise<PlanItem[]> {
       slips: 300,
       description: 'ใช้ Gemini API Key ของร้านเอง ค่า AI จ่ายตรงกับ Google',
       badge_color: 'bg-success-green/10 text-success-green border border-success-green/20',
-      features: ['ข้อความ AI ไม่จำกัด (ใช้ API Key ของร้าน)', 'ตรวจสลิปอัตโนมัติ 300 ครั้ง/เดือน', 'ฟีเจอร์ Pro ทั้งหมด'],
+      features: ['ข้อความ AI ไม่จำกัด (ใช้ API Key ของร้าน)', 'ตรวจสลิปอัตโนมัติ 300 ครั้ง/เดือน', 'ฟีเจอร์ Pro ทั้งหมด', 'บันทึกสลิปผ่าน LINE เข้าแดชบอร์ดร้าน', 'แจ้งลูกค้าเมื่อสินค้ากลับมา (back-in-stock)', 'Response caching สำหรับคำถามซ้ำ'],
     },
     {
       key: 'pro',
@@ -155,7 +155,7 @@ export async function getPlans(): Promise<PlanItem[]> {
       slips: 300,
       description: 'สำหรับร้านที่มีแชทหนาแน่นและระบบจองคิว',
       badge_color: 'bg-amber-500/10 text-amber-600 border border-amber-500/20 font-bold',
-      features: ['ข้อความ AI 3,000 ข้อความ/เดือน', 'ตรวจสลิปอัตโนมัติ 300 ครั้ง/เดือน', 'ฟีเจอร์ Starter ทั้งหมด', 'ระบบจองคิวและแจ้งเตือนลูกค้า'],
+      features: ['ข้อความ AI 3,000 ข้อความ/เดือน', 'ตรวจสลิปอัตโนมัติ 300 ครั้ง/เดือน', 'ฟีเจอร์ Starter ทั้งหมด', 'ระบบจองคิวและแจ้งเตือนลูกค้า', 'บันทึกสลิปผ่าน LINE เข้าแดชบอร์ดร้าน', 'แจ้งลูกค้าเมื่อสินค้ากลับมา (back-in-stock)', 'Response caching สำหรับคำถามซ้ำ'],
     },
     {
       key: 'agency',
@@ -166,7 +166,7 @@ export async function getPlans(): Promise<PlanItem[]> {
       slips: 1000,
       description: 'สำหรับแบรนด์หรือร้านหลายช่องทางที่มียอดแชทสูง',
       badge_color: 'bg-purple-500/10 text-purple-600 border border-purple-500/20 font-bold',
-      features: ['ข้อความ AI 8,000 ข้อความ/เดือน', 'ตรวจสลิปอัตโนมัติ 1,000 ครั้ง/เดือน', 'ฟีเจอร์ Pro ทั้งหมด', 'ซัพพอร์ตแบบเร่งด่วน'],
+      features: ['ข้อความ AI 8,000 ข้อความ/เดือน', 'ตรวจสลิปอัตโนมัติ 1,000 ครั้ง/เดือน', 'ฟีเจอร์ Pro ทั้งหมด', 'ซัพพอร์ตแบบเร่งด่วน', 'บันทึกสลิปผ่าน LINE เข้าแดชบอร์ดร้าน', 'แจ้งลูกค้าเมื่อสินค้ากลับมา (back-in-stock)', 'Response caching สำหรับคำถามซ้ำ'],
     },
   ]
 

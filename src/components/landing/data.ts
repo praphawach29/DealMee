@@ -152,7 +152,33 @@ export const comparisonRows: FeatureRow[] = [
     byok: true,
   },
 
-  // ความฉลาดและความสัมพันธ์ลูกค้า
+  {
+    category: 'ระบบการขาย & การเงิน',
+    label: 'บันทึกสลิปเข้าแดชบอร์ดร้าน',
+    description: 'พนักงานถ่ายสลิปผ่าน LINE แล้วบันทึกยอดให้เจ้าของเห็นทันที',
+    starter: true,
+    pro: true,
+    agency: true,
+    byok: true,
+  },
+  {
+    category: 'ระบบการขาย & การเงิน',
+    label: 'แจ้งลูกค้าเมื่อสินค้ากลับมา (back-in-stock)',
+    description: 'บอทตรวจสต็อกจริงก่อนแจ้งลูกค้าที่ขอให้ติดตาม',
+    starter: true,
+    pro: true,
+    agency: true,
+    byok: true,
+  },
+  {
+    category: 'ความสามารถพื้นฐาน & AI',
+    label: 'Response caching สำหรับคำถามซ้ำ',
+    description: 'คำถามซ้ำ เช่น ราคา เมนู เวลาทำการ ใช้ cache เพื่อลดค่า AI',
+    starter: true,
+    pro: true,
+    agency: true,
+    byok: true,
+  },
   {
     category: 'ระบบฐานข้อมูล & ลูกค้าสัมพันธ์',
     label: 'โปรไฟล์ลูกค้า',
