@@ -266,6 +266,18 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
     shopId, orderId: pendingOrder.id, conversationId: pendingOrder.conversation_id, revenue: slipAmount,
   }).catch((err) => console.error('[SalesTrajectory Error]:', err))
 
+  // Auto-extract candidate skill from this successful conversation
+  if (shopSkillsTelemetryEnabled(shop.features as Record<string, unknown> | undefined)) {
+    import('@/lib/ai/skillExtractor').then(({ extractSkillFromConversation }) => {
+      extractSkillFromConversation({
+        shopId,
+        conversationId: pendingOrder.conversation_id,
+        outcome: 'conversion',
+        revenue: slipAmount,
+      }).catch((err) => console.warn('[SkillExtractor] auto-extract failed:', err))
+    }).catch(() => {})
+  }
+
   await replyAndLog(
     `✅ ตรวจสอบสลิปสำเร็จค่ะ!\n` +
     `💰 ยอดโอน: ${amountThai} บาท\n` +

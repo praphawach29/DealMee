@@ -28,7 +28,7 @@ export async function extractSkillFromConversation({
 }: {
   shopId: string
   conversationId: string
-  outcome: string // 'paid' | 'handoff' | 'cancelled' | 'no_response'
+  outcome: string // 'conversion' | 'handoff' | 'cancelled' | 'no_response'
   revenue?: number
 }): Promise<SkillExtractionResult> {
   try {
@@ -214,7 +214,7 @@ ${transcript}
       skill_id: inserted.id,
       shop_id: shopId,
       conversation_id: conversationId,
-      weight: outcome === 'paid' ? 1.0 : outcome === 'handoff' ? 0.7 : 0.5,
+      weight: outcome === 'conversion' ? 1.0 : outcome === 'handoff' ? 0.7 : 0.5,
     })
 
     console.log(`[SkillExtractor] Created candidate skill ${inserted.id} from conversation ${conversationId} (outcome: ${outcome})`)
@@ -330,7 +330,7 @@ const { createAdminClient } = await import('@/lib/supabase/admin')
     .from('conversation_outcomes')
     .select('conversation_id, outcome, revenue')
     .eq('shop_id', shopId)
-    .in('outcome', ['paid', 'handoff'])
+    .in('outcome', ['conversion', 'handoff'])
     .order('created_at', { ascending: false })
     .limit(limit)
 
