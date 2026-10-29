@@ -1544,14 +1544,26 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
       JSON.stringify(executed.args) === JSON.stringify(response.toolCall!.args)
   )
 
-  const toolResult = isDuplicateToolCall
-    ? {
-        resultForAi: 'เครื่องมือนี้ถูกเรียกไปแล้วด้วยข้อมูลเดียวกัน กรุณาสรุปคำตอบให้ลูกค้าจากข้อมูลที่มีอยู่ตอนนี้ โดยไม่ต้องเรียกเครื่องมือซ้ำ',
-        immediateMessages: [],
-        scheduledMessage: undefined,
-        productsData: undefined,
-      }
-    : await state.executor(response.toolCall.name, response.toolCall.args, state.toolCtx)
+  const toolStart = Date.now()
+    const toolResult = isDuplicateToolCall
+      ? {
+          resultForAi: 'เครื่องมือนี้ถูกเรียกไปแล้วด้วยข้อมูลเดียวกัน กรุณาสรุปคำตอบให้ลูกค้าจากข้อมูลที่มีอยู่ตอนนี้ โดยไม่ต้องเรียกเครื่องมือซ้ำ',
+          immediateMessages: [],
+          scheduledMessage: undefined,
+          productsData: undefined,
+        }
+      : await state.executor(response.toolCall.name, response.toolCall.args, state.toolCtx)
+    // Phase 5: log tool usage (fire-and-forget)
+    import('@/lib/ai/agentMemory').then(({ logToolUsage }) => {
+      logToolUsage({
+        shopId: state.toolCtx.shopId,
+        conversationId: state.conversationId,
+        toolName: response.toolCall!.name,
+        argsSummary: JSON.stringify(response.toolCall!.args).slice(0, 200),
+        success: true,
+        durationMs: Date.now() - toolStart,
+      }).catch(() => {})
+    }).catch(() => {})
 
   if (toolResult.productsData && toolResult.productsData.length > 0) {
     // A later tool in the same turn (search, then stock) adds cards. Same catalog id is kept once.

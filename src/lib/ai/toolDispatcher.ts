@@ -468,6 +468,7 @@ export async function executeTool(
   args: Record<string, any>,
   ctx: ToolExecutionContext
 ): Promise<ToolExecutionResult> {
+  const startTime = Date.now()
   const { shopId: rawShopId, userId, conversationId, shop, supabase, supabaseAdmin, language: lang = 'th' } = ctx
   const shopId = rawShopId || shop?.id
 
