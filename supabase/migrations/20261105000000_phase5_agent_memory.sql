@@ -23,13 +23,17 @@ CREATE INDEX IF NOT EXISTS idx_agent_memory_type ON public.shop_agent_memory (me
 CREATE INDEX IF NOT EXISTS idx_agent_memory_category ON public.shop_agent_memory (category);
 
 ALTER TABLE public.shop_agent_memory ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users read their shop agent memory" ON public.shop_agent_memory;
 CREATE POLICY "Users read their shop agent memory" ON public.shop_agent_memory
   FOR SELECT USING (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()));
+DROP POLICY IF EXISTS "Users insert their shop agent memory" ON public.shop_agent_memory;
 CREATE POLICY "Users insert their shop agent memory" ON public.shop_agent_memory
   FOR INSERT WITH CHECK (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()));
+DROP POLICY IF EXISTS "Users update their shop agent memory" ON public.shop_agent_memory;
 CREATE POLICY "Users update their shop agent memory" ON public.shop_agent_memory
   FOR UPDATE USING (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()))
   WITH CHECK (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()));
+DROP POLICY IF EXISTS "Users delete their shop agent memory" ON public.shop_agent_memory;
 CREATE POLICY "Users delete their shop agent memory" ON public.shop_agent_memory
   FOR DELETE USING (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()));
 
@@ -56,8 +60,10 @@ CREATE INDEX IF NOT EXISTS idx_tool_usage_tool ON public.tool_usage_log (tool_na
 CREATE INDEX IF NOT EXISTS idx_tool_usage_created ON public.tool_usage_log (created_at);
 
 ALTER TABLE public.tool_usage_log ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users read their shop tool usage" ON public.tool_usage_log;
 CREATE POLICY "Users read their shop tool usage" ON public.tool_usage_log
   FOR SELECT USING (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()));
+DROP POLICY IF EXISTS "Service role inserts tool usage" ON public.tool_usage_log;
 CREATE POLICY "Service role inserts tool usage" ON public.tool_usage_log
   FOR INSERT WITH CHECK (auth.role() IS DISTINCT FROM 'anon');
 
@@ -86,8 +92,10 @@ CREATE INDEX IF NOT EXISTS idx_skill_revisions_skill ON public.shop_skill_revisi
 CREATE INDEX IF NOT EXISTS idx_skill_revisions_shop ON public.shop_skill_revisions (shop_id);
 
 ALTER TABLE public.shop_skill_revisions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users read their shop skill revisions" ON public.shop_skill_revisions;
 CREATE POLICY "Users read their shop skill revisions" ON public.shop_skill_revisions
   FOR SELECT USING (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()));
+DROP POLICY IF EXISTS "Service role inserts skill revisions" ON public.shop_skill_revisions;
 CREATE POLICY "Service role inserts skill revisions" ON public.shop_skill_revisions
   FOR INSERT WITH CHECK (auth.role() IS DISTINCT FROM 'anon');
 
