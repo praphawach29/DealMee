@@ -392,6 +392,16 @@ async function processLineEvents({
             })
             if (result.success) {
               await sendLinePush(userId, `✅ บันทึกยอด ${result.amount?.toLocaleString()} บาท แล้วค่ะ (ref: ${result.ref || '-'})`, lineToken)
+              // Notify shop admin
+              try {
+                const { data: shop } = await (await import('@/lib/supabase/admin')).createAdminClient().from('shops').select('*').eq('id', shop_id).single()
+                if (shop) {
+                  const { notifyShopAdmin } = await import('@/lib/billing/ownerAlerts')
+                  await notifyShopAdmin(shop, `📸 สลิปใหม่! ยอด ${result.amount?.toLocaleString()} บาท (ref: ${result.ref || '-'}) — ตรวจสอบได้ที่ dashboard`)
+                }
+              } catch (e) {
+                console.warn('[SlipToRecord] admin notify failed:', e)
+              }
             } else {
               await sendLinePush(userId, `❌ ${result.error}`, lineToken)
             }
