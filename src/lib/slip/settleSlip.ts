@@ -3,6 +3,7 @@ import { salesAutomationEnabled } from '@/lib/billing/trial'
 import { notifyShopAdmin } from '@/lib/billing/ownerAlerts'
 import { cancelFollowUpTasks, scheduleRepurchaseFollowUp } from '@/lib/ai/proactiveFollowUp'
 import { extractGoldenTrajectoryFromOrder } from '@/lib/ai/salesTrajectory'
+import { shopSkillsTelemetryEnabled } from '@/lib/ai/shopSkillsRollout'
 import { claimSlipCheck } from '@/lib/billing/planLimits'
 import { verifySlip, checkSlipReceiver, resolveSlipProviderAndKey } from './verifySlip'
 import { readSlipQr, type SlipQr } from './readSlipQr'
@@ -237,6 +238,19 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
     }
     await sendToManualReview('บันทึกสถานะการชำระเงินไม่สำเร็จ', pendingOrder.order_no)
     return
+  }
+
+  // Event-driven outcome signal (Phase 0): the slip cleared and the order is paid.
+  // This is the moment a sale actually happened, so mark the conversation outcome.
+  if (shopSkillsTelemetryEnabled(shop.features as Record<string, unknown> | undefined)) {
+    const { error: outcomeErr } = await supabase.rpc('set_conversation_outcome', {
+      p_conversation_id: pendingOrder.conversation_id,
+      p_outcome: 'conversion',
+      p_shop_id: shopId,
+      p_revenue: slipAmount,
+      p_source: 'verified_slip',
+    })
+    if (outcomeErr) console.error('[SlipVerify] set_conversation_outcome failed:', outcomeErr.message)
   }
 
   await cancelFollowUpTasks({ shopId, referenceId: pendingOrder.order_no, taskType: 'qr_recovery' })

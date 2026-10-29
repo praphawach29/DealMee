@@ -69,6 +69,11 @@ export function dashboardNavItems(opts: {
     { href: '/dashboard/inbox', label: 'กล่องข้อความ', icon: MessageSquare },
   )
 
+  if (features.shop_skills_enabled === true) {
+    const knowledgeIndex = main.findIndex((item) => item.href === '/dashboard/knowledge')
+    main.splice(knowledgeIndex + 1, 0, { href: '/dashboard/skills', label: 'AI Skills', icon: Sparkles })
+  }
+
   const footer: DashboardNavItem[] = [
     { href: '/dashboard/help', label: 'คู่มือการใช้งาน', icon: BookOpen },
   ]

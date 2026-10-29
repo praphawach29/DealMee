@@ -717,10 +717,10 @@ export async function executeTool(
     // order total and the shop's account number, and a reworded digit here
     // sends the customer's money somewhere it shouldn't go.
     // Push LINE notification to shop admin if admin_notify is enabled
-    if (shop?.line_token && shop?.features?.admin_notify !== false) {
-      const targetAdmin = shop.admin_line_user_id || shop.owner_line_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
-      if (targetAdmin) {
-        const orderTotal = totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })
+        if (shop?.line_token && shop?.features?.admin_notify !== false) {
+          const targetAdmin = shop.admin_line_user_id || shop.owner_line_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
+          if (targetAdmin && targetAdmin !== userId) {
+            const orderTotal = totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })
         const adminMsg = `🛒 มีออเดอร์ใหม่เข้ามา!\nเลขที่: ${orderNo}\nลูกค้า: ${args.name || 'ลูกค้า'}\nสินค้า: ${itemsText}\nยอดรวม: ฿${orderTotal} บาท`
         fetch('https://api.line.me/v2/bot/message/push', {
           method: 'POST',
@@ -776,7 +776,8 @@ export async function executeTool(
       `เหตุผล: ${args.reason || 'ต้องการคุยกับคน'}`,
       `ตอบลูกค้า: ${baseUrl}/dashboard/inbox`,
     ].filter(Boolean).join('\n')
-    await notifyShopAdmin(shop, notifyText).catch((e) => console.warn('[Admin Handover Notify Error]:', e))
+    await notifyShopAdmin(shop, notifyText, { excludeLineUserId: userId })
+      .catch((e) => console.warn('[Admin Handover Notify Error]:', e))
 
     return { resultForAi: 'เรียกแอดมินให้เข้ามาดูแลแล้ว ให้บอกลูกค้าว่าส่งเรื่องให้แอดมินแล้ว แอดมินจะติดต่อกลับโดยเร็ว', immediateMessages: [] }
   }
@@ -1527,7 +1528,7 @@ export async function executeTool(
 
     if (shop?.line_token && shop?.features?.admin_notify !== false) {
       const targetAdmin = shop.admin_line_user_id || shop.owner_line_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
-      if (targetAdmin) {
+      if (targetAdmin && targetAdmin !== userId) {
         fetch('https://api.line.me/v2/bot/message/push', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${shop.line_token}` },

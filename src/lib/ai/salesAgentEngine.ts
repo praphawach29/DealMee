@@ -14,7 +14,7 @@ import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
 import { getGeminiPromptCache, dropGeminiPromptCache } from '@/lib/ai/geminiCache'
 import { executeTool as realExecuteTool, type ToolExecutor, type ToolExecutionContext, type CustomerMessage } from '@/lib/ai/toolDispatcher'
-import { mergeProductCards } from '@/lib/ai/productCards'
+import { mergeProductCards, isKeywordProductQuery } from '@/lib/ai/productCards'
 import { t, detectCustomerLanguage, type CustomerLanguage } from '@/lib/i18n/customerMessages'
 import {
   formatSalesStagePromptContext,
@@ -25,6 +25,9 @@ import {
   retrieveWinningTrajectories,
   formatGoldenClosersPromptContext,
 } from '@/lib/ai/salesTrajectory'
+import { formatShopSkillsPromptContext, retrieveActiveShopSkills } from '@/lib/ai/shopSkills'
+import { shopSkillsRetrievalEnabled } from '@/lib/ai/shopSkillsRollout'
+import { greetingOnlyReply, shouldBlockGreetingHandoff } from '@/lib/ai/handoffGuard'
 import { orderPaymentLabel } from '@/lib/orders/paymentState'
 
 const supabase = createAdminClient()
@@ -152,6 +155,10 @@ export interface AgentResult {
   productsData?: any[]
   /** Active sales stage computed at the end of the turn (greeting, discovery, showcase, closing, post_sale). */
   salesStage?: SalesStage
+  /** Heuristic response confidence (0-1) used by the Phase 0 skill data pipeline. */
+  ai_confidence?: number
+  /** Detected user intent — used by Phase 0 skill data pipeline. */
+  intent?: string
 }
 
 /**
@@ -205,6 +212,7 @@ export interface PlanningState {
   shop: any
   conversationId: string
   salesStage: SalesStage
+  isFirstCustomerTurn: boolean
   /** Language of the customer's message, so the strings the system writes itself match the language the model is replying in. */
   language: CustomerLanguage
   turns: PlanningTurn[]
@@ -1317,8 +1325,13 @@ ${paymentInfo}`
   })
   const goldenClosersContext = formatGoldenClosersPromptContext(goldenTrajectories)
 
+  const activeShopSkills = shopSkillsRetrievalEnabled(shop.features)
+    ? await retrieveActiveShopSkills(shop.id, userQuery, 3)
+    : []
+  const shopSkillsContext = formatShopSkillsPromptContext(activeShopSkills)
+
   const dynamicSystemPrompt = `${salesStageContext}${goldenClosersContext ? `\n\n${goldenClosersContext}` : ''}
-${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}${businessHoursPromptContext(shop.features)}
+${shopSkillsContext ? `\n\n${shopSkillsContext}` : ''}${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}${businessHoursPromptContext(shop.features)}
 ${historyContext}`
 
   // Free plan (incl. ended trials): sales automation is locked and orders go to the admin.
@@ -1349,7 +1362,7 @@ ${historyContext}`
   // Prompt size by section, to see what each planning step resends (staticTotal includes products and booking)
   const sectionSizes: Record<string, number> = {
     staticTotal: staticSystemPrompt.length, products: productsContext.length, booking: bookingContext.length,
-    knowledge: knowledgeContext.length, history: historyContext.length, golden: goldenClosersContext.length,
+    knowledge: knowledgeContext.length, skills: shopSkillsContext.length, history: historyContext.length, golden: goldenClosersContext.length,
     customer: customerProfileContext.length, state: bookingStateContext.length + orderStateContext.length + documentStateContext.length,
   }
   console.log(`[Prompt size] ${systemInstruction.length} chars: ` + Object.entries(sectionSizes).map(([k, v]) => `${k} ${v}`).join(', '))
@@ -1373,6 +1386,7 @@ ${historyContext}`
       shop,
       conversationId,
       salesStage: initialSalesStage,
+      isFirstCustomerTurn: recentCustomerMessages.length <= 1,
       language,
       turns: [{ role: 'user', text: userQuery }],
       step: 0,
@@ -1488,6 +1502,17 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
       }
     }
     return { done: true, finalText: response.text }
+  }
+
+  const firstUserTurn = state.turns.find((turn) => turn.role === 'user')
+  const currentUserMessage = firstUserTurn && 'text' in firstUserTurn ? firstUserTurn.text : ''
+  if (shouldBlockGreetingHandoff({
+    message: currentUserMessage,
+    isFirstCustomerTurn: state.isFirstCustomerTurn,
+    toolName: response.toolCall.name,
+  })) {
+    console.warn(`[DealMee Guard] Blocked request_human_agent for greeting-only first turn in ${state.conversationId}`)
+    return { done: true, finalText: greetingOnlyReply(state.language) }
   }
 
   state.turns.push({ role: 'assistant', text: response.text, toolCall: response.toolCall })
@@ -1611,7 +1636,45 @@ function finalizeAgentResult(state: PlanningState, finalText: string): AgentResu
     scheduledMessages: state.scheduledMessages,
     productsData: state.productsData,
     salesStage: nextStage,
+    ai_confidence: computeConfidence({ text: tagged.text, toolCallsExecuted: state.toolCallsExecuted, usage, scheduledMessages: state.scheduledMessages }),
+    intent: detectIntent(userQueryText, state.toolCallsExecuted.map((t) => t.name)),
   }
+}
+
+// ─── Phase 0 heuristics: confidence + intent (no extra LLM cost) ─────────────
+
+const LOW_CONFIDENCE_PATTERNS = /ไม่แน่ใจ|ขอโทษ|ไม่ทราบ|ยังไม่มีข้อมูล|ไม่สามารถ|ไม่มีข้อมูล/iu;
+
+/** Simple heuristic confidence (0–1) avoiding an extra provider call. */
+function computeConfidence(opts: {
+  text: string
+  toolCallsExecuted: { name: string }[]
+  usage?: AgentUsage
+  scheduledMessages: { delayMs: number }[]
+}): number {
+  let confidence = 0.8 // baseline: model gave an answer
+  // no tools ran and the reply hedges → lower
+  if (opts.toolCallsExecuted.length === 0 && LOW_CONFIDENCE_PATTERNS.test(opts.text)) {
+    confidence -= 0.3
+  }
+  const hasOrder = opts.toolCallsExecuted.some((t) => t.name === 'take_order' || t.name === 'send_payment_qr')
+  const hasBooking = opts.toolCallsExecuted.some((t) => t.name === 'book_appointment')
+  if (hasOrder || hasBooking) confidence += 0.15 // decisive action → confident closing
+  if (opts.toolCallsExecuted.some((t) => t.name === 'escalate_to_human')) confidence -= 0.2
+  return Math.max(0.05, Math.min(0.99, Math.round(confidence * 100) / 100))
+}
+
+/** Lightweight intent classifier using tool names + keywords already in the codebase. */
+export function detectIntent(query: string, executedTools: string[]): string {
+  if (executedTools.includes('take_order') || executedTools.includes('send_payment_qr')) return 'purchase'
+  if (executedTools.includes('book_appointment')) return 'booking'
+  if (executedTools.includes('request_human_agent') || executedTools.includes('escalate_to_human')) return 'handoff'
+  if (isKeywordProductQuery(query)) return 'product_query'
+  if (/ราคา|ถูก|แพง|ส่วนลด|โปรโม/iu.test(query)) return 'price_inquiry'
+  if (/จอง|นัด|เวลา|เปิด-ปิด/iu.test(query)) return 'booking_inquiry'
+  if (/สลิป|เงิน|ชำระ|โอน|พร้อมเพย์/iu.test(query)) return 'payment_inquiry'
+  if (/ขอคืน|ยกเลิก|เปลี่ยน|คืนเงิน|ปัญหา|ชำรุด|สินค้าเสีย/iu.test(query)) return 'objection'
+  return 'info_request'
 }
 
 /**

@@ -24,7 +24,7 @@ export async function alertIfUpset({
   message,
 }: {
   shop: Record<string, unknown> & { id?: string; name?: string | null; features?: Record<string, unknown> | null }
-  conversation: { id: string; customer_name?: string | null; metadata?: Record<string, unknown> | null }
+  conversation: { id: string; user_id?: string | null; customer_name?: string | null; metadata?: Record<string, unknown> | null }
   message: string
 }): Promise<void> {
   try {
@@ -69,7 +69,11 @@ export async function alertIfUpset({
       .eq('id', conversation.id)
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.dealmee.app'
-    await notifyShopAdmin(shop, upsetAlertText(message, conversation.customer_name, `${appUrl}/dashboard/inbox`))
+    await notifyShopAdmin(
+      shop,
+      upsetAlertText(message, conversation.customer_name, `${appUrl}/dashboard/inbox`),
+      { excludeLineUserId: conversation.user_id }
+    )
     console.log(`[UpsetAlert] Alerted shop ${shop.id} (p=${p.toFixed(2)}) for conversation ${conversation.id}`)
   } catch (err) {
     console.warn('[UpsetAlert] skipped:', err instanceof Error ? err.message : err)

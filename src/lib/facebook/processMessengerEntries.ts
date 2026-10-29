@@ -17,7 +17,7 @@ import {
   sendFacebookImage,
   sendFacebookLinkButtons,
 } from '@/lib/facebook/messengerHelper'
-import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
+import { processSalesAgentChat, detectIntent } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 import { settleSlipImage } from '@/lib/slip/settleSlip'
@@ -28,6 +28,7 @@ import {
   resolveChannelProductCards,
 } from '@/lib/ai/productCards'
 import { scheduleCustomerMessage } from '@/lib/ai/proactiveFollowUp'
+import { shopSkillsTelemetryEnabled } from '@/lib/ai/shopSkillsRollout'
 
 const supabase = createAdminClient()
 
@@ -46,6 +47,7 @@ export async function processMessengerEntries({
 }) {
   // Upset-customer checks run alongside the bot's reply; awaited at the end so after() keeps them alive
   const upsetChecks: Promise<void>[] = []
+  const skillsTelemetryEnabled = shopSkillsTelemetryEnabled(features)
 
   for (const entry of entries) {
     const messagingList = entry.messaging || []
@@ -151,6 +153,7 @@ export async function processMessengerEntries({
           message: cleanText,
           platform: targetPlatform,
           platform_message_id: event.message?.mid || null,
+          ...(skillsTelemetryEnabled ? { intent: detectIntent(cleanText, []) } : {}),
         })
         .select('id')
         .single()
@@ -240,10 +243,25 @@ export async function processMessengerEntries({
         catalogProducts: keywordCatalog,
       })
 
-      // 10. Check conversation ai_mode:
-      // - 'copilot': Save draft suggestion in chat_messages for admin approval
-      // - 'auto': Deliver response to Facebook user via Graph API
-      // - 'manual': Skip sending
+  // 10. Check conversation ai_mode:
+  // - 'copilot': Save draft suggestion in chat_messages for admin approval
+  // - 'auto': Deliver response to Facebook user via Graph API
+  // - 'manual': Skip sending
+  // ── Phase 0: auto-detect conversation outcome ───────────────────────────────
+  // NOTE: 'conversion' is recorded by settleSlip.ts (actual payment).  Here we
+  // only auto-tag 'handoff' (customer asked for a human), which is terminal.
+  const executedTools = (agentResult.toolCallsExecuted || []).map((t) => t.name)
+  const isHandoff = executedTools.includes('request_human_agent')
+  if (skillsTelemetryEnabled && isHandoff) {
+    const { error } = await supabase.rpc('set_conversation_outcome', {
+      p_conversation_id: conv.id,
+      p_outcome: 'handoff',
+      p_shop_id: shop_id,
+      p_source: `${targetPlatform}_handoff`,
+    })
+    if (error) console.error('[FB Webhook] set_conversation_outcome failed:', error.message)
+  }
+
       if (conv.ai_mode === 'copilot') {
         console.log(`[Facebook Webhook] Conversation in Copilot mode for ${senderPsid}. Saving draft suggestion.`)
         if (savedUserMsg?.id && aiReplyText) {
@@ -267,6 +285,9 @@ export async function processMessengerEntries({
             sender_name: shop.bot_name || 'น้องบอท Dealmee',
             message: aiReplyText,
             platform: targetPlatform,
+            ...(skillsTelemetryEnabled
+              ? { ai_confidence: agentResult.ai_confidence, intent: agentResult.intent }
+              : {}),
           })
 
           // Update conversation last message

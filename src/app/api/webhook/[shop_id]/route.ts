@@ -6,12 +6,13 @@ import { adminPausePayload, isPauseExpired, resumePayload } from '@/lib/inbox/ad
 import { isHandoffRequest } from '@/lib/ai/thaiMatch'
 import { alertIfUpset } from '@/lib/ai/upsetAlert'
 import { verifyLineSignature } from '@/lib/line/signature'
-import { processSalesAgentChat, type AgentResult } from '@/lib/ai/salesAgentEngine'
+import { processSalesAgentChat, type AgentResult, detectIntent } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 import { buildAutoGreeting, isDefaultGreeting } from '@/lib/businessGreeting'
 import { synthesizeFaqFromConversation } from '@/lib/ai/faqSynthesis'
 import { scheduleCustomerMessage } from '@/lib/ai/proactiveFollowUp'
+import { shopSkillsTelemetryEnabled } from '@/lib/ai/shopSkillsRollout'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildLineFlexProductCarousel } from '@/lib/line/flexHelper'
@@ -120,6 +121,7 @@ async function processLineEvents({
 }) {
   // Upset-customer checks run alongside the bot's reply; awaited at the end so after() keeps them alive
   const upsetChecks: Promise<void>[] = []
+  const skillsTelemetryEnabled = shopSkillsTelemetryEnabled(features)
 
   // Process each LINE event
   for (const event of events) {
@@ -211,6 +213,7 @@ async function processLineEvents({
           sender_name: 'ลูกค้า',
           message: userText,
           platform: 'line',
+          ...(skillsTelemetryEnabled ? { intent: detectIntent(userText, []) } : {}),
         })
         .select('id')
         .single()
@@ -415,6 +418,7 @@ async function deliverAgentResult({
 }) {
   const aiReplyText = agentResult.text || ''
   const features = (shop.features as Record<string, any>) || {}
+  const skillsTelemetryEnabled = shopSkillsTelemetryEnabled(features)
 
   if (aiReplyText) {
     await supabase.from('chat_messages').insert({
@@ -424,6 +428,9 @@ async function deliverAgentResult({
       sender_name: (shop.bot_name && !/botify/i.test(shop.bot_name)) ? shop.bot_name : 'น้อง DealMee',
       message: aiReplyText,
       platform: 'line',
+      ...(skillsTelemetryEnabled
+        ? { ai_confidence: agentResult.ai_confidence, intent: agentResult.intent }
+        : {}),
     })
   }
 
@@ -546,12 +553,22 @@ async function deliverAgentResult({
     )
   }
 
-  // Tool execution happens INSIDE the Planning Layer (src/lib/ai/toolDispatcher.ts's
-  // executeTool(), called possibly multiple times per customer message) —
-  // this function's job is just to log what ran and deliver the results.
-  // log tool calls to server console only, DO NOT store internal tool code in chat_messages table.
-  for (const toolCall of agentResult.toolCallsExecuted) {
-    console.log(`[Webhook] AI executed tool: ${toolCall.name}`, toolCall.args)
+  // ── Phase 0: auto-detect conversation outcome ───────────────────────────────
+  // NOTE: we do NOT mark 'conversion' here — an order created by take_order /
+  // send_payment_qr is only intent to pay.  Real conversion is recorded in
+  // settleSlip.ts when the slip clears and the order is marked `paid`.
+  // We only auto-tag the handoff case (customer asked for a human), which is a
+  // terminal outcome at the point it happens.
+  const executedTools = agentResult.toolCallsExecuted.map((t) => t.name)
+  const isHandoff = executedTools.includes('request_human_agent')
+  if (skillsTelemetryEnabled && isHandoff) {
+    const { error } = await supabase.rpc('set_conversation_outcome', {
+      p_conversation_id: conv.id,
+      p_outcome: 'handoff',
+      p_shop_id: shopId,
+      p_source: 'line_handoff',
+    })
+    if (error) console.error('[Webhook] set_conversation_outcome failed:', error.message)
   }
 
   if (!immediateMessagesDelivered && lineToken) {
