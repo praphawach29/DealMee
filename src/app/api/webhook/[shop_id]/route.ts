@@ -374,8 +374,30 @@ async function processLineEvents({
       const messageId = event.message.id
       console.log(`[Webhook] Received image ${messageId} from ${userId}`)
 
+      const isSlipToRecord = features.slip_to_record === true
       const isSlipVerifyActive = features.slip_verify !== false
-      if (isSlipVerifyActive) {
+      if (isSlipToRecord) {
+        if (replyToken && lineToken) {
+          await sendLineReply(replyToken, 'ได้รับรูปแล้วค่ะ 📄 กำลังบันทึกยอดให้นะคะ...', lineToken)
+        }
+        if (lineToken) {
+          await withLineLoading(userId, lineToken, async () => {
+            const { recordSlipTransaction } = await import('@/lib/slip/recordSlipTransaction')
+            const result = await recordSlipTransaction({
+              shopId: shop_id,
+              conversationId: null,
+              messageId,
+              lineToken,
+              shopSettings: shop.shop_settings || {},
+            })
+            if (result.success) {
+              await sendLinePush(userId, `✅ บันทึกยอด ${result.amount?.toLocaleString()} บาท แล้วค่ะ (ref: ${result.ref || '-'})`, lineToken)
+            } else {
+              await sendLinePush(userId, `❌ ${result.error}`, lineToken)
+            }
+          }).catch(err => console.error('[SlipToRecord Error]', err))
+        }
+      } else if (isSlipVerifyActive) {
         if (replyToken && lineToken) {
           await sendLineReply(replyToken, 'ได้รับรูปแล้วค่ะ 📄 รอสักครู่นะคะ...', lineToken)
         }
