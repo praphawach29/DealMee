@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS public.conversation_outcomes (
   shop_id         UUID NOT NULL REFERENCES public.shops(id) ON DELETE CASCADE,
   outcome         TEXT NOT NULL CHECK (outcome IN ('conversion', 'no_conversion', 'info_query', 'handoff')),
   revenue         NUMERIC DEFAULT 0,
+  ai_confidence   NUMERIC(3,2),
+  intent          TEXT,
   set_by          UUID REFERENCES public.users(id),
   source          TEXT NOT NULL DEFAULT 'system',
   set_at          TIMESTAMPTZ DEFAULT now(),
