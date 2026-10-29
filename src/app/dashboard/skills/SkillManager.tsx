@@ -23,7 +23,24 @@ export default function SkillManager({ enabled }: { enabled: boolean }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [applyingTemplate, setApplyingTemplate] = useState<string | null>(null)
 
+  async function applyTemplate(templateType: string) {
+    setApplyingTemplate(templateType)
+    setError('')
+    try {
+      const response = await fetch('/api/shop/skills/templates', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ template_type: templateType }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) setError(payload.error ?? 'สร้างจาก Template ไม่สำเร็จ')
+      else await loadSkills()
+    } finally {
+      setApplyingTemplate(null)
+    }
+  }
   const loadSkills = useCallback(async () => {
     const response = await fetch('/api/shop/skills', { cache: 'no-store' })
     const payload = await response.json().catch(() => ({}))
@@ -126,6 +143,31 @@ export default function SkillManager({ enabled }: { enabled: boolean }) {
           {editingId && <button type="button" onClick={() => { setEditingId(null); setForm(emptyForm) }} className="rounded-lg border px-4 py-2 text-sm">ยกเลิก</button>}
         </div>
       </form>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-900 mb-3">📋 ใช้ Template (สร้าง Skill อัตโนมัติ)</h2>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { type: 'restaurant', label: '🍽️ ร้านอาหาร', desc: 'เมนู+ราคา, จัดส่ง' },
+            { type: 'salon', label: '💅 เสริมสวย/สปา', desc: 'บริการ+ราคา, จองคิว' },
+            { type: 'retail', label: '🛍️ ร้านค้า', desc: 'สินค้า+ราคา, จัดส่ง' },
+            { type: 'general', label: '🏢 ทั่วไป', desc: 'ราคา+แพ็กเกจ, การชำระเงิน' },
+          ].map((t) => (
+            <button
+              key={t.type}
+              type="button"
+              disabled={applyingTemplate !== null}
+              onClick={() => void applyTemplate(t.type)}
+              className="flex flex-col items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-3 text-center text-sm hover:border-violet-300 hover:bg-violet-50 disabled:opacity-50"
+            >
+              {applyingTemplate === t.type ? <Loader2 className="animate-spin" size={18} /> : <span className="text-lg">{t.label.split(' ')[0]}</span>}
+              <span className="font-semibold text-slate-800">{t.label.split(' ').slice(1).join(' ')}</span>
+              <span className="text-xs text-slate-500">{t.desc}</span>
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-slate-500">กดเลือก → ระบบสร้าง candidate skills อัตโนมัติ → แก้ไขข้อมูล → กด "เปิดใช้"</p>
+      </div>
 
       <section className="space-y-3">
         {loading && <div className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="animate-spin" size={16} /> กำลังโหลด</div>}
