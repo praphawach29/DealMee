@@ -277,4 +277,8 @@ CREATE TRIGGER trg_validate_shop_skill_source_scope
   BEFORE INSERT OR UPDATE ON public.shop_skill_sources
   FOR EACH ROW EXECUTE FUNCTION public.validate_shop_skill_source_scope();
 
+-- Ensure ai_confidence and intent columns exist (in case table was created before this migration)
+ALTER TABLE public.conversation_outcomes ADD COLUMN IF NOT EXISTS ai_confidence NUMERIC(3,2);
+ALTER TABLE public.conversation_outcomes ADD COLUMN IF NOT EXISTS intent TEXT;
+
 SELECT 'Phase 0 (shop_skills data collection foundation) schema applied successfully' AS result;
