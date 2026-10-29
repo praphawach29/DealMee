@@ -150,7 +150,7 @@ export interface AgentResult {
   /** Every tool actually executed this turn, in order — for future use by the Sales Workflow Engine (stage transitions) and debugging. Always an array. */
   toolCallsExecuted: AgentToolCall[]
   /** Delayed pushes (schedule_followup) — the engine has no channel access to set its own setTimeout, so the caller (webhook route) does it. Always an array. */
-  scheduledMessages: { delayMs: number; message: CustomerMessage }[]
+  scheduledMessages: { delayMs: number; message: CustomerMessage; productName?: string; reason?: string }[]
   /** Catalog rows from search_products / check_stock. Channels render one carousel from this list. */
   productsData?: any[]
   /** Active sales stage computed at the end of the turn (greeting, discovery, showcase, closing, post_sale). */
@@ -231,7 +231,7 @@ export interface PlanningState {
   allUsage: AgentUsage[]
   immediateMessages: CustomerMessage[]
   toolCallsExecuted: AgentToolCall[]
-  scheduledMessages: { delayMs: number; message: CustomerMessage }[]
+  scheduledMessages: { delayMs: number; message: CustomerMessage; productName?: string; reason?: string }[]
   productsData?: any[]
   lastProviderError?: string
   isPlayground?: boolean
@@ -607,7 +607,8 @@ const MASTER_TOOLS = [
       type: 'object',
       properties: {
         delay_minutes: { type: 'number', description: 'จำนวนนาทีที่รอก่อนทักกลับ เช่น 30, 60, 120' },
-        reason: { type: 'string', description: 'เหตุผลที่ต้องการ Follow-up' },
+        reason: { type: 'string', description: 'เหตุผล: general (ติดตามทั่วไป) หรือ back_in_stock (แจ้งเตือนเมื่อสินค้ามา)' },
+        product_name: { type: 'string', description: 'ชื่อสินค้าที่ลูกค้าสอบถาม (ใช้เมื่อ reason=back_in_stock)' },
       },
       required: ['delay_minutes', 'reason'],
     },
@@ -1682,7 +1683,7 @@ function computeConfidence(opts: {
   text: string
   toolCallsExecuted: { name: string }[]
   usage?: AgentUsage
-  scheduledMessages: { delayMs: number }[]
+  scheduledMessages: { delayMs: number; productName?: string; reason?: string }[]
 }): number {
   let confidence = 0.8 // baseline: model gave an answer
   // no tools ran and the reply hedges → lower

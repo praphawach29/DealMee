@@ -60,7 +60,7 @@ export interface ToolExecutionResult {
    */
   immediateMessages: CustomerMessage[]
   /** Only schedule_followup uses this — the caller (webhook route) is responsible for the actual setTimeout + LINE push, since this module has no channel/push capability of its own. */
-  scheduledMessage?: { delayMs: number; message: CustomerMessage }
+  scheduledMessage?: { delayMs: number; message: CustomerMessage; productName?: string; reason?: string }
   /** Catalog rows from search_products or check_stock. The channel sends one carousel from these. */
   productsData?: Array<{
     id: string
@@ -826,11 +826,16 @@ export async function executeTool(
   if (toolName === 'schedule_followup') {
     // Durable now (queued in follow_up_tasks), so allow up to a day
     const delayMs = Math.min(Math.max(Number(args.delay_minutes) || 60, 5), 24 * 60) * 60 * 1000
-    const followupMsg = `👋 สวัสดีค่ะ ไม่ทราบว่าตัดสินใจได้แล้วหรือยังคะ? มีอะไรให้ช่วยแนะนำเพิ่มเติมได้เลยนะคะ 😊`
+    const reason = String(args.reason || 'general')
+    const productName = args.product_name ? String(args.product_name) : undefined
+    let followupMsg = `👋 สวัสดีค่ะ ไม่ทราบว่าตัดสินใจได้แล้วหรือยังคะ? มีอะไรให้ช่วยแนะนำเพิ่มเติมได้เลยนะคะ 😊`
+    if (reason === 'back_in_stock') {
+      followupMsg = `👋 สวัสดีค่ะ เสื้อยืดที่ถามไว้ ตอนนี้ของมาแล้วค่ะ! สนใจสั่งได้เลยนะ 😊`
+    }
     return {
-      resultForAi: 'ตั้งเวลาส่งข้อความติดตามแล้ว',
+      resultForAi: reason === 'back_in_stock' ? 'ตั้งเวลาแจ้งเตือนเมื่อสินค้ามาแล้ว' : 'ตั้งเวลาส่งข้อความติดตามแล้ว',
       immediateMessages: [],
-      scheduledMessage: { delayMs, message: { type: 'text', content: followupMsg } },
+      scheduledMessage: { delayMs, message: { type: 'text', content: followupMsg }, productName, reason },
     }
   }
 

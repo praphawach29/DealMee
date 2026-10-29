@@ -567,10 +567,47 @@ export async function processDueFollowUpTasks(limit = 25): Promise<{
         }
       }
 
-      // 4. Generate message text
-      const messageText = generateProactiveMessage({ task, shop })
+      // Back-in-stock check: if reason is 'back_in_stock', verify product is in stock
+      const payload = task.payload || {}
+      if (payload.reason === 'back_in_stock' && payload.product_name) {
+        const { data: prods } = await supabase
+          .from('products')
+          .select('id, name, stock')
+          .eq('shop_id', task.shop_id)
+          .or(`name.ilike.%${payload.product_name}%,master_sku.ilike.%${payload.product_name}%`)
+          .limit(1)
 
-      // 5. Send on the conversation's own channel
+        const product = prods?.[0]
+        const inStock = product && (product.stock || 0) > 0
+
+        if (!inStock) {
+          const retryCount = (payload.retry_count || 0) + 1
+          const maxRetries = payload.max_retries || 3
+          if (retryCount < maxRetries) {
+            // Reschedule for 3 days later
+            const nextTrigger = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+            await supabase
+              .from('follow_up_tasks')
+              .update({
+                trigger_at: nextTrigger,
+                payload: { ...payload, retry_count: retryCount },
+              })
+              .eq('id', task.id)
+            cancelled++
+            continue
+          } else {
+            // Max retries reached, send "still out of stock" message
+            payload.message = `👋 สวัสดีค่ะ เสื้อยืดที่ถามไว้ ยังไม่มาถึงร้านค่ะ ถ้าของมาจะรีบแจ้งให้ทราบอีกครั้งนะ 😊`
+          }
+        } else {
+          // In stock! Update message with actual product name
+          payload.message = `👋 สวัสดีค่ะ ${product.name} ที่ถามไว้ ตอนนี้ของมาแล้วค่ะ! สนใจสั่งได้เลยนะ 😊`
+        }
+        task.payload = payload
+      }
+
+      // 4. Generate message text
+      const messageText = (task.payload as any)?.message || generateProactiveMessage({ task, shop })
       const outcome = await deliverFollowUp(supabase, task, shop, platform, messageText)
       if (outcome.status !== 'sent') {
         if (outcome.status === 'failed') {
@@ -641,12 +678,16 @@ export async function scheduleCustomerMessage({
   userId,
   message,
   delayMs,
+  productName,
+  reason,
 }: {
   shopId: string
   conversationId?: string | null
   userId: string
   message: string
   delayMs: number
+  productName?: string
+  reason?: string
 }) {
   try {
     const supabase = createAdminClient()
@@ -659,7 +700,7 @@ export async function scheduleCustomerMessage({
       reference_id: conversationId || null,
       trigger_at: triggerAt,
       status: 'pending',
-      payload: { message },
+      payload: { message, product_name: productName || null, reason: reason || 'general', retry_count: 0, max_retries: 3 },
     })
     if (error) {
       console.error('[ProactiveFollowUp] Error queueing scheduled message:', error)

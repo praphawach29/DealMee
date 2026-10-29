@@ -601,6 +601,8 @@ async function deliverAgentResult({
       userId,
       message: scheduled.message.content,
       delayMs: scheduled.delayMs,
+      productName: scheduled.productName,
+      reason: scheduled.reason,
     })
   }
 }
