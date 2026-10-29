@@ -88,14 +88,6 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
             ติดตามรายการสั่งซื้อ อัปเดตสถานะชำระเงิน และยอดขายที่บอท AI ปิดการขายให้ลูกค้า
           </p>
         </div>
-        <button
-          onClick={handleCreateMock}
-          disabled={loading}
-          className="flex items-center justify-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-4 py-2 rounded-xl transition-all shadow-md shadow-electric-blue/20 hover:-translate-y-0.5 cursor-pointer disabled:opacity-50 shrink-0 text-xs sm:text-sm"
-        >
-          <span className="material-symbols-outlined text-[18px]">add</span>
-          <span>สร้างออเดอร์ตัวอย่าง</span>
-        </button>
       </div>
 
       {/* Compact 3-Column Stats Grid on Mobile */}
@@ -312,14 +304,6 @@ export default function OrdersManager({ orders }: { orders: OrderItem[] }) {
             <p className="text-xs sm:text-sm text-on-surface-variant max-w-sm mb-6">
               เมื่อมีคำสั่งซื้อทักเข้ามาจาก LINE หรือสร้างโดยบอท AI ออเดอร์จะมาปรากฏในหน้านี้ทันที
             </p>
-            <button
-              onClick={handleCreateMock}
-              disabled={loading}
-              className="flex items-center gap-2 bg-electric-blue hover:bg-primary text-white font-label-md font-semibold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-electric-blue/20 text-xs sm:text-sm"
-            >
-              <span className="material-symbols-outlined text-[18px] sm:text-[20px]">add</span>
-              <span>สร้างออเดอร์ตัวอย่าง</span>
-            </button>
           </div>
         )}
       </div>

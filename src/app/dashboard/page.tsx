@@ -64,6 +64,7 @@ export default async function DashboardPage({
         .from('orders')
         .select('id, order_no, customer_name, total_amount, status, items_summary, product_name, quantity, created_at')
         .eq('shop_id', currentShopId)
+        .not('order_no', 'match', '^ORD-[0-9]{4}$')
         .order('created_at', { ascending: false })
         .limit(1000),
       supabase

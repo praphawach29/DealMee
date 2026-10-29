@@ -24,6 +24,7 @@ export default async function OrdersPage() {
       .from('orders')
       .select('*')
       .eq('shop_id', shop.id)
+      .not('order_no', 'match', '^ORD-[0-9]{4}$')
       .order('created_at', { ascending: false })
 
     orders = data || []
