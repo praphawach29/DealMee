@@ -30,6 +30,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const supabase = createAdminClient()
   const now = new Date().toISOString()
+  // Invalidate stale cached answers whenever an approved skill changes.
+  await supabase.from('ai_response_cache').delete().eq('shop_id', auth.shopId)
   if (body.action === 'activate') {
     if (existing.status !== 'candidate') {
       return NextResponse.json({ error: 'Only candidate skills can be activated' }, { status: 409 })
@@ -94,6 +96,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   if (!existing) return NextResponse.json({ error: 'Skill not found' }, { status: 404 })
 
   const supabase = createAdminClient()
+  await supabase.from('ai_response_cache').delete().eq('shop_id', auth.shopId)
   if (existing.status !== 'candidate') {
     const { error } = await supabase.from('shop_skills').update({ status: 'archived', updated_at: new Date().toISOString() })
       .eq('id', skillId).eq('shop_id', auth.shopId)
