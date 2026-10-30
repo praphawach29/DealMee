@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireShop } from '@/lib/auth/requireShop'
-import { nextSkillVersion, parseShopSkillInput, type ShopSkill } from '@/lib/ai/shopSkills'
+import { formatShopSkillsPromptContext, nextSkillVersion, parseShopSkillInput, type ShopSkill } from '@/lib/ai/shopSkills'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 type RouteContext = { params: Promise<{ skillId: string }> }
@@ -33,6 +33,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (body.action === 'activate') {
     if (existing.status !== 'candidate') {
       return NextResponse.json({ error: 'Only candidate skills can be activated' }, { status: 409 })
+    }
+    const { data: active, error: activeError } = await supabase.from('shop_skills')
+      .select('*').eq('shop_id', auth.shopId).eq('status', 'active').limit(101)
+    if (activeError) return NextResponse.json({ error: 'Unable to validate active skills' }, { status: 500 })
+    try {
+      if ((active?.length ?? 0) >= 100) throw new Error('Too many active skills')
+      formatShopSkillsPromptContext([...(active ?? []), existing] as ShopSkill[])
+    } catch {
+      return NextResponse.json({ error: 'เนื้อหา Skill ที่เปิดใช้รวมกันยาวเกินไป กรุณาเก็บ Skill ที่ไม่ใช้ก่อน' }, { status: 409 })
     }
     const version = nextSkillVersion(existing.version)
     const snapshot = existing as ShopSkill

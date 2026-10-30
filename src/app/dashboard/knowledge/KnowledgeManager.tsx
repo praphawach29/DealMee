@@ -321,6 +321,11 @@ export default function KnowledgeManager({
           <span>เพิ่มข้อมูลใหม่</span>
         </button>
       </div>
+      <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">
+        เอกสารหน้านี้ใช้เป็นข้อมูลอ้างอิง หากเป็นไฟล์กำหนดพฤติกรรมหรือขั้นตอนทำงานของบอท
+        {' '}<a href="/dashboard/skills" className="font-semibold underline">นำเข้าเป็น Skill ที่หน้า AI Skills</a>
+        {' '}รองรับหน่วยงานบริการและโหมดตอบคำถามโดยไม่ต้องมีสินค้า
+      </div>
 
       {/* ── Alert / Toast Notification ── */}
       {message && (

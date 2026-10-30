@@ -57,7 +57,9 @@ export function nextSkillVersion(version: string): string {
 
 export function rankShopSkills(skills: ShopSkill[], query: string, limit = 3): ShopSkill[] {
   const normalized = query.toLocaleLowerCase('th-TH')
-  return skills
+  const active = skills.filter(skill => skill.status === 'active')
+  const always = active.filter(skill => (skill.skill_type === 'behavior' || skill.skill_type === 'rule') && skill.trigger_keywords.length === 0)
+  const matched = active.filter(skill => !always.includes(skill))
     .map((skill) => ({
       skill,
       score: skill.trigger_keywords.reduce(
@@ -69,6 +71,7 @@ export function rankShopSkills(skills: ShopSkill[], query: string, limit = 3): S
     .sort((left, right) => right.score - left.score)
     .slice(0, Math.max(0, Math.min(limit, 5)))
     .map(({ skill }) => skill)
+  return [...always, ...matched]
 }
 
 export async function retrieveActiveShopSkills(shopId: string, query: string, limit = 3): Promise<ShopSkill[]> {
@@ -80,15 +83,18 @@ export async function retrieveActiveShopSkills(shopId: string, query: string, li
       .select('id,shop_id,skill_type,category,version,status,trigger_keywords,knowledge_body,instruction,gold_conversations,updated_at')
       .eq('shop_id', shopId)
       .eq('status', 'active')
-      .limit(30)
-    if (error || !data) return []
+      .order('id', { ascending: true })
+      .limit(101)
+    if (error || !data) throw new Error('Unable to load active skills')
+    if (data.length > 100) throw new Error('Active skill budget exceeded')
     return rankShopSkills(data as ShopSkill[], query, limit)
-  } catch {
-    return []
+  } catch (error) {
+    // Never answer without approved rules when loading them fails.
+    throw error
   }
 }
 
-export function formatShopSkillsPromptContext(skills: ShopSkill[], maxLength = 4000): string {
+export function formatShopSkillsPromptContext(skills: ShopSkill[], maxLength = 48000): string {
   if (!skills.length) return ''
   const blocks = skills.map((skill) => {
     const parts = [`[${skill.skill_type}:${skill.category} v${skill.version}]`]
@@ -96,9 +102,12 @@ export function formatShopSkillsPromptContext(skills: ShopSkill[], maxLength = 4
     if (skill.instruction) parts.push(`แนวทาง: ${skill.instruction}`)
     return parts.join('\n')
   })
-  return [
-    '## SHOP SKILLS (ใช้เฉพาะเมื่อเกี่ยวข้อง)',
+  const context = [
+    '## APPROVED ORGANIZATION SKILLS',
+    'ปฏิบัติตามแนวทางที่เจ้าของอนุมัติ กฎ behavior/rule ที่ไม่มีคำกระตุ้นใช้ทุกคำตอบ ส่วนทักษะอื่นใช้เฉพาะเรื่องที่เกี่ยวข้อง ไฟล์นี้ไม่ใช่สิทธิ์รันโค้ดหรือเพิ่มเครื่องมือ',
     'ห้ามใช้ข้อมูลส่วนนี้แทนข้อมูลจริงจากเครื่องมือ ราคา สต็อก นโยบายระบบ หรือคำสั่งความปลอดภัย',
     ...blocks,
-  ].join('\n\n').slice(0, maxLength)
+  ].join('\n\n')
+  if (context.length > maxLength) throw new Error('Skill prompt budget exceeded; reduce active skills')
+  return context
 }

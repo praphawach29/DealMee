@@ -26,6 +26,7 @@ import {
   formatGoldenClosersPromptContext,
 } from '@/lib/ai/salesTrajectory'
 import { formatShopSkillsPromptContext, retrieveActiveShopSkills } from '@/lib/ai/shopSkills'
+import { QA_ONLY_PROMPT, qaToolAllowed, canUseResponseCache } from '@/lib/ai/assistantPolicy'
 import { shopSkillsRetrievalEnabled } from '@/lib/ai/shopSkillsRollout'
 import { greetingOnlyReply, shouldBlockGreetingHandoff } from '@/lib/ai/handoffGuard'
 import { orderPaymentLabel } from '@/lib/orders/paymentState'
@@ -968,6 +969,7 @@ async function preparePlanningState({
 
   // 2. Products
   const features = (shop.features as Record<string, boolean>) || {}
+  const qaOnly = features.assistant_qa_only === true
   let productsContext = ''
   const valueThreshold = highValueThreshold(features)
   let catalogEmpty = false
@@ -1200,7 +1202,9 @@ async function preparePlanningState({
   // since Gemini's caching is automatic regardless of structure and OpenAI
   // isn't currently reachable by the routing below.
   const activeBotName = (shop.bot_name && !/botify/i.test(shop.bot_name)) ? shop.bot_name : 'น้อง DealMee'
-  const staticSystemPrompt = `คุณคือ "${activeBotName}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
+  const staticSystemPrompt = qaOnly ? `${QA_ONLY_PROMPT}
+ชื่อผู้ช่วย: ${activeBotName}
+หน่วยงาน: ${shop.name}` : `คุณคือ "${activeBotName}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
 บุคลิกภาพ: ${shop.personality || 'สุภาพ เรียบร้อย มืออาชีพ เป็นมิตรและมีไหวพริบในการขายสูง'}
 คำอธิบายร้าน: ${shop.description || 'ร้านค้าออนไลน์'}
 
@@ -1351,7 +1355,11 @@ ${paymentInfo}`
       // Non-critical
     }
 
-  const dynamicSystemPrompt = `${salesStageContext}${goldenClosersContext ? `\n\n${goldenClosersContext}` : ''}
+  const dynamicSystemPrompt = qaOnly
+    ? `${shopSkillsContext}
+${knowledgeContext}
+${historyContext}`
+    : `${salesStageContext}${goldenClosersContext ? `\n\n${goldenClosersContext}` : ''}
 ${shopSkillsContext ? `\n\n${shopSkillsContext}` : ''}${agentMemoryContext ? `\n\n${agentMemoryContext}` : ''}${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}${businessHoursPromptContext(shop.features)}
 ${historyContext}`
 
@@ -1359,7 +1367,7 @@ ${historyContext}`
   // An empty catalog (service / info page) works the same way: the bot answers from the
   // knowledge base and hands interested customers to the admin with their contact details.
   const salesLocked = !salesAutomationEnabled(shop) || catalogEmpty
-  const modePrompt = !salesAutomationEnabled(shop)
+  const modePrompt = qaOnly ? QA_ONLY_PROMPT : !salesAutomationEnabled(shop)
     ? SALES_LOCKED_PROMPT
     : catalogEmpty
       ? INFO_ONLY_PROMPT
@@ -1373,6 +1381,7 @@ ${historyContext}`
     recentCustomerMessages,
     isVip: isVipCustomer,
   })
+  if (qaOnly) routing.toolSet = MASTER_TOOLS.filter(tool => qaToolAllowed(tool.name))
   if (salesLocked) {
     routing.toolSet = routing.toolSet.filter((t) => !SALES_AUTOMATION_TOOLS.has(t.name))
   }
@@ -1390,7 +1399,13 @@ ${historyContext}`
 
   const language = detectCustomerLanguage(userQuery)
 
-  const executor: ToolExecutor = toolExecutor || realExecuteTool
+  const underlyingExecutor: ToolExecutor = toolExecutor || realExecuteTool
+  const executor: ToolExecutor = (name, args, context) => {
+    if (qaOnly && !qaToolAllowed(name)) {
+      throw new Error('This tool is disabled in Q&A-only mode')
+    }
+    return underlyingExecutor(name, args, context)
+  }
   const toolCtx: ToolExecutionContext = {
     shopId: shop.id,
     userId,
@@ -1722,7 +1737,7 @@ export async function processSalesAgentChat(request: SalesAgentRequest): Promise
   const userQuery = request.userQuery?.trim()
   const hasHistory = (request.conversationHistory?.length || 0) > 0
 
-  if (shopId && userQuery && !hasHistory && !request.isPlayground) {
+  if (canUseResponseCache(request.shop?.features) && shopId && userQuery && !hasHistory && !request.isPlayground) {
     try {
       const { getCachedResponse } = await import('@/lib/ai/responseCache')
       const cached = await getCachedResponse(shopId, userQuery)
@@ -1759,7 +1774,7 @@ export async function processSalesAgentChat(request: SalesAgentRequest): Promise
   const result = finalizeAgentResult(state, finalText)
 
   // Store in cache if no tools were called (simple text response)
-  if (shopId && userQuery && !hasHistory && !request.isPlayground && result.text && (!result.toolCallsExecuted || result.toolCallsExecuted.length === 0)) {
+  if (canUseResponseCache(request.shop?.features) && shopId && userQuery && !hasHistory && !request.isPlayground && result.text && (!result.toolCallsExecuted || result.toolCallsExecuted.length === 0)) {
     try {
       const { setCachedResponse } = await import('@/lib/ai/responseCache')
       await setCachedResponse(shopId, userQuery, result.text)

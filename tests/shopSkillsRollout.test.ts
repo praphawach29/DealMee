@@ -28,8 +28,8 @@ test('telemetry runs only when global and shop flags are both enabled', () => {
   assert.equal(shopSkillsTelemetryEnabled({ shop_skills_enabled: true }), true)
 })
 
-test('retrieval also requires global and shop flags', () => {
-  delete process.env.SHOP_SKILLS_RETRIEVAL_ENABLED
+test('retrieval requires tenant opt-in and supports global kill switch', () => {
+  process.env.SHOP_SKILLS_RETRIEVAL_ENABLED = 'false'
   assert.equal(shopSkillsRetrievalEnabled({ shop_skills_enabled: true }), false)
   process.env.SHOP_SKILLS_RETRIEVAL_ENABLED = 'true'
   assert.equal(shopSkillsRetrievalEnabled({ shop_skills_enabled: false }), false)

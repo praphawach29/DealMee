@@ -1,6 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { MAX_SKILL_FILE_BYTES, parseSkillFile, type ParsedSkillFile } from '@/lib/ai/skillFile'
+import SkillRuntimeSettings from './SkillRuntimeSettings'
 import { Archive, CheckCircle2, Loader2, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
 
 type Skill = {
@@ -24,6 +26,58 @@ export default function SkillManager({ enabled }: { enabled: boolean }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [applyingTemplate, setApplyingTemplate] = useState<string | null>(null)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<ParsedSkillFile | null>(null)
+  const [readingFile, setReadingFile] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importNotice, setImportNotice] = useState('')
+  const selectionVersion = useRef(0)
+
+  async function previewFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    const version = ++selectionVersion.current
+    setPreview(null)
+    setImportFile(null)
+    setError('')
+    setImportNotice('')
+    if (!file) { setReadingFile(false); return }
+    setReadingFile(true)
+    try {
+      if (file.size > MAX_SKILL_FILE_BYTES) throw new Error('File exceeds 16 KB')
+      const parsed = parseSkillFile(file.name, new Uint8Array(await file.arrayBuffer()))
+      if (version !== selectionVersion.current) return
+      setImportFile(file)
+      setPreview(parsed)
+    } catch (error) {
+      if (version === selectionVersion.current) setError(error instanceof Error ? error.message : 'อ่านไฟล์ไม่สำเร็จ')
+    } finally {
+      if (version === selectionVersion.current) setReadingFile(false)
+    }
+  }
+
+  async function importSkill(event: React.FormEvent) {
+    event.preventDefault()
+    if (!importFile || !preview || readingFile || importing) return
+    setImporting(true)
+    setError('')
+    setImportNotice('')
+    try {
+      const data = new FormData()
+      data.set('file', importFile)
+      const response = await fetch('/api/shop/skills/import', { method: 'POST', body: data })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error ?? 'นำเข้า Skill ไม่สำเร็จ')
+      setImportFile(null)
+      setPreview(null)
+      setImportNotice('นำเข้าเป็น Candidate แล้ว กรุณาตรวจสอบและกดเปิดใช้ก่อนบอทนำไปใช้')
+      await loadSkills()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'นำเข้า Skill ไม่สำเร็จ กรุณาลองใหม่')
+    } finally {
+      setImporting(false)
+    }
+  }
 
   async function applyTemplate(templateType: string) {
     setApplyingTemplate(templateType)
@@ -42,11 +96,16 @@ export default function SkillManager({ enabled }: { enabled: boolean }) {
     }
   }
   const loadSkills = useCallback(async () => {
-    const response = await fetch('/api/shop/skills', { cache: 'no-store' })
-    const payload = await response.json().catch(() => ({}))
-    if (!response.ok) setError(payload.error ?? 'โหลด Skill ไม่สำเร็จ')
-    else setSkills(payload.skills ?? [])
-    setLoading(false)
+    try {
+      const response = await fetch('/api/shop/skills', { cache: 'no-store' })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) setError(payload.error ?? 'โหลด Skill ไม่สำเร็จ')
+      else setSkills(payload.skills ?? [])
+    } catch {
+      setError('โหลดรายการ Skill ไม่สำเร็จ กรุณาลองใหม่ (หากนำเข้าสำเร็จแล้วไม่ต้องนำเข้าซ้ำ)')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {
@@ -111,12 +170,38 @@ export default function SkillManager({ enabled }: { enabled: boolean }) {
         <p className="mt-1 text-sm text-slate-600">สร้างเป็นฉบับร่าง ตรวจสอบ แล้วจึงเปิดใช้กับบอท</p>
       </header>
 
+      <SkillRuntimeSettings />
       {!enabled && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           ร้านนี้ยังไม่ได้เปิด feature <code>shop_skills_enabled</code> จึงจัดเตรียม Skill ได้ แต่บอทจะยังไม่นำไปใช้
         </div>
       )}
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error} <button type="button" onClick={() => void loadSkills()} className="underline">โหลดรายการอีกครั้ง</button></div>}
+
+      <form aria-label="Import skill" aria-busy={importing || readingFile} onSubmit={importSkill} className="space-y-3 rounded-2xl border border-violet-200 bg-white p-5 shadow-sm">
+        <h2 className="font-semibold text-slate-900">นำเข้า Skill จาก Markdown</h2>
+        <p className="text-sm text-slate-600">ไฟล์ .md / .txt แบบ UTF-8 ไม่เกิน 16 KB และแนวทางการตอบไม่เกิน 8,000 ตัวอักษร ระบบปฏิเสธไฟล์ที่เกินขนาดโดยไม่ตัดข้อความ</p>
+        <p className="text-sm text-slate-600">รองรับ Markdown ธรรมดา หรือ frontmatter ระหว่าง --- ที่มี name (ไม่เกิน 50 ตัวอักษร) และ description แบบข้อความบรรทัดเดียวเท่านั้น ไม่รองรับ YAML ซับซ้อน ชื่อจะเป็นหมวดหมู่และคำอธิบายเก็บในช่องข้อมูล</p>
+        <p className="text-sm text-amber-800">นำเข้าเป็น Behavior แบบไม่มีคำกระตุ้น: ใช้กับทุกคำตอบเมื่ออนุมัติและเปิดระบบ Skills แล้ว ต้องตรวจสอบ Candidate และกดเปิดใช้ก่อน ระบบไม่รันสคริปต์หรือไฟล์แนบ ไม่โหลดไฟล์ที่ลิงก์ไว้</p>
+        <div className="flex flex-wrap gap-4 text-sm text-violet-700">
+          <a href="/skill-templates/government-service.md" download className="underline">ดาวน์โหลดแม่แบบงานราชการ</a>
+          <a href="/skill-templates/legal-information.md" download className="underline">ดาวน์โหลดแม่แบบข้อมูลกฎหมาย</a>
+        </div>
+        <label className="block text-sm font-medium text-slate-700">เลือกไฟล์เพื่อดูตัวอย่างก่อนบันทึก
+          <input type="file" accept=".md,.txt,text/plain,text/markdown" disabled={importing} onChange={previewFile} className="mt-2 block w-full text-sm" />
+        </label>
+        {readingFile && <p role="status" className="text-sm text-slate-500">กำลังอ่านไฟล์…</p>}
+        {preview && <div className="space-y-2">
+          <p className="text-sm font-medium text-slate-800">{importFile?.name} · หมวดหมู่: {preview.category}</p>
+          {preview.description && <p className="whitespace-pre-wrap text-sm text-slate-600">{preview.description}</p>}
+          <p className="text-xs text-slate-500">แนวทางการตอบ {preview.instruction.length.toLocaleString()} / 8,000 ตัวอักษร (แสดงเป็นข้อความเท่านั้น)</p>
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{preview.instruction}</pre>
+        </div>}
+        <button type="submit" disabled={!preview || importing || readingFile} className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          {importing && <Loader2 size={16} className="animate-spin" />} {importing ? 'กำลังนำเข้า…' : 'ยืนยันนำเข้าเป็น Candidate'}
+        </button>
+        {importNotice && <p role="status" className="text-sm text-emerald-700">{importNotice}</p>}
+      </form>
 
       <form onSubmit={submitSkill} className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-2">
         <label className="text-sm font-medium text-slate-700">ประเภท
@@ -129,6 +214,7 @@ export default function SkillManager({ enabled }: { enabled: boolean }) {
         </label>
         <label className="text-sm font-medium text-slate-700 md:col-span-2">คำกระตุ้น (คั่นด้วย comma)
           <input className="mt-1 w-full rounded-lg border border-slate-300 p-2" value={form.keywords} onChange={(event) => setForm({ ...form, keywords: event.target.value })} placeholder="ราคา, ส่งด่วน, รับประกัน" />
+          {form.skill_type === 'behavior' && <span className="mt-1 block text-xs text-slate-500">เว้นว่าง = ใช้กับทุกคำตอบเมื่ออนุมัติและเปิดระบบ Skills แล้ว</span>}
         </label>
         <label className="text-sm font-medium text-slate-700">ข้อมูลที่ยืนยันแล้ว
           <textarea className="mt-1 min-h-28 w-full rounded-lg border border-slate-300 p-2" value={form.knowledge_body} onChange={(event) => setForm({ ...form, knowledge_body: event.target.value })} maxLength={8000} />
@@ -183,6 +269,7 @@ export default function SkillManager({ enabled }: { enabled: boolean }) {
                 {skill.status !== 'active' && <button onClick={() => void mutate(skill, 'delete')} className="rounded-lg border border-red-200 p-1.5 text-red-600" aria-label="ลบ"><Trash2 size={15} /></button>}
               </div>
             </div>
+            {skill.skill_type === 'behavior' && !skill.trigger_keywords?.length && <div className="mt-3 text-xs text-violet-700">ไม่มีคำกระตุ้น · ใช้กับทุกคำตอบเมื่ออนุมัติและเปิดระบบ Skills</div>}
             {skill.trigger_keywords?.length > 0 && <div className="mt-3 text-xs text-violet-700">{skill.trigger_keywords.join(' · ')}</div>}
             {skill.knowledge_body && <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{skill.knowledge_body}</p>}
             {skill.instruction && <p className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{skill.instruction}</p>}

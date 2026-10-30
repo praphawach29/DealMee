@@ -36,8 +36,9 @@ test('matching trigger keywords rank first', () => {
 })
 
 test('prompt context includes guardrail and respects size cap', () => {
-  const context = formatShopSkillsPromptContext([baseSkill], 180)
-  assert.match(context, /SHOP SKILLS/)
+  const context = formatShopSkillsPromptContext([baseSkill], 4000)
+  assert.match(context, /APPROVED ORGANIZATION SKILLS/)
   assert.match(context, /ห้ามใช้ข้อมูลส่วนนี้แทนข้อมูลจริง/)
-  assert.ok(context.length <= 180)
+  assert.ok(context.length <= 4000)
+  assert.throws(() => formatShopSkillsPromptContext([baseSkill], 180), /budget/)
 })
