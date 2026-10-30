@@ -61,12 +61,12 @@ export function dashboardNavItems(opts: {
   }
 
   main.push(
-    { href: '/dashboard/billing', label: 'แพ็กเกจและการชำระเงิน', icon: CreditCard },
-    { href: '/dashboard/settings', label: 'ตั้งค่าบอท', icon: Bot },
+    { href: '/dashboard/inbox', label: 'กล่องข้อความ', icon: MessageSquare },
     { href: '/dashboard/knowledge', label: 'คลังความรู้', icon: Database },
+    { href: '/dashboard/settings', label: 'ตั้งค่าบอท', icon: Bot },
+    { href: '/dashboard/billing', label: 'แพ็กเกจและการชำระเงิน', icon: CreditCard },
     { href: '/dashboard/documents', label: 'เอกสาร & ใบเสนอราคา', icon: FileSpreadsheet },
     { href: '/dashboard/modules', label: 'เครื่องมือ', icon: Blocks },
-    { href: '/dashboard/inbox', label: 'กล่องข้อความ', icon: MessageSquare },
   )
 
   if (features.shop_skills_enabled === true) {
