@@ -65,10 +65,11 @@ CREATE POLICY "Users read their shop tool usage" ON public.tool_usage_log
   FOR SELECT USING (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()));
 DROP POLICY IF EXISTS "Service role inserts tool usage" ON public.tool_usage_log;
 CREATE POLICY "Service role inserts tool usage" ON public.tool_usage_log
-  FOR INSERT WITH CHECK (auth.role() IS DISTINCT FROM 'anon');
+  FOR INSERT WITH CHECK (auth.role() = 'service_role');
 
-REVOKE ALL ON public.tool_usage_log FROM anon, public;
-GRANT SELECT, INSERT ON public.tool_usage_log TO authenticated, service_role;
+REVOKE ALL ON public.tool_usage_log FROM anon, authenticated, public;
+GRANT SELECT ON public.tool_usage_log TO authenticated;
+GRANT SELECT, INSERT ON public.tool_usage_log TO service_role;
 
 -- ============================================================
 -- 3. shop_skill_revisions — immutable skill version history
@@ -97,10 +98,11 @@ CREATE POLICY "Users read their shop skill revisions" ON public.shop_skill_revis
   FOR SELECT USING (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()));
 DROP POLICY IF EXISTS "Service role inserts skill revisions" ON public.shop_skill_revisions;
 CREATE POLICY "Service role inserts skill revisions" ON public.shop_skill_revisions
-  FOR INSERT WITH CHECK (auth.role() IS DISTINCT FROM 'anon');
+  FOR INSERT WITH CHECK (auth.role() = 'service_role');
 
-REVOKE ALL ON public.shop_skill_revisions FROM anon, public;
-GRANT SELECT, INSERT ON public.shop_skill_revisions TO authenticated, service_role;
+REVOKE ALL ON public.shop_skill_revisions FROM anon, authenticated, public;
+GRANT SELECT ON public.shop_skill_revisions TO authenticated;
+GRANT SELECT, INSERT ON public.shop_skill_revisions TO service_role;
 
 -- ============================================================
 -- 4. Trigger: auto-create revision on skill update
@@ -125,6 +127,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_skill_revision_on_update ON public.shop_skills;
 CREATE TRIGGER trg_skill_revision_on_update
   BEFORE UPDATE ON public.shop_skills
   FOR EACH ROW EXECUTE FUNCTION public.create_skill_revision();
@@ -132,7 +135,8 @@ CREATE TRIGGER trg_skill_revision_on_update
 -- ============================================================
 -- 5. View: tool_usage_stats — tool usage analytics
 -- ============================================================
-CREATE OR REPLACE VIEW public.tool_usage_stats AS
+CREATE OR REPLACE VIEW public.tool_usage_stats
+WITH (security_invoker = true) AS
 SELECT
   shop_id,
   tool_name,
@@ -143,6 +147,9 @@ SELECT
   MAX(created_at) AS last_used_at
 FROM public.tool_usage_log
 GROUP BY shop_id, tool_name;
+
+REVOKE ALL ON public.tool_usage_stats FROM anon, public;
+GRANT SELECT ON public.tool_usage_stats TO authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.increment_memory_usage(p_memory_id UUID)
 RETURNS void

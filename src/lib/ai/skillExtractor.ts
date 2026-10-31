@@ -61,7 +61,7 @@ export async function extractSkillFromConversation({
     // 3. Fetch outcome details
     const { data: outcomeRow } = await supabase
       .from('conversation_outcomes')
-      .select('outcome, ai_confidence, intent, sales_stage_final')
+      .select('outcome, ai_confidence, intent')
       .eq('conversation_id', conversationId)
       .maybeSingle()
 
@@ -331,7 +331,7 @@ const { createAdminClient } = await import('@/lib/supabase/admin')
     .select('conversation_id, outcome, revenue')
     .eq('shop_id', shopId)
     .in('outcome', ['conversion', 'handoff'])
-    .order('created_at', { ascending: false })
+    .order('set_at', { ascending: false })
     .limit(limit)
 
   if (!conversations || conversations.length === 0) return result

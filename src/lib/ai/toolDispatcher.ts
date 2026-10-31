@@ -8,6 +8,7 @@ import { buildLineFlexQuotationMessage, buildLineFlexOfficialLetterMessage } fro
 import { resolveCatalogProduct, describeUnresolved, parseQuantity, computeShippingFee, type CatalogProduct } from '@/lib/ai/catalogPricing'
 import { highValueThreshold, highValueRefusal } from '@/lib/ai/salesModes'
 import { notifyShopAdmin } from '@/lib/billing/ownerAlerts'
+import { codOrderRefusal, isCodPaymentMethod, shopCodEnabled } from '@/lib/ai/codPolicy'
 import { carrierName, trackingLink } from '@/lib/orders/tracking'
 import { adminPausePayload } from '@/lib/inbox/adminPause'
 import { quotationAcceptPath } from '@/lib/docs/acceptToken'
@@ -418,7 +419,7 @@ export function formatPaymentInstructions(shop: any, amount?: number, lang: Cust
     lines.push(`${t('paymentAccountName', lang)}: ${bankAccountName}`)
   }
 
-  if ((shop.shipping_fee_type || '').toLowerCase().includes('cod')) {
+  if (shopCodEnabled(shop)) {
     if (lines.length > 0) lines.push('')
     lines.push(t('paymentCod', lang))
   }
@@ -649,7 +650,11 @@ export async function executeTool(
     const itemsText = lines.map(lineLabel).join(', ')
     const totalQty = lines.reduce((sum, l) => sum + l.qty, 0)
     const subtotal = lines.reduce((sum, l) => sum + l.product.price * l.qty, 0)
-    const isCod = /ปลายทาง|cod/i.test(String(args.payment_method || ''))
+    const codRefusal = codOrderRefusal(shop, args.payment_method)
+    if (codRefusal) {
+      return { resultForAi: codRefusal, immediateMessages: [] }
+    }
+    const isCod = isCodPaymentMethod(args.payment_method)
     const { fee: shippingFee } = computeShippingFee(shop, String(args.address || ''), subtotal)
     const totalAmount = subtotal + shippingFee
     const modelTotal = Number(args.total_price)

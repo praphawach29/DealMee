@@ -27,7 +27,7 @@ function database(shop: Shop | null = { id: 'shop-1', plan: 'free', plan_key: 'f
 
 async function load(db: ReturnType<typeof database>, user: { id: string } | null = { id: 'user-1' }, shop: Shop | null = { id: 'shop-1', plan: 'free', plan_key: 'free' }) {
   const code = ts.transpileModule(readFileSync(routeUrl, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-  const module = { exports: {} as Record<string, unknown> }
+  const compiledModule = { exports: {} as Record<string, unknown> }
   new Function('require', 'module', 'exports', code)((name: string) => {
     if (name === '@/utils/supabase/server') return { createClient: async () => ({ auth: { getUser: async () => ({ data: { user }, error: null }) }, }) }
     if (name === '@/lib/supabase/admin') return { createAdminClient: () => db }
@@ -35,8 +35,8 @@ async function load(db: ReturnType<typeof database>, user: { id: string } | null
     if (name === '@/lib/shopHelper') return { getOrCreateShopForUser: async () => (user ? shop : null) }
     if (name === 'next/cache') return { revalidatePath: () => undefined }
     throw new Error(`Unexpected dependency: ${name}`)
-  }, module, module.exports)
-  return module.exports
+  }, compiledModule, compiledModule.exports)
+  return compiledModule.exports
 }
 
 test('wallet buy addon is blocked for free shops before spending', async () => {

@@ -26,7 +26,8 @@ import {
   formatGoldenClosersPromptContext,
 } from '@/lib/ai/salesTrajectory'
 import { formatShopSkillsPromptContext, retrieveActiveShopSkills } from '@/lib/ai/shopSkills'
-import { QA_ONLY_PROMPT, qaToolAllowed, canUseResponseCache } from '@/lib/ai/assistantPolicy'
+import { QA_ONLY_PROMPT, qaToolAllowed } from '@/lib/ai/assistantPolicy'
+import { codCloseExample, codObjectionLine, codPaymentRule, shopCodEnabled } from '@/lib/ai/codPolicy'
 import { shopSkillsRetrievalEnabled } from '@/lib/ai/shopSkillsRollout'
 import { greetingOnlyReply, shouldBlockGreetingHandoff } from '@/lib/ai/handoffGuard'
 import { orderPaymentLabel } from '@/lib/orders/paymentState'
@@ -365,7 +366,7 @@ const MASTER_TOOLS = [
           },
         },
         address: { type: 'string', description: 'ที่อยู่จัดส่งครบถ้วน' },
-        payment_method: { type: 'string', description: 'วิธีชำระเงิน เช่น โอนเงิน, เก็บปลายทาง' },
+        payment_method: { type: 'string', description: 'วิธีชำระเงินที่ร้านเปิดอยู่ เช่น โอนเงิน หรือพร้อมเพย์ ห้ามใส่เก็บปลายทางถ้าพรอมต์บอกว่าร้านไม่เปิด COD' },
         total_price: { type: 'number', description: 'ยอดรวมทั้งหมดที่ต้องชำระ (บาท)' },
         tax_invoice: { type: 'string', description: 'ต้องการใบกำกับภาษีหรือไม่' },
       },
@@ -1202,6 +1203,7 @@ async function preparePlanningState({
   // since Gemini's caching is automatic regardless of structure and OpenAI
   // isn't currently reachable by the routing below.
   const activeBotName = (shop.bot_name && !/botify/i.test(shop.bot_name)) ? shop.bot_name : 'น้อง DealMee'
+  const codOn = shopCodEnabled(shop)
   const staticSystemPrompt = qaOnly ? `${QA_ONLY_PROMPT}
 ชื่อผู้ช่วย: ${activeBotName}
 หน่วยงาน: ${shop.name}` : `คุณคือ "${activeBotName}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
@@ -1225,14 +1227,14 @@ async function preparePlanningState({
 - [กังวลเรื่องราคา / คิดว่าแพง / ขอดูก่อน]: ชี้ความคุ้มค่าระยะยาว (Cost-per-use) + เสนอโปรโมชั่น/ของแถม หรือแนะนำรุ่นรอง (Downsell) ที่ราคาเป็นมิตรและตอบโจทย์ได้เช่นกัน
 - [กังวลเรื่องคุณภาพ / ของแท้ / เห็นผลจริงไหม]: เสริม Social Proof ทันที เช่น เป็นรุ่นยอดนิยม ลูกค้ากว่า 90% ซื้อซ้ำ มีรีวิวแน่น และทางร้านมีนโยบายรับประกันสินค้า
 - [กังวลเรื่องการเลือกไซส์ / สูตรที่เหมาะ]: อาสาช่วยเทียบสเปกทันที ("คุณลูกค้าสูง/หนัก หรือมีสภาพผิวแบบไหนคะ เดี๋ยวแอดมินช่วยแนะนำสูตร/ไซส์ที่เป๊ะที่สุดให้ค่ะ")
-- [กังวลเรื่องการจัดส่ง / ความปลอดภัย]: แจ้งรอบจัดส่งด่วน มีเลขพัสดุติดตาม และมีช่องทางชำระเงินที่สบายใจ (เช่น โอนสแกน QR หรือ เก็บเงินปลายทาง)
+${codObjectionLine(codOn)}
 
 4. [Assumptive & Alternative Choice Close - ตะล่อมปิดการขายด้วยตัวเลือก]
 - หลีกเลี่ยงการถามเปิดช่องปฏิเสธ เช่น "รับไหมคะ?"
 - ให้ใช้เทคนิคปิดการขายด้วยตัวเลือก 2 ทาง (Alternative Close) เสมอ เช่น:
   - "คุณลูกค้ารับเป็น สีขาว หรือ สีดำ ดีคะ?"
   - "รับเป็น 1 กล่อง หรือเซ็ต 2 กล่องโปรส่งฟรีดีคะ?"
-  - "สะดวกชำระเป็น โอนสแกน QR พร้อมเพย์ หรือ เก็บเงินปลายทาง ดีคะ?"
+${codCloseExample(codOn)}
 
 5. [Ethical Urgency & Value Stacking - กระตุ้นการตัดสินใจอย่างสมเหตุสมผล]
 - แจ้งสิทธิประโยชน์ทันที เช่น "รอบส่งวันนี้ตัดรอบ 14:00 น. หากคอนเฟิร์มตอนนี้แอดมินจะรีบล็อกสิทธิ์ส่งฟรีรอบวันนี้ให้เลยค่ะ"
@@ -1297,7 +1299,7 @@ async function preparePlanningState({
 - ห้ามพิมพ์หัวข้อสรุปแล้วปล่อยค่าว่าง เช่น "- **" ถ้ายังไม่มีข้อมูลจริง ให้ถามหรือเรียกเครื่องมือแทน
 - ถ้าลูกค้าให้ชื่อ/เบอร์/ที่อยู่แล้ว ให้สรุปข้อมูลเหล่านั้นกลับให้ครบ อย่าละไว้หรือแทนด้วยหัวข้อว่าง
 - ตอบเป็น plain text ล้วนเสมอ ห้ามใช้ markdown ทุกชนิด (ตัวหนาด้วยดอกจันคู่, ตัวเอียงด้วยดอกจันเดี่ยว, code ด้วย backtick, หัวข้อด้วย #) เพราะ LINE ไม่แปลงให้ ลูกค้าจะเห็นเครื่องหมายพวกนี้ติดมาจริงๆ ถ้าอยากเน้น ให้ขึ้นบรรทัดใหม่หรือใช้อีโมจินำหน้าแทน
-- ถ้ายังขาดวิธีชำระเงิน ให้เสนอทางเลือกจากข้อมูลร้าน เช่น พร้อมเพย์/โอนธนาคาร/เก็บปลายทาง แล้วถามให้ลูกค้าเลือก ก่อนเรียก take_order
+${codPaymentRule(codOn)}
 - ห้ามสรุปว่ารับออเดอร์แล้วถ้ายังไม่ได้เรียก take_order หรือข้อมูลลูกค้ายังไม่ครบ ให้ถามเฉพาะข้อมูลที่ขาดแทน
 - ถ้าไม่มีข้อมูล ให้แจ้งลูกค้าให้รอแอดมินหรือเรียก request_human_agent
 ${productsContext}
@@ -1732,12 +1734,34 @@ export function detectIntent(query: string, executedTools: string[]): string {
  * anything else that just wants "give me the final answer".
  */
 export async function processSalesAgentChat(request: SalesAgentRequest): Promise<AgentResult> {
-  // Response cache: check if we have a cached response for this query
+  // Response cache: shop-scoped, first-turn only, never price/stock/order answers.
   const shopId = request.shop?.id
   const userQuery = request.userQuery?.trim()
   const hasHistory = (request.conversationHistory?.length || 0) > 0
+  const { isCacheableCustomerQuery, mayStoreResponseCache } = await import('@/lib/ai/responseCache')
+  let priorMessageCount = 0
+  if (shopId && userQuery && request.conversationId && !hasHistory && !request.isPlayground && isCacheableCustomerQuery(userQuery)) {
+    try {
+      const db = request.supabaseClient || createAdminClient()
+      const { count, error } = await db
+        .from('chat_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversation_id', request.conversationId)
+        .eq('shop_id', shopId)
+      priorMessageCount = error ? Number.POSITIVE_INFINITY : (count ?? 0)
+    } catch {
+      priorMessageCount = Number.POSITIVE_INFINITY
+    }
+  }
+  const cacheOk = Boolean(shopId && userQuery && mayStoreResponseCache({
+    features: request.shop?.features,
+    query: userQuery || '',
+    hasExplicitHistory: hasHistory,
+    isPlayground: request.isPlayground,
+    priorMessageCount,
+  }))
 
-  if (canUseResponseCache(request.shop?.features) && shopId && userQuery && !hasHistory && !request.isPlayground) {
+  if (cacheOk && shopId && userQuery) {
     try {
       const { getCachedResponse } = await import('@/lib/ai/responseCache')
       const cached = await getCachedResponse(shopId, userQuery)
@@ -1774,7 +1798,7 @@ export async function processSalesAgentChat(request: SalesAgentRequest): Promise
   const result = finalizeAgentResult(state, finalText)
 
   // Store in cache if no tools were called (simple text response)
-  if (canUseResponseCache(request.shop?.features) && shopId && userQuery && !hasHistory && !request.isPlayground && result.text && (!result.toolCallsExecuted || result.toolCallsExecuted.length === 0)) {
+  if (cacheOk && shopId && userQuery && result.text && (!result.toolCallsExecuted || result.toolCallsExecuted.length === 0)) {
     try {
       const { setCachedResponse } = await import('@/lib/ai/responseCache')
       await setCachedResponse(shopId, userQuery, result.text)

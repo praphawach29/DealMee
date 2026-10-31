@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireShop } from '@/lib/auth/requireShop'
 import { getShopAiKey } from '@/lib/billing/shopAiKey'
-import { createAdminClient } from '@/lib/supabase/admin'
+
+function providerError(body: string, key: string): string {
+  const redacted = key ? body.split(key).join('[redacted]') : body
+  return redacted.slice(0, 100)
+}
 
 export async function POST(request: NextRequest) {
   const auth = await requireShop()
@@ -27,10 +31,12 @@ export async function POST(request: NextRequest) {
 async function testKey(provider: string, key: string): Promise<NextResponse> {
   try {
     if (provider === 'gemini') {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`)
+      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
+        headers: { 'x-goog-api-key': key },
+      })
       if (!res.ok) {
         const err = await res.text()
-        return NextResponse.json({ valid: false, error: `Gemini API key ไม่ถูกต้อง: ${err.substring(0, 100)}` })
+        return NextResponse.json({ valid: false, error: `Gemini API key ไม่ถูกต้อง: ${providerError(err, key)}` })
       }
       const data = await res.json()
       const models = data.models?.length || 0
