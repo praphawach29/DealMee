@@ -19,9 +19,12 @@ export interface GoldenTrajectory {
   winning_turn_dialogue: Array<{ sender: 'customer' | 'bot' | 'agent'; text: string }>
   closing_technique: string
   revenue: number
-  status: 'active' | 'archived'
+  status: 'candidate' | 'active' | 'archived'
   created_at: string
 }
+
+/** New extracts wait for the merchant. Rows already marked active stay in use. */
+export const NEW_TRAJECTORY_STATUS = 'candidate' as const
 
 /**
  * Hermes-inspired Golden Trajectory Extractor
@@ -147,7 +150,7 @@ ${transcript}
         winning_turn_dialogue: parsed.winning_turn_dialogue,
         closing_technique: parsed.closing_technique || 'ปิดการขายด้วยข้อมูลชัดเจน',
         revenue: revenue || 0,
-        status: 'active',
+        status: NEW_TRAJECTORY_STATUS,
       })
       .select('id')
       .single()

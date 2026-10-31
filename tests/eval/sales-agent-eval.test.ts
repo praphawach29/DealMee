@@ -11,7 +11,7 @@ import { EVAL_CASES, EVAL_CATEGORIES, scriptedToolNames } from './fixtures/cases
 import { shopById } from './fixtures/shops.ts'
 import { runEvalTurn, scriptedModelCaller } from './runTurn.ts'
 import { buildReport, reportMarkdown } from './report.ts'
-import { offersDisabledCod, scoreEval } from './score.ts'
+import { deniesCod, offersDisabledCod, scoreEval } from './score.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -114,10 +114,16 @@ test('a greeting does not hand the chat to a human', async () => {
     text: '',
     toolCall: { name: 'request_human_agent', args: { reason: 'ทักทาย' }, id: 'greet' },
   })
-  const result = await runEvalTurn({ shop, evalCase, modelCaller: caller })
-  assert.equal(result.text, greetingOnlyReply('th'))
-  assert.deepEqual(result.toolCalls, [])
-  assert.equal(result.gaps.length, 0)
+  for (const message of ['สวัสดีค่ะ', 'หวัดดีค้าบ', 'ฮัลโหล', 'ดีจ้า', 'สวัสดีครับผม', 'ดีค่า']) {
+    const result = await runEvalTurn({
+      shop,
+      evalCase: { ...evalCase, turns: [{ role: 'user', text: message }] },
+      modelCaller: caller,
+    })
+    assert.equal(result.text, greetingOnlyReply('th'), message)
+    assert.deepEqual(result.toolCalls, [], message)
+    assert.equal(result.gaps.length, 0, message)
+  }
 })
 
 test('Q&A-only mode rejects a commerce tool before it runs', async () => {
@@ -216,6 +222,8 @@ test('scorer rejects an invented price and a COD offer the shop disabled', () =>
   assert.equal(offer.pass, false)
   assert.equal(offersDisabledCod('ร้านไม่ได้เปิดเก็บเงินปลายทางค่ะ'), false)
   assert.equal(offersDisabledCod('มีเก็บเงินปลายทางค่ะ'), true)
+  assert.equal(deniesCod('ไม่รับเก็บปลายทางค่ะ'), true)
+  assert.equal(deniesCod('มีเก็บเงินปลายทางค่ะ'), false)
 
   const verdict = checkGrounding({
     draft: 'มีเก็บเงินปลายทางค่ะ',
@@ -223,11 +231,73 @@ test('scorer rejects an invented price and a COD offer the shop disabled', () =>
     language: 'th',
     chunks: [],
     evidenceTexts: ['ไม่รับเก็บเงินปลายทาง'],
+    codEnabled: false,
   })
-  // Known checker gap: "ไม่รับ" is not treated as negating the phrase, so a
-  // positive COD claim can look supported. The eval scorer still fails it.
-  assert.equal(verdict.grounded, true)
+  assert.equal(verdict.grounded, false)
   assert.equal(offer.pass, false)
+
+  const denialOn = checkGrounding({
+    draft: 'ไม่รับเก็บปลายทางค่ะ',
+    customerMessage: 'เก็บปลายทางได้ไหม',
+    language: 'th',
+    chunks: [],
+    evidenceTexts: ['เปิดเก็บเงินปลายทาง'],
+    codEnabled: true,
+  })
+  assert.equal(denialOn.grounded, false)
+
+  const denialOff = checkGrounding({
+    draft: 'ไม่รับเก็บปลายทางค่ะ',
+    customerMessage: 'เก็บปลายทางได้ไหม',
+    language: 'th',
+    chunks: [],
+    evidenceTexts: ['ไม่รับเก็บเงินปลายทาง'],
+    codEnabled: false,
+  })
+  assert.equal(denialOff.grounded, true)
+
+  const unchecked = checkGrounding({
+    draft: 'ไม่รับเก็บปลายทางค่ะ',
+    customerMessage: 'เก็บปลายทางได้ไหม',
+    language: 'th',
+    chunks: [],
+    evidenceTexts: ['ไม่รับเก็บเงินปลายทาง'],
+  })
+  assert.equal(unchecked.grounded, false)
+
+  const fashion = shopById('fashion')
+  const falseDenial = scoreEval({
+    evalCase: EVAL_CASES.find((item) => item.id === 'cod_on-01')!,
+    shop: fashion,
+    finalText: 'ไม่รับเก็บปลายทางค่ะ',
+    draft: 'ไม่รับเก็บปลายทางค่ะ',
+    toolCalls: [],
+    evidenceTexts: ['เปิดเก็บเงินปลายทาง'],
+  })
+  assert.equal(falseDenial.pass, false)
+
+  const stockout = checkGrounding({
+    draft: 'เสื้อยืดสินค้าหมดค่ะ',
+    customerMessage: 'หมดยัง',
+    language: 'th',
+    chunks: [],
+    evidenceTexts: ['เสื้อยืดโอเวอร์ไซส์ ราคา 290 บาท (คงเหลือ: 12 ชิ้น)'],
+    codEnabled: true,
+  })
+  assert.equal(stockout.grounded, false)
+
+  const slots = checkGrounding({
+    draft: 'รอบ 18:00 ยังไม่มีค่ะ',
+    customerMessage: 'รอบ 18:00 ว่างมั้ย',
+    language: 'th',
+    chunks: [],
+    evidenceTexts: ['เวลาว่าง: 11:00, 13:00, 15:00, 17:00'],
+    codEnabled: false,
+  })
+  assert.equal(slots.grounded, true)
+  assert.equal(slots.shouldHandoff, false)
+  assert.match(slots.text, /11:00/)
+  assert.match(slots.text, /17:00/)
 })
 
 test('report groups pass rate by category', () => {

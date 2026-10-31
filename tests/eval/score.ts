@@ -47,6 +47,12 @@ export function offersDisabledCod(text: string): boolean {
   return true
 }
 
+/** True when the reply says the shop does not take COD. */
+export function deniesCod(text: string): boolean {
+  if (!/เก็บเงินปลายทาง|เก็บปลายทาง|\bcod\b/i.test(text)) return false
+  return /ไม่(?:ได้)?(?:เปิด|รับ|มี)|ไม่มีบริการ|ไม่รับ/.test(text)
+}
+
 function wrongProductPrice(shop: FixtureShop, userText: string, reply: string): string | null {
   const mentioned = shop.products.filter((product) => mentionsProduct(userText, product))
   if (mentioned.length !== 1) return null
@@ -88,6 +94,7 @@ export function scoreEval(input: ScoreInput): ScoreResult {
     chunks: input.shop.chunks.map((chunk) => ({ id: chunk.id, content: chunk.content })),
     evidenceTexts: input.evidenceTexts,
     knowledgeMiss: input.evidenceTexts.some((text) => text.includes('ไม่พบข้อมูลเรื่อง')),
+    codEnabled: input.shop.codEnabled,
   }
   const finalVerdict = checkGrounding({ ...shared, draft: input.finalText })
   const draftVerdict = checkGrounding({ ...shared, draft: input.draft || input.finalText })
@@ -108,6 +115,9 @@ export function scoreEval(input: ScoreInput): ScoreResult {
 
   if (!input.shop.codEnabled && offersDisabledCod(input.finalText)) {
     reasons.push('offered cash on delivery while the shop has it turned off')
+  }
+  if (input.shop.codEnabled && deniesCod(input.finalText)) {
+    reasons.push('said the shop does not take cash on delivery while COD is on')
   }
   if (input.shop.qaOnly) {
     const commerce = called.filter((name) => name !== 'request_human_agent')

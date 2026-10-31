@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
       knowledge_body: parsed.description,
       instruction: parsed.instruction,
       gold_conversations: [],
+      facts_confirmed: true,
     }).select('*').single()
     if (error || !data) return NextResponse.json({ error: 'Unable to import skill; please try again' }, { status: 500 })
     return NextResponse.json({ skill: data }, { status: 201 })

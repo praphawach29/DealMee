@@ -1,5 +1,9 @@
-const THAI_GREETING_ONLY = /^(?:สวัสดี|หวัดดี|ดี)(?:ครับผม|นะครับ|ครับ|ค่ะ|คะ|จ้า|จ๊ะ)?$/u
-const ENGLISH_GREETING_ONLY = /^(?:hi|hello|hey)(?: there)?$/u
+const THAI_PARTICLE = 'ครับผม|นะครับ|นะคะ|นะค่ะ|ค้าบ+|คับ+|ครับ|ค่ะ|คะ|ค่า+|จ้า+|จ๊ะ|จ้ะ|งับ|ฮ่ะ|ฮะ|นะ'
+const THAI_GREETING_ONLY = new RegExp(
+  `^(?:สวัสดี|หวัดดี|ดี|ฮัลโหล่*|ฮัลโล่*|เฮลโหล่*|ฮัลโล)(?:\\s*(?:${THAI_PARTICLE}))?$`,
+  'u',
+)
+const ENGLISH_GREETING_ONLY = /^(?:hi|hello|hey|hallo)(?: there)?$/u
 
 function normalizeGreeting(text: string): string {
   return text

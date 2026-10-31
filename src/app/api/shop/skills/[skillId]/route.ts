@@ -63,10 +63,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       console.error('[shop-skills] revision failed', revisionError.message)
       return NextResponse.json({ error: 'Unable to activate skill' }, { status: 500 })
     }
+    const confirmFacts = body.confirm_facts === true || existing.facts_confirmed === true
     const { data, error } = await supabase.from('shop_skills').update({
       status: 'active', version, approved_by: auth.userId, approved_at: now, updated_at: now,
+      facts_confirmed: confirmFacts,
     }).eq('id', skillId).eq('shop_id', auth.shopId).eq('status', 'candidate').select('*').single()
     if (error) return NextResponse.json({ error: 'Unable to activate skill' }, { status: 500 })
+    return NextResponse.json({ skill: data })
+  }
+
+  if (body.action === 'confirm_facts') {
+    const { data, error } = await supabase.from('shop_skills').update({
+      facts_confirmed: true,
+      updated_at: now,
+    }).eq('id', skillId).eq('shop_id', auth.shopId).select('*').single()
+    if (error) return NextResponse.json({ error: 'Unable to confirm skill facts' }, { status: 500 })
     return NextResponse.json({ skill: data })
   }
 
@@ -82,7 +93,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
   const parsed = parseShopSkillInput(body)
   if (!parsed.data) return NextResponse.json({ error: parsed.error }, { status: 400 })
-  const { data, error } = await supabase.from('shop_skills').update({ ...parsed.data, updated_at: now })
+  const { data, error } = await supabase.from('shop_skills').update({ ...parsed.data, facts_confirmed: true, updated_at: now })
     .eq('id', skillId).eq('shop_id', auth.shopId).eq('status', 'candidate').select('*').single()
   if (error) return NextResponse.json({ error: 'Unable to update skill' }, { status: 500 })
   return NextResponse.json({ skill: data })

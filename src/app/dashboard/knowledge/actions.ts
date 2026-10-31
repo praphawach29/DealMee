@@ -421,7 +421,12 @@ export async function toggleTrajectoryStatus(id: string, currentStatus: string) 
   }
 
   revalidatePath('/dashboard/knowledge')
-  return { success: nextStatus === 'active' ? 'เปิดใช้งานตัวอย่างนี้แล้ว' : 'ปิดใช้งานตัวอย่างนี้ชั่วคราวแล้ว' }
+  const success = currentStatus === 'candidate'
+    ? 'อนุมัติตัวอย่างนี้แล้ว บอทจะใช้เป็นแนวปิดการขาย'
+    : nextStatus === 'active'
+      ? 'เปิดใช้งานตัวอย่างนี้แล้ว'
+      : 'ปิดใช้งานตัวอย่างนี้ชั่วคราวแล้ว'
+  return { success }
 }
 
 export async function dismissKnowledgeGap(id: string) {
@@ -481,7 +486,7 @@ export async function triggerScanGoldenClosers() {
   revalidatePath('/dashboard/knowledge')
   return {
     success: extractedCount > 0
-      ? `สกัดบทสนทนาปิดการขายชั้นเยี่ยมได้สำเร็จ ${extractedCount} รายการ!`
+      ? `สกัดบทสนทนาปิดการขายได้ ${extractedCount} รายการ เป็นฉบับรออนุมัติ กดอนุมัติก่อนบอทจะนำไปใช้`
       : 'วิเคราะห์ออเดอร์แล้ว ไม่มีบทสนทนาใหม่ที่ต้องสกัดเพิ่มเติม',
   }
 }

@@ -123,6 +123,7 @@ test('multipart import saves only a session-owned behavior candidate with full i
     shop_id: 'session-shop', created_by: 'session-user', status: 'candidate',
     skill_type: 'behavior', category: 'policy', trigger_keywords: [],
     knowledge_body: 'summary', instruction: '\nHello\n', gold_conversations: [],
+    facts_confirmed: true,
   }])
   assert.equal((await response.json()).skill.id, 'new-skill')
 })

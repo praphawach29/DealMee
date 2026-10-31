@@ -68,10 +68,9 @@ export async function extractSkillFromConversation({
     const aiConfidence = outcomeRow?.ai_confidence ?? 0.5
     const intent = outcomeRow?.intent ?? 'info_request'
 
-    // 4. Build transcript (redact PII)
-    const transcript = messages
-      .map((m: any) => `${m.sender_type === 'user' ? 'ลูกค้า' : 'บอท'}: ${redactPii(m.message)}`)
-      .join('\n')
+    // 4. Facts may come only from the customer and the merchant. The bot's own
+    // replies are shown for behavior, and are not a source of shop facts.
+    const transcript = skillFactTranscript(messages)
 
 const { platformSecret } = await import('@/lib/platformSecrets')
     const apiKey = await platformSecret('GEMINI_API_KEY')
@@ -101,8 +100,8 @@ Intent: ${intent}
 - อย่าสกัดข้อมูลที่เป็น "เฉพาะครั้งนี้" (เช่น เลขออเดอร์, วันที่)
 - trigger_keywords: คำสำคัญ 2-5 คำ ที่ควร trigger สกิลนี้
 - category: หมวดหมู่ เช่น "sales", "shipping", "product_info", "greeting", "objection_handling"
-- knowledge_body: ข้อมูลความรู้ (ถ้า skill_type = knowledge/example) หรือ null
-- instruction: แนวทาง/กฎ (ถ้า skill_type = behavior/rule) หรือ null
+- knowledge_body: ข้อเท็จจริงของร้าน ต้องคัดมาจาก "แหล่งข้อเท็จจริง" เท่านั้น (ข้อความลูกค้าหรือแอดมิน) ห้ามคัดราคา สต็อก นโยบาย หรือเวลาจากข้อความของบอท ถ้าไม่มีแหล่งข้อเท็จจริง ให้ใส่ null
+- instruction: แนวทาง/กฎ (ถ้า skill_type = behavior/rule) หรือ null ได้จากบทสนทนาทั้งหมด แต่ห้ามใส่ตัวเลขที่บอทพูดเอง
 - ต้องมี knowledge_body หรือ instruction อย่างน้อยหนึ่ง
 
 ตอบกลับเป็น JSON รูปแบบนี้เท่านั้น:
@@ -114,9 +113,14 @@ Intent: ${intent}
   "instruction": "แนวทางที่ควรทำ..."
 }
 
-บทสนทนาจริง:
+แหล่งข้อเท็จจริง (ลูกค้าและแอดมินเท่านั้น):
 """
-${transcript}
+${transcript.factual || '(ไม่มีข้อความจากลูกค้าหรือแอดมิน)'}
+"""
+
+บทสนทนาทั้งหมด (ใช้ประกอบแนวทางได้ ห้ามใช้ข้อความของบอทเป็นข้อเท็จจริง):
+"""
+${transcript.full}
 """`
 
     const response = await fetch(
@@ -161,6 +165,7 @@ ${transcript}
     if (!validTypes.includes(parsed.skill_type)) {
       parsed.skill_type = 'knowledge'
     }
+    parsed.knowledge_body = retainFactualKnowledge(parsed.knowledge_body, transcript.factual)
     if (!parsed.knowledge_body && !parsed.instruction) {
       return { success: false, error: 'No useful content extracted', skipped: true, reason: 'no_content' }
     }
@@ -200,6 +205,7 @@ ${transcript}
         knowledge_body: parsed.knowledge_body,
         instruction: parsed.instruction,
         gold_conversations: [],
+        facts_confirmed: false,
       })
       .select('id')
       .single()
@@ -289,6 +295,41 @@ function checkConflict(newSkill: ExtractedSkill, activeSkills: any[]): string | 
     }
   }
   return null
+}
+
+const FACT_SENDERS = new Set(['user', 'agent', 'human', 'admin', 'merchant'])
+
+function senderLabel(sender?: string | null): string {
+  if (sender === 'user') return 'ลูกค้า'
+  if (FACT_SENDERS.has(String(sender || '')) && sender !== 'user') return 'แอดมิน'
+  if (sender === 'bot') return 'บอท'
+  return 'ระบบ'
+}
+
+/** Customer and merchant lines are the only source of factual skill text. */
+export function skillFactTranscript(messages: { sender_type?: string | null; message?: string | null }[]): { factual: string; full: string } {
+  const line = (message: { sender_type?: string | null; message?: string | null }) =>
+    `${senderLabel(message.sender_type)}: ${redactPii(message.message || '')}`
+  return {
+    factual: messages.filter((message) => FACT_SENDERS.has(String(message.sender_type || ''))).map(line).join('\n'),
+    full: messages.map(line).join('\n'),
+  }
+}
+
+/**
+ * Drop a knowledge body the model built from the bot. Empty merchant/customer
+ * text, or a price/count that those lines never said, cannot be stored as a fact.
+ */
+export function retainFactualKnowledge(body: string | null, factual: string): string | null {
+  const cleaned = (body || '').trim()
+  if (!cleaned || !factual.trim()) return null
+  const source = factual.replace(/,/g, '')
+  const numbers = cleaned.match(/\d[\d,.]*/g) || []
+  for (const number of numbers) {
+    const digits = number.replace(/,/g, '').replace(/\.$/, '')
+    if (digits.length >= 2 && !source.includes(digits)) return null
+  }
+  return cleaned
 }
 
 /**

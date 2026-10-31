@@ -15,6 +15,24 @@ export interface AgentMemory {
 }
 
 /**
+ * Shadow-eval notes used to be stored here as type "fact". They are not shop
+ * knowledge and must not enter the prompt or the grounding evidence.
+ */
+export function isShadowEvalMemory(memory: { category?: string | null; content?: string | null }): boolean {
+  const category = (memory.category || '').trim().toLowerCase()
+  if (category === 'shadow_eval' || category === 'shadow-eval') return true
+  return /^shadow eval\b/i.test((memory.content || '').trim())
+}
+
+/**
+ * Merchant-entered facts may support a shop claim. Procedures, preferences,
+ * pitfalls, and anything the bot wrote itself may not.
+ */
+export function isGroundingMemory(memory: Pick<AgentMemory, 'memory_type' | 'category' | 'content'>): boolean {
+  return memory.memory_type === 'fact' && !isShadowEvalMemory(memory)
+}
+
+/**
  * Retrieve relevant agent memories for a shop.
  * Used to inject procedural knowledge into the system prompt.
  */
@@ -36,7 +54,9 @@ export async function retrieveAgentMemories(
 
     // Simple keyword matching (same approach as shopSkills rankShopSkills)
     const normalized = query.toLocaleLowerCase('th-TH')
-    const scored = (data as AgentMemory[]).map((m) => ({
+    const scored = (data as AgentMemory[])
+      .filter((m) => !isShadowEvalMemory(m))
+      .map((m) => ({
       memory: m,
       score:
         (normalized.includes(m.category.toLocaleLowerCase('th-TH')) ? 2 : 0) +
@@ -57,8 +77,9 @@ export async function retrieveAgentMemories(
  * Format agent memories for prompt injection.
  */
 export function formatAgentMemoryContext(memories: AgentMemory[], maxLength = 2000): string {
-  if (memories.length === 0) return ''
-  const blocks = memories.map((m) => {
+  const visible = memories.filter((memory) => !isShadowEvalMemory(memory))
+  if (visible.length === 0) return ''
+  const blocks = visible.map((m) => {
     const typeLabel = m.memory_type === 'procedure' ? '📋 ขั้นตอน' :
                       m.memory_type === 'preference' ? '⭐ ความชอบ' :
                       m.memory_type === 'pitfall' ? '⚠️ ข้อควรระวัง' : '📌 ข้อเท็จจริง'
@@ -68,6 +89,11 @@ export function formatAgentMemoryContext(memories: AgentMemory[], maxLength = 20
     '## AGENT MEMORY (ความรู้ที่บอทเรียนรู้เอง)',
     ...blocks,
   ].join('\n').slice(0, maxLength)
+}
+
+/** Only merchant-entered facts. This is the slice grounding is allowed to quote. */
+export function formatGroundingMemory(memories: AgentMemory[], maxLength = 2000): string {
+  return formatAgentMemoryContext(memories.filter(isGroundingMemory), maxLength)
 }
 
 /**

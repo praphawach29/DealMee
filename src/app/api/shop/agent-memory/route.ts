@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireShop } from '@/lib/auth/requireShop'
+import { isShadowEvalMemory } from '@/lib/ai/agentMemory'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET() {
@@ -16,7 +17,8 @@ export async function GET() {
   if (error) {
     return NextResponse.json({ error: 'Unable to load memories' }, { status: 500 })
   }
-  return NextResponse.json({ memories: data ?? [] })
+  const memories = (data ?? []).filter((row) => !isShadowEvalMemory(row))
+  return NextResponse.json({ memories })
 }
 
 export async function POST(request: NextRequest) {
