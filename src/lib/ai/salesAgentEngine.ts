@@ -34,7 +34,12 @@ import { shopSkillsRetrievalEnabled } from '@/lib/ai/shopSkillsRollout'
 import { greetingOnlyReply, shouldBlockGreetingHandoff } from '@/lib/ai/handoffGuard'
 import { orderPaymentLabel } from '@/lib/orders/paymentState'
 
-const supabase = createAdminClient()
+// Created on first use so tests can import the planning loop without a database.
+let engineSupabaseClient: SupabaseClient | null = null
+function engineSupabase(): SupabaseClient {
+  if (!engineSupabaseClient) engineSupabaseClient = createAdminClient()
+  return engineSupabaseClient
+}
 
 /**
  * Sent the moment a plan turns out to need more than one AI call, so the
@@ -74,6 +79,11 @@ export interface SalesAgentRequest {
    * orders/bookings/etc.
    */
   toolExecutor?: ToolExecutor
+  /**
+   * Test seam. When set, the planning loop asks this function instead of Gemini,
+   * OpenAI, or Claude. Production callers leave it unset.
+   */
+  modelCaller?: ModelCaller
   /**
    * Optional caller-scoped Supabase client. Dashboard server actions pass the
    * authenticated user client so RLS-protected shop data (products, KB, etc.)
@@ -134,6 +144,21 @@ export interface AgentToolCall {
  * providers just never set it.
  */
 export type IdentifiedToolCall = AgentToolCall & { id?: string; thoughtSignature?: string }
+
+/** One provider step. Exported so an eval harness can script or record the same shape the loop consumes. */
+export interface ModelStepResult {
+  text: string
+  toolCall?: IdentifiedToolCall
+  usage?: AgentUsage
+  truncated?: boolean
+}
+
+export type ModelCaller = (input: {
+  systemInstruction: string
+  turns: PlanningTurn[]
+  toolNames: string[]
+  step: number
+}) => Promise<ModelStepResult | null>
 
 export interface AgentUsage {
   promptTokens: number
@@ -244,20 +269,15 @@ export interface PlanningState {
   /** Chunks and shop text the grounding check may quote. Tool results are appended as the plan runs. */
   groundingChunks: EvidenceChunk[]
   groundingTexts: string[]
+  /** Set only by tests and the live eval runner. Production leaves this empty. */
+  modelCaller?: ModelCaller
 }
 
 export type PlanningStart =
   | { done: true; result: AgentResult }
   | { done: false; state: PlanningState }
 
-/** Internal — one provider call's raw result within the planning loop (not the final AgentResult returned to callers). */
-interface ProviderStepResult {
-  text: string
-  toolCall?: IdentifiedToolCall
-  usage?: AgentUsage
-  /** The provider stopped because it hit the output-token ceiling, so `text` is cut off mid-sentence and must not be sent to a customer as-is. */
-  truncated?: boolean
-}
+type ProviderStepResult = ModelStepResult
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Master Tool List (36 Tools) — OpenAI format (canonical)
@@ -720,6 +740,35 @@ function filterTools(names: AgentToolName[]) {
   return MASTER_TOOLS.filter((t) => wanted.has(t.name))
 }
 
+/**
+ * Tools the model is allowed to see for this shop. Same filters as the planning
+ * setup: Q&A-only keeps handoff, and a free plan or an empty catalog drops
+ * sales-automation tools.
+ */
+export function toolsOfferedForShop(
+  shop: { features?: Record<string, unknown> | null; plan?: string | null; plan_key?: string | null; trial_expires_at?: string | null; plan_expires_at?: string | null },
+  options?: { catalogEmpty?: boolean },
+) {
+  const features = (shop.features || {}) as Record<string, boolean>
+  const qaOnly = features.assistant_qa_only === true
+  let toolSet = filterTools(ROUTED_TOOL_NAMES)
+  if (qaOnly) toolSet = MASTER_TOOLS.filter((tool) => qaToolAllowed(tool.name))
+  const salesLocked = !salesAutomationEnabled(shop) || options?.catalogEmpty === true
+  if (salesLocked) toolSet = toolSet.filter((tool) => !SALES_AUTOMATION_TOOLS.has(tool.name))
+  return toolSet
+}
+
+/** Blocks commerce tools in Q&A-only mode before they reach the dispatcher. */
+export function guardQaOnlyExecutor(qaOnly: boolean, underlying: ToolExecutor): ToolExecutor {
+  if (!qaOnly) return underlying
+  return (name, args, context) => {
+    if (!qaToolAllowed(name)) {
+      throw new Error('This tool is disabled in Q&A-only mode')
+    }
+    return underlying(name, args, context)
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DealMee Brain Engine™: Complexity Classifier & Router
 // ─────────────────────────────────────────────────────────────────────────────
@@ -939,6 +988,7 @@ async function preparePlanningState({
   toolExecutor,
   supabaseClient,
   isPlayground,
+  modelCaller,
 }: SalesAgentRequest): Promise<
   { quotaExceeded: true; language: CustomerLanguage } | { quotaExceeded: false; state: PlanningState }
 > {
@@ -948,7 +998,7 @@ async function preparePlanningState({
     return { quotaExceeded: true, language: detectCustomerLanguage(userQuery) }
   }
 
-  const db = supabaseClient || supabase
+  const db = supabaseClient || engineSupabase()
 
   // A shop that brings its own key (BYOK) uses only that key: it pays for its own AI,
   // so when the key fails the conversation goes to the shop's admin rather than
@@ -1391,10 +1441,7 @@ ${historyContext}`
     recentCustomerMessages,
     isVip: isVipCustomer,
   })
-  if (qaOnly) routing.toolSet = MASTER_TOOLS.filter(tool => qaToolAllowed(tool.name))
-  if (salesLocked) {
-    routing.toolSet = routing.toolSet.filter((t) => !SALES_AUTOMATION_TOOLS.has(t.name))
-  }
+  routing.toolSet = toolsOfferedForShop(shop, { catalogEmpty })
   console.log(
     `[DealMee Brain™] "${userQuery}" | ${routing.complexity} (score ${routing.complexityScore}) | Tools: ${routing.toolSet.length}${isVipCustomer ? ' | VIP customer' : ''} | Stage: ${initialSalesStage}`
   )
@@ -1409,13 +1456,7 @@ ${historyContext}`
 
   const language = detectCustomerLanguage(userQuery)
 
-  const underlyingExecutor: ToolExecutor = toolExecutor || realExecuteTool
-  const executor: ToolExecutor = (name, args, context) => {
-    if (qaOnly && !qaToolAllowed(name)) {
-      throw new Error('This tool is disabled in Q&A-only mode')
-    }
-    return underlyingExecutor(name, args, context)
-  }
+  const executor = guardQaOnlyExecutor(qaOnly, toolExecutor || realExecuteTool)
   const toolCtx: ToolExecutionContext = {
     shopId: shop.id,
     userId,
@@ -1452,6 +1493,7 @@ ${historyContext}`
       toolCallsExecuted: [],
       scheduledMessages: [],
       isPlayground: isPlayground || false,
+      modelCaller,
       groundingChunks: loadedKnowledge.chunks.map((chunk) => ({ id: chunk.id, content: chunk.content })),
       groundingTexts: [
         productsContext,
@@ -1482,6 +1524,15 @@ async function callCurrentStep(state: PlanningState): Promise<ProviderStepResult
 
   // On the final step, disable tools so the model synthesizes a customer-facing text answer
   const activeToolSet = state.step >= MAX_PLANNING_STEPS - 1 ? [] : routing.toolSet
+
+  if (state.modelCaller) {
+    return state.modelCaller({
+      systemInstruction,
+      turns,
+      toolNames: activeToolSet.map((tool) => tool.name),
+      step: state.step,
+    })
+  }
 
   // 1. Primary Engine: Gemini 3.8 Flash (High Speed & Accurate Tool Calling)
   if (geminiKey) {
@@ -1592,17 +1643,20 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
           productsData: undefined,
         }
       : await state.executor(response.toolCall.name, response.toolCall.args, state.toolCtx)
-    // Phase 5: log tool usage (fire-and-forget)
-    import('@/lib/ai/agentMemory').then(({ logToolUsage }) => {
-      logToolUsage({
-        shopId: state.toolCtx.shopId,
-        conversationId: state.conversationId,
-        toolName: response.toolCall!.name,
-        argsSummary: JSON.stringify(response.toolCall!.args).slice(0, 200),
-        success: true,
-        durationMs: Date.now() - toolStart,
+    // Phase 5: log tool usage (fire-and-forget). Skipped for the eval model
+    // seam so a scripted run cannot write tool rows into the product database.
+    if (!state.modelCaller) {
+      import('@/lib/ai/agentMemory').then(({ logToolUsage }) => {
+        logToolUsage({
+          shopId: state.toolCtx.shopId,
+          conversationId: state.conversationId,
+          toolName: response.toolCall!.name,
+          argsSummary: JSON.stringify(response.toolCall!.args).slice(0, 200),
+          success: true,
+          durationMs: Date.now() - toolStart,
+        }).catch(() => {})
       }).catch(() => {})
-    }).catch(() => {})
+    }
 
   if (toolResult.productsData && toolResult.productsData.length > 0) {
     // A later tool in the same turn (search, then stock) adds cards. Same catalog id is kept once.
