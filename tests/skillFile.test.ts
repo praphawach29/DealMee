@@ -19,6 +19,7 @@ test('UI previews text before multipart import, refreshes candidates and clears 
       return [states[index], (value: unknown) => { states[index] = typeof value === 'function' ? value(states[index]) : value }]
     } }
     if (name === '@/lib/ai/skillFile') return { parseSkillFile, MAX_SKILL_FILE_BYTES: 16384 }
+    if (name === '@/lib/ai/shadowReport') return { skillDigest: () => 'digest', isStaleRunning: () => false }
     if (name === './SkillRuntimeSettings') return { __esModule: true, default: () => null }
     return require(name)
   }, compiledModule, compiledModule.exports)
@@ -101,6 +102,7 @@ function importRoute(options: { unauthorized?: boolean; dbError?: boolean } = {}
     if (name === '@/lib/auth/requireShop') return { requireShop: async () => options.unauthorized ? { error: Response.json({ error: 'Unauthorized' }, { status: 401 }) } : { shopId: 'session-shop', userId: 'session-user' } }
     if (name === '@/lib/supabase/admin') return { createAdminClient: () => db }
     if (name === '@/lib/ai/skillFile') return { parseSkillFile, MAX_SKILL_FILE_BYTES: 16384 }
+    if (name === '@/lib/ai/shadowSchedule') return { queueSkillShadow: async () => {} }
     return require(name)
   }, compiledModule, compiledModule.exports)
   return { POST: compiledModule.exports.POST, inserted }

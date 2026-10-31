@@ -1,170 +1,224 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getShopAiKey } from '@/lib/billing/shopAiKey'
+import { effectivePlanKey } from '@/lib/billing/trial'
+import { shopCodEnabled } from '@/lib/ai/codPolicy'
+import { platformSecret } from '@/lib/platformSecrets'
+import { judgeWithGemini } from '@/lib/ai/replyJudge'
+import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
+import type { ShopSkill } from '@/lib/ai/shopSkills'
+import { skillDigest } from '@/lib/ai/shadowReport'
+import { previewSkill, runShadowComparison, type ShadowJudge, type ShadowRunResult } from '@/lib/ai/shadowRun'
+import { redactHistory, type ShadowHistoryTurn, type ShadowMessage } from '@/lib/ai/shadowSamples'
+import { saveShadowEval } from '@/lib/ai/shadowEvalStore'
 
-export interface ShadowEvalResult {
-  skillId: string
-  skillVersion: string
-  originalConfidence: number
-  shadowConfidence: number
-  originalIntent: string
-  shadowIntent: string
-  winner: 'original' | 'shadow' | 'tie'
-  recommendation: string
+type DbMessage = {
+  id: string
+  shop_id: string
+  conversation_id: string
+  sender_type: string
+  message: string
+  created_at: string
+}
+
+function asSender(value: string): 'user' | 'bot' {
+  return value === 'user' ? 'user' : 'bot'
+}
+
+async function loadShopReplay(shopId: string, skillId: string): Promise<{
+  skill: ShopSkill
+  shop: Record<string, unknown>
+  messages: ShadowMessage[]
+  historyFor: (sample: { conversationId: string; createdAt: string }) => Promise<ShadowHistoryTurn[]>
+} | null> {
+  const supabase = createAdminClient()
+  const { data: skill, error: skillError } = await supabase
+    .from('shop_skills')
+    .select('*')
+    .eq('id', skillId)
+    .eq('shop_id', shopId)
+    .maybeSingle()
+  if (skillError || !skill || skill.shop_id !== shopId) return null
+  const { data: shop, error: shopError } = await supabase
+    .from('shops')
+    .select('*')
+    .eq('id', shopId)
+    .maybeSingle()
+  if (shopError || !shop || shop.id !== shopId) return null
+  const { data: rows, error: messageError } = await supabase
+    .from('chat_messages')
+    .select('id, shop_id, conversation_id, sender_type, message, created_at')
+    .eq('shop_id', shopId)
+    .eq('sender_type', 'user')
+    .order('created_at', { ascending: false })
+    .limit(400)
+  if (messageError) throw new Error(messageError.message)
+  const conversationIds = [...new Set((rows || []).map((row: DbMessage) => row.conversation_id).filter(Boolean))]
+  const userByConversation = new Map<string, string>()
+  if (conversationIds.length > 0) {
+    const { data: conversations } = await supabase
+      .from('conversations')
+      .select('id, user_id, shop_id')
+      .eq('shop_id', shopId)
+      .in('id', conversationIds)
+    for (const conversation of conversations || []) {
+      if (conversation.shop_id === shopId) userByConversation.set(conversation.id, String(conversation.user_id || 'shadow-replay'))
+    }
+  }
+  const messages: ShadowMessage[] = ((rows || []) as DbMessage[])
+    .filter((row) => row.shop_id === shopId)
+    .map((row) => ({
+      id: row.id,
+      shopId: row.shop_id,
+      conversationId: row.conversation_id,
+      userId: userByConversation.get(row.conversation_id) || 'shadow-replay',
+      sender: 'user' as const,
+      text: row.message || '',
+      createdAt: row.created_at,
+    }))
+
+  return {
+    skill: skill as ShopSkill,
+    shop: shop as Record<string, unknown>,
+    messages,
+    historyFor: async (sample) => {
+      const { data: prior } = await supabase
+        .from('chat_messages')
+        .select('sender_type, message, created_at, shop_id, conversation_id')
+        .eq('shop_id', shopId)
+        .eq('conversation_id', sample.conversationId)
+        .lt('created_at', sample.createdAt)
+        .order('created_at', { ascending: false })
+        .limit(8)
+      return ((prior || []) as DbMessage[])
+        .filter((row) => row.shop_id === shopId && row.conversation_id === sample.conversationId)
+        .reverse()
+        .map((row) => ({ sender: asSender(row.sender_type), text: row.message || '' }))
+    },
+  }
+}
+
+async function shopGemini(shop: Record<string, unknown>): Promise<{ apiKey: string; model: string } | null> {
+  const model = String(shop.custom_ai_model || shop.ai_model || 'gemini-2.5-flash')
+  if (effectivePlanKey(shop as never) === 'byok' && shop.id) {
+    const own = await getShopAiKey(String(shop.id))
+    if (own?.provider !== 'gemini' || !own.key) return null
+    return { apiKey: own.key, model }
+  }
+  const apiKey = await platformSecret('GEMINI_API_KEY')
+  if (!apiKey) return null
+  const configured = String(shop.custom_ai_model || shop.ai_model || (await platformSecret('GEMINI_MODEL')) || 'gemini-2.5-flash')
+  return { apiKey, model: configured }
 }
 
 /**
- * Shadow evaluation: test a candidate skill against the original response.
- * Runs the bot's response WITH the candidate skill (shadow) and WITHOUT (original),
- * compares confidence and intent, and recommends activation if shadow performs better.
- *
- * This is a background, non-blocking evaluation. Results are stored for merchant review.
+ * Replays this shop's own chats with and without the skill. Does not send
+ * messages, and does not activate the skill.
  */
-export async function shadowEvaluateSkill({
-  shopId,
-  conversationId,
-  userQuery,
-  candidateSkillId,
-}: {
+export async function executeShadowEval(input: {
   shopId: string
-  conversationId: string
-  userQuery: string
-  candidateSkillId: string
-}): Promise<ShadowEvalResult | null> {
+  skillId: string
+  evalId: string
+  confirmFacts: boolean
+}): Promise<ShadowRunResult | null> {
   try {
-    const supabase = createAdminClient()
-
-    // Fetch the candidate skill
-    const { data: skill } = await supabase
-      .from('shop_skills')
-      .select('*')
-      .eq('id', candidateSkillId)
-      .eq('shop_id', shopId)
-      .eq('status', 'candidate')
-      .maybeSingle()
-
-    if (!skill) return null
-
-    // Fetch conversation outcome (if available) for ground truth
-    const { data: outcome } = await supabase
-      .from('conversation_outcomes')
-      .select('outcome, ai_confidence, intent')
-      .eq('conversation_id', conversationId)
-      .maybeSingle()
-
-    const originalConfidence = outcome?.ai_confidence ?? 0.5
-    const originalIntent = outcome?.intent ?? 'info_request'
-
-    // Shadow: use LLM to compare response quality
-    // Fetch the candidate skill's knowledge
-    const skillKnowledge = skill.knowledge_body || ''
-    const skillInstruction = skill.instruction || ''
-    const skillKeywords = (skill.trigger_keywords || []).join(', ')
-
-    // Simple heuristic + LLM-based scoring
-    // In production, this would call the AI model with the skill injected
-    // For now, we enhance the heuristic with keyword + knowledge coverage
-    const queryLower = userQuery.toLowerCase()
-    const keywordMatch = skillKeywords.split(',').filter((k: string) => queryLower.includes(k.trim().toLowerCase())).length
-    const knowledgeCoverage = skillKnowledge.length > 0 ? Math.min(0.3, skillKnowledge.length / 1000) : 0
-    const shadowScore = Math.min(0.99, originalConfidence + (keywordMatch > 0 ? 0.15 : 0) + (knowledgeCoverage > 0 ? 0.1 : 0))
-
-    const shadowConfidence = Math.round(shadowScore * 100) / 100
-    const shadowIntent = keywordMatch > 0 ? 'skill_match' : originalIntent
-
-    let winner: 'original' | 'shadow' | 'tie' = 'tie'
-    if (shadowConfidence > originalConfidence + 0.05) winner = 'shadow'
-    else if (originalConfidence > shadowConfidence + 0.05) winner = 'original'
-
-    const recommendation =
-      winner === 'shadow'
-        ? `Candidate skill v${skill.version} shows improvement (+${(shadowConfidence - originalConfidence).toFixed(2)}). Recommend activation.`
-        : winner === 'original'
-        ? `Original performs better. Keep candidate for further review.`
-        : `No significant difference. Candidate can be activated if merchant approves.`
-
-    // Stored beside skills, never in shop_agent_memory. Memory facts are
-    // grounding evidence; a shadow score is not a shop fact.
-    const { error: saveError } = await supabase.from('shop_skill_shadow_evals').insert({
-      shop_id: shopId,
-      skill_id: candidateSkillId,
-      conversation_id: conversationId,
-      skill_version: String(skill.version ?? ''),
-      user_query: userQuery.slice(0, 500),
-      original_confidence: originalConfidence,
-      shadow_confidence: shadowConfidence,
-      original_intent: originalIntent,
-      shadow_intent: shadowIntent,
-      winner,
-      recommendation,
-    })
-    if (saveError) {
-      console.error('[ShadowEval] Could not store result:', saveError.message)
+    const loaded = await loadShopReplay(input.shopId, input.skillId)
+    if (!loaded) {
+      await saveShadowEval(input.shopId, input.evalId, {
+        status: 'failed',
+        winner: 'pending',
+        recommendation: 'ไม่พบสกิลของร้านนี้ จึงยังไม่มีผลให้ตัดสิน',
+        error: 'missing-skill',
+      })
       return null
     }
-
-    return {
-      skillId: candidateSkillId,
-      skillVersion: skill.version,
-      originalConfidence,
-      shadowConfidence,
-      originalIntent,
-      shadowIntent,
-      winner,
-      recommendation,
+    const features = (loaded.shop.features || {}) as Record<string, unknown>
+    const skillsEnabled = features.shop_skills_enabled === true
+    const confirmFacts = input.confirmFacts || loaded.skill.facts_confirmed === true
+    const preview = previewSkill(loaded.skill, confirmFacts)
+    const historyCache = new Map<string, ShadowHistoryTurn[]>()
+    let judge: ShadowJudge | null = null
+    if (process.env.SHADOW_JUDGE !== '0') {
+      const gemini = await shopGemini(loaded.shop)
+      if (gemini) {
+        judge = async (payload) => {
+          const judged = await judgeWithGemini({ ...gemini, ...payload })
+          if (!judged.verdict) return null
+          return { ...judged.verdict, promptTokens: judged.promptTokens, completionTokens: judged.completionTokens }
+        }
+      }
     }
+    const result = await runShadowComparison({
+      shopId: input.shopId,
+      skill: loaded.skill,
+      messages: loaded.messages,
+      skillsEnabled,
+      confirmFacts,
+      judge,
+      historyFor: (sample) => historyCache.get(sample.id) || [],
+      replay: async (sample, arm) => {
+        if (!historyCache.has(sample.id)) historyCache.set(sample.id, await loaded.historyFor(sample))
+        const history = redactHistory(historyCache.get(sample.id) || [])
+        const played = await processSalesAgentChat({
+          shop: loaded.shop,
+          userQuery: sample.redactedText,
+          userId: sample.userId || 'shadow-replay',
+          conversationId: sample.conversationId,
+          conversationHistory: history,
+          isPlayground: true,
+          shadowReplay: {
+            maxSteps: 2,
+            omitSkillIds: [loaded.skill.id],
+            extraSkills: arm === 'with' ? [preview] : [],
+          },
+        })
+        const trace = played.shadowTrace
+        return {
+          finalText: played.text || '',
+          draft: trace?.draft || played.text || '',
+          toolCalls: (trace?.toolCalls || played.toolCallsExecuted || []).map((call) => ({ name: call.name })),
+          evidenceTexts: trace?.evidenceTexts || [],
+          chunks: trace?.chunks || [],
+          codEnabled: shopCodEnabled(loaded.shop),
+          promptTokens: played.usage?.promptTokens || 0,
+          completionTokens: played.usage?.completionTokens || 0,
+        }
+      },
+    })
+    await saveShadowEval(input.shopId, input.evalId, {
+      status: result.status,
+      winner: result.winner,
+      recommendation: result.recommendation,
+      skill_version: String(loaded.skill.version ?? ''),
+      sample_size: result.status === 'insufficient' && result.sampleSize === 0 ? result.found : result.sampleSize,
+      improved_count: result.improved,
+      regressed_count: result.regressed,
+      tied_count: result.tied,
+      grounded_with: result.groundedWith,
+      grounded_without: result.groundedWithout,
+      handoff_with: result.handoffWith,
+      handoff_without: result.handoffWithout,
+      judge_with: result.judgeWith,
+      judge_without: result.judgeWithout,
+      judge_used: result.judgeUsed,
+      prompt_tokens: result.promptTokens,
+      completion_tokens: result.completionTokens,
+      estimated_cost_usd: result.estimatedCostUsd,
+      original_confidence: result.originalConfidence,
+      shadow_confidence: result.shadowConfidence,
+      skill_digest: skillDigest(loaded.skill, confirmFacts),
+      metrics: result.metrics,
+      error: null,
+    })
+    return result
   } catch (err) {
-    console.error('[ShadowEval] Exception:', err)
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[ShadowEval] failed', message)
+    await saveShadowEval(input.shopId, input.evalId, {
+      status: 'failed',
+      winner: 'pending',
+      recommendation: 'ทดสอบไม่สำเร็จ จึงยังไม่มีผลให้ตัดสิน กดทดสอบใหม่ได้',
+      error: message.slice(0, 300),
+    }).catch(() => {})
     return null
   }
-}
-
-/**
- * Batch shadow evaluate all candidate skills for a shop.
- */
-export async function batchShadowEvaluate(shopId: string, limit = 5): Promise<ShadowEvalResult[]> {
-  const supabase = createAdminClient()
-  const results: ShadowEvalResult[] = []
-
-  const { data: candidates } = await supabase
-    .from('shop_skills')
-    .select('id')
-    .eq('shop_id', shopId)
-    .eq('status', 'candidate')
-    .limit(limit)
-
-  if (!candidates || candidates.length === 0) return results
-
-  // Get recent conversations with outcomes
-  const { data: conversations } = await supabase
-    .from('conversation_outcomes')
-    .select('conversation_id, notes')
-    .eq('shop_id', shopId)
-    .order('set_at', { ascending: false })
-    .limit(limit)
-
-  if (!conversations || conversations.length === 0) return results
-
-  for (const skill of candidates) {
-    for (const conv of conversations.slice(0, 2)) {
-      const { data: firstMsg } = await supabase
-        .from('chat_messages')
-        .select('message')
-        .eq('conversation_id', conv.conversation_id)
-        .eq('shop_id', shopId)
-        .eq('sender_type', 'user')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle()
-      const userQuery = String(firstMsg?.message || conv.notes || '').trim()
-      if (!userQuery) continue
-      const result = await shadowEvaluateSkill({
-        shopId,
-        conversationId: conv.conversation_id,
-        userQuery,
-        candidateSkillId: skill.id,
-      })
-      if (result) results.push(result)
-    }
-  }
-
-  return results
 }
