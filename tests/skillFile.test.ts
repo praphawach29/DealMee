@@ -21,6 +21,7 @@ test('UI previews text before multipart import, refreshes candidates and clears 
     if (name === '@/lib/ai/skillFile') return { parseSkillFile, MAX_SKILL_FILE_BYTES: 16384 }
     if (name === '@/lib/ai/shadowReport') return { skillDigest: () => 'digest', isStaleRunning: () => false }
     if (name === './SkillRuntimeSettings') return { __esModule: true, default: () => null }
+    if (name === './NightlyReviewPanel') return { __esModule: true, default: () => null }
     return require(name)
   }, compiledModule, compiledModule.exports)
   function render() {

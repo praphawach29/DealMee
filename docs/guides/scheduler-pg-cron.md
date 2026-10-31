@@ -88,6 +88,9 @@ select cron.schedule('dealmee-follow-up', '*/5 * * * *',
 select public.run_follow_up_cron();                                             -- ยิงเดี๋ยวนี้ 1 ครั้ง
 ```
 
+รีวิวสกิลรายคืนไม่ได้อยู่ในงานนี้ ดู [nightly-skill-review.md](./nightly-skill-review.md)
+(Vercel Cron วันละครั้ง แยกจากตัวตั้งเวลา 5 นาที)
+
 ## ตอนย้ายไปโปรเจกต์ Supabase ใหม่
 
 migration จะตั้งตารางเวลาให้เอง แต่ **Vault ไม่ได้มากับ migration** ต้องรันข้อ 2 ใหม่ทุกครั้ง
