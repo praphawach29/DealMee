@@ -424,6 +424,28 @@ export async function toggleTrajectoryStatus(id: string, currentStatus: string) 
   return { success: nextStatus === 'active' ? 'เปิดใช้งานตัวอย่างนี้แล้ว' : 'ปิดใช้งานตัวอย่างนี้ชั่วคราวแล้ว' }
 }
 
+export async function dismissKnowledgeGap(id: string) {
+  const supabase = await createClient()
+  const resolved = await resolveShop(supabase)
+  if ('error' in resolved) return { error: resolved.error }
+  if (!id) return { error: 'ไม่พบคำถามนี้' }
+
+  const { error } = await supabase
+    .from('knowledge_gaps')
+    .update({ status: 'dismissed' })
+    .eq('id', id)
+    .eq('shop_id', resolved.shop.id)
+    .eq('status', 'open')
+
+  if (error) {
+    if (isMissingKnowledgeSchema(error)) return { error: 'ยังไม่ได้ติดตั้งตารางบันทึกคำถาม' }
+    return { error: `ปิดรายการไม่สำเร็จ: ${error.message}` }
+  }
+
+  revalidatePath('/dashboard/knowledge')
+  return { success: 'ปิดรายการนี้แล้ว' }
+}
+
 export async function triggerScanGoldenClosers() {
   const supabase = await createClient()
   const resolved = await resolveShop(supabase)

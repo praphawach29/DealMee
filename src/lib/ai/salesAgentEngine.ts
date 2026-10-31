@@ -5,6 +5,8 @@ import { getShopAiKey } from '@/lib/billing/shopAiKey'
 import { highValueThreshold, isHighValue, HIGH_VALUE_TAG, INFO_ONLY_PROMPT, highValuePrompt } from '@/lib/ai/salesModes'
 import { getPlanLimits, getAddonRemaining, consumeAddonCredit } from '@/lib/billing/planLimits'
 import { loadKnowledgeContext } from '@/lib/knowledge/retrieve'
+import { recordKnowledgeGap } from '@/lib/knowledge/gaps'
+import { checkGrounding, chunksFromRetrievedText, GROUNDING_RULES, type EvidenceChunk } from '@/lib/ai/grounding'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { platformSecret } from '@/lib/platformSecrets'
 import { buildBusinessPromptContext } from '@/lib/businessGreeting'
@@ -239,6 +241,9 @@ export interface PlanningState {
   isPlayground?: boolean
   /** The shop runs on its own AI key only (no platform fallback) */
   byok?: boolean
+  /** Chunks and shop text the grounding check may quote. Tool results are appended as the plan runs. */
+  groundingChunks: EvidenceChunk[]
+  groundingTexts: string[]
 }
 
 export type PlanningStart =
@@ -386,7 +391,7 @@ const MASTER_TOOLS = [
   },
   {
     name: 'calculate_shipping',
-    description: 'คำนวณและดูอัตราค่าจัดส่งตามจังหวัดปลายทาง',
+    description: 'คำนวณอัตราค่าจัดส่งตามจังหวัดปลายทางจากข้อมูลร้าน ตอบค่าส่งตามผลเครื่องมือเท่านั้น ถ้าไม่มีอัตรา ห้ามเดา ให้เรียก request_human_agent',
     parameters: {
       type: 'object',
       properties: {
@@ -400,7 +405,7 @@ const MASTER_TOOLS = [
   // ── 📦 Product ────────────────────────────────────────────────────────────────
   {
     name: 'search_products',
-    description: 'ค้นหาสินค้าจากฐานข้อมูลจริง ใช้เมื่อลูกค้าถามสินค้า ราคา หรือต้องการข้อมูลสินค้าที่ถูกต้อง',
+    description: 'ค้นหาสินค้าจากฐานข้อมูลจริง ใช้เมื่อลูกค้าถามสินค้า ราคา หรือสต็อก บอกราคาและจำนวนได้เฉพาะรายการที่เครื่องมือหรือแคตตาล็อกมี ห้ามเดาราคา',
     parameters: {
       type: 'object',
       properties: {
@@ -555,7 +560,7 @@ const MASTER_TOOLS = [
   // ── 🧠 Knowledge ──────────────────────────────────────────────────────────────
   {
     name: 'search_knowledge_base',
-    description: 'ค้นหาคลังความรู้ของร้าน ทั้งคำถาม-คำตอบที่ร้านเขียนเองและเนื้อหาเต็มจากไฟล์ที่อัปโหลด ใช้ก่อนตอบนโยบาย ราคา รหัสสินค้า หรือรายละเอียดที่ไม่มีในแคตตาล็อก ถ้าไม่พบ ห้ามเดา ให้เรียก request_human_agent',
+    description: 'ค้นคลังความรู้ของร้าน ทั้งคำถาม-คำตอบที่ร้านเขียนและเนื้อหาไฟล์ที่อัปโหลด เรียกก่อนตอบนโยบาย การจัดส่ง โปรโมชั่นที่ไม่อยู่ในแคตตาล็อก สเปก เวลาทำการ หรือรายละเอียดที่ search_products ไม่ได้ให้ ห้ามใช้แทน search_products หรือ check_stock สำหรับราคาและจำนวนคงเหลือ ถ้าไม่พบ ห้ามเดา ให้เรียก request_human_agent',
     parameters: {
       type: 'object',
       properties: {
@@ -568,7 +573,7 @@ const MASTER_TOOLS = [
   // ── 🎁 Promotions ──────────────────────────────────────────────────────────────
   {
     name: 'get_active_promotions',
-    description: 'ดึงโปรโมชั่นและส่วนลดที่กำลังใช้งานอยู่เพื่อแนะนำให้ลูกค้า',
+    description: 'ดึงโปรโมชั่นที่ร้านเปิดอยู่ พูดถึงส่วนลดหรือของแถมได้เฉพาะรายการที่เครื่องมือคืนมา ห้ามแต่งโปรโมชั่นเอง',
     parameters: { type: 'object', properties: {}, required: [] },
   },
 
@@ -1206,7 +1211,9 @@ async function preparePlanningState({
   const codOn = shopCodEnabled(shop)
   const staticSystemPrompt = qaOnly ? `${QA_ONLY_PROMPT}
 ชื่อผู้ช่วย: ${activeBotName}
-หน่วยงาน: ${shop.name}` : `คุณคือ "${activeBotName}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
+หน่วยงาน: ${shop.name}
+
+${GROUNDING_RULES}` : `คุณคือ "${activeBotName}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
 บุคลิกภาพ: ${shop.personality || 'สุภาพ เรียบร้อย มืออาชีพ เป็นมิตรและมีไหวพริบในการขายสูง'}
 คำอธิบายร้าน: ${shop.description || 'ร้านค้าออนไลน์'}
 
@@ -1225,7 +1232,7 @@ async function preparePlanningState({
 3. [Proactive Objection & Hesitation Handling Matrix - จัดการข้อกังวล 4 ด้าน]
 เมื่อสัมผัสได้ว่าลูกค้ากำลังลังเล ถามคำถามเชิงกังวล หรือพูดว่า "ขอดูก่อน/คิดดูก่อน" ให้คลี่คลายอย่างจริงใจและนุ่มนวล:
 - [กังวลเรื่องราคา / คิดว่าแพง / ขอดูก่อน]: ชี้ความคุ้มค่าระยะยาว (Cost-per-use) + เสนอโปรโมชั่น/ของแถม หรือแนะนำรุ่นรอง (Downsell) ที่ราคาเป็นมิตรและตอบโจทย์ได้เช่นกัน
-- [กังวลเรื่องคุณภาพ / ของแท้ / เห็นผลจริงไหม]: เสริม Social Proof ทันที เช่น เป็นรุ่นยอดนิยม ลูกค้ากว่า 90% ซื้อซ้ำ มีรีวิวแน่น และทางร้านมีนโยบายรับประกันสินค้า
+- [กังวลเรื่องคุณภาพ / ของแท้ / เห็นผลจริงไหม]: เสริมได้เฉพาะรีวิวหรือนโยบายรับประกันที่อยู่ในข้อมูลร้าน ห้ามแต่งตัวเลขเช่นเปอร์เซ็นต์ลูกค้าซื้อซ้ำ และห้ามบอกว่าของแท้ถ้าข้อมูลร้านไม่ได้เขียนไว้
 - [กังวลเรื่องการเลือกไซส์ / สูตรที่เหมาะ]: อาสาช่วยเทียบสเปกทันที ("คุณลูกค้าสูง/หนัก หรือมีสภาพผิวแบบไหนคะ เดี๋ยวแอดมินช่วยแนะนำสูตร/ไซส์ที่เป๊ะที่สุดให้ค่ะ")
 ${codObjectionLine(codOn)}
 
@@ -1233,11 +1240,11 @@ ${codObjectionLine(codOn)}
 - หลีกเลี่ยงการถามเปิดช่องปฏิเสธ เช่น "รับไหมคะ?"
 - ให้ใช้เทคนิคปิดการขายด้วยตัวเลือก 2 ทาง (Alternative Close) เสมอ เช่น:
   - "คุณลูกค้ารับเป็น สีขาว หรือ สีดำ ดีคะ?"
-  - "รับเป็น 1 กล่อง หรือเซ็ต 2 กล่องโปรส่งฟรีดีคะ?"
+  - "รับเป็น 1 ชิ้น หรือ 2 ชิ้นดีคะ?" (ห้ามใส่คำว่าส่งฟรีถ้าข้อมูลร้านไม่ได้ให้ส่งฟรี)
 ${codCloseExample(codOn)}
 
 5. [Ethical Urgency & Value Stacking - กระตุ้นการตัดสินใจอย่างสมเหตุสมผล]
-- แจ้งสิทธิประโยชน์ทันที เช่น "รอบส่งวันนี้ตัดรอบ 14:00 น. หากคอนเฟิร์มตอนนี้แอดมินจะรีบล็อกสิทธิ์ส่งฟรีรอบวันนี้ให้เลยค่ะ"
+- กระตุ้นได้เฉพาะสิทธิที่มีจริงในข้อมูลร้านหรือผลเครื่องมือ ห้ามกำหนดเวลาตัดรอบหรือสัญญาส่งฟรีเอง
 
 6. [Product Card & Flex Carousel Display]
 - เมื่อลูกค้าถามถึงสินค้า ขอดูสินค้า ขอดูรูปภาพ หรือสนใจสินค้าประเภทใดประเภทหนึ่งชัดเจน (เช่น "มีเสื้อยืดไหม", "ขอดูกางเกงหน่อย", "มีสินค้าอะไรบ้าง", "มีรูปไหม") คุณต้องเรียกใช้ Tool "search_products" ระบบจะแนบการ์ดสินค้าจากรายการที่เครื่องมือพบให้เอง ทั้งบน LINE (Flex carousel) และ Facebook/Instagram (การ์ด Messenger)
@@ -1302,6 +1309,8 @@ ${codCloseExample(codOn)}
 ${codPaymentRule(codOn)}
 - ห้ามสรุปว่ารับออเดอร์แล้วถ้ายังไม่ได้เรียก take_order หรือข้อมูลลูกค้ายังไม่ครบ ให้ถามเฉพาะข้อมูลที่ขาดแทน
 - ถ้าไม่มีข้อมูล ให้แจ้งลูกค้าให้รอแอดมินหรือเรียก request_human_agent
+
+${GROUNDING_RULES}
 ${productsContext}
 ${buildBusinessPromptContext(shop, bookingPromptTemplates)}${bookingContext}
 ${paymentInfo}`
@@ -1322,6 +1331,7 @@ ${paymentInfo}`
     }
   }
 
+  const hoursContext = businessHoursPromptContext(shop.features)
   const salesStageContext = formatSalesStagePromptContext(initialSalesStage) + STAGE_TAG_INSTRUCTION
 
   // 5e. Golden Closers (Few-Shot Winning Sales Trajectories)
@@ -1333,36 +1343,34 @@ ${paymentInfo}`
   const goldenClosersContext = formatGoldenClosersPromptContext(goldenTrajectories)
 
   const activeShopSkills = shopSkillsRetrievalEnabled(shop.features)
-      ? await retrieveActiveShopSkills(shop.id, userQuery, 3)
-      : []
-    const shopSkillsContext = formatShopSkillsPromptContext(activeShopSkills)
-    // Phase 4: log skill exposures (fire-and-forget)
-    if (activeShopSkills.length > 0) {
-      import('@/lib/ai/skillExposure').then(({ logSkillExposures }) => {
-        logSkillExposures({
-          shopId: shop.id,
-          conversationId,
-          skills: activeShopSkills.map((s) => ({ id: s.id, version: s.version })),
-        }).catch(() => {})
+    ? await retrieveActiveShopSkills(shop.id, userQuery, 3)
+    : []
+  const shopSkillsContext = formatShopSkillsPromptContext(activeShopSkills)
+  if (activeShopSkills.length > 0) {
+    import('@/lib/ai/skillExposure').then(({ logSkillExposures }) => {
+      logSkillExposures({
+        shopId: shop.id,
+        conversationId,
+        skills: activeShopSkills.map((s) => ({ id: s.id, version: s.version })),
       }).catch(() => {})
-    }
+    }).catch(() => {})
+  }
 
-    // Phase 5/6: retrieve agent memories for prompt injection
-    let agentMemoryContext = ''
-    try {
-      const { retrieveAgentMemories, formatAgentMemoryContext } = await import('@/lib/ai/agentMemory')
-      const memories = await retrieveAgentMemories(shop.id, userQuery, 5)
-      agentMemoryContext = formatAgentMemoryContext(memories)
-    } catch {
-      // Non-critical
-    }
+  let agentMemoryContext = ''
+  try {
+    const { retrieveAgentMemories, formatAgentMemoryContext } = await import('@/lib/ai/agentMemory')
+    const memories = await retrieveAgentMemories(shop.id, userQuery, 5)
+    agentMemoryContext = formatAgentMemoryContext(memories)
+  } catch {
+    // Memory is extra context. A lookup failure still lets the turn answer from the catalog and knowledge.
+  }
 
   const dynamicSystemPrompt = qaOnly
     ? `${shopSkillsContext}
-${knowledgeContext}
+${knowledgeContext}${hoursContext}
 ${historyContext}`
     : `${salesStageContext}${goldenClosersContext ? `\n\n${goldenClosersContext}` : ''}
-${shopSkillsContext ? `\n\n${shopSkillsContext}` : ''}${agentMemoryContext ? `\n\n${agentMemoryContext}` : ''}${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}${businessHoursPromptContext(shop.features)}
+${shopSkillsContext ? `\n\n${shopSkillsContext}` : ''}${agentMemoryContext ? `\n\n${agentMemoryContext}` : ''}${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}${hoursContext}
 ${historyContext}`
 
   // Free plan (incl. ended trials): sales automation is locked and orders go to the admin.
@@ -1444,6 +1452,19 @@ ${historyContext}`
       toolCallsExecuted: [],
       scheduledMessages: [],
       isPlayground: isPlayground || false,
+      groundingChunks: loadedKnowledge.chunks.map((chunk) => ({ id: chunk.id, content: chunk.content })),
+      groundingTexts: [
+        productsContext,
+        paymentInfo,
+        bookingContext,
+        bookingStateContext,
+        orderStateContext,
+        documentStateContext,
+        hoursContext,
+        knowledgeContext,
+        shopSkillsContext,
+        agentMemoryContext,
+      ].filter((part) => part.trim()),
     },
   }
 }
@@ -1588,6 +1609,12 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
     state.productsData = mergeProductCards(state.productsData, toolResult.productsData)
   }
   state.toolCallsExecuted.push({ name: response.toolCall.name, args: response.toolCall.args })
+  state.groundingTexts = state.groundingTexts || []
+  state.groundingChunks = state.groundingChunks || []
+  if (toolResult.resultForAi) state.groundingTexts.push(toolResult.resultForAi)
+  for (const chunk of chunksFromRetrievedText(toolResult.resultForAi || '')) {
+    if (!state.groundingChunks.some((existing) => existing.id === chunk.id)) state.groundingChunks.push(chunk)
+  }
   state.immediateMessages.push(...toolResult.immediateMessages)
   if (toolResult.scheduledMessage) state.scheduledMessages.push(toolResult.scheduledMessage)
   state.turns.push({
@@ -1649,7 +1676,43 @@ function toPlainText(text: string): string {
     .replace(/^#{1,6}[ \t]+/gm, '')
 }
 
-function finalizeAgentResult(state: PlanningState, finalText: string): AgentResult {
+async function applyGrounding(state: PlanningState, finalText: string): Promise<string> {
+  const texts = state.groundingTexts || []
+  const firstUserTurn = state.turns.find((turn) => turn.role === 'user')
+  const customerMessage = firstUserTurn && 'text' in firstUserTurn ? firstUserTurn.text : ''
+  const verdict = checkGrounding({
+    draft: finalText,
+    customerMessage,
+    language: state.language === 'en' ? 'en' : 'th',
+    chunks: state.groundingChunks || [],
+    evidenceTexts: texts,
+    knowledgeMiss: texts.some((text) => text.includes('ไม่พบข้อมูลเรื่อง')),
+  })
+  const alreadyHandedOff = state.toolCallsExecuted.some((call) => call.name === 'request_human_agent')
+  if (verdict.shouldHandoff && !alreadyHandedOff) {
+    try {
+      await state.executor('request_human_agent', {
+        reason: `ลูกค้าถามเรื่องที่ยังไม่มีในข้อมูลร้าน: ${verdict.question.slice(0, 180)}`,
+        urgency: 'normal',
+      }, state.toolCtx)
+      state.toolCallsExecuted.push({ name: 'request_human_agent', args: { reason: verdict.reason } })
+    } catch (err) {
+      console.error('[grounding] handoff failed:', err instanceof Error ? err.message : err)
+    }
+  }
+  if (verdict.shouldLog && !state.isPlayground && verdict.question && verdict.reason !== 'small_talk' && verdict.reason !== 'grounded') {
+    const conversationId = /^[0-9a-f-]{36}$/i.test(state.conversationId || '') ? state.conversationId : null
+    await recordKnowledgeGap(state.toolCtx.supabase, {
+      shopId: String(state.shop?.id || ''),
+      conversationId,
+      question: verdict.question,
+      reason: verdict.reason,
+    })
+  }
+  return verdict.text
+}
+
+async function finalizeAgentResult(state: PlanningState, finalText: string): Promise<AgentResult> {
   // Sum usage across every step into one AgentUsage — quota/cost accounting
   // counts this as ONE customer message regardless of how many AI calls the
   // plan took internally.
@@ -1667,8 +1730,10 @@ function finalizeAgentResult(state: PlanningState, finalText: string): AgentResu
   const firstUserTurn = state.turns.find((t) => t.role === 'user')
   const userQueryText = firstUserTurn && 'text' in firstUserTurn ? firstUserTurn.text : ''
 
-  // The model ends its reply with [[stage:...]]: take it off before anything is sent
+  // The model ends its reply with [[stage:...]]. Take that off before the
+  // grounding check, so the tag is neither shown to the customer nor treated as a shop fact.
   const tagged = extractStageTag(finalText)
+  const customerText = toPlainText(await applyGrounding(state, tagged.text)).trim()
   const nextStage = determineNextSalesStage({
     currentStage: state.salesStage,
     modelStage: tagged.stage,
@@ -1679,14 +1744,14 @@ function finalizeAgentResult(state: PlanningState, finalText: string): AgentResu
   })
 
   return {
-    text: toPlainText(tagged.text).trim(),
+    text: customerText,
     usage,
     immediateMessages: state.immediateMessages,
     toolCallsExecuted: state.toolCallsExecuted,
     scheduledMessages: state.scheduledMessages,
     productsData: state.productsData,
     salesStage: nextStage,
-    ai_confidence: computeConfidence({ text: tagged.text, toolCallsExecuted: state.toolCallsExecuted, usage, scheduledMessages: state.scheduledMessages }),
+    ai_confidence: computeConfidence({ text: customerText, toolCallsExecuted: state.toolCallsExecuted, usage, scheduledMessages: state.scheduledMessages }),
     intent: detectIntent(userQueryText, state.toolCallsExecuted.map((t) => t.name)),
   }
 }
@@ -1795,7 +1860,7 @@ export async function processSalesAgentChat(request: SalesAgentRequest): Promise
       break
     }
   }
-  const result = finalizeAgentResult(state, finalText)
+  const result = await finalizeAgentResult(state, finalText)
 
   // Store in cache if no tools were called (simple text response)
   if (cacheOk && shopId && userQuery && result.text && (!result.toolCallsExecuted || result.toolCallsExecuted.length === 0)) {
@@ -1830,7 +1895,7 @@ export async function startSalesAgentPlanning(request: SalesAgentRequest): Promi
   state.step += 1
 
   if (outcome.done) {
-    return { done: true, result: finalizeAgentResult(state, outcome.finalText) }
+    return { done: true, result: await finalizeAgentResult(state, outcome.finalText) }
   }
   return { done: false, state }
 }
