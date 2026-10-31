@@ -7,13 +7,21 @@ import {
 } from '../src/lib/ai/handoffGuard.ts'
 
 test('plain Thai and English greetings are recognized', () => {
-  for (const message of ['สวัสดีครับ', 'สวัสดีค่ะ 😊', 'หวัดดี', 'hello!', 'Hi there']) {
+  for (const message of [
+    'สวัสดีครับ', 'สวัสดีค่ะ 😊', 'หวัดดี', 'hello!', 'Hi there',
+    'หวัดดีค้าบ', 'หวัดดีคับ', 'ฮัลโหล', 'ฮัลโหลค่ะ', 'ฮัลโหลครับ',
+    'ดีจ้า', 'ดีจ้า 🙏', 'ดีค่า', 'ดีค่ะ', 'สวัสดีครับผม', 'สวัสดีค้าบ', 'เฮลโหล',
+  ]) {
     assert.equal(isGreetingOnlyMessage(message), true, message)
   }
 })
 
 test('a greeting with a real request is not greeting-only', () => {
-  for (const message of ['สวัสดี ขอใบเสนอราคาครับ', 'สวัสดี ขอคุยกับแอดมิน', 'hello, I need help']) {
+  for (const message of [
+    'สวัสดี ขอใบเสนอราคาครับ', 'สวัสดี ขอคุยกับแอดมิน', 'hello, I need help',
+    'หวัดดี มีเสื้อยืดไหม', 'ฮัลโหล ขอคุยกับแอดมิน', 'ดีไหมครับ', 'ดีมากเลย',
+    'ดีไซน์นี้สวย', 'สวัสดีปีใหม่', 'hello มีคนอยู่ไหม', 'ดีจ้า ขอดูราคา',
+  ]) {
     assert.equal(isGreetingOnlyMessage(message), false, message)
   }
 })

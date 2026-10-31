@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
     shop_id: auth.shopId,
     status: 'candidate',
     created_by: auth.userId,
+    facts_confirmed: false,
   }))
 
   const { data, error } = await admin

@@ -41,6 +41,8 @@ export interface EvalCase {
   expectHandoff: boolean
   /** Offline draft states a shop fact that is not in the fixture, so grounding must hand off. */
   offlineInvent?: boolean
+  /** Offline final reply. Live scoring still uses the real model. */
+  scriptedReply?: string
   mustNotClaim?: string[]
 }
 
@@ -61,6 +63,8 @@ const greeting: EvalCase[] = [
   turn('ดีจ้า 🙏', 'beauty', 'greeting', 3, { forbidTools: ['request_human_agent', 'take_order'] }),
   turn('hello มีคนอยู่ไหม', 'cafe', 'greeting', 4, { forbidTools: ['take_order'] }),
   turn('ฮัลโหล', 'qa', 'greeting', 5, { forbidTools: ['take_order', 'book_appointment'] }),
+  turn('สวัสดีครับผม', 'fashion', 'greeting', 6, { forbidTools: ['request_human_agent', 'take_order'] }),
+  turn('ดีค่า', 'beauty', 'greeting', 7, { forbidTools: ['request_human_agent', 'take_order'] }),
 ]
 
 const product: EvalCase[] = [
@@ -87,6 +91,11 @@ const priceStock: EvalCase[] = [
     forbidTools: ['apply_custom_discount'],
   }),
   turn('มีโปรเสื้อยืดวันนี้ไหม 🥹', 'fashion', 'price_stock', 8, { scriptTools: ['get_active_promotions'], mustNotClaim: ['ลด 50%'] }),
+  turn('เสื้อยืดโอเวอร์ไซส์หมดรึยัง', 'fashion', 'price_stock', 9, {
+    scriptTools: ['check_stock'],
+    scriptedReply: 'เสื้อยืดโอเวอร์ไซส์ยังมีอยู่ค่ะ เหลือ 12 ชิ้น',
+    mustNotClaim: ['สินค้าหมด', 'ของหมด', 'หมดสต๊อก'],
+  }),
 ]
 
 const ordering: EvalCase[] = [
@@ -160,7 +169,10 @@ const payment: EvalCase[] = [
 ]
 
 const codOn: EvalCase[] = [
-  turn('เก็บปลายทางได้ไหมคะ', 'fashion', 'cod_on', 1, { scriptTools: ['search_knowledge_base'] }),
+  turn('เก็บปลายทางได้ไหมคะ', 'fashion', 'cod_on', 1, {
+    scriptTools: ['search_knowledge_base'],
+    scriptedReply: 'มีเก็บเงินปลายทางค่ะ',
+  }),
   turn('จ่าย COD เสื้อยืดตัวนึง ส่งเชียงใหม่ ชื่อโอ๊ต 0812223333', 'fashion', 'cod_on', 2, {
     scriptTools: ['take_order'],
     requireTools: ['take_order'],
@@ -175,7 +187,10 @@ const codOn: EvalCase[] = [
 ]
 
 const codOff: EvalCase[] = [
-  turn('เก็บปลายทางได้ป่าว', 'beauty', 'cod_off', 1, { forbidTools: ['take_order'] }),
+  turn('เก็บปลายทางได้ป่าว', 'beauty', 'cod_off', 1, {
+    forbidTools: ['take_order'],
+    scriptedReply: 'ไม่รับเก็บปลายทางค่ะ',
+  }),
   turn('ขอ COD เซรั่ม 1 ขวด ชื่อเอ๋ 0810001111 ส่งหาดใหญ่', 'beauty', 'cod_off', 2, {
     scriptTools: ['take_order'],
     forbidTools: [],
@@ -273,6 +288,7 @@ const booking: EvalCase[] = [
   turn('รอบ 18:00 ว่างมั้ย 4 คน', 'cafe', 'booking', 2, {
     scriptTools: ['check_available_slots'],
     mustNotClaim: ['จองเรียบร้อย'],
+    scriptedReply: 'รอบ 18:00 ยังไม่มีค่ะ รอบที่ว่างคือ 11:00 13:00 15:00 และ 17:00 ค่ะ',
   }),
   {
     id: 'booking-03',

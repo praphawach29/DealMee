@@ -1,5 +1,4 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { platformSecret } from '@/lib/platformSecrets'
 
 export interface ShadowEvalResult {
   skillId: string
@@ -82,15 +81,25 @@ export async function shadowEvaluateSkill({
         ? `Original performs better. Keep candidate for further review.`
         : `No significant difference. Candidate can be activated if merchant approves.`
 
-    // Store shadow eval result
-    await supabase.from('shop_agent_memory').insert({
+    // Stored beside skills, never in shop_agent_memory. Memory facts are
+    // grounding evidence; a shadow score is not a shop fact.
+    const { error: saveError } = await supabase.from('shop_skill_shadow_evals').insert({
       shop_id: shopId,
-      memory_type: 'fact',
-      category: 'shadow_eval',
-      content: `Shadow eval for skill ${candidateSkillId} v${skill.version}: ${winner} (orig=${originalConfidence}, shadow=${shadowConfidence}). ${recommendation}`,
-      source_conversation_id: conversationId,
-      confidence: 0.7,
+      skill_id: candidateSkillId,
+      conversation_id: conversationId,
+      skill_version: String(skill.version ?? ''),
+      user_query: userQuery.slice(0, 500),
+      original_confidence: originalConfidence,
+      shadow_confidence: shadowConfidence,
+      original_intent: originalIntent,
+      shadow_intent: shadowIntent,
+      winner,
+      recommendation,
     })
+    if (saveError) {
+      console.error('[ShadowEval] Could not store result:', saveError.message)
+      return null
+    }
 
     return {
       skillId: candidateSkillId,

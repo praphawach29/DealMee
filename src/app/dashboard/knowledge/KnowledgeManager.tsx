@@ -68,7 +68,7 @@ export interface GoldenTrajectory {
   winning_turn_dialogue: Array<{ sender: 'customer' | 'bot' | 'agent'; text: string }>
   closing_technique: string
   revenue: number
-  status: 'active' | 'archived'
+  status: 'candidate' | 'active' | 'archived'
   created_at: string
 }
 
@@ -915,10 +915,11 @@ export default function KnowledgeManager({
                   <span>ถอดรหัสบทสนทนาปิดการขาย (Golden Closers)</span>
                   <span className="text-[10px] bg-purple-200 text-purple-900 dark:bg-purple-900 dark:text-purple-200 px-2 py-0.5 rounded-full font-bold">
                     {trajectories.filter((t) => t.status === 'active').length} สคริปต์ใช้งานอยู่
+                    {trajectories.some((t) => t.status === 'candidate') ? ` · ${trajectories.filter((t) => t.status === 'candidate').length} รออนุมัติ` : ''}
                   </span>
                 </h4>
                 <p className="text-xs text-purple-800/80 dark:text-purple-300/80 mt-0.5">
-                  ระบบถอดรหัสจังหวะที่ลูกค้าลังเลแล้วบอทหรือแอดมินตอบจนปิดยอดโอนเงินได้สำเร็จ เพื่อนำมาสอน AI เป็นตัวอย่างเลียนแบบไหวพริบการขายแบบเรียลไทม์
+                  รายการที่สกัดใหม่จะรอให้คุณอนุมัติก่อนบอทนำไปใช้ สคริปต์ที่เปิดใช้อยู่แล้วยังทำงานตามเดิม
                 </p>
               </div>
             </div>
@@ -972,11 +973,12 @@ export default function KnowledgeManager({
               {trajectories.map((traj) => {
                 const badge = objectionBadge(traj.customer_objection_type)
                 const isActive = traj.status === 'active'
+                const isCandidate = traj.status === 'candidate'
                 return (
                   <div
                     key={traj.id}
                     className={`p-5 sm:p-6 transition-colors flex flex-col gap-3.5 ${
-                      isActive
+                      isActive || isCandidate
                         ? 'bg-white hover:bg-slate-50/50 dark:bg-slate-900 dark:hover:bg-slate-800/40'
                         : 'bg-slate-50/60 dark:bg-slate-900/30 opacity-75'
                     }`}
@@ -986,6 +988,11 @@ export default function KnowledgeManager({
                         <span className={`px-2.5 py-0.5 text-xs font-bold rounded-md border ${badge.color}`}>
                           {badge.label}
                         </span>
+                        {isCandidate && (
+                          <span className="px-2.5 py-0.5 text-xs font-bold rounded-md bg-amber-100 text-amber-900 border border-amber-300">
+                            รออนุมัติ
+                          </span>
+                        )}
                         {traj.revenue > 0 && (
                           <span className="px-2.5 py-0.5 text-xs font-bold rounded-md bg-emerald-100 text-emerald-900 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1.5">
                             <Coins className="w-3.5 h-3.5" />
@@ -1003,12 +1010,19 @@ export default function KnowledgeManager({
                           onClick={() => handleToggleTrajectory(traj.id, traj.status)}
                           disabled={loading}
                           className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all border flex items-center gap-1.5 cursor-pointer ${
-                            isActive
+                            isCandidate
+                              ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                              : isActive
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
                               : 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
                           }`}
                         >
-                          {isActive ? (
+                          {isCandidate ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>อนุมัติให้บอทใช้</span>
+                            </>
+                          ) : isActive ? (
                             <>
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               <span>ใช้งานอยู่</span>
@@ -1086,7 +1100,7 @@ export default function KnowledgeManager({
                 ยังไม่มีบทสนทนาปิดการขาย (Golden Closers)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mb-5">
-                เมื่อมีลูกค้าสั่งซื้อและชำระเงินสำเร็จ ระบบจะถอดรหัสจังหวะปิดการขายมาเป็นตัวอย่างให้ AI โดยอัตโนมัติ หรือกดสแกนออเดอร์เดิมได้เลย
+                เมื่อมีออเดอร์ที่ชำระเงินแล้ว ระบบถอดรหัสจังหวะปิดการขายเป็นฉบับรออนุมัติ บอทจะใช้ก็ต่อเมื่อคุณกดอนุมัติ สคริปต์ที่เปิดใช้อยู่แล้วยังทำงานตามเดิม
               </p>
               <button
                 onClick={handleScanGoldenClosers}

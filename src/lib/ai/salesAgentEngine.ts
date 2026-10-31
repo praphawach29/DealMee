@@ -27,7 +27,7 @@ import {
   retrieveWinningTrajectories,
   formatGoldenClosersPromptContext,
 } from '@/lib/ai/salesTrajectory'
-import { formatShopSkillsPromptContext, retrieveActiveShopSkills } from '@/lib/ai/shopSkills'
+import { formatShopSkillsEvidence, formatShopSkillsPromptContext, retrieveActiveShopSkills } from '@/lib/ai/shopSkills'
 import { QA_ONLY_PROMPT, qaToolAllowed } from '@/lib/ai/assistantPolicy'
 import { codCloseExample, codObjectionLine, codPaymentRule, shopCodEnabled } from '@/lib/ai/codPolicy'
 import { shopSkillsRetrievalEnabled } from '@/lib/ai/shopSkillsRollout'
@@ -1396,6 +1396,7 @@ ${paymentInfo}`
     ? await retrieveActiveShopSkills(shop.id, userQuery, 3)
     : []
   const shopSkillsContext = formatShopSkillsPromptContext(activeShopSkills)
+  const shopSkillsEvidence = formatShopSkillsEvidence(activeShopSkills)
   if (activeShopSkills.length > 0) {
     import('@/lib/ai/skillExposure').then(({ logSkillExposures }) => {
       logSkillExposures({
@@ -1407,10 +1408,12 @@ ${paymentInfo}`
   }
 
   let agentMemoryContext = ''
+  let memoryEvidence = ''
   try {
-    const { retrieveAgentMemories, formatAgentMemoryContext } = await import('@/lib/ai/agentMemory')
+    const { retrieveAgentMemories, formatAgentMemoryContext, formatGroundingMemory } = await import('@/lib/ai/agentMemory')
     const memories = await retrieveAgentMemories(shop.id, userQuery, 5)
     agentMemoryContext = formatAgentMemoryContext(memories)
+    memoryEvidence = formatGroundingMemory(memories)
   } catch {
     // Memory is extra context. A lookup failure still lets the turn answer from the catalog and knowledge.
   }
@@ -1504,8 +1507,8 @@ ${historyContext}`
         documentStateContext,
         hoursContext,
         knowledgeContext,
-        shopSkillsContext,
-        agentMemoryContext,
+        shopSkillsEvidence,
+        memoryEvidence,
       ].filter((part) => part.trim()),
     },
   }
@@ -1741,6 +1744,7 @@ async function applyGrounding(state: PlanningState, finalText: string): Promise<
     chunks: state.groundingChunks || [],
     evidenceTexts: texts,
     knowledgeMiss: texts.some((text) => text.includes('ไม่พบข้อมูลเรื่อง')),
+    codEnabled: shopCodEnabled(state.shop),
   })
   const alreadyHandedOff = state.toolCallsExecuted.some((call) => call.name === 'request_human_agent')
   if (verdict.shouldHandoff && !alreadyHandedOff) {

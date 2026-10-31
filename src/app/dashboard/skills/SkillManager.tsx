@@ -14,6 +14,7 @@ type Skill = {
   trigger_keywords: string[]
   knowledge_body: string | null
   instruction: string | null
+  facts_confirmed?: boolean | null
 }
 
 const emptyForm = { skill_type: 'knowledge', category: 'sales', keywords: '', knowledge_body: '', instruction: '' }
@@ -31,6 +32,7 @@ export default function SkillManager({ enabled }: { enabled: boolean }) {
   const [readingFile, setReadingFile] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importNotice, setImportNotice] = useState('')
+  const [confirmFacts, setConfirmFacts] = useState<Record<string, boolean>>({})
   const selectionVersion = useRef(0)
 
   async function previewFile(event: React.ChangeEvent<HTMLInputElement>) {
@@ -150,12 +152,15 @@ export default function SkillManager({ enabled }: { enabled: boolean }) {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  async function mutate(skill: Skill, action: 'activate' | 'archive' | 'delete') {
+  async function mutate(skill: Skill, action: 'activate' | 'archive' | 'delete' | 'confirm_facts') {
     setError('')
     const response = await fetch(`/api/shop/skills/${skill.id}`, {
       method: action === 'delete' ? 'DELETE' : 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: action === 'delete' ? undefined : JSON.stringify({ action }),
+      body: action === 'delete' ? undefined : JSON.stringify({
+        action,
+        confirm_facts: action === 'activate' && confirmFacts[skill.id] === true,
+      }),
     })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) setError(payload.error ?? 'อัปเดต Skill ไม่สำเร็จ')
@@ -218,6 +223,7 @@ export default function SkillManager({ enabled }: { enabled: boolean }) {
         </label>
         <label className="text-sm font-medium text-slate-700">ข้อมูลที่ยืนยันแล้ว
           <textarea className="mt-1 min-h-28 w-full rounded-lg border border-slate-300 p-2" value={form.knowledge_body} onChange={(event) => setForm({ ...form, knowledge_body: event.target.value })} maxLength={8000} />
+          <span className="mt-1 block text-xs text-slate-500">ข้อความที่ร้านเขียนหรือแก้เองถือเป็นข้อเท็จจริงของร้าน และใช้เป็นหลักฐานตอบลูกค้าได้เมื่อเปิดใช้</span>
         </label>
         <label className="text-sm font-medium text-slate-700">แนวทางการตอบ
           <textarea className="mt-1 min-h-28 w-full rounded-lg border border-slate-300 p-2" value={form.instruction} onChange={(event) => setForm({ ...form, instruction: event.target.value })} maxLength={8000} />
@@ -271,6 +277,26 @@ export default function SkillManager({ enabled }: { enabled: boolean }) {
             </div>
             {skill.skill_type === 'behavior' && !skill.trigger_keywords?.length && <div className="mt-3 text-xs text-violet-700">ไม่มีคำกระตุ้น · ใช้กับทุกคำตอบเมื่ออนุมัติและเปิดระบบ Skills</div>}
             {skill.trigger_keywords?.length > 0 && <div className="mt-3 text-xs text-violet-700">{skill.trigger_keywords.join(' · ')}</div>}
+            {skill.facts_confirmed === true && <p className="mt-3 text-xs text-emerald-700">ข้อเท็จจริงที่ยืนยันแล้ว จะใช้เป็นหลักฐานเมื่อสกิลนี้เปิดใช้</p>}
+            {skill.facts_confirmed !== true && (skill.knowledge_body || skill.skill_type === 'knowledge') && (
+              <div className="mt-3 space-y-2 text-xs text-amber-800">
+                <p>ข้อเท็จจริงยังไม่ยืนยัน บอททำตามแนวทางนี้ได้ แต่จะไม่ใช้ข้อความนี้พิสูจน์ราคา สต็อก นโยบาย หรือการชำระเงิน จนกว่าจะแก้ข้อความหรือกดยืนยัน</p>
+                {skill.status === 'candidate' && (
+                  <label className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={confirmFacts[skill.id] === true}
+                      onChange={(event) => setConfirmFacts((current) => ({ ...current, [skill.id]: event.target.checked }))}
+                    />
+                    <span>ยืนยันว่าข้อความนี้เป็นข้อเท็จจริงของร้าน แล้วจึงใช้เป็นหลักฐานตอนกดเปิดใช้</span>
+                  </label>
+                )}
+                {skill.status === 'active' && (
+                  <button type="button" onClick={() => void mutate(skill, 'confirm_facts')} className="rounded-lg border border-amber-300 px-2 py-1 font-semibold">ยืนยันข้อเท็จจริง</button>
+                )}
+              </div>
+            )}
             {skill.knowledge_body && <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{skill.knowledge_body}</p>}
             {skill.instruction && <p className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{skill.instruction}</p>}
           </article>

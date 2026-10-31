@@ -21,7 +21,7 @@ const chunks: EvidenceChunk[] = [
   { id: CHUNK, content: 'เสื้อยืดรุ่น SKU-8891 ราคา 290 บาท ส่งฟรีเมื่อซื้อครบ 2 ชิ้น' },
 ]
 
-function check(draft: string, extra: { evidenceTexts?: string[]; customerMessage?: string; knowledgeMiss?: boolean; language?: 'th' | 'en'; chunks?: EvidenceChunk[] } = {}) {
+function check(draft: string, extra: { evidenceTexts?: string[]; customerMessage?: string; knowledgeMiss?: boolean; language?: 'th' | 'en'; chunks?: EvidenceChunk[]; codEnabled?: boolean | null } = {}) {
   return checkGrounding({
     draft,
     customerMessage: extra.customerMessage ?? 'เสื้อตัวนี้ราคาเท่าไหร่',
@@ -29,6 +29,7 @@ function check(draft: string, extra: { evidenceTexts?: string[]; customerMessage
     chunks: extra.chunks ?? chunks,
     evidenceTexts: extra.evidenceTexts ?? [],
     knowledgeMiss: extra.knowledgeMiss,
+    codEnabled: extra.codEnabled,
   })
 }
 
@@ -142,6 +143,104 @@ test('gap identity is per shop and repeated questions increment', () => {
     id: 'gap-1',
     askCount: 3,
   })
+})
+
+test('COD claims follow the shop switch both ways', () => {
+  const offer = check('มีเก็บเงินปลายทางค่ะ', {
+    evidenceTexts: ['ไม่รับเก็บเงินปลายทาง'],
+    customerMessage: 'เก็บปลายทางได้ไหม',
+    chunks: [],
+    codEnabled: false,
+  })
+  assert.equal(offer.grounded, false)
+
+  const denialWhenOn = check('ไม่รับเก็บปลายทางค่ะ', {
+    evidenceTexts: ['เปิดเก็บเงินปลายทาง', 'วิธีชำระ: เก็บเงินปลายทาง'],
+    customerMessage: 'เก็บปลายทางได้ไหม',
+    chunks: [],
+    codEnabled: true,
+  })
+  assert.equal(denialWhenOn.grounded, false)
+  assert.equal(denialWhenOn.shouldHandoff, true)
+
+  const denialWhenOff = check('ไม่รับเก็บปลายทางค่ะ', {
+    evidenceTexts: ['ไม่รับเก็บเงินปลายทาง'],
+    customerMessage: 'เก็บปลายทางได้ไหม',
+    chunks: [],
+    codEnabled: false,
+  })
+  assert.equal(denialWhenOff.grounded, true)
+  assert.equal(denialWhenOff.text.includes('ไม่รับเก็บปลายทาง'), true)
+
+  const offerWhenOn = check('มีเก็บเงินปลายทางค่ะ', {
+    evidenceTexts: ['เปิดเก็บเงินปลายทาง'],
+    customerMessage: 'เก็บปลายทางได้ไหม',
+    chunks: [],
+    codEnabled: true,
+  })
+  assert.equal(offerWhenOn.grounded, true)
+
+  const unchecked = check('ไม่รับเก็บปลายทางค่ะ', {
+    evidenceTexts: ['ไม่รับเก็บเงินปลายทาง'],
+    customerMessage: 'เก็บปลายทางได้ไหม',
+    chunks: [],
+  })
+  assert.equal(unchecked.grounded, false)
+})
+
+test('an out-of-stock claim needs stock evidence', () => {
+  const invented = check('เสื้อยืดสินค้าหมดค่ะ', {
+    evidenceTexts: ['เสื้อยืดโอเวอร์ไซส์ ราคา 290 บาท (คงเหลือ: 12 ชิ้น)'],
+    customerMessage: 'หมดยัง',
+    chunks: [],
+  })
+  assert.equal(invented.grounded, false)
+  assert.equal(invented.shouldHandoff, true)
+
+  const fromTool = check('เสื้อยืดสินค้าหมดค่ะ', {
+    evidenceTexts: ['check_stock: เสื้อยืด หมดสต๊อก'],
+    customerMessage: 'หมดยัง',
+    chunks: [],
+  })
+  assert.equal(fromTool.grounded, true)
+
+  const fromZero = check('กางเกงของหมดค่ะ', {
+    evidenceTexts: ['กางเกงขาสั้นลินิน: 450 บาท (คงเหลือ: 0 ชิ้น)'],
+    customerMessage: 'หมดยัง',
+    chunks: [],
+  })
+  assert.equal(fromZero.grounded, true)
+})
+
+test('naming a closed time slot offers the real rounds instead of handing off', () => {
+  const slots = 'เวลาว่าง: 11:00, 13:00, 15:00, 17:00'
+  const offered = check('รอบ 18:00 ยังไม่มีค่ะ รอบที่ว่างคือ 11:00 13:00 15:00 และ 17:00 ค่ะ', {
+    evidenceTexts: [slots],
+    customerMessage: 'รอบ 18:00 ว่างมั้ย',
+    chunks: [],
+  })
+  assert.equal(offered.grounded, true)
+  assert.equal(offered.shouldHandoff, false)
+  assert.equal(offered.text.includes('18:00'), true)
+  assert.equal(offered.text.includes('11:00'), true)
+
+  const onlyDenial = check('รอบ 18:00 ยังไม่มีค่ะ', {
+    evidenceTexts: [slots],
+    customerMessage: 'รอบ 18:00 ว่างมั้ย',
+    chunks: [],
+  })
+  assert.equal(onlyDenial.grounded, true)
+  assert.equal(onlyDenial.shouldHandoff, false)
+  assert.match(onlyDenial.text, /11:00/)
+  assert.match(onlyDenial.text, /17:00/)
+
+  const inventedSlot = check('รอบ 18:00 ว่างค่ะ', {
+    evidenceTexts: [slots],
+    customerMessage: 'รอบ 18:00 ว่างมั้ย',
+    chunks: [],
+  })
+  assert.equal(inventedSlot.grounded, false)
+  assert.equal(inventedSlot.shouldHandoff, true)
 })
 
 test('the migration isolates gaps by shop and the prompt tells the model to look facts up', () => {

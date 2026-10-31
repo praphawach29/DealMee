@@ -26,7 +26,10 @@ export const GROUNDING_RULES = `[ข้อเท็จจริงของร�
 ราคา สต็อก สเปก โปรโมชั่น นโยบาย การจัดส่ง เวลาทำการ และช่องทางชำระเงิน ต้องมาจากข้อความในพรอมต์นี้ หรือจากผลเครื่องมือในเทิร์นนี้เท่านั้น
 - ราคาและจำนวนสินค้า: ใช้ตัวเลขจาก [แคตตาล็อกสินค้าของร้าน] หรือผล search_products / check_stock ห้ามจำราคาเอง
 - นโยบาย วิธีส่ง โปรที่ไม่อยู่ในแคตตาล็อก สเปกที่แคตตาล็อกไม่มี และเวลาที่ไม่มีใน [เวลาทำการของร้าน]: เรียก search_knowledge_base ก่อนตอบ
-- ห้ามสัญญาว่าส่งฟรี รับประกัน ของแท้ ลดราคา เก็บเงินปลายทาง หรือตัดรอบเวลา ถ้าข้อมูลร้านไม่ได้เขียนไว้
+- ห้ามสัญญาว่าส่งฟรี รับประกัน ของแท้ ลดราคา หรือตัดรอบเวลา ถ้าข้อมูลร้านไม่ได้เขียนไว้
+- การบอกว่ารับหรือไม่รับเก็บเงินปลายทางต้องตรงกับสวิตช์ COD ของร้านทั้งสองทาง ห้ามสรุปจากคำว่าเก็บปลายทางที่อยู่ในประโยคปฏิเสธ
+- การบอกว่าสินค้าหมดต้องมีผลเช็คสต็อกหรือแคตตาล็อกที่ระบุว่าหมดหรือเหลือ 0 ห้ามเดาจากความจำ
+- ถ้าลูกค้าขอเวลาที่ไม่อยู่ในรอบว่าง ให้บอกว่ารอบนั้นยังไม่มี แล้วเสนอเฉพาะรอบที่ผลเครื่องมือระบุว่าว่าง ห้ามส่งต่อแอดมินเพียงเพราะเอ่ยเวลาที่ไม่มี
 - ทักทาย ถามความต้องการ ขอชื่อ เบอร์ ที่อยู่ และชวนเลือกสินค้าได้ตามปกติ โดยไม่ต้องอ้างแหล่งข้อมูล
 - ถ้าไม่มีข้อมูล ให้บอกอย่างสุภาพว่าจะให้แอดมินช่วยตรวจ แล้วเรียก request_human_agent ห้ามแต่งคำตอบ
 - เมื่อตอบข้อเท็จจริง ให้ปิดท้ายหนึ่งบรรทัดภายในรูปแบบ [[cite:chunk:<chunk_id>,tool:<ชื่อเครื่องมือ>]] ใส่เฉพาะ chunk_id หรือเครื่องมือที่มีจริงในเทิร์นนี้ ลูกค้าจะไม่เห็นบรรทัดนี้`
@@ -49,6 +52,11 @@ export interface GroundingInput {
   evidenceTexts: string[]
   /** search_knowledge_base returned nothing for this turn. */
   knowledgeMiss?: boolean
+  /**
+   * Shop COD switch. Offers are grounded only when this is true, denials only
+   * when it is false. Omit it and any COD claim is unsupported.
+   */
+  codEnabled?: boolean | null
 }
 
 export type GroundingReason = 'small_talk' | 'grounded' | 'unsupported_shop_fact' | 'invented_citation' | 'unanswered'
@@ -137,10 +145,11 @@ export function checkGrounding(input: GroundingInput): GroundingVerdict {
     }
   }
 
-  const unsupported = factSentences.filter((sentence) => !sentenceSupported(sentence, evidence))
+  const unsupported = factSentences.filter((sentence) => !sentenceSupported(sentence, evidence, input.codEnabled))
   if (unsupported.length === 0) {
     return {
       ...base,
+      text: supplementUnavailableSlotReply(visible, evidence, input.language),
       skipped: false,
       grounded: true,
       shouldHandoff: false,
@@ -190,7 +199,7 @@ function isShopFactSentence(sentence: string): boolean {
   return true
 }
 
-function sentenceSupported(sentence: string, evidence: string): boolean {
+function sentenceSupported(sentence: string, evidence: string, codEnabled?: boolean | null): boolean {
   const norm = normalize(sentence)
   if (/จองเรียบร้อย|รับออเดอร์แล้ว/.test(norm)) {
     const id = norm.match(/[a-z]{2,}-\d{3,}/i)
@@ -198,6 +207,8 @@ function sentenceSupported(sentence: string, evidence: string): boolean {
     return evidence.includes(id[0].toLowerCase())
   }
   if (!literalPhrasesSupported(norm, evidence)) return false
+  if (!codClaimSupported(norm, codEnabled)) return false
+  if (!stockoutSupported(norm, evidence)) return false
   if (!codesSupported(norm, evidence)) return false
   const claims = extractClaims(norm)
   if (/ราคา|บาท|฿|baht|\bprice\b/.test(norm)) {
@@ -221,7 +232,6 @@ function literalPhrasesSupported(sentence: string, evidence: string): boolean {
   const groups = [
     ['ส่งฟรี', 'จัดส่งฟรี', 'ฟรีค่าส่ง'],
     ['รับประกัน'],
-    ['เก็บเงินปลายทาง', 'เก็บปลายทาง'],
     ['ของแท้'],
     ['เปิดทุกวัน'],
   ]
@@ -251,9 +261,131 @@ interface NumberClaim {
   time: string | null
 }
 
+const STOCKOUT_PHRASES = ['สินค้าหมดสต็อก', 'สินค้าหมดสต๊อก', 'หมดสต็อก', 'หมดสต๊อก', 'สินค้าหมด', 'ของหมด', 'out of stock']
+
+/** A positive out-of-stock phrase. "ไม่หมด" and "ของหมดอายุ" are not claims. */
+function claimsStockout(sentence: string): boolean {
+  for (const phrase of STOCKOUT_PHRASES) {
+    let from = 0
+    while (from < sentence.length) {
+      const at = sentence.indexOf(phrase, from)
+      if (at < 0) break
+      const prefix = sentence.slice(Math.max(0, at - 8), at)
+      const tail = sentence.slice(at + phrase.length, at + phrase.length + 3)
+      if (!/(?:ยังไม่|ไม่ได้|ไม่มี|ไม่)\s*$/.test(prefix) && !tail.startsWith('อายุ')) return true
+      from = at + phrase.length
+    }
+  }
+  return false
+}
+
+function evidenceHasStockout(evidence: string): boolean {
+  if (STOCKOUT_PHRASES.some((phrase) => phraseOccurs(evidence, phrase))) return true
+  return /คงเหลือ\s*:?\s*0\b/.test(evidence) || /เหลือ\s*:?\s*0\s*(?:ชิ้น|หลอด|ถุง|ขวด|อัน)/.test(evidence)
+}
+
+function stockoutSupported(sentence: string, evidence: string): boolean {
+  if (!claimsStockout(sentence)) return true
+  return evidenceHasStockout(evidence)
+}
+
+type CodDirection = 'offer' | 'deny'
+
+function codDirection(sentence: string): CodDirection | 'mixed' | null {
+  const text = sentence.toLowerCase()
+  let offer = false
+  let deny = false
+  const mark = (at: number) => {
+    const prefix = text.slice(Math.max(0, at - 18), at)
+    if (/(?:ไม่(?:ได้)?(?:เปิด|รับ|มี)?|ไม่มีบริการ|ไม่รับ|no|not|don't|do not|doesn't)\s*$/i.test(prefix)) deny = true
+    else offer = true
+  }
+  for (const phrase of ['เก็บเงินปลายทาง', 'เก็บปลายทาง']) {
+    let from = 0
+    while (from < text.length) {
+      const at = text.indexOf(phrase, from)
+      if (at < 0) break
+      mark(at)
+      from = at + phrase.length
+    }
+  }
+  for (const match of text.matchAll(/\bcod\b/g)) mark(match.index ?? 0)
+  if (!offer && !deny) return null
+  if (offer && deny) return 'mixed'
+  return deny ? 'deny' : 'offer'
+}
+
+/** COD offers need the switch on. Denials need it off. A missing switch supports neither. */
+function codClaimSupported(sentence: string, codEnabled?: boolean | null): boolean {
+  const direction = codDirection(sentence)
+  if (!direction) return true
+  if (direction === 'mixed') return false
+  if (direction === 'offer') return codEnabled === true
+  return codEnabled === false
+}
+
+const TIME_DENIED_BEFORE = /(?:ยังไม่มี|ไม่มีรอบ|ไม่ว่าง|ไม่เปิด|ไม่ได้เปิด|ไม่รับจอง|ไม่มี)\s*$/
+const TIME_DENIED_AFTER = /^\s*(?:ยังไม่มี|ไม่ว่าง|เต็ม(?:แล้ว)?|ไม่เปิด|ไม่มี(?:แล้ว|รอบ)?|ปิดรับ)/
+
+/** Clock times the reply says are unavailable. Those do not have to appear in shop text. */
+function deniedTimeRanges(sentence: string): { start: number; end: number }[] {
+  const times = [...sentence.matchAll(/(\d{1,2}):(\d{2})/g)].map((match) => ({
+    start: match.index ?? 0,
+    end: (match.index ?? 0) + match[0].length,
+  }))
+  const denied: { start: number; end: number }[] = []
+  for (let i = 0; i < times.length; i++) {
+    const prevEnd = i > 0 ? times[i - 1].end : 0
+    const nextStart = i + 1 < times.length ? times[i + 1].start : sentence.length
+    const before = sentence.slice(prevEnd, times[i].start)
+    const after = sentence.slice(times[i].end, nextStart)
+    const beforeDenies = TIME_DENIED_BEFORE.test(before)
+    const afterDenies = TIME_DENIED_AFTER.test(after)
+    const sharedWithNext = afterDenies && TIME_DENIED_BEFORE.test(sentence.slice(times[i].end, nextStart))
+    if (beforeDenies || (afterDenies && !sharedWithNext)) denied.push(times[i])
+  }
+  return denied
+}
+
+function replyHasTime(text: string, slot: string): boolean {
+  const parts = slot.split(':')
+  const hour = String(Number(parts[0]))
+  const minute = parts[1] || '00'
+  return text.includes(`${hour}:${minute}`) || text.includes(`${hour.padStart(2, '0')}:${minute}`)
+}
+
+function slotList(evidence: string): string[] {
+  const marked = evidence.match(/เวลาว่าง:\s*([^\n]+)/)
+  const source = marked ? marked[1] : evidence
+  const lists = source.match(/\d{1,2}:\d{2}(?:\s*(?:,|และ)?\s*\d{1,2}:\d{2}){1,}/g) || []
+  if (lists.length === 0) return []
+  const best = [...lists].sort((a, b) => b.length - a.length)[0]
+  return [...new Set(best.match(/\d{1,2}:\d{2}/g) || [])]
+}
+
+/**
+ * A reply that names a time the shop does not open should keep that denial and
+ * also list the slots the tool or booking text actually has.
+ */
+export function supplementUnavailableSlotReply(reply: string, evidence: string, language: 'th' | 'en'): string {
+  if (deniedTimeRanges(normalize(reply)).length === 0) return reply
+  const slots = slotList(evidence)
+  if (slots.length < 2) return reply
+  const normReply = normalize(reply)
+  const missing = slots.filter((slot) => !replyHasTime(normReply, slot))
+  if (missing.length === 0) return reply
+  const line = language === 'en'
+    ? `Available times: ${missing.join(', ')}`
+    : `รอบที่ว่างคือ ${missing.join(' ')} ค่ะ`
+  return `${reply}\n${line}`
+}
+
 function extractClaims(sentence: string): NumberClaim[] {
   const claims: NumberClaim[] = []
+  const denied = deniedTimeRanges(sentence)
   for (const match of sentence.matchAll(/(\d{1,2}):(\d{2})/g)) {
+    const start = match.index ?? 0
+    if (denied.some((span) => span.start === start)) continue
     claims.push({ digits: '', unit: null, time: `${match[1].padStart(2, '0')}:${match[2]}` })
   }
   for (const match of sentence.matchAll(/(\d+(?:\.\d+)?)(\s*)(บาท|฿|baht|%|ปี|เดือน|วัน|ชั่วโมง|ชม|ชิ้น)/g)) {

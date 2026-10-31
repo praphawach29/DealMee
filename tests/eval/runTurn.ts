@@ -37,6 +37,7 @@ function productsMentioned(shop: FixtureShop, text: string) {
 }
 
 export function offlineDraft(shop: FixtureShop, evalCase: EvalCase): string {
+  if (evalCase.scriptedReply) return evalCase.scriptedReply
   if (evalCase.offlineInvent) return 'รับประกัน 9 ปี ราคา 99999 บาท และส่งฟรีทุกชิ้นค่ะ'
   if (evalCase.category === 'greeting') return 'สวัสดีค่ะ วันนี้สนใจดูอะไรเป็นพิเศษคะ'
   const mentioned = productsMentioned(shop, evalCase.turns.map((turn) => turn.text).join('\n'))
