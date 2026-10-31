@@ -7,7 +7,8 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test tests/**/*.test.ts",
+    "test": "node --import ./tests/register-hooks.mjs --experimental-strip-types --test $(find tests -name '*.test.ts')",
+    "eval:live": "node --import ./tests/register-hooks.mjs --experimental-strip-types tests/eval/run-live.ts",
     "schema:check": "node scripts/schema-snapshot.mjs check"
   },
   "dependencies": {
