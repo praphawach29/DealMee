@@ -2,11 +2,12 @@
 
 import React from 'react'
 import { HeroChatMock } from './ProductVisuals'
+import { DemoButton, SignupButton } from './demo/LandingActions'
 import { TEMPLATES } from '@/app/onboarding/templates'
 
 const stats = [
   { num: '24 ชม.', label: 'บอทตอบแชท' },
-  { num: '3', label: 'ช่องทางแชทที่เชื่อมได้' },
+  { num: 'LINE OA', label: 'ใช้ของร้านที่มีอยู่แล้ว' },
   { num: String(TEMPLATES.length), label: 'เทมเพลตตอนสมัคร' },
   { num: 'ตรวจสลิป', label: 'กับข้อมูลธนาคาร' },
 ]
@@ -49,17 +50,13 @@ export default function HeroSection() {
 
           {/* Action CTAs */}
           <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3.5 pt-1">
-            <a
-              href="#pricing"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-bold text-sm sm:text-base px-7 py-3 rounded-full shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/35 transition-all duration-200 active:scale-95"
-            >
-              <span>🚀 เริ่มต้นใช้งานฟรี</span>
-            </a>
+            <SignupButton size="lg" className="w-full sm:w-auto" />
+            <DemoButton size="lg" tone="dark" className="w-full sm:w-auto" />
             <a
               href="#demo"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-white/30 hover:border-white/60 text-white font-semibold text-sm sm:text-base px-7 py-3 rounded-full hover:bg-white/[0.08] transition-all duration-200 active:scale-95"
+              className="w-full sm:w-auto inline-flex items-center justify-center text-sm font-semibold text-white/75 hover:text-white underline-offset-4 hover:underline px-2 py-2"
             >
-              <span>ดูตัวอย่างการทำงาน</span>
+              ดูคลิปการใช้งาน
             </a>
           </div>
 
@@ -74,8 +71,9 @@ export default function HeroSection() {
           </div>
         </div>
 
-        <div className="flex justify-center items-center order-first lg:order-last">
+        <div className="order-first flex flex-col items-center gap-4 lg:order-last">
           <HeroChatMock />
+
         </div>
       </div>
     </section>

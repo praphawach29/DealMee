@@ -10,11 +10,13 @@ import { checkGrounding, chunksFromRetrievedText, GROUNDING_RULES, type Evidence
 import { createAdminClient } from '@/lib/supabase/admin'
 import { platformSecret } from '@/lib/platformSecrets'
 import { buildBusinessPromptContext } from '@/lib/businessGreeting'
+import { containsThaiKeyword } from '@/lib/ai/thaiMatch'
+import { extractStageTag, STAGE_TAG_INSTRUCTION } from '@/lib/ai/stageMarker'
 import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
 import { getGeminiPromptCache, dropGeminiPromptCache } from '@/lib/ai/geminiCache'
 import { executeTool as realExecuteTool, type ToolExecutor, type ToolExecutionContext, type CustomerMessage } from '@/lib/ai/toolDispatcher'
-import { mergeProductCards } from '@/lib/ai/productCards'
+import { mergeProductCards, isKeywordProductQuery } from '@/lib/ai/productCards'
 import { t, detectCustomerLanguage, type CustomerLanguage } from '@/lib/i18n/customerMessages'
 import {
   formatSalesStagePromptContext,
@@ -25,6 +27,12 @@ import {
   retrieveWinningTrajectories,
   formatGoldenClosersPromptContext,
 } from '@/lib/ai/salesTrajectory'
+import { formatShopSkillsPromptContext, retrieveActiveShopSkills } from '@/lib/ai/shopSkills'
+import { QA_ONLY_PROMPT, qaToolAllowed } from '@/lib/ai/assistantPolicy'
+import { codCloseExample, codObjectionLine, codPaymentRule, shopCodEnabled } from '@/lib/ai/codPolicy'
+import { shopSkillsRetrievalEnabled } from '@/lib/ai/shopSkillsRollout'
+import { greetingOnlyReply, shouldBlockGreetingHandoff } from '@/lib/ai/handoffGuard'
+import { orderPaymentLabel } from '@/lib/orders/paymentState'
 
 const supabase = createAdminClient()
 
@@ -146,11 +154,15 @@ export interface AgentResult {
   /** Every tool actually executed this turn, in order — for future use by the Sales Workflow Engine (stage transitions) and debugging. Always an array. */
   toolCallsExecuted: AgentToolCall[]
   /** Delayed pushes (schedule_followup) — the engine has no channel access to set its own setTimeout, so the caller (webhook route) does it. Always an array. */
-  scheduledMessages: { delayMs: number; message: CustomerMessage }[]
+  scheduledMessages: { delayMs: number; message: CustomerMessage; productName?: string; reason?: string }[]
   /** Catalog rows from search_products / check_stock. Channels render one carousel from this list. */
   productsData?: any[]
   /** Active sales stage computed at the end of the turn (greeting, discovery, showcase, closing, post_sale). */
   salesStage?: SalesStage
+  /** Heuristic response confidence (0-1) used by the Phase 0 skill data pipeline. */
+  ai_confidence?: number
+  /** Detected user intent — used by Phase 0 skill data pipeline. */
+  intent?: string
 }
 
 /**
@@ -204,6 +216,7 @@ export interface PlanningState {
   shop: any
   conversationId: string
   salesStage: SalesStage
+  isFirstCustomerTurn: boolean
   /** Language of the customer's message, so the strings the system writes itself match the language the model is replying in. */
   language: CustomerLanguage
   turns: PlanningTurn[]
@@ -222,7 +235,7 @@ export interface PlanningState {
   allUsage: AgentUsage[]
   immediateMessages: CustomerMessage[]
   toolCallsExecuted: AgentToolCall[]
-  scheduledMessages: { delayMs: number; message: CustomerMessage }[]
+  scheduledMessages: { delayMs: number; message: CustomerMessage; productName?: string; reason?: string }[]
   productsData?: any[]
   lastProviderError?: string
   isPlayground?: boolean
@@ -358,7 +371,7 @@ const MASTER_TOOLS = [
           },
         },
         address: { type: 'string', description: 'ที่อยู่จัดส่งครบถ้วน' },
-        payment_method: { type: 'string', description: 'วิธีชำระเงิน เช่น โอนเงิน, เก็บปลายทาง' },
+        payment_method: { type: 'string', description: 'วิธีชำระเงินที่ร้านเปิดอยู่ เช่น โอนเงิน หรือพร้อมเพย์ ห้ามใส่เก็บปลายทางถ้าพรอมต์บอกว่าร้านไม่เปิด COD' },
         total_price: { type: 'number', description: 'ยอดรวมทั้งหมดที่ต้องชำระ (บาท)' },
         tax_invoice: { type: 'string', description: 'ต้องการใบกำกับภาษีหรือไม่' },
       },
@@ -601,7 +614,8 @@ const MASTER_TOOLS = [
       type: 'object',
       properties: {
         delay_minutes: { type: 'number', description: 'จำนวนนาทีที่รอก่อนทักกลับ เช่น 30, 60, 120' },
-        reason: { type: 'string', description: 'เหตุผลที่ต้องการ Follow-up' },
+        reason: { type: 'string', description: 'เหตุผล: general (ติดตามทั่วไป) หรือ back_in_stock (แจ้งเตือนเมื่อสินค้ามา)' },
+        product_name: { type: 'string', description: 'ชื่อสินค้าที่ลูกค้าสอบถาม (ใช้เมื่อ reason=back_in_stock)' },
       },
       required: ['delay_minutes', 'reason'],
     },
@@ -759,8 +773,8 @@ export function computeComplexityScore({
   const text = userQuery.toLowerCase().trim()
   let score = 0
 
-  const matchedNegotiation = NEGOTIATION_KEYWORDS.filter((k) => text.includes(k))
-  const matchedObjections = HESITATION_AND_OBJECTION_KEYWORDS.filter((k) => text.includes(k))
+  const matchedNegotiation = NEGOTIATION_KEYWORDS.filter((k) => containsThaiKeyword(text, k))
+  const matchedObjections = HESITATION_AND_OBJECTION_KEYWORDS.filter((k) => containsThaiKeyword(text, k))
   
   // Combine unique matched triggers
   const uniqueMatches = Array.from(new Set([...matchedNegotiation, ...matchedObjections]))
@@ -772,8 +786,8 @@ export function computeComplexityScore({
   for (const msg of recentCustomerMessages.slice(-3)) {
     const priorText = msg.toLowerCase()
     if (
-      NEGOTIATION_KEYWORDS.some((k) => priorText.includes(k)) ||
-      HESITATION_AND_OBJECTION_KEYWORDS.some((k) => priorText.includes(k))
+      NEGOTIATION_KEYWORDS.some((k) => containsThaiKeyword(priorText, k)) ||
+      HESITATION_AND_OBJECTION_KEYWORDS.some((k) => containsThaiKeyword(priorText, k))
     ) {
       score += 1
     }
@@ -961,6 +975,7 @@ async function preparePlanningState({
 
   // 2. Products
   const features = (shop.features as Record<string, boolean>) || {}
+  const qaOnly = features.assistant_qa_only === true
   let productsContext = ''
   const valueThreshold = highValueThreshold(features)
   let catalogEmpty = false
@@ -1137,7 +1152,7 @@ async function preparePlanningState({
   // to quote instead of inventing one.
   const { data: myOrders } = await db
     .from('orders')
-    .select('order_no, product_name, quantity, total_amount, status, payment_status')
+    .select('order_no, product_name, quantity, total_amount, status')
     .eq('shop_id', shop.id)
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
@@ -1147,7 +1162,7 @@ async function preparePlanningState({
     ? `\n\n[ออเดอร์ที่บันทึกจริงแล้วของลูกค้ารายนี้]\n` +
       myOrders.map((o: any) =>
         `- ${o.order_no}: ${o.product_name || '-'}${o.quantity ? ` x${o.quantity}` : ''} ` +
-        `${Number(o.total_amount || 0).toLocaleString()} บาท (สถานะ ${o.status}, ชำระเงิน ${o.payment_status || '-'})`
+        `${Number(o.total_amount || 0).toLocaleString()} บาท (สถานะ ${o.status}, ชำระเงิน ${orderPaymentLabel(o.status)})`
       ).join('\n') +
       `\n(ใช้เลขที่ออเดอร์จากรายการนี้เท่านั้น ห้ามแต่งเลขใหม่)`
     : `\n\n[ออเดอร์ที่บันทึกจริงแล้วของลูกค้ารายนี้]\nยังไม่มีออเดอร์ที่บันทึกจริงเลย — ถ้ายังไม่ได้เรียก take_order สำเร็จในเทิร์นนี้ ห้ามบอกลูกค้าว่ารับออเดอร์แล้วเด็ดขาด`
@@ -1193,7 +1208,12 @@ async function preparePlanningState({
   // since Gemini's caching is automatic regardless of structure and OpenAI
   // isn't currently reachable by the routing below.
   const activeBotName = (shop.bot_name && !/botify/i.test(shop.bot_name)) ? shop.bot_name : 'น้อง DealMee'
-  const staticSystemPrompt = `คุณคือ "${activeBotName}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
+  const codOn = shopCodEnabled(shop)
+  const staticSystemPrompt = qaOnly ? `${QA_ONLY_PROMPT}
+ชื่อผู้ช่วย: ${activeBotName}
+หน่วยงาน: ${shop.name}
+
+${GROUNDING_RULES}` : `คุณคือ "${activeBotName}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
 บุคลิกภาพ: ${shop.personality || 'สุภาพ เรียบร้อย มืออาชีพ เป็นมิตรและมีไหวพริบในการขายสูง'}
 คำอธิบายร้าน: ${shop.description || 'ร้านค้าออนไลน์'}
 
@@ -1214,14 +1234,14 @@ async function preparePlanningState({
 - [กังวลเรื่องราคา / คิดว่าแพง / ขอดูก่อน]: ชี้ความคุ้มค่าระยะยาว (Cost-per-use) + เสนอโปรโมชั่น/ของแถม หรือแนะนำรุ่นรอง (Downsell) ที่ราคาเป็นมิตรและตอบโจทย์ได้เช่นกัน
 - [กังวลเรื่องคุณภาพ / ของแท้ / เห็นผลจริงไหม]: เสริมได้เฉพาะรีวิวหรือนโยบายรับประกันที่อยู่ในข้อมูลร้าน ห้ามแต่งตัวเลขเช่นเปอร์เซ็นต์ลูกค้าซื้อซ้ำ และห้ามบอกว่าของแท้ถ้าข้อมูลร้านไม่ได้เขียนไว้
 - [กังวลเรื่องการเลือกไซส์ / สูตรที่เหมาะ]: อาสาช่วยเทียบสเปกทันที ("คุณลูกค้าสูง/หนัก หรือมีสภาพผิวแบบไหนคะ เดี๋ยวแอดมินช่วยแนะนำสูตร/ไซส์ที่เป๊ะที่สุดให้ค่ะ")
-- [กังวลเรื่องการจัดส่ง / ความปลอดภัย]: แจ้งการจัดส่งและช่องทางชำระเงินเท่าที่มีในข้อมูลร้านหรือผลเครื่องมือ ห้ามเสนอเก็บเงินปลายทางเองถ้าข้อมูลร้านไม่มี
+${codObjectionLine(codOn)}
 
 4. [Assumptive & Alternative Choice Close - ตะล่อมปิดการขายด้วยตัวเลือก]
 - หลีกเลี่ยงการถามเปิดช่องปฏิเสธ เช่น "รับไหมคะ?"
 - ให้ใช้เทคนิคปิดการขายด้วยตัวเลือก 2 ทาง (Alternative Close) เสมอ เช่น:
   - "คุณลูกค้ารับเป็น สีขาว หรือ สีดำ ดีคะ?"
   - "รับเป็น 1 ชิ้น หรือ 2 ชิ้นดีคะ?" (ห้ามใส่คำว่าส่งฟรีถ้าข้อมูลร้านไม่ได้ให้ส่งฟรี)
-  - "สะดวกชำระเป็น โอนสแกน QR พร้อมเพย์ หรือ เก็บเงินปลายทาง ดีคะ?"
+${codCloseExample(codOn)}
 
 5. [Ethical Urgency & Value Stacking - กระตุ้นการตัดสินใจอย่างสมเหตุสมผล]
 - กระตุ้นได้เฉพาะสิทธิที่มีจริงในข้อมูลร้านหรือผลเครื่องมือ ห้ามกำหนดเวลาตัดรอบหรือสัญญาส่งฟรีเอง
@@ -1286,7 +1306,7 @@ async function preparePlanningState({
 - ห้ามพิมพ์หัวข้อสรุปแล้วปล่อยค่าว่าง เช่น "- **" ถ้ายังไม่มีข้อมูลจริง ให้ถามหรือเรียกเครื่องมือแทน
 - ถ้าลูกค้าให้ชื่อ/เบอร์/ที่อยู่แล้ว ให้สรุปข้อมูลเหล่านั้นกลับให้ครบ อย่าละไว้หรือแทนด้วยหัวข้อว่าง
 - ตอบเป็น plain text ล้วนเสมอ ห้ามใช้ markdown ทุกชนิด (ตัวหนาด้วยดอกจันคู่, ตัวเอียงด้วยดอกจันเดี่ยว, code ด้วย backtick, หัวข้อด้วย #) เพราะ LINE ไม่แปลงให้ ลูกค้าจะเห็นเครื่องหมายพวกนี้ติดมาจริงๆ ถ้าอยากเน้น ให้ขึ้นบรรทัดใหม่หรือใช้อีโมจินำหน้าแทน
-- ถ้ายังขาดวิธีชำระเงิน ให้เสนอทางเลือกจากข้อมูลร้าน เช่น พร้อมเพย์/โอนธนาคาร/เก็บปลายทาง แล้วถามให้ลูกค้าเลือก ก่อนเรียก take_order
+${codPaymentRule(codOn)}
 - ห้ามสรุปว่ารับออเดอร์แล้วถ้ายังไม่ได้เรียก take_order หรือข้อมูลลูกค้ายังไม่ครบ ให้ถามเฉพาะข้อมูลที่ขาดแทน
 - ถ้าไม่มีข้อมูล ให้แจ้งลูกค้าให้รอแอดมินหรือเรียก request_human_agent
 
@@ -1312,7 +1332,7 @@ ${paymentInfo}`
   }
 
   const hoursContext = businessHoursPromptContext(shop.features)
-  const salesStageContext = formatSalesStagePromptContext(initialSalesStage)
+  const salesStageContext = formatSalesStagePromptContext(initialSalesStage) + STAGE_TAG_INSTRUCTION
 
   // 5e. Golden Closers (Few-Shot Winning Sales Trajectories)
   const goldenTrajectories = await retrieveWinningTrajectories({
@@ -1322,15 +1342,42 @@ ${paymentInfo}`
   })
   const goldenClosersContext = formatGoldenClosersPromptContext(goldenTrajectories)
 
-  const dynamicSystemPrompt = `${salesStageContext}${goldenClosersContext ? `\n\n${goldenClosersContext}` : ''}
-${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}${hoursContext}
+  const activeShopSkills = shopSkillsRetrievalEnabled(shop.features)
+    ? await retrieveActiveShopSkills(shop.id, userQuery, 3)
+    : []
+  const shopSkillsContext = formatShopSkillsPromptContext(activeShopSkills)
+  if (activeShopSkills.length > 0) {
+    import('@/lib/ai/skillExposure').then(({ logSkillExposures }) => {
+      logSkillExposures({
+        shopId: shop.id,
+        conversationId,
+        skills: activeShopSkills.map((s) => ({ id: s.id, version: s.version })),
+      }).catch(() => {})
+    }).catch(() => {})
+  }
+
+  let agentMemoryContext = ''
+  try {
+    const { retrieveAgentMemories, formatAgentMemoryContext } = await import('@/lib/ai/agentMemory')
+    const memories = await retrieveAgentMemories(shop.id, userQuery, 5)
+    agentMemoryContext = formatAgentMemoryContext(memories)
+  } catch {
+    // Memory is extra context. A lookup failure still lets the turn answer from the catalog and knowledge.
+  }
+
+  const dynamicSystemPrompt = qaOnly
+    ? `${shopSkillsContext}
+${knowledgeContext}${hoursContext}
+${historyContext}`
+    : `${salesStageContext}${goldenClosersContext ? `\n\n${goldenClosersContext}` : ''}
+${shopSkillsContext ? `\n\n${shopSkillsContext}` : ''}${agentMemoryContext ? `\n\n${agentMemoryContext}` : ''}${knowledgeContext}${customerProfileContext}${bookingStateContext}${orderStateContext}${documentStateContext}${hoursContext}
 ${historyContext}`
 
   // Free plan (incl. ended trials): sales automation is locked and orders go to the admin.
   // An empty catalog (service / info page) works the same way: the bot answers from the
   // knowledge base and hands interested customers to the admin with their contact details.
   const salesLocked = !salesAutomationEnabled(shop) || catalogEmpty
-  const modePrompt = !salesAutomationEnabled(shop)
+  const modePrompt = qaOnly ? QA_ONLY_PROMPT : !salesAutomationEnabled(shop)
     ? SALES_LOCKED_PROMPT
     : catalogEmpty
       ? INFO_ONLY_PROMPT
@@ -1344,6 +1391,7 @@ ${historyContext}`
     recentCustomerMessages,
     isVip: isVipCustomer,
   })
+  if (qaOnly) routing.toolSet = MASTER_TOOLS.filter(tool => qaToolAllowed(tool.name))
   if (salesLocked) {
     routing.toolSet = routing.toolSet.filter((t) => !SALES_AUTOMATION_TOOLS.has(t.name))
   }
@@ -1354,14 +1402,20 @@ ${historyContext}`
   // Prompt size by section, to see what each planning step resends (staticTotal includes products and booking)
   const sectionSizes: Record<string, number> = {
     staticTotal: staticSystemPrompt.length, products: productsContext.length, booking: bookingContext.length,
-    knowledge: knowledgeContext.length, history: historyContext.length, golden: goldenClosersContext.length,
+    knowledge: knowledgeContext.length, skills: shopSkillsContext.length, history: historyContext.length, golden: goldenClosersContext.length,
     customer: customerProfileContext.length, state: bookingStateContext.length + orderStateContext.length + documentStateContext.length,
   }
   console.log(`[Prompt size] ${systemInstruction.length} chars: ` + Object.entries(sectionSizes).map(([k, v]) => `${k} ${v}`).join(', '))
 
   const language = detectCustomerLanguage(userQuery)
 
-  const executor: ToolExecutor = toolExecutor || realExecuteTool
+  const underlyingExecutor: ToolExecutor = toolExecutor || realExecuteTool
+  const executor: ToolExecutor = (name, args, context) => {
+    if (qaOnly && !qaToolAllowed(name)) {
+      throw new Error('This tool is disabled in Q&A-only mode')
+    }
+    return underlyingExecutor(name, args, context)
+  }
   const toolCtx: ToolExecutionContext = {
     shopId: shop.id,
     userId,
@@ -1378,6 +1432,7 @@ ${historyContext}`
       shop,
       conversationId,
       salesStage: initialSalesStage,
+      isFirstCustomerTurn: recentCustomerMessages.length <= 1,
       language,
       turns: [{ role: 'user', text: userQuery }],
       step: 0,
@@ -1407,6 +1462,8 @@ ${historyContext}`
         documentStateContext,
         hoursContext,
         knowledgeContext,
+        shopSkillsContext,
+        agentMemoryContext,
       ].filter((part) => part.trim()),
     },
   }
@@ -1506,6 +1563,17 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
     return { done: true, finalText: response.text }
   }
 
+  const firstUserTurn = state.turns.find((turn) => turn.role === 'user')
+  const currentUserMessage = firstUserTurn && 'text' in firstUserTurn ? firstUserTurn.text : ''
+  if (shouldBlockGreetingHandoff({
+    message: currentUserMessage,
+    isFirstCustomerTurn: state.isFirstCustomerTurn,
+    toolName: response.toolCall.name,
+  })) {
+    console.warn(`[DealMee Guard] Blocked request_human_agent for greeting-only first turn in ${state.conversationId}`)
+    return { done: true, finalText: greetingOnlyReply(state.language) }
+  }
+
   state.turns.push({ role: 'assistant', text: response.text, toolCall: response.toolCall })
 
   // Guard against repeated identical tool calls leading to dead loops
@@ -1515,14 +1583,26 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
       JSON.stringify(executed.args) === JSON.stringify(response.toolCall!.args)
   )
 
-  const toolResult = isDuplicateToolCall
-    ? {
-        resultForAi: 'เครื่องมือนี้ถูกเรียกไปแล้วด้วยข้อมูลเดียวกัน กรุณาสรุปคำตอบให้ลูกค้าจากข้อมูลที่มีอยู่ตอนนี้ โดยไม่ต้องเรียกเครื่องมือซ้ำ',
-        immediateMessages: [],
-        scheduledMessage: undefined,
-        productsData: undefined,
-      }
-    : await state.executor(response.toolCall.name, response.toolCall.args, state.toolCtx)
+  const toolStart = Date.now()
+    const toolResult = isDuplicateToolCall
+      ? {
+          resultForAi: 'เครื่องมือนี้ถูกเรียกไปแล้วด้วยข้อมูลเดียวกัน กรุณาสรุปคำตอบให้ลูกค้าจากข้อมูลที่มีอยู่ตอนนี้ โดยไม่ต้องเรียกเครื่องมือซ้ำ',
+          immediateMessages: [],
+          scheduledMessage: undefined,
+          productsData: undefined,
+        }
+      : await state.executor(response.toolCall.name, response.toolCall.args, state.toolCtx)
+    // Phase 5: log tool usage (fire-and-forget)
+    import('@/lib/ai/agentMemory').then(({ logToolUsage }) => {
+      logToolUsage({
+        shopId: state.toolCtx.shopId,
+        conversationId: state.conversationId,
+        toolName: response.toolCall!.name,
+        argsSummary: JSON.stringify(response.toolCall!.args).slice(0, 200),
+        success: true,
+        durationMs: Date.now() - toolStart,
+      }).catch(() => {})
+    }).catch(() => {})
 
   if (toolResult.productsData && toolResult.productsData.length > 0) {
     // A later tool in the same turn (search, then stock) adds cards. Same catalog id is kept once.
@@ -1547,8 +1627,15 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
   if (state.step === MAX_PLANNING_STEPS - 1) {
     // Reached maximum allowed planning steps without generating final text.
     // Transfer conversation to human handoff rather than leaking internal raw tool results to the customer.
+    // Through request_human_agent, so the pause carries its one-hour timer and the shop's
+    // admin gets a LINE alert: flipping the row to 'human' on its own left the bot silent
+    // with nobody told, until the owner happened to open the inbox (23 Oct 2026).
     try {
-      await state.toolCtx.supabase.from('conversations').update({ status: 'human' }).eq('id', state.conversationId)
+      await state.executor(
+        'request_human_agent',
+        { reason: 'บอทตอบคำถามนี้เองไม่ได้ (ใช้ขั้นตอนวางแผนครบแล้ว) จึงส่งต่อให้แอดมิน' },
+        state.toolCtx
+      )
     } catch (err) {
       console.error('[Planning Layer] Failed to flip conversation to human handoff:', err)
     }
@@ -1642,10 +1729,14 @@ async function finalizeAgentResult(state: PlanningState, finalText: string): Pro
 
   const firstUserTurn = state.turns.find((t) => t.role === 'user')
   const userQueryText = firstUserTurn && 'text' in firstUserTurn ? firstUserTurn.text : ''
-  const customerText = toPlainText(await applyGrounding(state, finalText)).trim()
 
+  // The model ends its reply with [[stage:...]]. Take that off before the
+  // grounding check, so the tag is neither shown to the customer nor treated as a shop fact.
+  const tagged = extractStageTag(finalText)
+  const customerText = toPlainText(await applyGrounding(state, tagged.text)).trim()
   const nextStage = determineNextSalesStage({
     currentStage: state.salesStage,
+    modelStage: tagged.stage,
     userQuery: userQueryText,
     executedToolNames: state.toolCallsExecuted.map((t) => t.name),
     hasPendingOrder: state.toolCallsExecuted.some((t) => t.name === 'send_payment_qr'),
@@ -1660,7 +1751,45 @@ async function finalizeAgentResult(state: PlanningState, finalText: string): Pro
     scheduledMessages: state.scheduledMessages,
     productsData: state.productsData,
     salesStage: nextStage,
+    ai_confidence: computeConfidence({ text: customerText, toolCallsExecuted: state.toolCallsExecuted, usage, scheduledMessages: state.scheduledMessages }),
+    intent: detectIntent(userQueryText, state.toolCallsExecuted.map((t) => t.name)),
   }
+}
+
+// ─── Phase 0 heuristics: confidence + intent (no extra LLM cost) ─────────────
+
+const LOW_CONFIDENCE_PATTERNS = /ไม่แน่ใจ|ขอโทษ|ไม่ทราบ|ยังไม่มีข้อมูล|ไม่สามารถ|ไม่มีข้อมูล/iu;
+
+/** Simple heuristic confidence (0–1) avoiding an extra provider call. */
+function computeConfidence(opts: {
+  text: string
+  toolCallsExecuted: { name: string }[]
+  usage?: AgentUsage
+  scheduledMessages: { delayMs: number; productName?: string; reason?: string }[]
+}): number {
+  let confidence = 0.8 // baseline: model gave an answer
+  // no tools ran and the reply hedges → lower
+  if (opts.toolCallsExecuted.length === 0 && LOW_CONFIDENCE_PATTERNS.test(opts.text)) {
+    confidence -= 0.3
+  }
+  const hasOrder = opts.toolCallsExecuted.some((t) => t.name === 'take_order' || t.name === 'send_payment_qr')
+  const hasBooking = opts.toolCallsExecuted.some((t) => t.name === 'book_appointment')
+  if (hasOrder || hasBooking) confidence += 0.15 // decisive action → confident closing
+  if (opts.toolCallsExecuted.some((t) => t.name === 'escalate_to_human')) confidence -= 0.2
+  return Math.max(0.05, Math.min(0.99, Math.round(confidence * 100) / 100))
+}
+
+/** Lightweight intent classifier using tool names + keywords already in the codebase. */
+export function detectIntent(query: string, executedTools: string[]): string {
+  if (executedTools.includes('take_order') || executedTools.includes('send_payment_qr')) return 'purchase'
+  if (executedTools.includes('book_appointment')) return 'booking'
+  if (executedTools.includes('request_human_agent') || executedTools.includes('escalate_to_human')) return 'handoff'
+  if (isKeywordProductQuery(query)) return 'product_query'
+  if (/ราคา|ถูก|แพง|ส่วนลด|โปรโม/iu.test(query)) return 'price_inquiry'
+  if (/จอง|นัด|เวลา|เปิด-ปิด/iu.test(query)) return 'booking_inquiry'
+  if (/สลิป|เงิน|ชำระ|โอน|พร้อมเพย์/iu.test(query)) return 'payment_inquiry'
+  if (/ขอคืน|ยกเลิก|เปลี่ยน|คืนเงิน|ปัญหา|ชำรุด|สินค้าเสีย/iu.test(query)) return 'objection'
+  return 'info_request'
 }
 
 /**
@@ -1670,6 +1799,55 @@ async function finalizeAgentResult(state: PlanningState, finalText: string): Pro
  * anything else that just wants "give me the final answer".
  */
 export async function processSalesAgentChat(request: SalesAgentRequest): Promise<AgentResult> {
+  // Response cache: shop-scoped, first-turn only, never price/stock/order answers.
+  const shopId = request.shop?.id
+  const userQuery = request.userQuery?.trim()
+  const hasHistory = (request.conversationHistory?.length || 0) > 0
+  const { isCacheableCustomerQuery, mayStoreResponseCache } = await import('@/lib/ai/responseCache')
+  let priorMessageCount = 0
+  if (shopId && userQuery && request.conversationId && !hasHistory && !request.isPlayground && isCacheableCustomerQuery(userQuery)) {
+    try {
+      const db = request.supabaseClient || createAdminClient()
+      const { count, error } = await db
+        .from('chat_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversation_id', request.conversationId)
+        .eq('shop_id', shopId)
+      priorMessageCount = error ? Number.POSITIVE_INFINITY : (count ?? 0)
+    } catch {
+      priorMessageCount = Number.POSITIVE_INFINITY
+    }
+  }
+  const cacheOk = Boolean(shopId && userQuery && mayStoreResponseCache({
+    features: request.shop?.features,
+    query: userQuery || '',
+    hasExplicitHistory: hasHistory,
+    isPlayground: request.isPlayground,
+    priorMessageCount,
+  }))
+
+  if (cacheOk && shopId && userQuery) {
+    try {
+      const { getCachedResponse } = await import('@/lib/ai/responseCache')
+      const cached = await getCachedResponse(shopId, userQuery)
+      if (cached) {
+        return {
+          text: cached,
+          immediateMessages: [],
+          toolCallsExecuted: [],
+          scheduledMessages: [],
+          productsData: [],
+          ai_confidence: 0.9,
+          intent: 'cached_response',
+          usage: undefined,
+          allUsage: [],
+        } as AgentResult
+      }
+    } catch (err) {
+      console.warn('[ResponseCache] lookup failed:', err)
+    }
+  }
+
   const prep = await preparePlanningState(request)
   if (prep.quotaExceeded) return quotaExceededResult(prep.language)
 
@@ -1682,7 +1860,19 @@ export async function processSalesAgentChat(request: SalesAgentRequest): Promise
       break
     }
   }
-  return finalizeAgentResult(state, finalText)
+  const result = await finalizeAgentResult(state, finalText)
+
+  // Store in cache if no tools were called (simple text response)
+  if (cacheOk && shopId && userQuery && result.text && (!result.toolCallsExecuted || result.toolCallsExecuted.length === 0)) {
+    try {
+      const { setCachedResponse } = await import('@/lib/ai/responseCache')
+      await setCachedResponse(shopId, userQuery, result.text)
+    } catch (err) {
+      console.warn('[ResponseCache] store failed:', err)
+    }
+  }
+
+  return result
 }
 
 /**

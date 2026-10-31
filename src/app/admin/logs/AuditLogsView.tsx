@@ -10,40 +10,7 @@ interface AuditLogItem {
 }
 
 export default function AuditLogsView() {
-  const mockLogs: AuditLogItem[] = [
-    {
-      id: 'log-001',
-      action: 'เปิดใช้งานพอร์ทัล Super Admin',
-      details: 'ผู้ดูแลระบบเข้าสู่ระบบเพื่อตรวจสอบสถิติประจำวัน',
-      user: 'praphawach@gmail.com',
-      time: 'เมื่อสักครู่',
-      type: 'info',
-    },
-    {
-      id: 'log-002',
-      action: 'เชื่อมต่อ Gemini AI API Gateway',
-      details: 'ตรวจสอบสถานะการทำงานของโมเดล Gemini 3.6 Flash สำเร็จ',
-      user: 'SYSTEM',
-      time: '10 นาทีที่แล้ว',
-      type: 'success',
-    },
-    {
-      id: 'log-003',
-      action: 'ปรับปรุงคอลัมน์ชำระเงินและค่าจัดส่ง',
-      details: 'อัปเดตตาราง public.shops ด้วยคำสั่ง SQL Migration',
-      user: 'praphawach@gmail.com',
-      time: '1 ชั่วโมงที่แล้ว',
-      type: 'success',
-    },
-    {
-      id: 'log-004',
-      action: 'เชื่อมต่อ LINE Messaging API Webhook',
-      details: 'ตรวจสอบการส่งข้อความตอบกลับร้านค้าสำเร็จ',
-      user: 'SYSTEM',
-      time: '2 ชั่วโมงที่แล้ว',
-      type: 'info',
-    },
-  ]
+  const logs: AuditLogItem[] = []
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -60,7 +27,12 @@ export default function AuditLogsView() {
       {/* Logs Table Card */}
       <div className="bg-surface border border-outline-variant/40 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
         <div className="space-y-3">
-          {mockLogs.map((log) => (
+          {logs.length === 0 ? (
+            <p className="text-sm text-on-surface-variant py-6 text-center">
+              ยังไม่มีบันทึกกิจกรรมจากระบบ หน้านี้จะแสดงเฉพาะเหตุการณ์จริงเมื่อมีการเชื่อมต่อประวัติการทำงาน
+            </p>
+          ) : null}
+          {logs.map((log) => (
             <div
               key={log.id}
               className="p-4 rounded-xl border border-outline-variant/30 bg-merchant-bg flex flex-col sm:flex-row sm:items-center justify-between gap-3"

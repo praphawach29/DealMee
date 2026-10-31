@@ -5,7 +5,9 @@ import Navbar from './Navbar'
 import HeroSection from './HeroSection'
 import FeaturesSection from './FeaturesSection'
 import HowItWorksSection from './HowItWorksSection'
-import ChatSimulatorSection from './ChatSimulatorSection'
+import DemoVideoSection from './DemoVideoSection'
+import LiveDemoSection from './LiveDemoSection'
+import { LandingActionsProvider } from './demo/LandingActions'
 import DashboardShowcase from './DashboardShowcase'
 import PricingSection from './PricingSection'
 import PricingComparison from './PricingComparison'
@@ -13,8 +15,9 @@ import CtaSection from './CtaSection'
 import ContactFaqSection from './ContactFaqSection'
 import Footer from './Footer'
 
-export default function LandingPage() {
+export default function LandingPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
   return (
+    <LandingActionsProvider isLoggedIn={isLoggedIn}>
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 selection:bg-cyan-500/20 selection:text-cyan-800">
       {/* 1. Header Navigation */}
       <Navbar />
@@ -22,32 +25,37 @@ export default function LandingPage() {
       {/* 2. Hero: sample LINE chat of the real sales flow */}
       <HeroSection />
 
-      {/* 3. 12 Core Features Grid */}
+      {/* 3. The promo clips, one chapter at a time */}
+      <DemoVideoSection />
+
+      {/* Two ways in: the no-account demo chat, or the real trial */}
+      <LiveDemoSection />
+
+      {/* 4. 12 Core Features Grid */}
       <FeaturesSection />
 
-      {/* 4. How It Works (Steps & Business Types) */}
+      {/* 5. How It Works (Steps & Business Types) */}
       <HowItWorksSection />
 
-      {/* 5. Simulated chat of real tools */}
-      <ChatSimulatorSection />
 
-      {/* 6. Merchant dashboard showcase */}
+      {/* 7. Merchant dashboard showcase */}
       <DashboardShowcase />
 
-      {/* 7. Pricing Plans (4 Tiers) */}
+      {/* 8. Pricing Plans (4 Tiers) */}
       <PricingSection />
 
-      {/* 8. Feature Comparison Matrix */}
+      {/* 9. Feature Comparison Matrix */}
       <PricingComparison />
 
-      {/* 9. CTA with the admin LINE alert the product actually sends */}
+      {/* 10. CTA with the admin LINE alert the product actually sends */}
       <CtaSection />
 
-      {/* 10. Contact Info & FAQ */}
+      {/* 11. Contact Info & FAQ */}
       <ContactFaqSection />
 
-      {/* 11. Minimalist Footer */}
+      {/* 12. Minimalist Footer */}
       <Footer />
     </div>
+    </LandingActionsProvider>
   )
 }

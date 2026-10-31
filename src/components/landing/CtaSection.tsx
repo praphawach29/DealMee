@@ -1,14 +1,14 @@
 'use client'
 
 import React from 'react'
-import Link from 'next/link'
 import { TRIAL_DAYS } from '@/lib/billing/trial'
 import { DEALMEE_LINE_OA } from './data'
 import { AdminAlertMock } from './ProductVisuals'
+import { DemoButton, SignupButton } from './demo/LandingActions'
 
 const items = [
   { num: `${TRIAL_DAYS} วัน`, label: 'ทดลองใช้งานฟรี' },
-  { num: '3 ช่องทาง', label: 'LINE, Facebook, Instagram' },
+  { num: 'LINE OA', label: 'เชื่อมของร้านที่มีอยู่แล้ว' },
   { num: 'แดชบอร์ด', label: 'ตั้งค่าเองได้ ไม่ต้องเขียนโค้ด' },
 ]
 
@@ -21,7 +21,7 @@ export default function CtaSection() {
             พร้อมให้บอท AI ดูแลลูกค้าแทนคุณ?
           </h2>
           <p className="text-white/70 text-sm sm:text-base mb-8 max-w-xl mx-auto lg:mx-0 leading-relaxed">
-            เริ่มต้นง่าย ติดตั้งเร็ว พร้อมตอบลูกค้าและสร้างยอดขายอัตโนมัติได้ตลอด 24 ชั่วโมง
+            เชื่อม LINE OA ของร้านแล้วเปิดใช้ได้เลย บอทตอบลูกค้า รับออเดอร์ และตรวจสลิปให้ตลอดเวลา
           </p>
 
           <div className="flex gap-4 justify-center lg:justify-start flex-wrap mb-8">
@@ -37,12 +37,8 @@ export default function CtaSection() {
           </div>
 
           <div className="flex gap-3.5 justify-center lg:justify-start flex-wrap">
-            <Link
-              href="/login"
-              className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-7 py-3 rounded-full font-bold text-sm sm:text-base inline-flex items-center gap-2 hover:opacity-95 shadow-lg shadow-cyan-500/25 transition-all duration-200 active:scale-95"
-            >
-              🚀 ทดลองใช้ฟรี {TRIAL_DAYS} วัน
-            </Link>
+            <SignupButton size="lg" />
+            <DemoButton size="lg" tone="dark" />
             <a
               href={DEALMEE_LINE_OA.url}
               target="_blank"

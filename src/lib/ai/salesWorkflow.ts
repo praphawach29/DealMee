@@ -9,6 +9,8 @@
  * 5. post_sale  - ขอบคุณ ยืนยันการชำระเงิน/สลิป แนะนำสินค้าเสริม หรือขอรีวิว
  */
 
+import { hasUnnegatedMatch } from '@/lib/ai/thaiMatch'
+
 export type SalesStage = 'greeting' | 'discovery' | 'showcase' | 'closing' | 'post_sale'
 
 export interface StageDeterminationInput {
@@ -18,6 +20,8 @@ export interface StageDeterminationInput {
   hasPendingOrder?: boolean
   hasCompletedOrder?: boolean
   lastMessageAt?: string | null
+  /** The stage the model tagged its reply with (stageMarker.ts). Replaces the keyword guesses below. */
+  modelStage?: SalesStage | null
 }
 
 /**
@@ -91,6 +95,7 @@ export function determineNextSalesStage({
   hasPendingOrder = false,
   hasCompletedOrder = false,
   lastMessageAt,
+  modelStage = null,
 }: StageDeterminationInput): SalesStage {
   const text = userQuery.toLowerCase().trim()
   const current: SalesStage = (
@@ -119,25 +124,37 @@ export function determineNextSalesStage({
   }
 
   // 3. Closing signals: Payment QR requested, checkout initiated, quotation issued
-  const hasOrderIntentWords = /(เอาเลย|เอาค่ะ|เอาครับ|สั่งเลย|สั่งซื้อ|พร้อมโอน|ขอเลขบัญชี|ขอคิวอาร์|ขอ qr|จ่ายเงิน|เก็บปลายทาง|ใบเสนอราคา|เสนอราคา|quotation)/.test(text)
   if (
     executedToolNames.includes('send_payment_qr') ||
     executedToolNames.includes('create_quotation') ||
     executedToolNames.includes('create_official_letter') ||
-    hasPendingOrder ||
-    hasOrderIntentWords
+    hasPendingOrder
   ) {
+    return 'closing'
+  }
+
+  // What the tools did above is fact. For what the customer meant, the model's own judgment
+  // (it read the whole conversation) beats keywords. It can't declare a sale done, though:
+  // post_sale comes only from a recorded order or booking, or stays if the chat is already there.
+  const showcaseTools =
+    executedToolNames.includes('search_products') ||
+    executedToolNames.includes('check_stock') ||
+    executedToolNames.includes('get_active_promotions')
+  if (modelStage && (modelStage !== 'post_sale' || current === 'post_sale')) {
+    if (showcaseTools && (modelStage === 'greeting' || modelStage === 'discovery')) return 'showcase'
+    return modelStage
+  }
+
+  // Without the model's tag (an error reply, a cut-off answer), fall back to keywords.
+  // "ยังไม่เอาเลยค่ะ" is a refusal, not an order: a phrase right after ไม่ doesn't count
+  const hasOrderIntentWords = hasUnnegatedMatch(text, /(เอาเลย|เอาค่ะ|เอาครับ|สั่งเลย|สั่งซื้อ|พร้อมโอน|ขอเลขบัญชี|ขอคิวอาร์|ขอ qr|จ่ายเงิน|เก็บปลายทาง|ใบเสนอราคา|เสนอราคา|quotation)/)
+  if (hasOrderIntentWords) {
     return 'closing'
   }
 
   // 4. Showcase signals: Product search, stock check, discount discussion, objection handling
   const hasProductQuery = /(มีไหม|ราคา|เท่าไหร่|ขอดู|มีรูปไหม|โปร|สต็อก|ลดได้ไหม|ของแท้ไหม|คิดดูก่อน)/.test(text)
-  if (
-    executedToolNames.includes('search_products') ||
-    executedToolNames.includes('check_stock') ||
-    executedToolNames.includes('get_active_promotions') ||
-    hasProductQuery
-  ) {
+  if (showcaseTools || hasProductQuery) {
     return 'showcase'
   }
 

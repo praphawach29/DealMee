@@ -30,7 +30,7 @@ body { font-family: 'Plex Thai', sans-serif; color: #fff; background: var(--navy
 .hook .kicker { font-size: 38px; font-weight: 600; color: var(--cyan); margin-bottom: 28px; }
 .hook h1 { font-size: 96px; line-height: 1.22; font-weight: 700; }
 .hook h1 em { font-style: normal; background: linear-gradient(90deg, #5B8CFF, var(--cyan)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.hook .sub { margin-top: 36px; font-size: 42px; line-height: 1.45; color: #C7D2FE; font-weight: 400; }
+.hook .sub { white-space: pre-line; margin-top: 36px; font-size: 42px; line-height: 1.45; color: #C7D2FE; font-weight: 400; }
 
 /* main */
 .callout { position: absolute; left: 70px; right: 150px; top: 190px; height: 210px; }
@@ -150,7 +150,7 @@ function build(clip) {
     <div class="phone"><div class="screen">
       <div class="chathead"><div class="av">${esc(m.shop.emoji)}</div><div><div class="nm">${esc(m.shop.name)}</div><div class="st"><i></i>ตอบโดย DealMee AI</div></div></div>
       <div class="viewport"><div class="list" id="list">
-        ${m.msgs.map((x, i) => `<div class="row ${x.side}" id="m${i}">${x.side === 'bot' ? `<div class="bav"><img src="${ICON}"></div>` : ''}${msgHtml(x)}</div>`).join('')}
+        ${m.msgs.map((x, i) => `<div class="row ${x.side === 'admin' ? 'bot' : x.side}" id="m${i}">${x.side === 'bot' ? `<div class="bav"><img src="${ICON}"></div>` : x.side === 'admin' ? '<div class="bav" style="font-size:30px">👩‍💼</div>' : ''}${msgHtml(x)}</div>`).join('')}
         <div class="typing" id="typing"><div class="bav"><img src="${ICON}"></div><div class="dots"><span></span><span></span><span></span></div></div>
       </div></div>
       ${(m.overlays || []).map((o, i) => o.kind === 'notify'

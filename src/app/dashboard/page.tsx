@@ -1,13 +1,21 @@
+import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { planLabel } from '@/lib/billing/planLabel'
 import MerchantDashboardClient from './MerchantDashboardClient'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
+import { loginUrl, PLAYGROUND_PATH } from '@/lib/auth/safeNext'
 
 import { getLinePushQuotaInfo } from '@/lib/billing/pushQuota'
 import type { SetupChecklistItem } from './components/SetupChecklistCard'
 import type { DashboardOrder, DashboardProduct } from '@/lib/dashboard/metrics'
+import { SAMPLE_ORDER_EXCLUSION_PATTERN } from '@/lib/orders/sampleOrders'
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ playground?: string }>
+}) {
+  const openPlayground = (await searchParams)?.playground === '1'
   const supabase = await createClient()
 
   // 1. Get authenticated user
@@ -16,30 +24,7 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    return (
-      <MerchantDashboardClient
-        shopName="ร้านค้าตัวอย่าง"
-        botName="น้อง DealMee"
-        botStatus="active"
-        plan="PRO"
-        productsCount={0}
-        knowledgeCount={0}
-        ordersCount={0}
-        totalRevenue={0}
-        totalMessages={0}
-        latestKnowledgeTitle="ยังไม่ได้เชื่อมต่อร้านค้า"
-        latestKnowledgeDate=""
-        orders={[]}
-        products={[]}
-        pushQuotaInfo={{
-          totalQuota: 300,
-          usedCount: 0,
-          remainingCount: 300,
-          period: new Date().toISOString().slice(0, 7),
-          planName: 'PRO',
-        }}
-      />
-    )
+    redirect(loginUrl({ next: openPlayground ? PLAYGROUND_PATH : '/dashboard' }))
   }
 
   // 2. Fetch Merchant's Shop via shopHelper
@@ -80,6 +65,7 @@ export default async function DashboardPage() {
         .from('orders')
         .select('id, order_no, customer_name, total_amount, status, items_summary, product_name, quantity, created_at')
         .eq('shop_id', currentShopId)
+        .not('order_no', 'match', SAMPLE_ORDER_EXCLUSION_PATTERN)
         .order('created_at', { ascending: false })
         .limit(1000),
       supabase
@@ -190,6 +176,7 @@ export default async function DashboardPage() {
       pushQuotaInfo={pushQuotaInfo}
       orders={recentOrders}
       products={catalog}
+      initialPlaygroundOpen={openPlayground}
     />
   )
 }

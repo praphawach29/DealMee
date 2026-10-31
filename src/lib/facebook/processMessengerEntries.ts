@@ -5,6 +5,9 @@
  * from the page id). Both verify the request, answer Meta, then call this in after().
  */
 import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
+import { adminPausePayload, isPauseExpired, resumePayload } from '@/lib/inbox/adminPause'
+import { isHandoffRequest } from '@/lib/ai/thaiMatch'
+import { alertIfUpset } from '@/lib/ai/upsetAlert'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   sendFacebookMessage,
@@ -14,7 +17,7 @@ import {
   sendFacebookImage,
   sendFacebookLinkButtons,
 } from '@/lib/facebook/messengerHelper'
-import { processSalesAgentChat } from '@/lib/ai/salesAgentEngine'
+import { processSalesAgentChat, detectIntent } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 import { settleSlipImage } from '@/lib/slip/settleSlip'
@@ -25,6 +28,7 @@ import {
   resolveChannelProductCards,
 } from '@/lib/ai/productCards'
 import { scheduleCustomerMessage } from '@/lib/ai/proactiveFollowUp'
+import { shopSkillsTelemetryEnabled } from '@/lib/ai/shopSkillsRollout'
 
 const supabase = createAdminClient()
 
@@ -41,6 +45,10 @@ export async function processMessengerEntries({
   isInstagram: boolean
   targetPlatform: 'facebook' | 'instagram'
 }) {
+  // Upset-customer checks run alongside the bot's reply; awaited at the end so after() keeps them alive
+  const upsetChecks: Promise<void>[] = []
+  const skillsTelemetryEnabled = shopSkillsTelemetryEnabled(features)
+
   for (const entry of entries) {
     const messagingList = entry.messaging || []
 
@@ -145,25 +153,19 @@ export async function processMessengerEntries({
           message: cleanText,
           platform: targetPlatform,
           platform_message_id: event.message?.mid || null,
+          ...(skillsTelemetryEnabled ? { intent: detectIntent(cleanText, []) } : {}),
         })
         .select('id')
         .single()
 
+      upsetChecks.push(alertIfUpset({ shop, conversation: conv, message: cleanText }))
+
       // 6. Check for Pause/Admin Commands
-      const lowerText = cleanText.toLowerCase()
-      const isPauseCommand =
-        ['/pause', '/stop', '/admin', '/human'].includes(lowerText) ||
-        cleanText === 'ขอคุยกับแอดมิน' ||
-        cleanText === 'ขอคุยกับเจ้าหน้าที่' ||
-        cleanText === 'ติดต่อเจ้าหน้าที่'
+      const isPauseCommand = isHandoffRequest(cleanText)
 
       if (isPauseCommand) {
         console.log(`[Facebook Webhook] Explicit pause command detected for PSID: ${senderPsid}`)
-        const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString()
-        await supabase
-          .from('conversations')
-          .update({ status: 'human', paused_until: pausedUntil })
-          .eq('id', conv.id)
+        await supabase.from('conversations').update(adminPausePayload()).eq('id', conv.id)
 
         if (pageToken) {
           await sendFacebookMessage(
@@ -177,19 +179,11 @@ export async function processMessengerEntries({
 
       // 7. Check if Admin Takeover is active
       if (conv.status === 'human') {
-        const now = new Date()
-        const isPauseExpired = conv.paused_until
-          ? now > new Date(conv.paused_until)
-          : (conv.last_message_at ? now.getTime() - new Date(conv.last_message_at).getTime() > 60 * 60 * 1000 : true)
-        const isExplicitReset = cleanText.startsWith('/ai') || isPauseExpired
+        const isExplicitReset = cleanText.startsWith('/ai') || (await isPauseExpired(supabase, conv))
 
         if (isExplicitReset) {
           console.log(`[Facebook Webhook] Auto-resuming AI mode for PSID ${senderPsid}`)
-          await supabase.from('conversations').update({ 
-            status: 'ai', 
-            ai_mode: 'auto', 
-            paused_until: null 
-          }).eq('id', conv.id)
+          await supabase.from('conversations').update(resumePayload()).eq('id', conv.id)
           conv.status = 'ai'
           conv.ai_mode = 'auto'
           if (cleanText.startsWith('/ai') && pageToken) {
@@ -249,10 +243,34 @@ export async function processMessengerEntries({
         catalogProducts: keywordCatalog,
       })
 
-      // 10. Check conversation ai_mode:
-      // - 'copilot': Save draft suggestion in chat_messages for admin approval
-      // - 'auto': Deliver response to Facebook user via Graph API
-      // - 'manual': Skip sending
+  // 10. Check conversation ai_mode:
+  // - 'copilot': Save draft suggestion in chat_messages for admin approval
+  // - 'auto': Deliver response to Facebook user via Graph API
+  // - 'manual': Skip sending
+  // ── Phase 0: auto-detect conversation outcome ───────────────────────────────
+  // NOTE: 'conversion' is recorded by settleSlip.ts (actual payment).  Here we
+  // only auto-tag 'handoff' (customer asked for a human), which is terminal.
+  const executedTools = (agentResult.toolCallsExecuted || []).map((t) => t.name)
+  const isHandoff = executedTools.includes('request_human_agent')
+  if (skillsTelemetryEnabled && isHandoff) {
+    const { error } = await supabase.rpc('set_conversation_outcome', {
+      p_conversation_id: conv.id,
+      p_outcome: 'handoff',
+      p_shop_id: shop_id,
+      p_source: `${targetPlatform}_handoff`,
+    })
+    if (error) console.error('[FB Webhook] set_conversation_outcome failed:', error.message)
+
+    // Auto-extract candidate skill from handoff conversation
+    import('@/lib/ai/skillExtractor').then(({ extractSkillFromConversation }) => {
+      extractSkillFromConversation({
+        shopId: shop_id,
+        conversationId: conv.id,
+        outcome: 'handoff',
+      }).catch((err) => console.warn('[SkillExtractor] FB handoff auto-extract failed:', err))
+    }).catch(() => {})
+  }
+
       if (conv.ai_mode === 'copilot') {
         console.log(`[Facebook Webhook] Conversation in Copilot mode for ${senderPsid}. Saving draft suggestion.`)
         if (savedUserMsg?.id && aiReplyText) {
@@ -276,6 +294,9 @@ export async function processMessengerEntries({
             sender_name: shop.bot_name || 'น้องบอท Dealmee',
             message: aiReplyText,
             platform: targetPlatform,
+            ...(skillsTelemetryEnabled
+              ? { ai_confidence: agentResult.ai_confidence, intent: agentResult.intent }
+              : {}),
           })
 
           // Update conversation last message
@@ -336,6 +357,8 @@ export async function processMessengerEntries({
       }
     }
   }
+
+  await Promise.allSettled(upsetChecks)
 }
 
 /**

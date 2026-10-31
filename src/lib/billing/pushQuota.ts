@@ -37,11 +37,15 @@ export async function getLinePushQuotaInfo(
   // Fetch broadcasts sent in current month
   const { data: broadcasts } = await supabase
     .from('broadcasts')
-    .select('recipient_count, created_at')
+    .select('*') // recipient_count only exists once the broadcast columns migration has run
     .eq('shop_id', shopId)
     .gte('created_at', startOfMonth)
 
-  const usedCount = (broadcasts || []).reduce((sum, b) => sum + Number(b.recipient_count || 0), 0)
+  // recipient_count arrives with the broadcast columns migration; until then success + failed is the same number
+  const usedCount = (broadcasts || []).reduce(
+    (sum, b: any) => sum + Number(b.recipient_count ?? Number(b.success_count || 0) + Number(b.failed_count || 0)),
+    0
+  )
   const remainingCount = Math.max(0, totalQuota - usedCount)
 
   return {

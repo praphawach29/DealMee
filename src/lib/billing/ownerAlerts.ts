@@ -1,19 +1,17 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { TRIAL_DAYS, trialStatus } from './trial'
+import { isOrderPaid } from '@/lib/orders/paymentState'
+import { adminLineRecipient, shouldSendAdminAlert } from '@/lib/line/adminAlertRouting'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.dealmee.app'
 const UPGRADE_URL = `${APP_URL}/dashboard/billing`
 
 type Shop = Record<string, any>
 
-function adminLineId(shop: Shop): string | null {
-  return shop.admin_line_user_id || shop.owner_line_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id || null
-}
-
 /** LINE push to the shop owner through the shop's own OA; silently skipped when not set up. */
 export async function pushToOwner(shop: Shop, text: string): Promise<boolean> {
   const token = shop.line_token ? String(shop.line_token).trim() : ''
-  const to = adminLineId(shop)
+  const to = adminLineRecipient(shop)
   if (!token || !to) return false
   try {
     const res = await fetch('https://api.line.me/v2/bot/message/push', {
@@ -30,8 +28,13 @@ export async function pushToOwner(shop: Shop, text: string): Promise<boolean> {
 }
 
 /** Order/slip alerts to the shop admin; skipped when the shop turned admin notifications off. */
-export async function notifyShopAdmin(shop: Shop, text: string): Promise<void> {
+export async function notifyShopAdmin(
+  shop: Shop,
+  text: string,
+  options: { excludeLineUserId?: string | null } = {}
+): Promise<void> {
   if (shop?.features?.admin_notify === false) return
+  if (!shouldSendAdminAlert(shop, options.excludeLineUserId)) return
   await pushToOwner(shop, text)
 }
 
@@ -47,12 +50,12 @@ async function trialResults(shopId: string, since: Date) {
   const admin = createAdminClient()
   const { data } = await admin
     .from('orders')
-    .select('total_amount, payment_status')
+    .select('total_amount, status')
     .eq('shop_id', shopId)
     .gte('created_at', since.toISOString())
   const orders = data?.length || 0
   const revenue = (data || [])
-    .filter((o: any) => o.payment_status === 'paid')
+    .filter((o: any) => isOrderPaid(o.status))
     .reduce((sum: number, o: any) => sum + (Number(o.total_amount) || 0), 0)
   return { orders, revenue }
 }

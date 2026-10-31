@@ -3,6 +3,7 @@ import { salesAutomationEnabled } from '@/lib/billing/trial'
 import { notifyShopAdmin } from '@/lib/billing/ownerAlerts'
 import { cancelFollowUpTasks, scheduleRepurchaseFollowUp } from '@/lib/ai/proactiveFollowUp'
 import { extractGoldenTrajectoryFromOrder } from '@/lib/ai/salesTrajectory'
+import { shopSkillsTelemetryEnabled } from '@/lib/ai/shopSkillsRollout'
 import { claimSlipCheck } from '@/lib/billing/planLimits'
 import { verifySlip, checkSlipReceiver, resolveSlipProviderAndKey } from './verifySlip'
 import { readSlipQr, type SlipQr } from './readSlipQr'
@@ -167,6 +168,11 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
     await replyAndLog(
       `❌ ตรวจสอบสลิปไม่สำเร็จค่ะ (${reason})\n\nกรุณาตรวจสอบ:\n• ถ่ายหน้าจอสลิปให้ชัดเจน ไม่ตัดขอบหรือ QR Code\n• ต้องเป็นสลิปโอนเงินจริงจากธนาคาร\n• ยอดเงินตรงกับยอดในออเดอร์\n\nหากท่านโอนเงินเรียบร้อยแล้ว สามารถแจ้งแอดมินให้ตรวจสอบได้เลยนะคะ 🙏`
     )
+    // A pending order means the customer is trying to pay. An unreadable slip
+    // must reach the shop admin; a product photo with no order does not.
+    if (pendingOrder) {
+      await notifyShopAdmin(shop, `⚠️ สลิปอ่านไม่ได้\nลูกค้า: ${customerLabel}\nออเดอร์: ${pendingOrder.order_no}\nเหตุผล: ${reason}\nกรุณาตรวจสอบใน Inbox ก่อนยืนยันออเดอร์`)
+    }
     return
   }
 
@@ -239,6 +245,19 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
     return
   }
 
+  // Event-driven outcome signal (Phase 0): the slip cleared and the order is paid.
+  // This is the moment a sale actually happened, so mark the conversation outcome.
+  if (shopSkillsTelemetryEnabled(shop.features as Record<string, unknown> | undefined)) {
+    const { error: outcomeErr } = await supabase.rpc('set_conversation_outcome', {
+      p_conversation_id: pendingOrder.conversation_id,
+      p_outcome: 'conversion',
+      p_shop_id: shopId,
+      p_revenue: slipAmount,
+      p_source: 'verified_slip',
+    })
+    if (outcomeErr) console.error('[SlipVerify] set_conversation_outcome failed:', outcomeErr.message)
+  }
+
   await cancelFollowUpTasks({ shopId, referenceId: pendingOrder.order_no, taskType: 'qr_recovery' })
 
   // Follow-up messages are delivered over LINE only
@@ -251,6 +270,18 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
   extractGoldenTrajectoryFromOrder({
     shopId, orderId: pendingOrder.id, conversationId: pendingOrder.conversation_id, revenue: slipAmount,
   }).catch((err) => console.error('[SalesTrajectory Error]:', err))
+
+  // Auto-extract candidate skill from this successful conversation
+  if (shopSkillsTelemetryEnabled(shop.features as Record<string, unknown> | undefined)) {
+    import('@/lib/ai/skillExtractor').then(({ extractSkillFromConversation }) => {
+      extractSkillFromConversation({
+        shopId,
+        conversationId: pendingOrder.conversation_id,
+        outcome: 'conversion',
+        revenue: slipAmount,
+      }).catch((err) => console.warn('[SkillExtractor] auto-extract failed:', err))
+    }).catch(() => {})
+  }
 
   await replyAndLog(
     `✅ ตรวจสอบสลิปสำเร็จค่ะ!\n` +

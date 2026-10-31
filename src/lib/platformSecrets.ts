@@ -42,6 +42,7 @@ export const SECRET_DEFS: SecretDef[] = [
   { name: 'OPENAI_MODEL', label: 'OpenAI Model', group: 'ai', secret: false },
   { name: 'CLAUDE_API_KEY', label: 'Claude API Key', group: 'ai', secret: true, envAliases: ['CLAUDE_KEY'], legacySettingsKey: 'claude_key', help: 'สำรองลำดับที่สอง และใช้อ่านเอกสารในคลังความรู้' },
   { name: 'CLAUDE_MODEL', label: 'Claude Model', group: 'ai', secret: false },
+  { name: 'TYPESAFE_API_KEY', label: 'TypeSafe API Key', group: 'ai', secret: true, help: 'แจ้งเตือนแอดมินเมื่อลูกค้าดูไม่พอใจ (ร้านต้องเปิดสวิตช์เอง) ~0.001 บาทต่อข้อความ · console.typesafe.ai' },
   { name: 'SLIP_PROVIDER', label: 'ผู้ให้บริการตรวจสลิปหลัก', group: 'slip', secret: false, options: ['easyslip', 'thunder', 'slipok'] },
   { name: 'EASYSLIP_API_KEY', label: 'EasySlip API Key', group: 'slip', secret: true },
   { name: 'THUNDER_API_KEY', label: 'Thunder API Key', group: 'slip', secret: true },

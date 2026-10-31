@@ -1,5 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendFacebookMessage } from '@/lib/facebook/messengerHelper'
+import { isOrderSettled } from '@/lib/orders/paymentState'
+import { backInStockStillWaitingMessage, restockIlikePattern } from '@/lib/ai/restockMessage'
 
 export interface FollowUpConfig {
   qr_recovery_enabled?: boolean
@@ -520,15 +522,24 @@ export async function processDueFollowUpTasks(limit = 25): Promise<{
 
       if (task.task_type === 'qr_recovery' && task.reference_id) {
         // Orders are keyed by order_no and settled via status (the slip flow sets status='paid')
-        const { data: order } = await supabase
+        const { data: order, error: orderError } = await supabase
           .from('orders')
-          .select('status, payment_status')
+          .select('status')
           .eq('shop_id', task.shop_id)
           .eq('order_no', task.reference_id)
           .maybeSingle()
 
-        const settled = ['paid', 'verified', 'completed', 'shipped', 'cancelled']
-        if (order && (settled.includes(order.status) || settled.includes(order.payment_status))) {
+        // A failed read must not count as "unpaid": nagging a customer who already paid is worse
+        // than one missed reminder (the old select named a column production doesn't have)
+        if (orderError) {
+          console.error('[qr_recovery] could not read order, skipping reminder:', orderError.message)
+          await supabase
+            .from('follow_up_tasks')
+            .update({ status: 'failed', executed_at: nowIso, error_message: `Order lookup failed: ${orderError.message}` })
+            .eq('id', task.id)
+          continue
+        }
+        if (order && isOrderSettled(order.status)) {
           await supabase
             .from('follow_up_tasks')
             .update({ status: 'cancelled', executed_at: nowIso, error_message: 'Order already paid' })
@@ -557,10 +568,55 @@ export async function processDueFollowUpTasks(limit = 25): Promise<{
         }
       }
 
-      // 4. Generate message text
-      const messageText = generateProactiveMessage({ task, shop })
+      // Back-in-stock check: if reason is 'back_in_stock', verify product is in stock
+      const payload = task.payload || {}
+      if (payload.reason === 'back_in_stock' && payload.product_name) {
+        const pattern = restockIlikePattern(String(payload.product_name))
+        const { data: byName } = await supabase
+          .from('products')
+          .select('id, name, stock')
+          .eq('shop_id', task.shop_id)
+          .ilike('name', pattern)
+          .limit(1)
+        let product = byName?.[0]
+        if (!product) {
+          const { data: bySku } = await supabase
+            .from('products')
+            .select('id, name, stock')
+            .eq('shop_id', task.shop_id)
+            .ilike('master_sku', pattern)
+            .limit(1)
+          product = bySku?.[0]
+        }
+        const inStock = product && (product.stock || 0) > 0
 
-      // 5. Send on the conversation's own channel
+        if (!inStock) {
+          const retryCount = (payload.retry_count || 0) + 1
+          const maxRetries = payload.max_retries || 3
+          if (retryCount < maxRetries) {
+            // Reschedule for 3 days later
+            const nextTrigger = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+            await supabase
+              .from('follow_up_tasks')
+              .update({
+                trigger_at: nextTrigger,
+                payload: { ...payload, retry_count: retryCount },
+              })
+              .eq('id', task.id)
+            cancelled++
+            continue
+          } else {
+            // Max retries reached, send "still out of stock" message
+            payload.message = backInStockStillWaitingMessage(payload.product_name)
+          }
+        } else if (product) {
+          payload.message = `👋 สวัสดีค่ะ ${product.name} ที่ถามไว้ ตอนนี้ของมาแล้วค่ะ! สนใจสั่งได้เลยนะ 😊`
+        }
+        task.payload = payload
+      }
+
+      // 4. Generate message text
+      const messageText = (task.payload as any)?.message || generateProactiveMessage({ task, shop })
       const outcome = await deliverFollowUp(supabase, task, shop, platform, messageText)
       if (outcome.status !== 'sent') {
         if (outcome.status === 'failed') {
@@ -631,12 +687,16 @@ export async function scheduleCustomerMessage({
   userId,
   message,
   delayMs,
+  productName,
+  reason,
 }: {
   shopId: string
   conversationId?: string | null
   userId: string
   message: string
   delayMs: number
+  productName?: string
+  reason?: string
 }) {
   try {
     const supabase = createAdminClient()
@@ -649,7 +709,7 @@ export async function scheduleCustomerMessage({
       reference_id: conversationId || null,
       trigger_at: triggerAt,
       status: 'pending',
-      payload: { message },
+      payload: { message, product_name: productName || null, reason: reason || 'general', retry_count: 0, max_retries: 3 },
     })
     if (error) {
       console.error('[ProactiveFollowUp] Error queueing scheduled message:', error)

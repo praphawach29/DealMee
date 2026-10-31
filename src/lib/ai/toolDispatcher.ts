@@ -8,10 +8,13 @@ import { buildLineFlexQuotationMessage, buildLineFlexOfficialLetterMessage } fro
 import { resolveCatalogProduct, describeUnresolved, parseQuantity, computeShippingFee, type CatalogProduct } from '@/lib/ai/catalogPricing'
 import { highValueThreshold, highValueRefusal } from '@/lib/ai/salesModes'
 import { notifyShopAdmin } from '@/lib/billing/ownerAlerts'
+import { codOrderRefusal, isCodPaymentMethod, shopCodEnabled } from '@/lib/ai/codPolicy'
 import { carrierName, trackingLink } from '@/lib/orders/tracking'
+import { adminPausePayload } from '@/lib/inbox/adminPause'
 import { quotationAcceptPath } from '@/lib/docs/acceptToken'
 import { searchKnowledgeForTool } from '@/lib/knowledge/retrieve'
 import { toProductCards } from '@/lib/ai/productCards'
+import { orderPaymentLabel, PAID_ORDER_STATUSES } from '@/lib/orders/paymentState'
 
 const QR_BUCKET = 'qr-codes'
 
@@ -58,7 +61,7 @@ export interface ToolExecutionResult {
    */
   immediateMessages: CustomerMessage[]
   /** Only schedule_followup uses this — the caller (webhook route) is responsible for the actual setTimeout + LINE push, since this module has no channel/push capability of its own. */
-  scheduledMessage?: { delayMs: number; message: CustomerMessage }
+  scheduledMessage?: { delayMs: number; message: CustomerMessage; productName?: string; reason?: string }
   /** Catalog rows from search_products or check_stock. The channel sends one carousel from these. */
   productsData?: Array<{
     id: string
@@ -416,7 +419,7 @@ export function formatPaymentInstructions(shop: any, amount?: number, lang: Cust
     lines.push(`${t('paymentAccountName', lang)}: ${bankAccountName}`)
   }
 
-  if ((shop.shipping_fee_type || '').toLowerCase().includes('cod')) {
+  if (shopCodEnabled(shop)) {
     if (lines.length > 0) lines.push('')
     lines.push(t('paymentCod', lang))
   }
@@ -466,6 +469,7 @@ export async function executeTool(
   args: Record<string, any>,
   ctx: ToolExecutionContext
 ): Promise<ToolExecutionResult> {
+  const startTime = Date.now()
   const { shopId: rawShopId, userId, conversationId, shop, supabase, supabaseAdmin, language: lang = 'th' } = ctx
   const shopId = rawShopId || shop?.id
 
@@ -646,7 +650,11 @@ export async function executeTool(
     const itemsText = lines.map(lineLabel).join(', ')
     const totalQty = lines.reduce((sum, l) => sum + l.qty, 0)
     const subtotal = lines.reduce((sum, l) => sum + l.product.price * l.qty, 0)
-    const isCod = /ปลายทาง|cod/i.test(String(args.payment_method || ''))
+    const codRefusal = codOrderRefusal(shop, args.payment_method)
+    if (codRefusal) {
+      return { resultForAi: codRefusal, immediateMessages: [] }
+    }
+    const isCod = isCodPaymentMethod(args.payment_method)
     const { fee: shippingFee } = computeShippingFee(shop, String(args.address || ''), subtotal)
     const totalAmount = subtotal + shippingFee
     const modelTotal = Number(args.total_price)
@@ -715,10 +723,10 @@ export async function executeTool(
     // order total and the shop's account number, and a reworded digit here
     // sends the customer's money somewhere it shouldn't go.
     // Push LINE notification to shop admin if admin_notify is enabled
-    if (shop?.line_token && shop?.features?.admin_notify !== false) {
-      const targetAdmin = shop.admin_line_user_id || shop.owner_line_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
-      if (targetAdmin) {
-        const orderTotal = totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })
+        if (shop?.line_token && shop?.features?.admin_notify !== false) {
+          const targetAdmin = shop.admin_line_user_id || shop.owner_line_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
+          if (targetAdmin && targetAdmin !== userId) {
+            const orderTotal = totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })
         const adminMsg = `🛒 มีออเดอร์ใหม่เข้ามา!\nเลขที่: ${orderNo}\nลูกค้า: ${args.name || 'ลูกค้า'}\nสินค้า: ${itemsText}\nยอดรวม: ฿${orderTotal} บาท`
         fetch('https://api.line.me/v2/bot/message/push', {
           method: 'POST',
@@ -745,10 +753,7 @@ export async function executeTool(
     // Paused for an hour like the customer's own "/admin" command. Without paused_until the
     // webhooks measure the pause from the previous message, so a customer who kept writing
     // within the hour kept the bot silent for good (Messenger, 20 Oct 2026).
-    await supabase
-      .from('conversations')
-      .update({ status: 'human', paused_until: new Date(Date.now() + 60 * 60 * 1000).toISOString() })
-      .eq('id', conversationId)
+    await supabase.from('conversations').update(adminPausePayload()).eq('id', conversationId)
 
     const customerName = String(args.customer_name || '').trim()
     const phone = String(args.phone || '').trim()
@@ -777,7 +782,8 @@ export async function executeTool(
       `เหตุผล: ${args.reason || 'ต้องการคุยกับคน'}`,
       `ตอบลูกค้า: ${baseUrl}/dashboard/inbox`,
     ].filter(Boolean).join('\n')
-    await notifyShopAdmin(shop, notifyText).catch((e) => console.warn('[Admin Handover Notify Error]:', e))
+    await notifyShopAdmin(shop, notifyText, { excludeLineUserId: userId })
+      .catch((e) => console.warn('[Admin Handover Notify Error]:', e))
 
     return { resultForAi: 'เรียกแอดมินให้เข้ามาดูแลแล้ว ให้บอกลูกค้าว่าส่งเรื่องให้แอดมินแล้ว แอดมินจะติดต่อกลับโดยเร็ว', immediateMessages: [] }
   }
@@ -825,11 +831,16 @@ export async function executeTool(
   if (toolName === 'schedule_followup') {
     // Durable now (queued in follow_up_tasks), so allow up to a day
     const delayMs = Math.min(Math.max(Number(args.delay_minutes) || 60, 5), 24 * 60) * 60 * 1000
-    const followupMsg = `👋 สวัสดีค่ะ ไม่ทราบว่าตัดสินใจได้แล้วหรือยังคะ? มีอะไรให้ช่วยแนะนำเพิ่มเติมได้เลยนะคะ 😊`
+    const reason = String(args.reason || 'general')
+    const productName = args.product_name ? String(args.product_name) : undefined
+    let followupMsg = `👋 สวัสดีค่ะ ไม่ทราบว่าตัดสินใจได้แล้วหรือยังคะ? มีอะไรให้ช่วยแนะนำเพิ่มเติมได้เลยนะคะ 😊`
+    if (reason === 'back_in_stock') {
+      followupMsg = `👋 สวัสดีค่ะ เสื้อยืดที่ถามไว้ ตอนนี้ของมาแล้วค่ะ! สนใจสั่งได้เลยนะ 😊`
+    }
     return {
-      resultForAi: 'ตั้งเวลาส่งข้อความติดตามแล้ว',
+      resultForAi: reason === 'back_in_stock' ? 'ตั้งเวลาแจ้งเตือนเมื่อสินค้ามาแล้ว' : 'ตั้งเวลาส่งข้อความติดตามแล้ว',
       immediateMessages: [],
-      scheduledMessage: { delayMs, message: { type: 'text', content: followupMsg } },
+      scheduledMessage: { delayMs, message: { type: 'text', content: followupMsg }, productName, reason },
     }
   }
 
@@ -887,7 +898,7 @@ export async function executeTool(
     // Without an order number, the conversation's latest orders ("ของถึงไหนแล้ว").
     let query = supabase
       .from('orders')
-      .select('order_no,status,payment_status,tracking_no,tracking_carrier,tracking_url,product_name,items_summary,total_amount')
+      .select('order_no,status,tracking_no,tracking_carrier,tracking_url,product_name,items_summary,total_amount')
       .eq('shop_id', shopId)
       .eq('conversation_id', conversationId)
     if (oid) query = query.or(`order_no.ilike.%${oid}%${UUID_RE.test(oid) ? `,id.eq.${oid}` : ''}`)
@@ -901,14 +912,13 @@ export async function executeTool(
       }
     }
     const sMap: Record<string, string> = { pending: 'รอดำเนินการ', confirmed: 'ยืนยันแล้ว', processing: 'กำลังดำเนินการ', paid: 'ชำระแล้ว รอจัดส่ง', shipped: 'จัดส่งแล้ว', delivered: 'ส่งถึงแล้ว', cancelled: 'ยกเลิก' }
-    const pMap: Record<string, string> = { pending: 'รอชำระ', paid: 'ชำระแล้ว', failed: 'ล้มเหลว' }
     const lines = found.map((ord: any) => {
       const carrier = carrierName(ord.tracking_carrier)
       const link = trackingLink(ord.tracking_carrier, ord.tracking_url)
       const tracking = ord.tracking_no
         ? `, ขนส่ง ${carrier || 'ไม่ระบุ'} เลขพัสดุ ${ord.tracking_no}${link ? ` ติดตามที่ ${link}` : ''}`
         : ord.status === 'shipped' ? ', ยังไม่มีเลขพัสดุในระบบ' : ''
-      return `ออเดอร์ ${ord.order_no}: สินค้า ${ord.product_name || ord.items_summary || '-'}, ยอด ${Number(ord.total_amount).toLocaleString()} บาท, สถานะ ${sMap[ord.status] ?? ord.status}, ชำระเงิน ${pMap[ord.payment_status] ?? ord.payment_status}${tracking}`
+      return `ออเดอร์ ${ord.order_no}: สินค้า ${ord.product_name || ord.items_summary || '-'}, ยอด ${Number(ord.total_amount).toLocaleString()} บาท, สถานะ ${sMap[ord.status] ?? ord.status}, ชำระเงิน ${orderPaymentLabel(ord.status)}${tracking}`
     })
     return {
       resultForAi: `${lines.join('\n')}\nบอกเลขพัสดุและลิงก์ตามข้อมูลนี้เท่านั้น ห้ามเดาสถานะระหว่างทางหรือวันที่ถึง เพราะระบบไม่มีข้อมูลจากขนส่ง ถ้ายังไม่มีเลขพัสดุ บอกลูกค้าว่าร้านจะแจ้งเลขพัสดุในแชทนี้เมื่อส่งของแล้ว`,
@@ -1255,7 +1265,7 @@ export async function executeTool(
   }
 
   if (toolName === 'check_loyalty_points') {
-    const { data: paidOrds } = await supabase.from('orders').select('total_amount').eq('shop_id', shopId).eq('conversation_id', conversationId).eq('payment_status', 'paid')
+    const { data: paidOrds } = await supabase.from('orders').select('total_amount').eq('shop_id', shopId).eq('conversation_id', conversationId).in('status', [...PAID_ORDER_STATUSES])
     const total = paidOrds?.reduce((s: number, o: any) => s + Number(o.total_amount), 0) ?? 0
     const pts = Math.floor(total / 100)
     return {
@@ -1529,7 +1539,7 @@ export async function executeTool(
 
     if (shop?.line_token && shop?.features?.admin_notify !== false) {
       const targetAdmin = shop.admin_line_user_id || shop.owner_line_id || shop.features?.admin_line_user_id || shop.features?.admin_notify_user_id
-      if (targetAdmin) {
+      if (targetAdmin && targetAdmin !== userId) {
         fetch('https://api.line.me/v2/bot/message/push', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${shop.line_token}` },

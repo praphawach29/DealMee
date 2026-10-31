@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { testPlaygroundChat, getPlaygroundQuotaStatus, getPlaygroundGreeting } from '../settings/actions'
-import { Bot, X, Send } from 'lucide-react'
+import Link from 'next/link'
+import { testPlaygroundChat, getPlaygroundQuotaStatus, getPlaygroundGreeting, getPlaygroundCatalogStatus } from '../settings/actions'
+import { Bot, X, Send, PackagePlus, BookOpen } from 'lucide-react'
 
 interface ChatMessage {
   id: string
@@ -23,11 +24,23 @@ interface QuotaStatus {
   isOverQuota: boolean
 }
 
+interface CatalogSnapshot {
+  products: number
+  knowledge: number
+  services: number
+}
+
 interface ChatPlaygroundModalProps {
   isOpen: boolean
   onClose: () => void
   initialBotName?: string
   initialPersonality?: string
+  /** Counts already loaded by the dashboard. The modal still rechecks, including services. */
+  initialCatalog?: { products: number; knowledge: number }
+}
+
+function catalogIsEmpty(snapshot: CatalogSnapshot | null): boolean {
+  return Boolean(snapshot && snapshot.products === 0 && snapshot.knowledge === 0 && snapshot.services === 0)
 }
 
 export default function ChatPlaygroundModal({
@@ -35,29 +48,53 @@ export default function ChatPlaygroundModal({
   onClose,
   initialBotName = 'น้อง DealMee',
   initialPersonality = 'สุภาพ เรียบร้อย มืออาชีพ และมุ่งมั่นให้บริการ',
+  initialCatalog,
 }: ChatPlaygroundModalProps) {
   const [botName, setBotName] = useState(initialBotName)
-  const [personality, setPersonality] = useState(initialPersonality)
+  const [personality] = useState(initialPersonality)
   const [inputQuery, setInputQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [quotaStatus, setQuotaStatus] = useState<QuotaStatus | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      sender: 'bot',
-      text: `สวัสดีค่ะ ยินดีต้อนรับสู่ระบบแชทจำลอง! หนูชื่อ "${initialBotName}" พนักงานขาย AI ประจำร้าน ลองพิมพ์ถามข้อมูลสินค้า ราคา หรือโปรโมชั่นเพื่อทดสอบการตอบได้เลยค่ะ`,
-      timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
-    },
-  ])
+  const [catalog, setCatalog] = useState<CatalogSnapshot | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+
+  const hintedReady = (initialCatalog?.products ?? 0) > 0 || (initialCatalog?.knowledge ?? 0) > 0
+  const showEmpty = catalogIsEmpty(catalog)
+  const waitingForCatalog = !catalog && !hintedReady
+
+  const requestClose = () => {
+    setCatalog(null)
+    setMessages([])
+    onClose()
+  }
 
   useEffect(() => {
     if (!isOpen) return
-    getPlaygroundQuotaStatus().then((status) => {
-      if (status) setQuotaStatus(status)
-    })
-    getPlaygroundGreeting().then((result) => {
-      setMessages((prev) => prev.map((msg) => msg.id === 'welcome' ? { ...msg, text: result.greeting } : msg))
-    })
+    let cancelled = false
+    Promise.all([getPlaygroundCatalogStatus(), getPlaygroundGreeting(), getPlaygroundQuotaStatus()]).then(
+      ([status, greeting, quota]) => {
+        if (cancelled) return
+        if (quota) setQuotaStatus(quota)
+        const snapshot = status ?? { products: -1, knowledge: -1, services: -1 }
+        setCatalog(snapshot)
+        const timestamp = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+        setMessages(
+          catalogIsEmpty(snapshot)
+            ? []
+            : [
+                {
+                  id: 'welcome',
+                  sender: 'bot',
+                  text: greeting.greeting,
+                  timestamp,
+                },
+              ],
+        )
+      },
+    )
+    return () => {
+      cancelled = true
+    }
   }, [isOpen])
 
   if (!isOpen) return null
@@ -66,7 +103,7 @@ export default function ChatPlaygroundModal({
     const textToSend = simulateQuotaExceeded
       ? '[ทดสอบ] จำลองข้อความเมื่อโควต้าหมด'
       : queryText || inputQuery
-    if (!textToSend.trim() || loading) return
+    if (!textToSend.trim() || loading || showEmpty || waitingForCatalog) return
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -113,12 +150,7 @@ export default function ChatPlaygroundModal({
     setMessages((prev) => [...prev, ...replies])
   }
 
-  const quickPresets = [
-    'จองโต๊ะ 4 คนพรุ่งนี้ 18:00 ได้ไหม',
-    'วันนี้มีโต๊ะว่างช่วงเย็นไหม',
-    'ขอดูเวลาที่จองได้หน่อย',
-    'ยกเลิกการจองต้องทำยังไง',
-  ]
+  const quickPresets = ['มีอะไรบ้าง', 'ราคาเท่าไหร่', 'จัดส่งอย่างไร', 'ขอคุยกับแอดมิน']
   const usagePct =
     quotaStatus && !quotaStatus.isUnlimited && quotaStatus.messageLimit > 0
       ? Math.min(100, Math.round((quotaStatus.messagesUsed / quotaStatus.messageLimit) * 100))
@@ -145,7 +177,7 @@ export default function ChatPlaygroundModal({
                   onChange={(e) => setBotName(e.target.value)}
                   placeholder="ชื่อบอท AI"
                   className="bg-slate-800 border border-slate-700 text-slate-100 font-bold text-sm px-2 py-0.5 rounded-lg focus:outline-none focus:border-electric-blue w-36"
-                  title="คลิกเพื่อแก้ไขชื่อบอทจำลอง"
+                  title="คลิกเพื่อแก้ไขชื่อบอท"
                 />
                 <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-md font-semibold">
                   Online • AI Sales
@@ -172,7 +204,7 @@ export default function ChatPlaygroundModal({
           </div>
 
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer min-h-[44px] min-w-[44px]"
             aria-label="Close playground"
           >
@@ -180,14 +212,47 @@ export default function ChatPlaygroundModal({
           </button>
         </div>
 
+        {showEmpty ? (
+          <div className="flex flex-1 items-center overflow-y-auto bg-slate-950/30 p-4 sm:p-6">
+            <div className="mx-auto w-full max-w-md rounded-[14px] bg-white p-5 font-sans text-slate-900 shadow-card sm:p-6">
+              <p className="text-xs font-bold tracking-wide text-[#2F6BFF]">บอทจริงของร้านคุณ</p>
+              <h2 className="font-heading mt-1 text-lg font-semibold">ยังไม่มีข้อมูลให้บอทตอบ</h2>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                ร้านนี้ยังไม่มีสินค้าและคลังความรู้ บอทตอบจากข้อมูลที่คุณบันทึกเท่านั้น
+                เพิ่มสินค้าอย่างน้อย 1 รายการ หรือใส่คลังความรู้อย่างน้อย 1 ข้อ แล้วกลับมาที่ทดสอบสนทนาได้เลย
+              </p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-500">ระบบจะไม่ใส่สินค้า รีวิว หรือยอดขายตัวอย่างให้</p>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <Link
+                  href="/dashboard/products"
+                  className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-[14px] bg-[#2F6BFF] px-4 text-sm font-semibold text-white"
+                >
+                  <PackagePlus className="h-4 w-4" />
+                  เพิ่มสินค้า
+                </Link>
+                <Link
+                  href="/dashboard/knowledge"
+                  className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-[14px] border border-[#2F6BFF] px-4 text-sm font-semibold text-[#2F6BFF]"
+                >
+                  <BookOpen className="h-4 w-4" />
+                  เพิ่มคลังความรู้
+                </Link>
+              </div>
+              <Link href="/dashboard/services" className="mt-3 block text-center text-xs font-semibold text-[#2F6BFF] hover:underline">
+                ร้านบริการเพิ่มบริการที่จองได้
+              </Link>
+            </div>
+          </div>
+        ) : (
+        <>
         {/* Quick Presets Bar */}
         <div className="p-2.5 bg-slate-950/40 border-b border-slate-800/60 flex items-center gap-2 overflow-x-auto shrink-0">
           <span className="text-[11px] font-bold text-slate-400 shrink-0 ml-1">คำถามตัวอย่าง:</span>
-          {quickPresets.map((preset, idx) => (
+          {quickPresets.map((preset) => (
             <button
-              key={idx}
-              disabled={loading}
-              onClick={() => handleSend(preset.replace(/^[^\s]+\s/, ''))}
+              key={preset}
+              disabled={loading || waitingForCatalog}
+              onClick={() => handleSend(preset)}
               className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/60 whitespace-nowrap transition-colors cursor-pointer disabled:opacity-50 min-h-[36px] flex items-center active:scale-[0.98]"
             >
               {preset}
@@ -205,6 +270,9 @@ export default function ChatPlaygroundModal({
 
         {/* Chat History Area */}
         <div className="flex-1 p-4 overflow-y-auto space-y-3.5 bg-slate-950/30">
+          {waitingForCatalog && (
+            <p className="text-sm text-slate-400">กำลังตรวจข้อมูลร้าน...</p>
+          )}
           {messages.map((msg) => (
             <div
               key={msg.id}
@@ -296,6 +364,8 @@ export default function ChatPlaygroundModal({
             <Send className="h-4 w-4" />
           </button>
         </div>
+        </>
+        )}
 
       </div>
     </div>

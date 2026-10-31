@@ -8,6 +8,7 @@ import {
   getPlatformBillingSettings,
 } from '@/lib/billing/manualBilling'
 import { isSuperAdminEmail } from '@/lib/auth/superAdmin'
+import { signSlipUrls } from '@/lib/billing/slipStorage'
 import qrcode from 'qrcode'
 import { notifyPlatformOwner } from '@/lib/billing/platformAlerts'
 import {
@@ -78,8 +79,11 @@ export async function getPaymentsList(statusFilter?: string) {
     return []
   }
 
+  const signed = await signSlipUrls(admin, (data || []).map((p: any) => p.slip_url))
+
   return (data || []).map((p: any) => ({
     ...p,
+    slip_url: p.slip_url ? signed.get(p.slip_url) || '' : '',
     shop_name: p.shops?.name || 'ไม่ระบุชื่อร้าน',
     shop_bot_name: p.shops?.bot_name,
   }))

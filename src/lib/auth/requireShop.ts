@@ -7,7 +7,10 @@ import { getOrCreateShopForUser } from '@/lib/shopHelper'
  * The shop always comes from the session, never from request input, so a caller
  * cannot act on another shop by passing its shop_id.
  */
-export async function requireShop(): Promise<{ shopId: string; error?: undefined } | { shopId?: undefined; error: NextResponse }> {
+export async function requireShop(): Promise<
+  | { shopId: string; userId: string; error?: undefined }
+  | { shopId?: undefined; userId?: undefined; error: NextResponse }
+> {
   const supabase = await createClient()
   const {
     data: { user },
@@ -23,5 +26,5 @@ export async function requireShop(): Promise<{ shopId: string; error?: undefined
     return { error: NextResponse.json({ error: 'Shop not found' }, { status: 404 }) }
   }
 
-  return { shopId: shop.id as string }
+  return { shopId: shop.id as string, userId: user.id }
 }

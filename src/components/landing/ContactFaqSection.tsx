@@ -1,15 +1,16 @@
 'use client'
 
 import React, { useState } from 'react'
+import { TRIAL_DAYS } from '@/lib/billing/trial'
 import { DEALMEE_LINE_OA, faqs } from './data'
-import {
-  ChevronDown,
-  MessageSquare,
-  Mail,
-  Clock,
-  ArrowRight,
-  Headphones,
-} from 'lucide-react'
+import { Check, ChevronDown, MessageSquare } from 'lucide-react'
+
+/** Only things the product and the terms page actually promise. */
+const CONTACT_POINTS = [
+  `ทดลองใช้ฟรี ${TRIAL_DAYS} วัน ไม่ต้องผูกบัตร`,
+  'ช่วยตั้งค่า LINE OA ของร้านให้ ไม่มีค่าติดตั้ง',
+  'เปลี่ยนหรือหยุดแพ็กเกจได้ทุกเมื่อ ไม่มีสัญญาผูกมัด',
+]
 
 export default function ContactFaqSection() {
   const [openIndex, setOpenIndex] = useState<number | null>(0)
@@ -32,7 +33,7 @@ export default function ContactFaqSection() {
                 มีคำถามหรือต้องการคำแนะนำ?
               </h2>
               <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-                ทีมงานพร้อมให้คำปรึกษาและช่วยแนะนำการตั้งค่า LINE Official Account ของคุณแบบไม่มีค่าใช้จ่าย
+                ทักมาที่ LINE ของ DealMee ได้เลย ทีมงานช่วยแนะนำการตั้งค่า LINE Official Account ของร้านให้ฟรี
               </p>
             </div>
 
@@ -50,47 +51,21 @@ export default function ContactFaqSection() {
                     {DEALMEE_LINE_OA.id}
                   </div>
                   <div className="text-xs text-slate-500 mt-0.5">
-                    แชทสอบถาม ปรึกษาการใช้งานได้ตลอดเวลา
+                    ทักเข้ามาได้ทุกเวลา ทีมงานจะตอบกลับให้เร็วที่สุด
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3.5 pt-4 border-t border-slate-200/60">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                  <Mail className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-                    Email ซัพพอร์ต
-                  </div>
-                  <div className="text-base font-bold text-slate-900 mt-0.5 font-mono">
-                    support@dealmee.app
-                  </div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    ตอบกลับภายใน 24 ชั่วโมงในวันทำการ
-                  </div>
-                </div>
-              </div>
+              <ul className="pt-4 border-t border-slate-200/60 space-y-2.5">
+                {CONTACT_POINTS.map((point) => (
+                  <li key={point} className="flex items-start gap-2.5 text-sm text-slate-700 leading-relaxed">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <span>{point}</span>
+                  </li>
+                ))}
+              </ul>
 
-              <div className="flex items-start gap-3.5 pt-4 border-t border-slate-200/60">
-                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                  <Clock className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-                    เวลาทำการทีมงาน
-                  </div>
-                  <div className="text-sm sm:text-base font-bold text-slate-900 mt-0.5">
-                    จันทร์ - อาทิตย์ (09:00 - 22:00 น.)
-                  </div>
-                  <div className="text-xs text-emerald-600 font-medium mt-0.5 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    เจ้าหน้าที่พร้อมให้บริการ
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-2">
+              <div className="pt-1">
                 <a
                   href={DEALMEE_LINE_OA.url}
                   target="_blank"

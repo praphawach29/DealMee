@@ -2,13 +2,17 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import { botMayReplyNow } from '@/lib/shop/businessHours'
 import { notifyQuotaExhausted } from '@/lib/billing/ownerAlerts'
 import { linkPlatformOwnerFromShopOa } from '@/lib/billing/platformLineAlerts'
+import { adminPausePayload, isPauseExpired, resumePayload } from '@/lib/inbox/adminPause'
+import { isHandoffRequest } from '@/lib/ai/thaiMatch'
+import { alertIfUpset } from '@/lib/ai/upsetAlert'
 import { verifyLineSignature } from '@/lib/line/signature'
-import { processSalesAgentChat, type AgentResult } from '@/lib/ai/salesAgentEngine'
+import { processSalesAgentChat, type AgentResult, detectIntent } from '@/lib/ai/salesAgentEngine'
 import { incrementUsage, incrementProviderUsage } from '@/lib/billing/usage'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 import { buildAutoGreeting, isDefaultGreeting } from '@/lib/businessGreeting'
 import { synthesizeFaqFromConversation } from '@/lib/ai/faqSynthesis'
 import { scheduleCustomerMessage } from '@/lib/ai/proactiveFollowUp'
+import { shopSkillsTelemetryEnabled } from '@/lib/ai/shopSkillsRollout'
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildLineFlexProductCarousel } from '@/lib/line/flexHelper'
@@ -73,7 +77,9 @@ export async function POST(
     const lineSecret = shop.line_secret ? shop.line_secret.trim() : undefined
     const features = (shop.features as Record<string, boolean>) || {}
     // Off when switched off, or while the shop is open and answers customers itself (business hours)
-    const isAutoReplyEnabled = features.auto_reply !== false && botMayReplyNow(features)
+    const autoReplySwitchedOff = features.auto_reply === false
+    const mutedByBusinessHours = !autoReplySwitchedOff && !botMayReplyNow(features)
+    const isAutoReplyEnabled = !autoReplySwitchedOff && !mutedByBusinessHours
 
     // Reject when the shop has no Channel Secret or the signature does not match.
     // A missing secret used to log a warning and still run the bot.
@@ -87,7 +93,7 @@ export async function POST(
     // planning steps; holding the webhook open that long made LINE time out and redeliver.
     after(async () => {
       try {
-        await processLineEvents({ events, shop, shopId: shop_id, lineToken, features, isAutoReplyEnabled })
+        await processLineEvents({ events, shop, shopId: shop_id, lineToken, features, isAutoReplyEnabled, mutedByBusinessHours })
       } catch (err) {
         console.error('[LINE Webhook] Background processing failed:', err)
       }
@@ -103,7 +109,7 @@ export async function POST(
 // ─── Event processing (runs in after(), once LINE has its 200) ────────────────
 
 async function processLineEvents({
-  events, shop, shopId: shop_id, lineToken, features, isAutoReplyEnabled,
+  events, shop, shopId: shop_id, lineToken, features, isAutoReplyEnabled, mutedByBusinessHours,
 }: {
   events: any[]
   shop: Record<string, any>
@@ -111,7 +117,12 @@ async function processLineEvents({
   lineToken: string | undefined
   features: Record<string, boolean>
   isAutoReplyEnabled: boolean
+  mutedByBusinessHours: boolean
 }) {
+  // Upset-customer checks run alongside the bot's reply; awaited at the end so after() keeps them alive
+  const upsetChecks: Promise<void>[] = []
+  const skillsTelemetryEnabled = shopSkillsTelemetryEnabled(features)
+
   // Process each LINE event
   for (const event of events) {
     const userId = event.source?.userId
@@ -202,13 +213,15 @@ async function processLineEvents({
           sender_name: 'ลูกค้า',
           message: userText,
           platform: 'line',
+          ...(skillsTelemetryEnabled ? { intent: detectIntent(userText, []) } : {}),
         })
         .select('id')
         .single()
 
+      upsetChecks.push(alertIfUpset({ shop, conversation: conv, message: userText }))
+
       // 4. Check if Admin Takeover is active OR Auto-Reply is disabled
       const cleanText = userText.trim()
-      const lowerText = cleanText.toLowerCase()
 
       // 3.1 Handle Admin Instant Linking Command (e.g. /admin-link ADM-123456)
       if (cleanText.startsWith('/admin-link') || cleanText.startsWith('/link-admin')) {
@@ -279,17 +292,11 @@ async function processLineEvents({
         }
       }
 
-      const isPauseCommand = ['/pause', '/stop', '/admin', '/human'].includes(lowerText) ||
-        cleanText === 'ขอคุยกับแอดมิน' || cleanText === 'ขอคุยกับเจ้าหน้าที่' || cleanText === 'ติดต่อเจ้าหน้าที่'
+      const isPauseCommand = isHandoffRequest(cleanText)
 
       if (isPauseCommand) {
         console.log(`[Webhook] Explicit pause command detected for ${userId}`)
-        const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString()
-        await supabase.from('conversations').update({ 
-          status: 'human', 
-          ai_mode: 'manual', 
-          paused_until: pausedUntil 
-        }).eq('id', conv.id)
+        await supabase.from('conversations').update(adminPausePayload()).eq('id', conv.id)
         if (replyToken && lineToken) {
           await sendLineReply(replyToken, 'รับเรื่องเรียบร้อยแล้วค่ะ น้องบอทได้หยุดการตอบชั่วคราวและประสานงานเจ้าหน้าที่แอดมินให้แล้วนะคะ สักครู่จะมีเจ้าหน้าที่เข้ามาดูแลค่ะ 😊', lineToken)
         }
@@ -297,20 +304,13 @@ async function processLineEvents({
       }
 
       if (conv.status === 'human') {
-        // Check if Smart Auto-Pause timer (1 hour) has expired OR if last chat was >1 hour ago (e.g. overnight)
-        const now = new Date()
-        const isPauseExpired = conv.paused_until
-          ? now > new Date(conv.paused_until)
-          : (conv.last_message_at ? (now.getTime() - new Date(conv.last_message_at).getTime() > 60 * 60 * 1000) : true)
-        const isExplicitReset = cleanText.startsWith('/ai') || isPauseExpired
+        // Hand the chat back once the admin's hour is up (the cron does the same for
+        // chats whose customer never writes again)
+        const isExplicitReset = cleanText.startsWith('/ai') || (await isPauseExpired(supabase, conv))
 
         if (isExplicitReset) {
           console.log(`[Webhook] Auto-resuming AI mode for ${userId} (1-Hour Auto-Pause expired or explicit reset)`)
-          await supabase.from('conversations').update({ 
-            status: 'ai', 
-            ai_mode: 'auto', 
-            paused_until: null 
-          }).eq('id', conv.id)
+          await supabase.from('conversations').update(resumePayload()).eq('id', conv.id)
           conv.status = 'ai'
           conv.ai_mode = 'auto'
           if (cleanText.startsWith('/ai') && replyToken && lineToken) {
@@ -324,7 +324,12 @@ async function processLineEvents({
       }
 
       if (!isAutoReplyEnabled) {
-        console.log(`[Webhook] Skipping AI reply for shop ${shop_id} (Auto-Reply feature disabled)`)
+        // Two very different reasons: the owner switched the bot off, or the shop is open
+        // and answers customers itself. Saying which one saves an hour of guessing.
+        const why = mutedByBusinessHours
+          ? 'bot set to reply outside business hours only, and the shop is open now'
+          : 'Auto-Reply switched off in settings'
+        console.log(`[Webhook] Skipping AI reply for shop ${shop_id} (${why})`)
         continue
       }
 
@@ -369,8 +374,50 @@ async function processLineEvents({
       const messageId = event.message.id
       console.log(`[Webhook] Received image ${messageId} from ${userId}`)
 
+      const isSlipToRecord = features.slip_to_record === true
       const isSlipVerifyActive = features.slip_verify !== false
-      if (isSlipVerifyActive) {
+      if (isSlipToRecord) {
+        if (replyToken && lineToken) {
+          await sendLineReply(replyToken, 'ได้รับรูปแล้วค่ะ 📄 กำลังบันทึกยอดให้นะคะ...', lineToken)
+        }
+        if (lineToken) {
+          await withLineLoading(userId, lineToken, async () => {
+            const { recordSlipTransaction } = await import('@/lib/slip/recordSlipTransaction')
+            const { data: slipConv } = await supabase
+              .from('conversations')
+              .select('id')
+              .eq('shop_id', shop_id)
+              .eq('user_id', userId)
+              .order('last_message_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+            const result = await recordSlipTransaction({
+              shopId: shop_id,
+              conversationId: slipConv?.id || null,
+              messageId,
+              lineToken,
+              shopSettings: shop.features?.slip_verification || {},
+            })
+            if (result.success) {
+              await sendLinePush(userId, `✅ บันทึกยอด ${result.amount?.toLocaleString()} บาท แล้วค่ะ (ref: ${result.ref || '-'})`, lineToken)
+              try {
+                const { notifyShopAdmin } = await import('@/lib/billing/ownerAlerts')
+                await notifyShopAdmin(shop, `📸 สลิปใหม่! ยอด ${result.amount?.toLocaleString()} บาท (ref: ${result.ref || '-'}) — ตรวจสอบได้ที่ dashboard`)
+              } catch (e) {
+                console.warn('[SlipToRecord] admin notify failed:', e)
+              }
+            } else {
+              await sendLinePush(userId, `❌ ${result.error}`, lineToken)
+              try {
+                const { notifyShopAdmin } = await import('@/lib/billing/ownerAlerts')
+                await notifyShopAdmin(shop, `⚠️ สลิปไม่ได้ถูกบันทึก\nลูกค้า: ${userId}\nเหตุผล: ${result.error || 'ไม่สามารถอ่านสลิปได้'}\nกรุณาตรวจสอบใน Inbox`)
+              } catch (e) {
+                console.warn('[SlipToRecord] admin notify failed:', e)
+              }
+            }
+          }).catch(err => console.error('[SlipToRecord Error]', err))
+        }
+      } else if (isSlipVerifyActive) {
         if (replyToken && lineToken) {
           await sendLineReply(replyToken, 'ได้รับรูปแล้วค่ะ 📄 รอสักครู่นะคะ...', lineToken)
         }
@@ -386,6 +433,8 @@ async function processLineEvents({
       }
     }
   }
+
+  await Promise.allSettled(upsetChecks)
 }
 
 // ─── Deliver a finished AgentResult (sync or from a background continuation) ──
@@ -411,6 +460,7 @@ async function deliverAgentResult({
 }) {
   const aiReplyText = agentResult.text || ''
   const features = (shop.features as Record<string, any>) || {}
+  const skillsTelemetryEnabled = shopSkillsTelemetryEnabled(features)
 
   if (aiReplyText) {
     await supabase.from('chat_messages').insert({
@@ -420,6 +470,9 @@ async function deliverAgentResult({
       sender_name: (shop.bot_name && !/botify/i.test(shop.bot_name)) ? shop.bot_name : 'น้อง DealMee',
       message: aiReplyText,
       platform: 'line',
+      ...(skillsTelemetryEnabled
+        ? { ai_confidence: agentResult.ai_confidence, intent: agentResult.intent }
+        : {}),
     })
   }
 
@@ -542,12 +595,31 @@ async function deliverAgentResult({
     )
   }
 
-  // Tool execution happens INSIDE the Planning Layer (src/lib/ai/toolDispatcher.ts's
-  // executeTool(), called possibly multiple times per customer message) —
-  // this function's job is just to log what ran and deliver the results.
-  // log tool calls to server console only, DO NOT store internal tool code in chat_messages table.
-  for (const toolCall of agentResult.toolCallsExecuted) {
-    console.log(`[Webhook] AI executed tool: ${toolCall.name}`, toolCall.args)
+  // ── Phase 0: auto-detect conversation outcome ───────────────────────────────
+  // NOTE: we do NOT mark 'conversion' here — an order created by take_order /
+  // send_payment_qr is only intent to pay.  Real conversion is recorded in
+  // settleSlip.ts when the slip clears and the order is marked `paid`.
+  // We only auto-tag the handoff case (customer asked for a human), which is a
+  // terminal outcome at the point it happens.
+  const executedTools = agentResult.toolCallsExecuted.map((t) => t.name)
+  const isHandoff = executedTools.includes('request_human_agent')
+  if (skillsTelemetryEnabled && isHandoff) {
+    const { error } = await supabase.rpc('set_conversation_outcome', {
+      p_conversation_id: conv.id,
+      p_outcome: 'handoff',
+      p_shop_id: shopId,
+      p_source: 'line_handoff',
+    })
+    if (error) console.error('[Webhook] set_conversation_outcome failed:', error.message)
+
+    // Auto-extract candidate skill from handoff conversation
+    import('@/lib/ai/skillExtractor').then(({ extractSkillFromConversation }) => {
+      extractSkillFromConversation({
+        shopId,
+        conversationId: conv.id,
+        outcome: 'handoff',
+      }).catch((err) => console.warn('[SkillExtractor] handoff auto-extract failed:', err))
+    }).catch(() => {})
   }
 
   if (!immediateMessagesDelivered && lineToken) {
@@ -571,6 +643,8 @@ async function deliverAgentResult({
       userId,
       message: scheduled.message.content,
       delayMs: scheduled.delayMs,
+      productName: scheduled.productName,
+      reason: scheduled.reason,
     })
   }
 }
