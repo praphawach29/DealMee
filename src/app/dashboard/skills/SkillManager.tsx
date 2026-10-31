@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MAX_SKILL_FILE_BYTES, parseSkillFile, type ParsedSkillFile } from '@/lib/ai/skillFile'
 import { isStaleRunning, skillDigest } from '@/lib/ai/shadowReport'
+import NightlyReviewPanel from './NightlyReviewPanel'
 import SkillRuntimeSettings from './SkillRuntimeSettings'
 import { Archive, CheckCircle2, Loader2, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
 
@@ -271,6 +272,20 @@ export default function SkillManager({ enabled }: { enabled: boolean }) {
         </div>
       )}
       {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error} <button type="button" onClick={() => void loadSkills()} className="underline">โหลดรายการอีกครั้ง</button></div>}
+      <NightlyReviewPanel
+        onDecided={() => void loadSkills()}
+        onEditSkill={(skill) => editSkill({
+          id: skill.id,
+          skill_type: skill.skill_type as Skill['skill_type'],
+          category: skill.category,
+          version: skill.version || '0.1.0',
+          status: skill.status,
+          trigger_keywords: skill.trigger_keywords || [],
+          knowledge_body: skill.knowledge_body,
+          instruction: skill.instruction,
+          facts_confirmed: skill.facts_confirmed,
+        })}
+      />
 
       <form aria-label="Import skill" aria-busy={importing || readingFile} onSubmit={importSkill} className="space-y-3 rounded-2xl border border-violet-200 bg-white p-5 shadow-sm">
         <h2 className="font-semibold text-slate-900">นำเข้า Skill จาก Markdown</h2>
