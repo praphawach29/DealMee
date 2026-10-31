@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendFacebookMessage } from '@/lib/facebook/messengerHelper'
 import { isOrderSettled } from '@/lib/orders/paymentState'
+import { backInStockStillWaitingMessage, restockIlikePattern } from '@/lib/ai/restockMessage'
 
 export interface FollowUpConfig {
   qr_recovery_enabled?: boolean
@@ -570,14 +571,23 @@ export async function processDueFollowUpTasks(limit = 25): Promise<{
       // Back-in-stock check: if reason is 'back_in_stock', verify product is in stock
       const payload = task.payload || {}
       if (payload.reason === 'back_in_stock' && payload.product_name) {
-        const { data: prods } = await supabase
+        const pattern = restockIlikePattern(String(payload.product_name))
+        const { data: byName } = await supabase
           .from('products')
           .select('id, name, stock')
           .eq('shop_id', task.shop_id)
-          .or(`name.ilike.%${payload.product_name}%,master_sku.ilike.%${payload.product_name}%`)
+          .ilike('name', pattern)
           .limit(1)
-
-        const product = prods?.[0]
+        let product = byName?.[0]
+        if (!product) {
+          const { data: bySku } = await supabase
+            .from('products')
+            .select('id, name, stock')
+            .eq('shop_id', task.shop_id)
+            .ilike('master_sku', pattern)
+            .limit(1)
+          product = bySku?.[0]
+        }
         const inStock = product && (product.stock || 0) > 0
 
         if (!inStock) {
@@ -597,10 +607,9 @@ export async function processDueFollowUpTasks(limit = 25): Promise<{
             continue
           } else {
             // Max retries reached, send "still out of stock" message
-            payload.message = `👋 สวัสดีค่ะ เสื้อยืดที่ถามไว้ ยังไม่มาถึงร้านค่ะ ถ้าของมาจะรีบแจ้งให้ทราบอีกครั้งนะ 😊`
+            payload.message = backInStockStillWaitingMessage(payload.product_name)
           }
-        } else {
-          // In stock! Update message with actual product name
+        } else if (product) {
           payload.message = `👋 สวัสดีค่ะ ${product.name} ที่ถามไว้ ตอนนี้ของมาแล้วค่ะ! สนใจสั่งได้เลยนะ 😊`
         }
         task.payload = payload

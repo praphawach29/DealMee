@@ -11,7 +11,7 @@ test('UI previews text before multipart import, refreshes candidates and clears 
   const states: unknown[] = []
   let cursor = 0
   const react = require('react')
-  const module = { exports: {} as { default: (props: { enabled: boolean }) => unknown } }
+  const compiledModule = { exports: {} as { default: (props: { enabled: boolean }) => unknown } }
   new Function('require', 'module', 'exports', compiled)((name: string) => {
     if (name === 'react') return { ...react, useEffect: () => {}, useCallback: (fn: unknown) => fn, useRef: () => ({ current: 0 }), useState: (initial: unknown) => {
       const index = cursor++
@@ -21,7 +21,7 @@ test('UI previews text before multipart import, refreshes candidates and clears 
     if (name === '@/lib/ai/skillFile') return { parseSkillFile, MAX_SKILL_FILE_BYTES: 16384 }
     if (name === './SkillRuntimeSettings') return { __esModule: true, default: () => null }
     return require(name)
-  }, module, module.exports)
+  }, compiledModule, compiledModule.exports)
   function render() {
     cursor = 0
     const nodes: { type: string; props: Record<string, any> }[] = []
@@ -29,7 +29,7 @@ test('UI previews text before multipart import, refreshes candidates and clears 
       if (Array.isArray(node)) return node.forEach(walk)
       if (node && typeof node === 'object' && node.props) { nodes.push(node); walk(node.props.children) }
     }
-    walk(module.exports.default({ enabled: true }))
+    walk(compiledModule.exports.default({ enabled: true }))
     return nodes
   }
   const oldFetch = globalThis.fetch
@@ -89,7 +89,7 @@ function importRoute(options: { unauthorized?: boolean; dbError?: boolean } = {}
   const inserted: Record<string, unknown>[] = []
   const source = readFileSync(new URL('../src/app/api/shop/skills/import/route.ts', import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
-  const module = { exports: {} as { POST: (request: Request) => Promise<Response> } }
+  const compiledModule = { exports: {} as { POST: (request: Request) => Promise<Response> } }
   const db = { from: (table: string) => {
     assert.equal(table, 'shop_skills')
     return { insert: (row: Record<string, unknown>) => {
@@ -102,8 +102,8 @@ function importRoute(options: { unauthorized?: boolean; dbError?: boolean } = {}
     if (name === '@/lib/supabase/admin') return { createAdminClient: () => db }
     if (name === '@/lib/ai/skillFile') return { parseSkillFile, MAX_SKILL_FILE_BYTES: 16384 }
     return require(name)
-  }, module, module.exports)
-  return { POST: module.exports.POST, inserted }
+  }, compiledModule, compiledModule.exports)
+  return { POST: compiledModule.exports.POST, inserted }
 }
 
 function upload(content: string | Uint8Array = '---\nname: policy\ndescription: summary\n---\n\nHello\n', filename = 'SKILL.md') {

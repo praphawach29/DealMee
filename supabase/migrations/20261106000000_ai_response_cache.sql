@@ -21,3 +21,7 @@ create policy "Users read their shop ai cache" on public.ai_response_cache
 drop policy if exists "Service role manages ai cache" on public.ai_response_cache;
 create policy "Service role manages ai cache" on public.ai_response_cache
   for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+
+revoke all on public.ai_response_cache from anon, public;
+grant select on public.ai_response_cache to authenticated;
+grant all on public.ai_response_cache to service_role;

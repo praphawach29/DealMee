@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import OrdersManager from './OrdersManager'
 
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
+import { SAMPLE_ORDER_EXCLUSION_PATTERN } from '@/lib/orders/sampleOrders'
 
 export default async function OrdersPage() {
   const supabase = await createClient()
@@ -24,7 +25,7 @@ export default async function OrdersPage() {
       .from('orders')
       .select('*')
       .eq('shop_id', shop.id)
-      .not('order_no', 'match', '^ORD-[0-9]{4}$')
+      .not('order_no', 'match', SAMPLE_ORDER_EXCLUSION_PATTERN)
       .order('created_at', { ascending: false })
 
     orders = data || []

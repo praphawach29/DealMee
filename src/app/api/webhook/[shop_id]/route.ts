@@ -383,27 +383,37 @@ async function processLineEvents({
         if (lineToken) {
           await withLineLoading(userId, lineToken, async () => {
             const { recordSlipTransaction } = await import('@/lib/slip/recordSlipTransaction')
+            const { data: slipConv } = await supabase
+              .from('conversations')
+              .select('id')
+              .eq('shop_id', shop_id)
+              .eq('user_id', userId)
+              .order('last_message_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
             const result = await recordSlipTransaction({
               shopId: shop_id,
-              conversationId: null,
+              conversationId: slipConv?.id || null,
               messageId,
               lineToken,
-              shopSettings: shop.shop_settings || {},
+              shopSettings: shop.features?.slip_verification || {},
             })
             if (result.success) {
               await sendLinePush(userId, `✅ บันทึกยอด ${result.amount?.toLocaleString()} บาท แล้วค่ะ (ref: ${result.ref || '-'})`, lineToken)
-              // Notify shop admin
               try {
-                const { data: shop } = await (await import('@/lib/supabase/admin')).createAdminClient().from('shops').select('*').eq('id', shop_id).single()
-                if (shop) {
-                  const { notifyShopAdmin } = await import('@/lib/billing/ownerAlerts')
-                  await notifyShopAdmin(shop, `📸 สลิปใหม่! ยอด ${result.amount?.toLocaleString()} บาท (ref: ${result.ref || '-'}) — ตรวจสอบได้ที่ dashboard`)
-                }
+                const { notifyShopAdmin } = await import('@/lib/billing/ownerAlerts')
+                await notifyShopAdmin(shop, `📸 สลิปใหม่! ยอด ${result.amount?.toLocaleString()} บาท (ref: ${result.ref || '-'}) — ตรวจสอบได้ที่ dashboard`)
               } catch (e) {
                 console.warn('[SlipToRecord] admin notify failed:', e)
               }
             } else {
               await sendLinePush(userId, `❌ ${result.error}`, lineToken)
+              try {
+                const { notifyShopAdmin } = await import('@/lib/billing/ownerAlerts')
+                await notifyShopAdmin(shop, `⚠️ สลิปไม่ได้ถูกบันทึก\nลูกค้า: ${userId}\nเหตุผล: ${result.error || 'ไม่สามารถอ่านสลิปได้'}\nกรุณาตรวจสอบใน Inbox`)
+              } catch (e) {
+                console.warn('[SlipToRecord] admin notify failed:', e)
+              }
             }
           }).catch(err => console.error('[SlipToRecord Error]', err))
         }

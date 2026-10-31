@@ -127,19 +127,30 @@ export async function batchShadowEvaluate(shopId: string, limit = 5): Promise<Sh
   // Get recent conversations with outcomes
   const { data: conversations } = await supabase
     .from('conversation_outcomes')
-    .select('conversation_id, user_query')
+    .select('conversation_id, notes')
     .eq('shop_id', shopId)
-    .order('created_at', { ascending: false })
+    .order('set_at', { ascending: false })
     .limit(limit)
 
   if (!conversations || conversations.length === 0) return results
 
   for (const skill of candidates) {
     for (const conv of conversations.slice(0, 2)) {
+      const { data: firstMsg } = await supabase
+        .from('chat_messages')
+        .select('message')
+        .eq('conversation_id', conv.conversation_id)
+        .eq('shop_id', shopId)
+        .eq('sender_type', 'user')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      const userQuery = String(firstMsg?.message || conv.notes || '').trim()
+      if (!userQuery) continue
       const result = await shadowEvaluateSkill({
         shopId,
         conversationId: conv.conversation_id,
-        userQuery: conv.user_query || '',
+        userQuery,
         candidateSkillId: skill.id,
       })
       if (result) results.push(result)
