@@ -49,5 +49,8 @@ export async function POST(request: NextRequest) {
     console.error('[shop-skills] create failed', error.message)
     return NextResponse.json({ error: 'Unable to create skill' }, { status: 500 })
   }
+  await import('@/lib/ai/shadowSchedule')
+    .then(({ queueSkillShadow }) => queueSkillShadow(data, true))
+    .catch((err) => console.error('[ShadowEval] queue failed', err instanceof Error ? err.message : err))
   return NextResponse.json({ skill: data }, { status: 201 })
 }

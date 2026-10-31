@@ -78,6 +78,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       updated_at: now,
     }).eq('id', skillId).eq('shop_id', auth.shopId).select('*').single()
     if (error) return NextResponse.json({ error: 'Unable to confirm skill facts' }, { status: 500 })
+    await import('@/lib/ai/shadowSchedule')
+      .then(({ queueSkillShadow }) => queueSkillShadow(data, true))
+      .catch((err) => console.error('[ShadowEval] queue failed', err instanceof Error ? err.message : err))
     return NextResponse.json({ skill: data })
   }
 
@@ -96,6 +99,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const { data, error } = await supabase.from('shop_skills').update({ ...parsed.data, facts_confirmed: true, updated_at: now })
     .eq('id', skillId).eq('shop_id', auth.shopId).eq('status', 'candidate').select('*').single()
   if (error) return NextResponse.json({ error: 'Unable to update skill' }, { status: 500 })
+  await import('@/lib/ai/shadowSchedule')
+    .then(({ queueSkillShadow }) => queueSkillShadow(data, true))
+    .catch((err) => console.error('[ShadowEval] queue failed', err instanceof Error ? err.message : err))
   return NextResponse.json({ skill: data })
 }
 

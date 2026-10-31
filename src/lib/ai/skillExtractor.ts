@@ -1,4 +1,5 @@
 import type { ShopSkill, ShopSkillType } from './shopSkills'
+import { redactPii } from './redactPii'
 
 export interface SkillExtractionResult {
   success: boolean
@@ -330,26 +331,6 @@ export function retainFactualKnowledge(body: string | null, factual: string): st
     if (digits.length >= 2 && !source.includes(digits)) return null
   }
   return cleaned
-}
-
-/**
- * Redact PII from text for safe storage in skills.
- */
-function redactPii(text: string): string {
-  if (!text) return ''
-  return text
-    // Phone numbers
-    .replace(/\b0\d{8,9}\b/g, '[เบอร์โทร]')
-    // Email
-    .replace(/\b[\w.-]+@[\w.-]+\.\w+\b/g, '[อีเมล]')
-    // Thai ID (13 digits)
-    .replace(/\b\d{13}\b/g, '[เลขบัตรประชาชน]')
-    // LINE user IDs
-    .replace(/\bU[0-9a-f]{32}\b/gi, '[LINE ID]')
-    // Bank account numbers (10-12 digits)
-    .replace(/\b\d{10,12}\b/g, '[เลขบัญชี]')
-    // Order/booking numbers
-    .replace(/\b(ORD|BK|QT)-\d+\b/gi, '[เลขที่เอกสาร]')
 }
 
 /**

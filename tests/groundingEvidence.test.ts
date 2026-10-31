@@ -91,7 +91,10 @@ test('new golden trajectories wait for approval', () => {
 
 test('shadow eval migration is shop-scoped, service-role write, and idempotent', () => {
   const sql = readFileSync(new URL('../supabase/migrations/20261109000000_grounding_evidence.sql', import.meta.url), 'utf8')
-  const shadow = readFileSync(new URL('../src/lib/ai/shadowEval.ts', import.meta.url), 'utf8')
+  const shadow = [
+    readFileSync(new URL('../src/lib/ai/shadowEval.ts', import.meta.url), 'utf8'),
+    readFileSync(new URL('../src/lib/ai/shadowEvalStore.ts', import.meta.url), 'utf8'),
+  ].join('\n')
   assert.equal(sql.includes('USING (true)'), false)
   assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.shop_skill_shadow_evals/)
   assert.match(sql, /ENABLE ROW LEVEL SECURITY/)

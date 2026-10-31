@@ -1,4 +1,5 @@
 import type { AgentToolName, ModelCaller, PlanningTurn } from '../../src/lib/ai/salesAgentEngine.ts'
+import { judgeReplyWithCaller, type JudgeVerdict } from '../../src/lib/ai/replyJudge.ts'
 
 export type EvalProviderName = 'gemini' | 'openrouter'
 
@@ -222,29 +223,13 @@ export async function judgeReply(input: {
   question: string
   answer: string
   evidence: string
-}): Promise<{ pass: boolean; reason: string } | null> {
-  const prompt = [
-    'คุณเป็นผู้ตรวจคำตอบบอทขาย ตรวจว่าคำตอบใช้เฉพาะข้อมูลร้าน ไม่แต่งราคา สต็อก ค่าส่ง โปรโมชั่น หรือนโยบาย',
-    'ตอบเป็น JSON เท่านั้น: {"pass": true, "reason": "สั้นๆ"}',
-    `คำถาม: ${input.question}`,
-    `คำตอบ: ${input.answer}`,
-    `ข้อมูลร้าน: ${input.evidence.slice(0, 4000)}`,
-  ].join('\n')
-  try {
-    const caller = createLiveCaller({
-      provider: input.provider,
-      model: input.model,
-      apiKey: input.apiKey,
-      tools: [],
-      usage: { promptTokens: 0, completionTokens: 0 },
-    })
-    const result = await caller({ systemInstruction: prompt, turns: [{ role: 'user', text: 'ให้คะแนน' }], toolNames: [], step: 0 })
-    const match = (result?.text || '').match(/\{[\s\S]*\}/)
-    if (!match) return null
-    const parsed = JSON.parse(match[0]) as { pass?: boolean; reason?: string }
-    if (typeof parsed.pass !== 'boolean') return null
-    return { pass: parsed.pass, reason: String(parsed.reason || '') }
-  } catch {
-    return null
-  }
+}): Promise<JudgeVerdict | null> {
+  const caller = createLiveCaller({
+    provider: input.provider,
+    model: input.model,
+    apiKey: input.apiKey,
+    tools: [],
+    usage: { promptTokens: 0, completionTokens: 0 },
+  })
+  return judgeReplyWithCaller(caller, input)
 }
