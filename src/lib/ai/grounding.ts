@@ -145,7 +145,8 @@ export function checkGrounding(input: GroundingInput): GroundingVerdict {
     }
   }
 
-  const unsupported = factSentences.filter((sentence) => !sentenceSupported(sentence, evidence, input.codEnabled))
+  const asked = normalize(input.customerMessage || '')
+  const unsupported = factSentences.filter((sentence) => !sentenceSupported(sentence, evidence, input.codEnabled, asked))
   if (unsupported.length === 0) {
     return {
       ...base,
@@ -199,7 +200,19 @@ function isShopFactSentence(sentence: string): boolean {
   return true
 }
 
-function sentenceSupported(sentence: string, evidence: string, codEnabled?: boolean | null): boolean {
+/**
+ * A number followed by one of these counts people or things, not money: "11 คน" in
+ * "11 คนอยู่แพ็กเกจเล็ก เดือนละ 660 บาท" is the customer's headcount. Without this the price
+ * sweep below read it as an 11-baht price and replaced a correct answer with the hand-off.
+ */
+const COUNT_AFTER = /^\s*(?:คน|ท่าน|ราย|สาขา|ข้อความ|ครั้ง|ที่นั่ง|ห้อง)/
+
+function countSupported(digits: string, evidence: string, asked: string): boolean {
+  const re = new RegExp(`(?:^|[^\\d])${escapeRegExp(digits)}(?!\\d)`)
+  return re.test(asked) || re.test(evidence)
+}
+
+function sentenceSupported(sentence: string, evidence: string, codEnabled?: boolean | null, asked = ''): boolean {
   const norm = normalize(sentence)
   if (/จองเรียบร้อย|รับออเดอร์แล้ว/.test(norm)) {
     const id = norm.match(/[a-z]{2,}-\d{3,}/i)
@@ -213,6 +226,12 @@ function sentenceSupported(sentence: string, evidence: string, codEnabled?: bool
   const claims = extractClaims(norm)
   if (/ราคา|บาท|฿|baht|\bprice\b/.test(norm)) {
     for (const match of norm.matchAll(/(?:^|[^\d])(\d{2,7})(?!\d)/g)) {
+      const after = norm.slice((match.index ?? 0) + match[0].length)
+      if (COUNT_AFTER.test(after)) {
+        // A count is a fact only in that the shop or the customer said it.
+        if (!countSupported(match[1], evidence, asked)) return false
+        continue
+      }
       if (!claims.some((claim) => claim.digits === match[1])) {
         claims.push({ digits: match[1], unit: 'บาท', time: null })
       }

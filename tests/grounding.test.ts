@@ -254,3 +254,36 @@ test('the migration isolates gaps by shop and the prompt tells the model to look
   assert.match(GROUNDING_RULES, /request_human_agent/)
   assert.match(GROUNDING_RULES, /\[\[cite:chunk:/)
 })
+
+// 1 Nov 2026, CheckMee: "11 คนอยู่แพ็กเกจเล็กค่ะ เดือนละ 660 บาท" was replaced with the hand-off.
+// The price sweep read the customer's headcount as an 11-baht price the shop never wrote.
+const pricing: EvidenceChunk[] = [
+  { id: CHUNK, content: '11–20 คน (แพ็กเกจเล็ก): 60 บาท/คน/เดือน ขั้นต่ำ 660 บาท/เดือน\n- 11 คน: 660 บาท/เดือน หรือ 6,600 บาท/ปี' },
+]
+
+test('a headcount the customer gave is not read as a price', () => {
+  const verdict = check('11 คนอยู่แพ็กเกจเล็กค่ะ เดือนละ 660 บาท (60 บาท × 11 คน) หรือจ่ายรายปี 6,600 บาท', {
+    chunks: pricing,
+    customerMessage: 'หากมีพนักงาน 11 คน ราคาเท่าไหร่ครับ',
+  })
+  assert.equal(verdict.grounded, true)
+  assert.equal(verdict.shouldHandoff, false)
+  assert.equal(verdict.text.includes('660'), true)
+})
+
+test('a headcount the shop wrote is allowed even when the customer did not say it', () => {
+  const verdict = check('พนักงาน 11 คน ราคาเดือนละ 660 บาทค่ะ', { chunks: pricing, customerMessage: 'ราคาเท่าไหร่' })
+  assert.equal(verdict.grounded, true)
+})
+
+test('a count nobody said is still unsupported', () => {
+  const verdict = check('ซื้อ 37 คนขึ้นไปลดเหลือ 660 บาทค่ะ', { chunks: pricing, customerMessage: 'มีส่วนลดไหม' })
+  assert.equal(verdict.grounded, false)
+  assert.equal(verdict.reason, 'unsupported_shop_fact')
+})
+
+test('a wrong price beside a real headcount is still caught', () => {
+  const verdict = check('11 คน เดือนละ 550 บาทค่ะ', { chunks: pricing, customerMessage: '11 คน' })
+  assert.equal(verdict.grounded, false)
+  assert.equal(verdict.text, GROUNDING_HANDOFF.th)
+})
