@@ -48,6 +48,7 @@ export default async function DashboardPage({
 
   let recentOrders: DashboardOrder[] = []
   let catalog: DashboardProduct[] = []
+  let pendingSkillProposals = 0
 
   if (currentShopId) {
     const [
@@ -57,6 +58,7 @@ export default async function DashboardPage({
       orderRes,
       productRes,
       quotaInfo,
+      reviewProposals,
     ] = await Promise.all([
       supabase.from('products').select('*', { count: 'exact', head: true }).eq('shop_id', currentShopId),
       supabase.from('knowledge_base').select('title, created_at', { count: 'exact' }).eq('shop_id', currentShopId).order('created_at', { ascending: false }).limit(1),
@@ -74,9 +76,15 @@ export default async function DashboardPage({
         .eq('shop_id', currentShopId)
         .order('stock', { ascending: true }),
       getLinePushQuotaInfo(supabase, currentShopId, shop?.plan || 'pro'),
+      supabase
+        .from('shop_skill_review_proposals')
+        .select('id', { count: 'exact', head: true })
+        .eq('shop_id', currentShopId)
+        .eq('status', 'pending'),
     ])
 
     productsCount = prodRes.count || 0
+    if (!reviewProposals.error) pendingSkillProposals = reviewProposals.count || 0
     catalog = (productRes.data || []).map((product) => ({
       id: product.id,
       name: product.name || 'สินค้า',
@@ -177,6 +185,7 @@ export default async function DashboardPage({
       orders={recentOrders}
       products={catalog}
       initialPlaygroundOpen={openPlayground}
+      pendingSkillProposals={pendingSkillProposals}
     />
   )
 }
