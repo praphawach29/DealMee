@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { platformSecret } from '@/lib/platformSecrets'
 import { verifyFacebookSignature } from '@/lib/facebook/messengerHelper'
 import { processMessengerEntries } from '@/lib/facebook/processMessengerEntries'
+import { exactlyOne } from '@/lib/security/tenantScope'
 
 /**
  * Webhook of DealMee's own Meta app, for every page connected with "เชื่อมเพจด้วย Facebook".
@@ -51,14 +52,15 @@ export async function POST(req: NextRequest) {
     const supabase = createAdminClient()
     for (const [pageId, entries] of byPage) {
       try {
-        const { data: shop } = await supabase
+        const { data: shops, error } = await supabase
           .from('shops')
           .select('*')
           .eq('facebook_page_id', pageId)
           .eq('facebook_connected_via', 'oauth')
-          .maybeSingle()
+          .limit(2)
+        const shop = error ? null : exactlyOne(shops)
         if (!shop?.facebook_page_token) {
-          console.warn(`[Platform FB Webhook] no shop connected to page ${pageId}`)
+          console.warn(`[Platform FB Webhook] page ${pageId} did not resolve to exactly one shop`)
           continue
         }
         const features = (shop.features as Record<string, boolean>) || {}

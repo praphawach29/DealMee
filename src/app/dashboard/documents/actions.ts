@@ -6,7 +6,7 @@ import { convertDocumentToQuotationDraft, ExtractedQuotationData } from '@/lib/a
 import { parseDocumentWithMarkItDown } from '@/lib/documentProcessor'
 import { revalidatePath } from 'next/cache'
 import { platformSecret } from '@/lib/platformSecrets'
-import { quotationAcceptPath } from '@/lib/docs/acceptToken'
+import { documentViewPath, quotationAcceptPath } from '@/lib/docs/acceptToken'
 
 export interface OfficialLetterDraft {
   doc_number: string
@@ -263,7 +263,7 @@ export async function saveOfficialLetterAction(draft: OfficialLetterDraft) {
     success: true,
     docId: doc.id,
     docNumber: doc.doc_number,
-    docUrl: `/doc/official/${doc.id}`,
+    docUrl: documentViewPath(doc.id, 'official'),
   }
 }
 
@@ -359,7 +359,7 @@ export async function convertQuotationToInvoiceAction(quotationId: string) {
     success: true,
     docId: newDoc.id,
     docNumber: newDoc.doc_number,
-    docUrl: `/doc/quotation/${newDoc.id}`,
+    docUrl: documentViewPath(newDoc.id),
   }
 }
 
@@ -454,6 +454,6 @@ export async function convertQuotationToSalesOrderAction(quotationId: string) {
     success: true,
     docId: newDoc.id,
     docNumber: newDoc.doc_number,
-    docUrl: `/doc/quotation/${newDoc.id}`,
+    docUrl: documentViewPath(newDoc.id),
   }
 }

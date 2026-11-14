@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { denyDocumentRead } from '@/lib/docs/documentAccess'
 import {
   generateQuotationDocx,
   generateQuotationXlsx,
@@ -27,6 +28,9 @@ export async function GET(
     if (docError || !doc) {
       return new NextResponse('ไม่พบเอกสารที่ต้องการดาวน์โหลด', { status: 404 })
     }
+
+    const denied = await denyDocumentRead(req, doc)
+    if (denied) return denied
 
     // 2. Fetch shop profile & logo
     const { data: shop } = await supabase

@@ -4,6 +4,13 @@ export const dynamic = 'force-dynamic'
 
 export default async function EvaluationPage() {
   const metrics = await getEvaluationMetrics()
+  if ('error' in metrics) {
+    return (
+      <div className="p-6 max-w-xl mx-auto">
+        <p className="text-sm text-slate-600 dark:text-slate-300">{metrics.error}</p>
+      </div>
+    )
+  }
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">

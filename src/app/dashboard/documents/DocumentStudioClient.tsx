@@ -1096,11 +1096,10 @@ export default function DocumentStudioClient({
                     const isInvoice = doc.doc_type === 'invoice'
                     const isSalesOrder = doc.doc_type === 'sales_order'
                     const isCommercial = isQuotation || isInvoice || isSalesOrder
-                    const docUrl = !isCommercial
-                      ? `/doc/official/${doc.id}`
-                      : isQuotation && doc.accept_token
-                        ? `/doc/quotation/${doc.id}?accept=${encodeURIComponent(doc.accept_token)}`
-                        : `/doc/quotation/${doc.id}`
+                    const docPath = isCommercial ? `/doc/quotation/${doc.id}` : `/doc/official/${doc.id}`
+                    const docUrl = doc.accept_token
+                      ? `${docPath}?accept=${encodeURIComponent(doc.accept_token)}`
+                      : docPath
                     const isAccepted = doc.status === 'accepted' || (typeof doc.notes === 'string' && doc.notes.includes('[STATUS:ACCEPTED'))
 
                     return (

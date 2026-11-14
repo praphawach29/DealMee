@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { verifyDocAcceptToken } from '@/lib/docs/acceptToken'
+import { quotationAcceptPath, verifyDocAcceptToken } from '@/lib/docs/acceptToken'
 
 async function readAcceptToken(req: NextRequest): Promise<string | null> {
   const fromQuery = req.nextUrl.searchParams.get('accept') || req.nextUrl.searchParams.get('token')
@@ -198,7 +198,7 @@ export async function POST(
                         action: {
                           type: 'uri',
                           label: '📄 เปิดดูใบเสนอราคา',
-                          uri: `${baseUrl}/doc/quotation/${doc.id}`,
+                          uri: `${baseUrl.replace(/\/$/, '')}${quotationAcceptPath(doc.id)}`,
                         },
                         style: 'primary',
                         color: '#2563eb',

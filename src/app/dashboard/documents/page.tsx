@@ -50,7 +50,7 @@ export default async function DocumentsPage() {
       <DocumentStudioClient
         initialDocuments={(documents || []).map((doc) => ({
           ...doc,
-          accept_token: doc.doc_type === 'quotation' ? trySignDocAcceptToken(doc.id) : null,
+          accept_token: trySignDocAcceptToken(doc.id),
         }))}
         shopName={shop.name || 'ร้านค้า'}
         companyName={shop.company_name || shop.name}

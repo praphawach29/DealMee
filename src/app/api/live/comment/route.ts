@@ -1,25 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLiveSessionState, processLiveComment, updateLiveBaskets } from '@/lib/live/liveStudioEngine'
+import { redactLivePayment } from '@/lib/live/redactLivePayment'
 import { requireShop } from '@/lib/auth/requireShop'
 import { liveStudioGuard } from '@/lib/live/liveStudioAccess'
+import { liveShopDecision } from '@/lib/security/tenantScope'
 
 /**
- * GET /api/live/comment?shop_id=...
- * Returns current live session state and active product card.
- * Public on purpose: the OBS overlay page (/live/overlay/[shop_id]) polls it without a login.
+ * GET /api/live/comment
+ * The shop comes from the signed-in session. A shop_id query is accepted only
+ * when it is that same shop; another shop gets 403 and no session state.
  */
 export async function GET(req: NextRequest) {
   try {
-    const searchParams = req.nextUrl.searchParams
-    const shopId = searchParams.get('shop_id')
-
-    if (!shopId) {
-      return NextResponse.json({ error: 'Missing shop_id query parameter' }, { status: 400 })
+    const auth = await requireShop()
+    if (auth.error) return auth.error
+    const decision = liveShopDecision(auth.shopId, req.nextUrl.searchParams.get('shop_id'))
+    if (decision.status !== 'ok') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: decision.status })
     }
-    const liveBlocked = await liveStudioGuard(shopId)
+    const liveBlocked = await liveStudioGuard(decision.shopId)
     if (liveBlocked) return liveBlocked
 
-    const state = await getLiveSessionState(shopId)
+    const state = redactLivePayment(await getLiveSessionState(decision.shopId))
     return NextResponse.json({ success: true, state })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Server error' }, { status: 500 })

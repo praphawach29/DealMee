@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { verifySuperAdmin } from '../actions'
 
 export interface EvaluationMetrics {
   totalConversations: number
@@ -19,7 +20,12 @@ export interface EvaluationMetrics {
   estimatedTotalCostUsd: number
 }
 
-export async function getEvaluationMetrics(): Promise<EvaluationMetrics> {
+export async function getEvaluationMetrics(): Promise<EvaluationMetrics | { error: string }> {
+  const { isSuperAdmin } = await verifySuperAdmin()
+  if (!isSuperAdmin) {
+    return { error: 'คุณไม่มีสิทธิ์ผู้ดูแลระบบ Super Admin' }
+  }
+
   const admin = createAdminClient()
 
   // 1. Fetch conversations & stage breakdown
