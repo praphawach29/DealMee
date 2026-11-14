@@ -1,0 +1,462 @@
+[
+  {
+    "verdict": "needs_validation",
+    "fingerprint": "admin.evaluation-metrics.missing-auth",
+    "title": "Evaluation metrics read every shop with the service role and no super-admin check",
+    "description": "getEvaluationMetrics selects conversations, orders, feedback, and token totals for every shop through the service-role client and returns platform-wide aggregates. Unlike the other admin actions that were read, it never calls verifySuperAdmin. The page that calls it is a server component, and the admin layout does not render that page for other emails.",
+    "claimed_root_cause": "The service-role aggregate has no authorization check inside the action. If Next.js exposes the use-server export as an invocable action, any caller who can address it receives cross-shop totals.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/app/admin/evaluation/actions.ts",
+        "line": 22,
+        "scope": "getEvaluationMetrics",
+        "description": "Creates the service-role client with no session lookup."
+      },
+      {
+        "kind": "propagation",
+        "file": "src/app/admin/evaluation/page.tsx",
+        "line": 5,
+        "scope": "EvaluationPage",
+        "description": "Awaits getEvaluationMetrics during render."
+      },
+      {
+        "kind": "sink",
+        "file": "src/app/admin/layout.tsx",
+        "line": 27,
+        "scope": "AdminLayout",
+        "description": "Non-allowlisted emails receive the lock screen instead of children. That does not add a check inside the action."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "src/app/admin/evaluation/actions.ts",
+        "line": 26,
+        "description": "selects id, sales_stage, and shop_id from conversations with no shop filter. The returned object keeps only counts."
+      },
+      {
+        "file": "src/app/admin/actions.ts",
+        "line": 24,
+        "description": "Other admin mutations call verifySuperAdmin before createAdminClient."
+      }
+    ],
+    "blockers": [
+      "Whether Next.js 16 registers this server-component-only use-server export as a client-invocable POST, and whether a non-admin response includes the rendered metrics, is a framework behavior this repo does not pin down."
+    ],
+    "validation_plan": {
+      "local": "Build the app locally with dummy env values and inspect the server-action manifest for getEvaluationMetrics. If an id is present, call it with no session and with a non-admin session against a local fixture of two shops and record whether the JSON totals are returned.",
+      "deployment": "Do not send the call to production. On a preview deployment the owner controls, confirm whether a non-admin browser can invoke the action id and whether the evaluation RSC payload contains the totals."
+    }
+  },
+  {
+    "verdict": "needs_validation",
+    "fingerprint": "documents.bearer-uuid-read",
+    "title": "Quotation view and download return a document to anyone who knows its id",
+    "description": "GET /doc/quotation/[id] and GET /api/doc/[id]/download use the service role and do not require the accept token. The HTML includes customer name, phone, address, totals, and the shop bank and PromptPay details. Accepting the quote does require a token. The Nov 2 migration dropped the public PostgREST SELECT that had listed every document.",
+    "claimed_root_cause": "The share pages treat the document UUID as a bearer capability and bypass RLS. That is cross-tenant read only if an attacker can obtain another shop's document id.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/utils/supabase/middleware.ts",
+        "line": 81,
+        "scope": "anonymous allowlist",
+        "description": "/doc and /api/doc skip the login redirect."
+      },
+      {
+        "kind": "propagation",
+        "file": "src/app/doc/quotation/[id]/route.ts",
+        "line": 16,
+        "scope": "quotation GET",
+        "description": "Loads the document by id with the service role before checking the accept token."
+      },
+      {
+        "kind": "sink",
+        "file": "src/app/api/doc/[id]/download/route.ts",
+        "line": 21,
+        "scope": "download GET",
+        "description": "Loads the same document and shop row with no token and returns the file."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "src/app/doc/quotation/[id]/route.ts",
+        "line": 99,
+        "description": "The accept token only decides whether the approve button is shown. A failed check still renders the document."
+      },
+      {
+        "file": "src/app/api/doc/[id]/accept/route.ts",
+        "line": 26,
+        "description": "POST accept rejects a missing or bad token."
+      },
+      {
+        "file": "supabase/migrations/20261102000000_close_public_policies.sql",
+        "line": 9,
+        "description": "The migration says the link pages read with the service role and drops the public SELECT that allowed listing."
+      }
+    ],
+    "blockers": [
+      "No reviewed route lists another tenant's document ids. A cross-tenant read needs a leaked UUID, and this run did not find an enumeration oracle."
+    ],
+    "validation_plan": {
+      "local": "With two dummy documents in a local fixture, request GET /doc/quotation/<id> and GET /api/doc/<id>/download with no cookie and confirm the body contains that document's customer fields. Then confirm a user JWT for shop A cannot select shop B's documents through PostgREST.",
+      "deployment": "Owner checks server logs and Referer handling to see whether document URLs are stored or sent to third parties. Do not probe production documents."
+    }
+  },
+  {
+    "verdict": "rejected",
+    "fingerprint": "knowledge.rpc.cross-shop-match",
+    "title": "Authenticated callers can read another shop's knowledge through match_knowledge_chunks",
+    "description": "The vector and keyword RPCs take a caller-supplied shop id and are granted to authenticated.",
+    "claimed_root_cause": "A caller passes another shop's UUID and the function returns that shop's chunk text.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "supabase/migrations/20261031000000_knowledge_chunks_pgvector.sql",
+        "line": 316,
+        "scope": "GRANT EXECUTE",
+        "description": "authenticated may call match_knowledge_chunks and search_knowledge_chunks_keyword."
+      },
+      {
+        "kind": "sink",
+        "file": "src/lib/knowledge/hybrid.ts",
+        "line": 164,
+        "scope": "mergeHybridResults",
+        "description": "Hits whose shopId is not the requested shop are dropped."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "supabase/migrations/20261031000000_knowledge_chunks_pgvector.sql",
+        "line": 168,
+        "description": "Both functions are SECURITY INVOKER and filter WHERE shop_id = p_shop_id."
+      },
+      {
+        "file": "src/lib/knowledge/retrieve.ts",
+        "line": 44,
+        "description": "The shop id is taken from server context and must be a UUID before the RPC."
+      }
+    ],
+    "reason": "SECURITY INVOKER means the caller's RLS still applies, and the chunk policies are shop-scoped. The application also filters in SQL and drops foreign hits in mergeHybridResults. The model cannot pass shop_id. The grant does not by itself return another shop's chunks."
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "live-studio.get.unauthenticated-shop-state",
+    "title": "A signed-in shop can read another shop's live session by passing its shop id",
+    "description": "GET /api/live/comment takes shop_id from the query string and does not compare it to the session. Login middleware blocks callers with no session, so this is not anonymous. Any other signed-in shop, when the target has features.live_studio enabled, receives that shop's products and stored live session, including comments, revenue, and the latest PromptPay payload.",
+    "root_cause": "The GET handler trusts shop_id from the query. requireShop is used on POST, pitch, and tts, but not on this GET. The feature flag is the only other gate.",
+    "intended_behavior": "A shop member may read only their own live session. A public overlay, if one is still required, should return a redacted card and not another tenant's payment payload.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "src/app/api/live/comment/route.ts",
+        "line": 11,
+        "scope": "GET",
+        "description": "Reads shop_id from the query string. Unlike POST in the same file, it does not call requireShop."
+      },
+      {
+        "kind": "propagation",
+        "file": "src/utils/supabase/middleware.ts",
+        "line": 65,
+        "scope": "updateSession",
+        "description": "A request with no user is redirected to login. A request with any valid user continues. /api/live is not an anonymous exemption."
+      },
+      {
+        "kind": "propagation",
+        "file": "src/lib/live/liveStudioAccess.ts",
+        "line": 16,
+        "scope": "liveStudioGuard",
+        "description": "Returns 404 only when that shop's features.live_studio is not true."
+      },
+      {
+        "kind": "sink",
+        "file": "src/lib/live/liveStudioEngine.ts",
+        "line": 76,
+        "scope": "getLiveSessionState",
+        "description": "Loads products and the settings document live_session_<shopId> for the query shop id and returns them."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "src/app/api/live/comment/route.ts",
+        "line": 33,
+        "description": "POST on the same route binds shop_id through requireShop. GET does not."
+      },
+      {
+        "file": "src/utils/supabase/middleware.ts",
+        "line": 80,
+        "description": "The anonymous allowlist includes /api/demo, /api/cron, /doc, and webhooks. It does not include /api/live, so a cookie-less caller is redirected."
+      },
+      {
+        "file": "src/lib/live/liveStudioEngine.ts",
+        "line": 84,
+        "description": "Products are selected with the caller-supplied shop id."
+      },
+      {
+        "file": "src/lib/live/liveStudioEngine.ts",
+        "line": 312,
+        "description": "latest_cf_order stores qr_data_url and promptpay_payload inside the session that GET returns."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "The attacker has any valid shop session. Callers with no session are redirected to /login and do not reach the handler."
+      },
+      {
+        "kind": "system_configuration",
+        "description": "The target shop has features.live_studio = true. Otherwise the guard returns 404."
+      },
+      {
+        "kind": "data_state",
+        "description": "Product name, price, and stock are returned for a default session. Comments, revenue, and a PromptPay payload are present after the shop has used the live comment flow."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "A signed-in merchant of shop A requests the live state of shop B.",
+      "payloads": [
+        "GET /api/live/comment?shop_id=<shop-b-uuid> with shop A's session cookie"
+      ],
+      "instructions": [
+        "On a local fixture, sign in as shop A and set features.live_studio true only on shop B.",
+        "GET /api/live/comment?shop_id=<shop-b-uuid> with shop A's cookie, and repeat with no cookie.",
+        "Compare the JSON with shop B's products and stored live_session row."
+      ],
+      "observed_result": "Source shows a session-less request is redirected by middleware, and a signed-in request passes the shop id straight into getLiveSessionState. The returned object is the product list plus the stored session, including latest_cf_order when one was saved. This was not executed against a server."
+    },
+    "remediation": {
+      "strategy": "Keep a public overlay response limited to the current product card. Require a per-shop unguessable overlay token before returning comments, revenue, orders, or PromptPay payloads.",
+      "code_changes": [
+        {
+          "file_name": "src/app/api/live/comment/route.ts",
+          "fixed_code": "const state = await getLiveSessionState(shopId)\nreturn NextResponse.json({ success: true, state: { title: state.title, current_product: state.current_product, current_basket_no: state.current_basket_no } })"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "low",
+        "reason": "Any trial or paying session is enough, but the target must have live_studio enabled and the attacker must know that shop UUID. The route comment calls the GET public, which the middleware currently prevents for anonymous clients."
+      },
+      "impact": {
+        "score": "medium",
+        "reason": "The response includes another shop's prices, stock, live comment text, order totals, and a PromptPay payload for that shop. It does not include the shop's channel secrets."
+      },
+      "overall_severity": "medium"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "GET, POST, the middleware allowlist, the feature guard, and the fields stored in the session were read end to end. Anonymous access was checked and does not reach the handler."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "orders.rls.workspace-or-shop-id",
+    "title": "Orders RLS lets one shop insert orders into another shop",
+    "description": "The orders INSERT, SELECT, and UPDATE policies accept a row when either shop_id or workspace_id is the caller's shop. A signed-in merchant can therefore store an order whose shop_id is another shop. That shop's dashboard loads orders with .eq('shop_id', shop.id) and will show the injected row.",
+    "root_cause": "The orders policies OR two different tenant columns, and the UPDATE policy has no separate WITH CHECK, so a caller who matches only workspace_id can set shop_id to any existing shop.",
+    "intended_behavior": "A merchant may read and write only orders whose shop_id is their own workspace_id. workspace_id on the order must not independently authorize a different shop_id.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "supabase/migrations/20260701000000_initial_schema.sql",
+        "line": 236,
+        "scope": "orders INSERT policy",
+        "description": "WITH CHECK passes when shop_id is the caller's shop or workspace_id is the caller's shop."
+      },
+      {
+        "kind": "propagation",
+        "file": "supabase/schema/production.json",
+        "line": 3511,
+        "scope": "orders policies and grants",
+        "description": "The deployed snapshot keeps that OR on INSERT, SELECT, and UPDATE, and grants INSERT, UPDATE, and SELECT to authenticated."
+      },
+      {
+        "kind": "sink",
+        "file": "src/app/dashboard/orders/page.tsx",
+        "line": 25,
+        "scope": "OrdersPage",
+        "description": "The victim shop selects every order with its shop_id, so the injected row is returned."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "supabase/migrations/20260701000000_initial_schema.sql",
+        "line": 230,
+        "description": "SELECT and INSERT policies OR shop_id with orders.workspace_id."
+      },
+      {
+        "file": "supabase/schema/production.json",
+        "line": 3308,
+        "description": "orders.workspace_id exists and references shops, so the OR is executable."
+      },
+      {
+        "file": "supabase/schema/production.json",
+        "line": 3296,
+        "description": "authenticated is granted INSERT, SELECT, UPDATE, and DELETE on orders."
+      },
+      {
+        "file": "supabase/schema/production.json",
+        "line": 3522,
+        "description": "UPDATE policy uses the same OR and has a null check expression."
+      },
+      {
+        "file": "src/app/dashboard/orders/page.tsx",
+        "line": 27,
+        "description": "The shop dashboard lists rows by shop_id under the signed-in shop."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "The attacker is signed in as any shop member. auth.uid() resolves to a users.workspace_id. The anon role fails the policy because auth.uid() is null."
+      },
+      {
+        "kind": "data_state",
+        "description": "The target shop_id must already exist because of orders_shop_id_fkey. Demo shop ids are published in supabase/migrations/20261101000000_live_demo.sql. Any other shop id the attacker has learned, including one embedded in a webhook URL, works the same way."
+      },
+      {
+        "kind": "system_configuration",
+        "description": "No later migration in this folder drops or replaces these orders policies. The column and grants are taken from supabase/schema/production.json captured 2026-10-24."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "A signed-in merchant of shop A, using the public anon key and their session, inserts into public.orders.",
+      "payloads": [
+        "{\"shop_id\":\"<shop-b-uuid>\",\"workspace_id\":\"<shop-a-uuid>\",\"customer_name\":\"injected\",\"total_amount\":1,\"status\":\"pending\"}"
+      ],
+      "instructions": [
+        "Apply the migrations and the orders columns from supabase/schema/production.json to a local Postgres with two dummy shops and two authenticated roles whose users.workspace_id values are those shops.",
+        "As shop A, insert a row with shop_id set to shop B and workspace_id set to shop A.",
+        "As shop B, select orders where shop_id equals shop B."
+      ],
+      "observed_result": "The INSERT policy's boolean is true for that row because workspace_id matches shop A even though shop_id does not. Shop B's shop_id filter then includes the row. This result is the policy predicate evaluated against the snapshot; it was not executed against a database because this run had no local Postgres and production was out of scope."
+    },
+    "remediation": {
+      "strategy": "Authorize orders only by shop_id equal to the caller's workspace. Use the same expression for USING and WITH CHECK on SELECT, INSERT, UPDATE, and DELETE. Reject updates that change shop_id.",
+      "code_changes": [
+        {
+          "file_name": "supabase/migrations/20260701000000_initial_schema.sql",
+          "fixed_code": "CREATE POLICY \"Users can insert their shop orders\" ON public.orders FOR INSERT WITH CHECK (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()));\nCREATE POLICY \"Users can update their shop orders\" ON public.orders FOR UPDATE USING (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid())) WITH CHECK (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()) AND shop_id IS NOT DISTINCT FROM (SELECT o.shop_id FROM public.orders o WHERE o.id = orders.id));"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "medium",
+        "reason": "Any signed-in shop can send the insert. Published demo shop ids need no leak. Other shop ids are UUIDs, but they are the webhook path parameter shops already put in channel settings."
+      },
+      "impact": {
+        "score": "high",
+        "reason": "The victim shop's order list, which staff use for fulfillment, accepts a row the attacker wrote. Existing victim rows are not readable through this predicate."
+      },
+      "overall_severity": "high"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "The allowing predicate is present in the migration and in the schema snapshot, including grants and the workspace_id column. No later migration replaces it. The dashboard read path was read through to the shop_id filter."
+    }
+  },
+  {
+    "verdict": "confirmed",
+    "fingerprint": "shops.facebook-page-id.uniqueness-bypass",
+    "title": "A shop can claim another shop's public Facebook page id and stop its Messenger webhook",
+    "description": "Duplicate Facebook page checks run only in the settings and connect actions. The shops UPDATE policy lets the owner change facebook_page_id, and the database index is not unique. The platform webhook then looks up one oauth shop by that page id and drops the event when the lookup does not return a single row.",
+    "root_cause": "Channel ownership is an application check on two server actions, not a constraint or trigger on shops. Direct PostgREST updates skip it.",
+    "intended_behavior": "One Facebook page id belongs to at most one shop, including when the row is updated through the Data API.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "supabase/migrations/20260701000000_initial_schema.sql",
+        "line": 46,
+        "scope": "shops UPDATE policy",
+        "description": "The owner may update their own shop row. Billing columns are guarded elsewhere. facebook_page_id is not."
+      },
+      {
+        "kind": "propagation",
+        "file": "src/app/dashboard/settings/actions.ts",
+        "line": 129,
+        "scope": "settings action",
+        "description": "facebookPageUsedByOtherShop runs only on this action and on connectFacebookPage, not on other writes."
+      },
+      {
+        "kind": "sink",
+        "file": "src/app/api/webhook/facebook/route.ts",
+        "line": 54,
+        "scope": "platform webhook page lookup",
+        "description": "maybeSingle on facebook_page_id and facebook_connected_via = oauth yields no shop when two rows match, and the event is skipped."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "src/lib/shop/channelOwnership.ts",
+        "line": 46,
+        "description": "The helper finds another shop with the same facebook_page_id, but nothing in the database calls it."
+      },
+      {
+        "file": "supabase/migrations/20261029000000_facebook_connect.sql",
+        "line": 9,
+        "description": "shops_facebook_page_id_idx is a partial index, not a unique constraint."
+      },
+      {
+        "file": "src/app/api/webhook/facebook/route.ts",
+        "line": 60,
+        "description": "A missing single shop row causes the entry to be ignored."
+      },
+      {
+        "file": "src/app/dashboard/settings/facebookActions.ts",
+        "line": 65,
+        "description": "connectFacebookPage is the other caller of the duplicate check, and it writes through the service role."
+      }
+    ],
+    "conditions": [
+      {
+        "kind": "authentication_level",
+        "description": "The attacker is a signed-in merchant updating their own shops row with the anon key and their JWT."
+      },
+      {
+        "kind": "data_state",
+        "description": "The victim page is connected with facebook_connected_via = oauth. Facebook page ids are public page identifiers."
+      },
+      {
+        "kind": "environmental_dependency",
+        "description": "supabase-js maybeSingle returns an error and null data when more than one row matches. The handler does not read that error."
+      }
+    ],
+    "execution": {
+      "attacker_perspective": "Merchant A sets their own shop's facebook_page_id to merchant B's public page id and sets facebook_connected_via to oauth.",
+      "payloads": [
+        "{\"facebook_page_id\":\"<victim-page-id>\",\"facebook_connected_via\":\"oauth\"}"
+      ],
+      "instructions": [
+        "On a local database with two shops, connect shop B through the oauth columns.",
+        "As shop A, update only shop A's row to the same facebook_page_id and facebook_connected_via = oauth, using the user JWT rather than the settings action.",
+        "POST a signed platform webhook whose entry id is that page id and observe the lookup."
+      ],
+      "observed_result": "The settings action would have rejected the duplicate, but the RLS update does not. The webhook query is no longer a single row, data is null, and the handler continues without calling processMessengerEntries. Shop A does not receive shop B's page token or messages. Shop B's events are dropped. This follows the source control flow; it was not executed against Supabase."
+    },
+    "remediation": {
+      "strategy": "Enforce one page per shop in the database. A partial unique index on facebook_page_id, and the same for line_bot_user_id, rejects the PostgREST update. Keep the action check as a friendly error.",
+      "code_changes": [
+        {
+          "file_name": "supabase/migrations/20261029000000_facebook_connect.sql",
+          "fixed_code": "create unique index if not exists shops_facebook_page_id_uq on public.shops (facebook_page_id) where facebook_page_id is not null and facebook_page_id <> '';"
+        }
+      ]
+    },
+    "severity": {
+      "likelihood": {
+        "score": "medium",
+        "reason": "The attacker needs only their own session and the victim's public page id. They do not need the page token."
+      },
+      "impact": {
+        "score": "medium",
+        "reason": "The demonstrated result is that the victim's platform Messenger events are dropped. The attacker does not read the victim's chats or token through this path."
+      },
+      "overall_severity": "medium"
+    },
+    "confidence": {
+      "score": "high",
+      "reason": "The update policy, the non-unique index, both application checks, and the webhook failure path were read end to end."
+    }
+  }
+]
