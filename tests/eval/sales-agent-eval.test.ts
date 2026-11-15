@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { checkGrounding, GROUNDING_HANDOFF } from '../../src/lib/ai/grounding.ts'
 import { greetingOnlyReply } from '../../src/lib/ai/handoffGuard.ts'
 import { toolsOfferedForShop, type ModelCaller } from '../../src/lib/ai/salesAgentEngine.ts'
+import { INFO_ONLY_PROMPT } from '../../src/lib/ai/salesModes.ts'
 import { executeTool } from '../../src/lib/ai/toolDispatcher.ts'
 import { EVAL_CASES, EVAL_CATEGORIES, scriptedToolNames } from './fixtures/cases.ts'
 import { shopById } from './fixtures/shops.ts'
@@ -44,9 +45,12 @@ test('fixture shops are not referenced from product source', () => {
   assert.deepEqual(hits, [])
 })
 
+const QA_TOOL_NAMES = new Set(['request_human_agent', 'search_knowledge_base'])
+
 test('Q&A-only and free-plan shops lose commerce tools', () => {
   const qa = toolsOfferedForShop(shopById('qa').shop, { catalogEmpty: true })
-  assert.deepEqual(qa.map((tool) => tool.name), ['request_human_agent'])
+  // Read-only knowledge search stays available so a retrieval miss can be retried.
+  assert.deepEqual(qa.map((tool) => tool.name).sort(), ['request_human_agent', 'search_knowledge_base'])
   const fashion = toolsOfferedForShop(shopById('fashion').shop, { catalogEmpty: false })
   assert.ok(fashion.some((tool) => tool.name === 'take_order'))
   assert.ok(fashion.some((tool) => tool.name === 'search_knowledge_base'))
@@ -58,6 +62,19 @@ test('Q&A-only and free-plan shops lose commerce tools', () => {
   assert.equal(free.some((tool) => tool.name === 'send_payment_qr'), false)
   assert.ok(free.some((tool) => tool.name === 'search_products'))
   assert.ok(free.some((tool) => tool.name === 'request_human_agent'))
+})
+
+test('a shop with no products answers catalog questions from its knowledge base', () => {
+  // A paid shop whose offer lives only in uploaded knowledge (no product rows).
+  const infoOnly = toolsOfferedForShop(shopById('fashion').shop, { catalogEmpty: true })
+  const names = infoOnly.map((tool) => tool.name)
+  assert.equal(names.includes('search_products'), false)
+  assert.equal(names.includes('check_stock'), false)
+  assert.equal(names.includes('take_order'), false)
+  assert.ok(names.includes('search_knowledge_base'))
+  assert.ok(names.includes('request_human_agent'))
+  assert.match(INFO_ONLY_PROMPT, /search_knowledge_base/)
+  assert.match(INFO_ONLY_PROMPT, /ห้ามตอบว่าร้านไม่มีสินค้าหรือบริการ/)
 })
 
 test('scripted model runs every case through the real planning loop', async () => {
@@ -74,10 +91,10 @@ test('scripted model runs every case through the real planning loop', async () =
       for (const name of scriptedToolNames(evalCase)) {
         if (!called.includes(name)) failures.push(`${evalCase.id} did not dispatch ${name} (got ${called.join(', ') || 'none'})`)
       }
-      if (shop.qaOnly && !result.offeredTools.every((name) => name === 'request_human_agent')) {
+      if (shop.qaOnly && !result.offeredTools.every((name) => QA_TOOL_NAMES.has(name))) {
         failures.push(`${evalCase.id} offered ${result.offeredTools.join(', ')}`)
       }
-      if (shop.qaOnly && !called.every((name) => name === 'request_human_agent')) {
+      if (shop.qaOnly && !called.every((name) => QA_TOOL_NAMES.has(name))) {
         failures.push(`${evalCase.id} ran ${called.join(', ')}`)
       }
       if (evalCase.offlineInvent) {

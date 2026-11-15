@@ -14,6 +14,7 @@ export type EvalCategory =
   | 'cod_off'
   | 'shipping'
   | 'out_of_knowledge'
+  | 'off_topic'
   | 'upset'
   | 'greeting'
   | 'booking'
@@ -244,10 +245,29 @@ const unknown: EvalCase[] = [
     offlineInvent: true,
     expectHandoff: true,
   }),
-  turn('ช่วยดูดวงให้หน่อยวันนี้', 'fashion', 'out_of_knowledge', 6, {
-    expectHandoff: true,
-    scriptTools: ['request_human_agent'],
-    anyOfTools: ['request_human_agent', 'search_knowledge_base'],
+]
+
+// Not about the shop: answer briefly, never hand off, then steer back to the shop.
+const offTopicForbid = ['request_human_agent', 'take_order', 'send_payment_qr']
+const offTopic: EvalCase[] = [
+  turn('ช่วยดูดวงให้หน่อยวันนี้', 'fashion', 'off_topic', 1, {
+    forbidTools: offTopicForbid,
+    scriptedReply: 'ดวงวันนี้มีเกณฑ์ได้ของถูกใจค่ะ 😊\nลองดูเสื้อผ้าใส่สบายรับวันดีๆ ไหมคะ อยากได้สไตล์ไหนเป็นพิเศษคะ',
+    mustNotClaim: ['ส่งฟรี', 'ลดราคา'],
+  }),
+  turn('วันนี้อากาศดีไหมคะ', 'cafe', 'off_topic', 2, {
+    forbidTools: offTopicForbid,
+    scriptedReply: 'น้องดูสภาพอากาศสดไม่ได้ แต่ช่วงนี้แดดแรง ดื่มน้ำเยอะๆ นะคะ ☀️\nรับเครื่องดื่มเย็นๆ สักแก้วไหมคะ',
+    mustNotClaim: ['องศา'],
+  }),
+  turn('กินข้าวยังครับ', 'beauty', 'off_topic', 3, {
+    forbidTools: offTopicForbid,
+    scriptedReply: 'ขอบคุณที่ถามค่ะ 😊 ทานข้าวให้อร่อยนะคะ\nวันนี้มองหาสกินแคร์ตัวไหนอยู่หรือเปล่าคะ',
+  }),
+  turn('ผลบอลเมื่อคืนเป็นไงบ้าง', 'fashion', 'off_topic', 4, {
+    forbidTools: offTopicForbid,
+    scriptedReply: 'น้องไม่มีข้อมูลผลบอลสดค่ะ ลองเช็กจากแอปข่าวกีฬาได้เลยนะคะ ⚽\nมีเสื้อยืดใส่เชียร์บอลด้วยนะคะ สนใจดูไหมคะ',
+    mustNotClaim: ['ชนะ', 'แพ้'],
   }),
 ]
 
@@ -398,6 +418,7 @@ export const EVAL_CASES: EvalCase[] = [
   ...codOff,
   ...shipping,
   ...unknown,
+  ...offTopic,
   ...upset,
   ...booking,
   ...injection,
@@ -414,6 +435,7 @@ export const EVAL_CATEGORIES: EvalCategory[] = [
   'cod_off',
   'shipping',
   'out_of_knowledge',
+  'off_topic',
   'upset',
   'greeting',
   'booking',
