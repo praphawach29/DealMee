@@ -57,18 +57,19 @@ export async function loadKnowledgeContext(options: {
   shopId: string
   query: string
   recentMessages?: string[]
-} & EmbeddingHints): Promise<{ text: string }> {
+} & EmbeddingHints): Promise<{ text: string; chunks: RankedChunk[] }> {
   try {
-    if (!options.shopId) return { text: '' }
+    if (!options.shopId) return { text: '', chunks: [] }
     const found = await retrieveKnowledge({ ...options, purpose: 'prompt', limit: 8 })
-    return renderKnowledgeSection({
+    const section = renderKnowledgeSection({
       chunks: found.chunks,
       shopHasKnowledge: found.shopHasKnowledge,
       maxChars: KNOWLEDGE_RELEVANT_MAX_CHARS,
     })
+    return { text: section.text, chunks: found.chunks }
   } catch (err) {
     console.error('[knowledge] retrieval failed:', safeErrorMessage(err))
-    return { text: '' }
+    return { text: '', chunks: [] }
   }
 }
 

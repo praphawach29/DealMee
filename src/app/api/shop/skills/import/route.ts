@@ -41,8 +41,12 @@ export async function POST(request: NextRequest) {
       knowledge_body: parsed.description,
       instruction: parsed.instruction,
       gold_conversations: [],
+      facts_confirmed: true,
     }).select('*').single()
     if (error || !data) return NextResponse.json({ error: 'Unable to import skill; please try again' }, { status: 500 })
+    await import('@/lib/ai/shadowSchedule')
+      .then(({ queueSkillShadow }) => queueSkillShadow(data, true))
+      .catch((err) => console.error('[ShadowEval] queue failed', err instanceof Error ? err.message : err))
     return NextResponse.json({ skill: data }, { status: 201 })
   } catch {
     return NextResponse.json({ error: 'Unable to import skill; please try again' }, { status: 500 })

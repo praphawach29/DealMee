@@ -43,6 +43,7 @@ import {
   triggerScanGoldenClosers,
   importKnowledgeFromUrl,
   importKnowledgeFromFile,
+  dismissKnowledgeGap,
 } from './actions'
 
 export interface KnowledgeItem {
@@ -67,16 +68,28 @@ export interface GoldenTrajectory {
   winning_turn_dialogue: Array<{ sender: 'customer' | 'bot' | 'agent'; text: string }>
   closing_technique: string
   revenue: number
-  status: 'active' | 'archived'
+  status: 'candidate' | 'active' | 'archived'
   created_at: string
+}
+
+export interface KnowledgeGap {
+  id: string
+  question: string
+  ask_count: number
+  last_asked_at: string
+  reason: string
 }
 
 export default function KnowledgeManager({
   items,
   trajectories = [],
+  gaps = [],
+  gapsReady = true,
 }: {
   items: KnowledgeItem[]
   trajectories?: GoldenTrajectory[]
+  gaps?: KnowledgeGap[]
+  gapsReady?: boolean
 }) {
   const [isOpenModal, setIsOpenModal] = useState(false)
   const [editingItem, setEditingItem] = useState<KnowledgeItem | null>(null)
@@ -86,6 +99,7 @@ export default function KnowledgeManager({
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [gapDraft, setGapDraft] = useState<KnowledgeGap | null>(null)
 
   // Auto-import states
   const [importTab, setImportTab] = useState<'file' | 'url' | 'ai'>('file')
@@ -198,9 +212,20 @@ export default function KnowledgeManager({
     if (res?.error) {
       setMessage({ type: 'error', text: res.error })
     } else if (res?.success) {
+      if (gapDraft) await dismissKnowledgeGap(gapDraft.id)
+      setGapDraft(null)
       setMessage({ type: 'success', text: res.success })
       setIsOpenModal(false)
     }
+  }
+
+  async function handleDismissGap(id: string) {
+    setLoading(true)
+    setMessage(null)
+    const res = await dismissKnowledgeGap(id)
+    setLoading(false)
+    if (res?.error) setMessage({ type: 'error', text: res.error })
+    else if (res?.success) setMessage({ type: 'success', text: res.success })
   }
 
   async function handleImport(formData: FormData, run: (fd: FormData) => Promise<any>) {
@@ -314,7 +339,10 @@ export default function KnowledgeManager({
         </div>
 
         <button
-          onClick={() => setIsOpenModal(true)}
+          onClick={() => {
+            setGapDraft(null)
+            setIsOpenModal(true)
+          }}
           className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2.5 rounded-xl transition-all shadow-sm shadow-blue-500/20 hover:-translate-y-0.5 cursor-pointer shrink-0 text-xs sm:text-sm"
         >
           <Plus className="w-4 h-4" />
@@ -352,6 +380,72 @@ export default function KnowledgeManager({
           </button>
         </div>
       )}
+
+      <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50 flex items-start gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+            <HelpCircle className="w-4 h-4" />
+          </div>
+          <div>
+            <h2 className="font-heading text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+              คำถามที่ลูกค้าถามแล้วบอทตอบไม่ได้
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              เมื่อบอทไม่มีข้อมูลร้านรองรับ ระบบบันทึกคำถามไว้ที่นี่ เพื่อให้เติมความรู้แล้วตอบได้ในครั้งถัดไป
+            </p>
+          </div>
+        </div>
+        {!gapsReady ? (
+          <div className="p-5 sm:p-6 text-sm text-slate-600 dark:text-slate-300">
+            ยังไม่ได้ติดตั้งตารางบันทึกคำถาม หลังอัปเดตฐานข้อมูล คำถามที่บอทตอบจากข้อมูลร้านไม่ได้จะมาแสดงที่นี่
+          </div>
+        ) : gaps.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center px-4 py-10">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center mb-3">
+              <HelpCircle className="w-6 h-6" />
+            </div>
+            <h3 className="font-heading text-sm font-semibold text-slate-900 dark:text-slate-100">
+              ยังไม่มีคำถามลักษณะนี้
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mt-1">
+              เมื่อลูกค้าถามราคา นโยบาย การจัดส่ง หรือรายละเอียดอื่นที่บอทไม่มีในข้อมูลร้าน รายการจะแสดงที่นี่ ไม่มีตัวอย่างสมมติ
+            </p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {gaps.map((gap) => (
+              <li key={gap.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100 break-words">{gap.question}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    ถาม {gap.ask_count} ครั้ง · ล่าสุด {new Date(gap.last_asked_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGapDraft(gap)
+                      setIsOpenModal(true)
+                    }}
+                    className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold cursor-pointer"
+                  >
+                    เพิ่มเป็นความรู้
+                  </button>
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => handleDismissGap(gap.id)}
+                    className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold cursor-pointer disabled:opacity-50"
+                  >
+                    ปิดรายการ
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {/* ── Smart Ingestion Hub (ศูนย์นำเข้าข้อมูลอัจฉริยะ) ── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
@@ -821,10 +915,11 @@ export default function KnowledgeManager({
                   <span>ถอดรหัสบทสนทนาปิดการขาย (Golden Closers)</span>
                   <span className="text-[10px] bg-purple-200 text-purple-900 dark:bg-purple-900 dark:text-purple-200 px-2 py-0.5 rounded-full font-bold">
                     {trajectories.filter((t) => t.status === 'active').length} สคริปต์ใช้งานอยู่
+                    {trajectories.some((t) => t.status === 'candidate') ? ` · ${trajectories.filter((t) => t.status === 'candidate').length} รออนุมัติ` : ''}
                   </span>
                 </h4>
                 <p className="text-xs text-purple-800/80 dark:text-purple-300/80 mt-0.5">
-                  ระบบถอดรหัสจังหวะที่ลูกค้าลังเลแล้วบอทหรือแอดมินตอบจนปิดยอดโอนเงินได้สำเร็จ เพื่อนำมาสอน AI เป็นตัวอย่างเลียนแบบไหวพริบการขายแบบเรียลไทม์
+                  รายการที่สกัดใหม่จะรอให้คุณอนุมัติก่อนบอทนำไปใช้ สคริปต์ที่เปิดใช้อยู่แล้วยังทำงานตามเดิม
                 </p>
               </div>
             </div>
@@ -878,11 +973,12 @@ export default function KnowledgeManager({
               {trajectories.map((traj) => {
                 const badge = objectionBadge(traj.customer_objection_type)
                 const isActive = traj.status === 'active'
+                const isCandidate = traj.status === 'candidate'
                 return (
                   <div
                     key={traj.id}
                     className={`p-5 sm:p-6 transition-colors flex flex-col gap-3.5 ${
-                      isActive
+                      isActive || isCandidate
                         ? 'bg-white hover:bg-slate-50/50 dark:bg-slate-900 dark:hover:bg-slate-800/40'
                         : 'bg-slate-50/60 dark:bg-slate-900/30 opacity-75'
                     }`}
@@ -892,6 +988,11 @@ export default function KnowledgeManager({
                         <span className={`px-2.5 py-0.5 text-xs font-bold rounded-md border ${badge.color}`}>
                           {badge.label}
                         </span>
+                        {isCandidate && (
+                          <span className="px-2.5 py-0.5 text-xs font-bold rounded-md bg-amber-100 text-amber-900 border border-amber-300">
+                            รออนุมัติ
+                          </span>
+                        )}
                         {traj.revenue > 0 && (
                           <span className="px-2.5 py-0.5 text-xs font-bold rounded-md bg-emerald-100 text-emerald-900 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1.5">
                             <Coins className="w-3.5 h-3.5" />
@@ -909,12 +1010,19 @@ export default function KnowledgeManager({
                           onClick={() => handleToggleTrajectory(traj.id, traj.status)}
                           disabled={loading}
                           className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all border flex items-center gap-1.5 cursor-pointer ${
-                            isActive
+                            isCandidate
+                              ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                              : isActive
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
                               : 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
                           }`}
                         >
-                          {isActive ? (
+                          {isCandidate ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>อนุมัติให้บอทใช้</span>
+                            </>
+                          ) : isActive ? (
                             <>
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               <span>ใช้งานอยู่</span>
@@ -992,7 +1100,7 @@ export default function KnowledgeManager({
                 ยังไม่มีบทสนทนาปิดการขาย (Golden Closers)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mb-5">
-                เมื่อมีลูกค้าสั่งซื้อและชำระเงินสำเร็จ ระบบจะถอดรหัสจังหวะปิดการขายมาเป็นตัวอย่างให้ AI โดยอัตโนมัติ หรือกดสแกนออเดอร์เดิมได้เลย
+                เมื่อมีออเดอร์ที่ชำระเงินแล้ว ระบบถอดรหัสจังหวะปิดการขายเป็นฉบับรออนุมัติ บอทจะใช้ก็ต่อเมื่อคุณกดอนุมัติ สคริปต์ที่เปิดใช้อยู่แล้วยังทำงานตามเดิม
               </p>
               <button
                 onClick={handleScanGoldenClosers}
@@ -1158,7 +1266,10 @@ export default function KnowledgeManager({
                 : 'เริ่มต้นโดยการอัปโหลดเอกสาร ดึงข้อมูลจากเว็บไซต์ หรือเพิ่มคำถาม-คำตอบ เพื่อให้ AI เรียนรู้'}
             </p>
             <button
-              onClick={() => setIsOpenModal(true)}
+              onClick={() => {
+                setGapDraft(null)
+                setIsOpenModal(true)
+              }}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-sm text-xs cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -1188,7 +1299,10 @@ export default function KnowledgeManager({
                 </div>
               </div>
               <button
-                onClick={() => setIsOpenModal(false)}
+                onClick={() => {
+                  setGapDraft(null)
+                  setIsOpenModal(false)
+                }}
                 className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-500 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -1220,6 +1334,7 @@ export default function KnowledgeManager({
                   name="title"
                   type="text"
                   required
+                  defaultValue={gapDraft?.question || ''}
                   placeholder="เช่น ค่าจัดส่งเท่าไหร่?, ร้านเปิดกี่โมง?"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs sm:text-sm focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition-all placeholder:text-slate-400"
                 />
@@ -1241,7 +1356,10 @@ export default function KnowledgeManager({
               <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsOpenModal(false)}
+                  onClick={() => {
+                    setGapDraft(null)
+                    setIsOpenModal(false)
+                  }}
                   className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition-all cursor-pointer"
                 >
                   ยกเลิก

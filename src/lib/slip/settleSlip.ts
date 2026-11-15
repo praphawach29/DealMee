@@ -168,6 +168,11 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
     await replyAndLog(
       `❌ ตรวจสอบสลิปไม่สำเร็จค่ะ (${reason})\n\nกรุณาตรวจสอบ:\n• ถ่ายหน้าจอสลิปให้ชัดเจน ไม่ตัดขอบหรือ QR Code\n• ต้องเป็นสลิปโอนเงินจริงจากธนาคาร\n• ยอดเงินตรงกับยอดในออเดอร์\n\nหากท่านโอนเงินเรียบร้อยแล้ว สามารถแจ้งแอดมินให้ตรวจสอบได้เลยนะคะ 🙏`
     )
+    // A pending order means the customer is trying to pay. An unreadable slip
+    // must reach the shop admin; a product photo with no order does not.
+    if (pendingOrder) {
+      await notifyShopAdmin(shop, `⚠️ สลิปอ่านไม่ได้\nลูกค้า: ${customerLabel}\nออเดอร์: ${pendingOrder.order_no}\nเหตุผล: ${reason}\nกรุณาตรวจสอบใน Inbox ก่อนยืนยันออเดอร์`)
+    }
     return
   }
 

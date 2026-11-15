@@ -421,7 +421,34 @@ export async function toggleTrajectoryStatus(id: string, currentStatus: string) 
   }
 
   revalidatePath('/dashboard/knowledge')
-  return { success: nextStatus === 'active' ? 'เปิดใช้งานตัวอย่างนี้แล้ว' : 'ปิดใช้งานตัวอย่างนี้ชั่วคราวแล้ว' }
+  const success = currentStatus === 'candidate'
+    ? 'อนุมัติตัวอย่างนี้แล้ว บอทจะใช้เป็นแนวปิดการขาย'
+    : nextStatus === 'active'
+      ? 'เปิดใช้งานตัวอย่างนี้แล้ว'
+      : 'ปิดใช้งานตัวอย่างนี้ชั่วคราวแล้ว'
+  return { success }
+}
+
+export async function dismissKnowledgeGap(id: string) {
+  const supabase = await createClient()
+  const resolved = await resolveShop(supabase)
+  if ('error' in resolved) return { error: resolved.error }
+  if (!id) return { error: 'ไม่พบคำถามนี้' }
+
+  const { error } = await supabase
+    .from('knowledge_gaps')
+    .update({ status: 'dismissed' })
+    .eq('id', id)
+    .eq('shop_id', resolved.shop.id)
+    .eq('status', 'open')
+
+  if (error) {
+    if (isMissingKnowledgeSchema(error)) return { error: 'ยังไม่ได้ติดตั้งตารางบันทึกคำถาม' }
+    return { error: `ปิดรายการไม่สำเร็จ: ${error.message}` }
+  }
+
+  revalidatePath('/dashboard/knowledge')
+  return { success: 'ปิดรายการนี้แล้ว' }
 }
 
 export async function triggerScanGoldenClosers() {
@@ -459,7 +486,7 @@ export async function triggerScanGoldenClosers() {
   revalidatePath('/dashboard/knowledge')
   return {
     success: extractedCount > 0
-      ? `สกัดบทสนทนาปิดการขายชั้นเยี่ยมได้สำเร็จ ${extractedCount} รายการ!`
+      ? `สกัดบทสนทนาปิดการขายได้ ${extractedCount} รายการ เป็นฉบับรออนุมัติ กดอนุมัติก่อนบอทจะนำไปใช้`
       : 'วิเคราะห์ออเดอร์แล้ว ไม่มีบทสนทนาใหม่ที่ต้องสกัดเพิ่มเติม',
   }
 }

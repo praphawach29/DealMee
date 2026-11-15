@@ -64,7 +64,7 @@ async function loadRoute(db = database(), authorized = true) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   const helper = await helpers()
-  const module = { exports: {} as { GET: () => Promise<Response>; PATCH: (request: Request) => Promise<Response> } }
+  const compiledModule = { exports: {} as { GET: () => Promise<Response>; PATCH: (request: Request) => Promise<Response> } }
   const dependencies: Record<string, unknown> = {
     'next/server': { NextResponse: Response },
     '@/lib/auth/requireShop': { requireShop: async () => authorized ? { shopId: 'session-shop', userId: 'user' } : { error: Response.json({ error: 'Unauthorized' }, { status: 401 }) } },
@@ -74,8 +74,8 @@ async function loadRoute(db = database(), authorized = true) {
   new Function('require', 'module', 'exports', code)((name: string) => {
     assert.ok(name in dependencies, `Unexpected dependency: ${name}`)
     return dependencies[name]
-  }, module, module.exports)
-  return module.exports
+  }, compiledModule, compiledModule.exports)
+  return compiledModule.exports
 }
 
 test('GET returns session-scoped flags with retrieval available unless explicitly false', async () => {
@@ -183,14 +183,14 @@ test('settings UI loads, saves verified values, warns about global stop and disp
     if (options?.method === 'PATCH') stored = { ...stored, ...JSON.parse(String(options.body)) }
     return Response.json(stored)
   }
-  const module = { exports: {} as { default: () => Element } }
+  const compiledModule = { exports: {} as { default: () => Element } }
   new Function('require', 'module', 'exports', 'fetch', code)((name: string) => {
     if (name === 'react') return react
     if (name === 'react/jsx-runtime') return require(name)
     if (name === 'next/navigation') return { useRouter: () => ({ refresh: () => undefined }) }
     throw new Error(`Unexpected component import: ${name}`)
-  }, module, module.exports, fakeFetch)
-  function render() { index = 0; const tree = module.exports.default(); firstRender = false; return tree }
+  }, compiledModule, compiledModule.exports, fakeFetch)
+  function render() { index = 0; const tree = compiledModule.exports.default(); firstRender = false; return tree }
   function nodes(node: unknown): Element[] {
     if (!node || typeof node !== 'object') return []
     if (Array.isArray(node)) return node.flatMap(nodes)

@@ -9,12 +9,14 @@ import { buildLineFlexQuotationMessage, buildLineFlexOfficialLetterMessage } fro
 import { resolveCatalogProduct, describeUnresolved, parseQuantity, computeShippingFee, type CatalogProduct } from '@/lib/ai/catalogPricing'
 import { highValueThreshold, highValueRefusal } from '@/lib/ai/salesModes'
 import { notifyShopAdmin } from '@/lib/billing/ownerAlerts'
+import { codOrderRefusal, isCodPaymentMethod, shopCodEnabled } from '@/lib/ai/codPolicy'
 import { carrierName, trackingLink } from '@/lib/orders/tracking'
 import { adminPausePayload } from '@/lib/inbox/adminPause'
 import { quotationAcceptPath } from '@/lib/docs/acceptToken'
 import { searchKnowledgeForTool } from '@/lib/knowledge/retrieve'
 import { toProductCards } from '@/lib/ai/productCards'
 import { orderPaymentLabel, PAID_ORDER_STATUSES } from '@/lib/orders/paymentState'
+import { SHADOW_READ_TOOLS, shadowBlockedToolMessage } from '@/lib/ai/shadowSandbox'
 
 const QR_BUCKET = 'qr-codes'
 
@@ -29,6 +31,8 @@ export interface ToolExecutionContext {
   supabaseAdmin: SupabaseClient
   /** Language of the customer's message, for the few blocks this module writes itself rather than leaving to the model. Defaults to Thai. */
   language?: CustomerLanguage
+  /** Shadow replay. Read tools may run. Writes, sends, and stage updates must not. */
+  dryRun?: boolean
 }
 
 export interface CustomerMessage {
@@ -384,7 +388,7 @@ export function formatPaymentInstructions(shop: any, amount?: number, lang: Cust
     lines.push(`${t('paymentAccountName', lang)}: ${bankAccountName}`)
   }
 
-  if ((shop.shipping_fee_type || '').toLowerCase().includes('cod')) {
+  if (shopCodEnabled(shop)) {
     if (lines.length > 0) lines.push('')
     lines.push(t('paymentCod', lang))
   }
@@ -437,6 +441,9 @@ export async function executeTool(
   const startTime = Date.now()
   const { shopId: rawShopId, userId, conversationId, shop, supabase, supabaseAdmin, language: lang = 'th' } = ctx
   const shopId = rawShopId || shop?.id
+  if (ctx.dryRun && !SHADOW_READ_TOOLS.has(toolName)) {
+    return { resultForAi: shadowBlockedToolMessage(toolName), immediateMessages: [] }
+  }
 
   // The tool set offered to the model is the same for every shop (prompt caching),
   // so the shop's switches on /dashboard/modules are enforced here
@@ -615,7 +622,11 @@ export async function executeTool(
     const itemsText = lines.map(lineLabel).join(', ')
     const totalQty = lines.reduce((sum, l) => sum + l.qty, 0)
     const subtotal = lines.reduce((sum, l) => sum + l.product.price * l.qty, 0)
-    const isCod = /ปลายทาง|cod/i.test(String(args.payment_method || ''))
+    const codRefusal = codOrderRefusal(shop, args.payment_method)
+    if (codRefusal) {
+      return { resultForAi: codRefusal, immediateMessages: [] }
+    }
+    const isCod = isCodPaymentMethod(args.payment_method)
     const { fee: shippingFee } = computeShippingFee(shop, String(args.address || ''), subtotal)
     const totalAmount = subtotal + shippingFee
     const modelTotal = Number(args.total_price)
@@ -1677,8 +1688,9 @@ export async function executeTool(
     return { resultForAi: `บันทึกความชอบของลูกค้าเรียบร้อยแล้ว (${key}: ${value})`, immediateMessages: [] }
   }
 
-  // Trigger stage transitions based on tool calls
-  if (['search_products', 'check_stock', 'get_active_promotions'].includes(toolName)) {
+  // Trigger stage transitions based on tool calls. Unreachable for tools that
+  // already returned, and forbidden during a shadow replay.
+  if (!ctx.dryRun && ['search_products', 'check_stock', 'get_active_promotions'].includes(toolName)) {
     updateSalesStage(ctx, 'showcase').catch(() => {})
   } else if (['take_order', 'send_payment_qr', 'book_appointment'].includes(toolName)) {
     updateSalesStage(ctx, 'closing').catch(() => {})

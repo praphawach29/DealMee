@@ -23,10 +23,13 @@ CREATE INDEX IF NOT EXISTS idx_msg_feedback_conv ON public.chat_message_feedback
 CREATE INDEX IF NOT EXISTS idx_msg_feedback_rating ON public.chat_message_feedback (rating);
 
 ALTER TABLE public.chat_message_feedback ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users read their shop message feedback" ON public.chat_message_feedback;
 CREATE POLICY "Users read their shop message feedback" ON public.chat_message_feedback
   FOR SELECT USING (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()));
+DROP POLICY IF EXISTS "Users insert their shop message feedback" ON public.chat_message_feedback;
 CREATE POLICY "Users insert their shop message feedback" ON public.chat_message_feedback
   FOR INSERT WITH CHECK (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()));
+DROP POLICY IF EXISTS "Users update their shop message feedback" ON public.chat_message_feedback;
 CREATE POLICY "Users update their shop message feedback" ON public.chat_message_feedback
   FOR UPDATE USING (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()))
   WITH CHECK (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()));
@@ -53,13 +56,16 @@ CREATE INDEX IF NOT EXISTS idx_skill_exposures_skill ON public.skill_exposures (
 CREATE INDEX IF NOT EXISTS idx_skill_exposures_msg ON public.skill_exposures (chat_message_id);
 
 ALTER TABLE public.skill_exposures ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users read their shop skill exposures" ON public.skill_exposures;
 CREATE POLICY "Users read their shop skill exposures" ON public.skill_exposures
   FOR SELECT USING (shop_id IN (SELECT workspace_id FROM public.users WHERE id = auth.uid()));
+DROP POLICY IF EXISTS "Service role inserts skill exposures" ON public.skill_exposures;
 CREATE POLICY "Service role inserts skill exposures" ON public.skill_exposures
-  FOR INSERT WITH CHECK (auth.role() IS DISTINCT FROM 'anon');
+  FOR INSERT WITH CHECK (auth.role() = 'service_role');
 
-REVOKE ALL ON public.skill_exposures FROM anon, public;
-GRANT SELECT, INSERT ON public.skill_exposures TO authenticated, service_role;
+REVOKE ALL ON public.skill_exposures FROM anon, authenticated, public;
+GRANT SELECT ON public.skill_exposures TO authenticated;
+GRANT SELECT, INSERT ON public.skill_exposures TO service_role;
 
 -- ============================================================
 -- 3. RPC: record_skill_exposure — batch insert exposures
@@ -97,7 +103,8 @@ GRANT EXECUTE ON FUNCTION public.record_skill_exposure(UUID, UUID, UUID, UUID[],
 -- ============================================================
 -- 4. View: skill_conversion_stats — conversion rate per skill
 -- ============================================================
-CREATE OR REPLACE VIEW public.skill_conversion_stats AS
+CREATE OR REPLACE VIEW public.skill_conversion_stats
+WITH (security_invoker = true) AS
 SELECT
   se.skill_id,
   ss.shop_id,
@@ -105,11 +112,11 @@ SELECT
   ss.category,
   ss.version,
   COUNT(DISTINCT se.conversation_id) AS exposed_conversations,
-  COUNT(DISTINCT CASE WHEN co.outcome = 'paid' THEN se.conversation_id END) AS paid_conversations,
+  COUNT(DISTINCT CASE WHEN co.outcome = 'conversion' THEN se.conversation_id END) AS paid_conversations,
   CASE
     WHEN COUNT(DISTINCT se.conversation_id) > 0
     THEN ROUND(
-      COUNT(DISTINCT CASE WHEN co.outcome = 'paid' THEN se.conversation_id END)::numeric
+      COUNT(DISTINCT CASE WHEN co.outcome = 'conversion' THEN se.conversation_id END)::numeric
       / COUNT(DISTINCT se.conversation_id)::numeric * 100, 1
     )
     ELSE 0
@@ -119,5 +126,8 @@ FROM public.skill_exposures se
 JOIN public.shop_skills ss ON ss.id = se.skill_id
 LEFT JOIN public.conversation_outcomes co ON co.conversation_id = se.conversation_id
 GROUP BY se.skill_id, ss.shop_id, ss.skill_type, ss.category, ss.version;
+
+REVOKE ALL ON public.skill_conversion_stats FROM anon, public;
+GRANT SELECT ON public.skill_conversion_stats TO authenticated, service_role;
 
 SELECT 'Phase 4 (feedback + exposure + attribution) schema applied successfully' AS result;

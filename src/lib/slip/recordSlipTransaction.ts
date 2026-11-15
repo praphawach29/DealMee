@@ -49,6 +49,20 @@ export async function recordSlipTransaction({
       return { success: false, error: result.rawMessage || 'ไม่สามารถอ่านสลิปได้ กรุณาส่งรูปที่ชัดเจนขึ้น' }
     }
 
+    const transRef = (result.transRef || '').trim()
+    if (transRef) {
+      const { data: existing } = await supabase
+        .from('slip_transactions')
+        .select('id')
+        .eq('shop_id', shopId)
+        .eq('trans_ref', transRef)
+        .limit(1)
+        .maybeSingle()
+      if (existing) {
+        return { success: false, error: 'สลิปนี้ถูกบันทึกไว้แล้ว' }
+      }
+    }
+
     // Create transaction record
     const { data: txn, error: insertErr } = await supabase
       .from('slip_transactions')
@@ -56,7 +70,7 @@ export async function recordSlipTransaction({
         shop_id: shopId,
         conversation_id: conversationId || null,
         amount: result.amount,
-        trans_ref: result.transRef || null,
+        trans_ref: transRef || null,
         trans_date: result.date ? new Date(result.date).toISOString() : null,
         sender_name: result.senderName || null,
         receiver_name: result.receiverName || null,
@@ -67,6 +81,9 @@ export async function recordSlipTransaction({
       .select('id')
       .single()
 
+    if (insertErr?.code === '23505') {
+      return { success: false, error: 'สลิปนี้ถูกบันทึกไว้แล้ว' }
+    }
     if (insertErr || !txn) {
       console.error('[SlipTransaction] insert failed:', insertErr?.message)
       return { success: false, error: 'บันทึกข้อมูลไม่สำเร็จ' }

@@ -90,5 +90,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'Rollback failed' }, { status: 500 })
   }
 
+  await admin.from('ai_response_cache').delete().eq('shop_id', auth.shopId)
+
   return NextResponse.json({ success: true, newVersion, rolledBackTo: revision.version })
 }

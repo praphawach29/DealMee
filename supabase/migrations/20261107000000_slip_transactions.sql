@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS public.slip_transactions (
 
 CREATE INDEX IF NOT EXISTS idx_slip_txn_shop_created ON public.slip_transactions (shop_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_slip_txn_shop_status ON public.slip_transactions (shop_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_slip_txn_shop_trans_ref
+  ON public.slip_transactions (shop_id, trans_ref)
+  WHERE trans_ref IS NOT NULL AND btrim(trans_ref) <> '';
 
 ALTER TABLE public.slip_transactions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users read their shop slip transactions" ON public.slip_transactions;
@@ -36,5 +39,9 @@ CREATE POLICY "Users update their shop slip transactions" ON public.slip_transac
 DROP POLICY IF EXISTS "Service role manages slip transactions" ON public.slip_transactions;
 CREATE POLICY "Service role manages slip transactions" ON public.slip_transactions
   FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+
+REVOKE ALL ON public.slip_transactions FROM anon, public;
+GRANT SELECT, INSERT, UPDATE ON public.slip_transactions TO authenticated;
+GRANT ALL ON public.slip_transactions TO service_role;
 
 SELECT 'Slip-to-Record (slip_transactions) table created' AS result;

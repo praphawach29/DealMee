@@ -8,6 +8,7 @@ import { loginUrl, PLAYGROUND_PATH } from '@/lib/auth/safeNext'
 import { getLinePushQuotaInfo } from '@/lib/billing/pushQuota'
 import type { SetupChecklistItem } from './components/SetupChecklistCard'
 import type { DashboardOrder, DashboardProduct } from '@/lib/dashboard/metrics'
+import { SAMPLE_ORDER_EXCLUSION_PATTERN } from '@/lib/orders/sampleOrders'
 
 export default async function DashboardPage({
   searchParams,
@@ -64,7 +65,7 @@ export default async function DashboardPage({
         .from('orders')
         .select('id, order_no, customer_name, total_amount, status, items_summary, product_name, quantity, created_at')
         .eq('shop_id', currentShopId)
-        .not('order_no', 'match', '^ORD-[0-9]{4}$')
+        .not('order_no', 'match', SAMPLE_ORDER_EXCLUSION_PATTERN)
         .order('created_at', { ascending: false })
         .limit(1000),
       supabase

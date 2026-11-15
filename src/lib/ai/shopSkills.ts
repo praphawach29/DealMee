@@ -13,6 +13,8 @@ export type ShopSkill = {
   instruction: string | null
   gold_conversations: unknown[]
   updated_at?: string
+  /** Merchant wrote, edited, or explicitly confirmed this text as a shop fact. */
+  facts_confirmed?: boolean
 }
 
 export type ShopSkillInput = {
@@ -74,20 +76,38 @@ export function rankShopSkills(skills: ShopSkill[], query: string, limit = 3): S
   return [...always, ...matched]
 }
 
+const SKILL_COLUMNS = 'id,shop_id,skill_type,category,version,status,trigger_keywords,knowledge_body,instruction,gold_conversations,updated_at,facts_confirmed'
+const SKILL_COLUMNS_LEGACY = 'id,shop_id,skill_type,category,version,status,trigger_keywords,knowledge_body,instruction,gold_conversations,updated_at'
+
+function missingFactsColumn(error: { message?: string; code?: string } | null): boolean {
+  if (!error) return false
+  return error.code === '42703' || /facts_confirmed/i.test(error.message || '')
+}
+
 export async function retrieveActiveShopSkills(shopId: string, query: string, limit = 3): Promise<ShopSkill[]> {
   try {
     const { createAdminClient } = await import('@/lib/supabase/admin')
     const supabase = createAdminClient()
-    const { data, error } = await supabase
+    const load = (columns: string) => supabase
       .from('shop_skills')
-      .select('id,shop_id,skill_type,category,version,status,trigger_keywords,knowledge_body,instruction,gold_conversations,updated_at')
+      .select(columns)
       .eq('shop_id', shopId)
       .eq('status', 'active')
       .order('id', { ascending: true })
       .limit(101)
-    if (error || !data) throw new Error('Unable to load active skills')
-    if (data.length > 100) throw new Error('Active skill budget exceeded')
-    return rankShopSkills(data as ShopSkill[], query, limit)
+    const first = await load(SKILL_COLUMNS)
+    let error = first.error
+    let rows: ShopSkill[] | null = null
+    if (missingFactsColumn(error)) {
+      const legacy = await load(SKILL_COLUMNS_LEGACY)
+      error = legacy.error
+      rows = ((legacy.data || []) as unknown as ShopSkill[]).map((row) => ({ ...row, facts_confirmed: false }))
+    } else if (!error && first.data) {
+      rows = first.data as unknown as ShopSkill[]
+    }
+    if (error || !rows) throw new Error('Unable to load active skills')
+    if (rows.length > 100) throw new Error('Active skill budget exceeded')
+    return rankShopSkills(rows, query, limit)
   } catch (error) {
     // Never answer without approved rules when loading them fails.
     throw error
@@ -110,4 +130,13 @@ export function formatShopSkillsPromptContext(skills: ShopSkill[], maxLength = 4
   ].join('\n\n')
   if (context.length > maxLength) throw new Error('Skill prompt budget exceeded; reduce active skills')
   return context
+}
+
+/**
+ * Skills the grounding check may quote. Approval alone is not enough: the
+ * merchant has to have written, edited, or ticked the facts as theirs.
+ * Behavior text still goes into the prompt via formatShopSkillsPromptContext.
+ */
+export function formatShopSkillsEvidence(skills: ShopSkill[], maxLength = 48000): string {
+  return formatShopSkillsPromptContext(skills.filter((skill) => skill.facts_confirmed === true), maxLength)
 }
