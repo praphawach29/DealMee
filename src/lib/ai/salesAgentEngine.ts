@@ -32,6 +32,7 @@ import { redactPii } from '@/lib/ai/redactPii'
 import { createShadowExecutor } from '@/lib/ai/shadowSandbox'
 import { shadowSkillContext, type ShadowSkillReplay } from '@/lib/ai/shadowSkills'
 import { QA_ONLY_PROMPT, qaToolAllowed, formatQaCatalogContext } from '@/lib/ai/assistantPolicy'
+import { buildKnowledgeQuery } from '@/lib/ai/knowledgeQuery'
 import { codCloseExample, codObjectionLine, codPaymentRule, shopCodEnabled } from '@/lib/ai/codPolicy'
 import { shopSkillsRetrievalEnabled } from '@/lib/ai/shopSkillsRollout'
 import { greetingOnlyReply, shouldBlockGreetingHandoff } from '@/lib/ai/handoffGuard'
@@ -1185,7 +1186,7 @@ async function preparePlanningState({
   const loadedKnowledge = await loadKnowledgeContext({
     supabase: db,
     shopId: String(shop.id || ''),
-    query: userQuery,
+    query: buildKnowledgeQuery(userQuery, { catalogEmpty }),
     recentMessages: recentCustomerMessages,
     byok,
     shopProvider: byok ? shopProvider : null,
