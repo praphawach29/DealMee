@@ -10,8 +10,9 @@ import {
   mapPlanRowToItem,
 } from '@/lib/admin/plansHelper'
 
+// A 'use server' file may export only async functions (each becomes a server
+// action callable from the browser). Import helpers from src/lib/admin directly.
 export type { PlanItem }
-export { DEFAULT_ADMIN_PLANS, mapPlanRowToItem }
 
 export async function verifySuperAdmin() {
   const supabase = await createClient()

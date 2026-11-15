@@ -22,8 +22,9 @@ import {
   buildPlatformLineDeepLinkAndQr,
 } from '@/lib/admin/paymentsHelper'
 
+// A 'use server' file may export only async functions (each becomes a server
+// action callable from the browser). Import helpers from src/lib/admin directly.
 export type { RawPaymentRecord }
-export { formatPaymentRecord, buildPlatformLineDeepLinkAndQr }
 
 async function assertSuperAdmin() {
   const supabase = await createClient()

@@ -13,6 +13,8 @@ import {
   PlanMarginRow,
 } from '@/lib/admin/marginCalculator'
 
+// A 'use server' file may export only async functions (each becomes a server
+// action callable from the browser). Import helpers from src/lib/admin directly.
 export type { ShopMarginRow, PlanMarginRow }
 
 export interface MarginReport {
@@ -22,12 +24,6 @@ export interface MarginReport {
   totals: { messages: number; costThb: number; revenueThb: number; marginThb: number; marginPct: number }
 }
 
-export {
-  aggregateShopUsage,
-  computeShopAndPlanAggregations,
-  buildPlanMarginRows,
-  computeMarginTotals,
-}
 
 /**
  * Super Admin only: returns per-shop and per-plan revenue vs LLM cost
