@@ -823,6 +823,10 @@ export async function executeTool(
     const { query, keyword } = applyProductSearchFilters(baseQuery, args)
     const { data: prods } = await query
     if (!prods || prods.length === 0) {
+      if (!keyword && !normalizeProductSearchKeyword(args.category) && !args.max_price) {
+        // No filter and still nothing: the catalog is empty: the shop describes its offer in the knowledge base.
+        return { resultForAi: 'ร้านนี้ไม่มีรายการสินค้าในระบบ ห้ามตอบลูกค้าว่าไม่มีสินค้าหรือบริการ ให้เรียก search_knowledge_base ด้วยคำค้นเช่น "สินค้า บริการ แพ็กเกจ ราคา" แล้วตอบจากผลนั้น', immediateMessages: [] }
+      }
       return { resultForAi: `ไม่พบสินค้าที่ตรงกับ "${keyword || args.keyword || ''}" ให้แจ้งลูกค้าและชวนลองคำค้นอื่น`, immediateMessages: [] }
     }
     const cards = toProductCards(prods)

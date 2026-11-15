@@ -765,10 +765,12 @@ function filterTools(names: AgentToolName[]) {
   return MASTER_TOOLS.filter((t) => wanted.has(t.name))
 }
 
+const CATALOG_TOOL_NAMES = new Set<string>(['search_products', 'check_stock'])
+
 /**
  * Tools the model is allowed to see for this shop. Same filters as the planning
- * setup: Q&A-only keeps handoff, and a free plan or an empty catalog drops
- * sales-automation tools.
+ * setup: Q&A-only keeps handoff and knowledge search, a free plan or an empty
+ * catalog drops sales-automation tools, and an empty catalog drops catalog search.
  */
 export function toolsOfferedForShop(
   shop: { features?: Record<string, unknown> | null; plan?: string | null; plan_key?: string | null; trial_expires_at?: string | null; plan_expires_at?: string | null },
@@ -780,6 +782,9 @@ export function toolsOfferedForShop(
   if (qaOnly) toolSet = MASTER_TOOLS.filter((tool) => qaToolAllowed(tool.name))
   const salesLocked = !salesAutomationEnabled(shop) || options?.catalogEmpty === true
   if (salesLocked) toolSet = toolSet.filter((tool) => !SALES_AUTOMATION_TOOLS.has(tool.name))
+  // No products: searching the catalog can only answer "ไม่พบสินค้า", which the
+  // model repeated to customers of shops whose offer lives in the knowledge base.
+  if (options?.catalogEmpty === true) toolSet = toolSet.filter((tool) => !CATALOG_TOOL_NAMES.has(tool.name))
   return toolSet
 }
 
