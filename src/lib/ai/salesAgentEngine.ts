@@ -26,7 +26,7 @@ import {
   formatGoldenClosersPromptContext,
 } from '@/lib/ai/salesTrajectory'
 import { formatShopSkillsPromptContext, retrieveActiveShopSkills } from '@/lib/ai/shopSkills'
-import { QA_ONLY_PROMPT, qaToolAllowed, canUseResponseCache } from '@/lib/ai/assistantPolicy'
+import { QA_ONLY_PROMPT, qaToolAllowed, canUseResponseCache, formatQaCatalogContext } from '@/lib/ai/assistantPolicy'
 import { shopSkillsRetrievalEnabled } from '@/lib/ai/shopSkillsRollout'
 import { greetingOnlyReply, shouldBlockGreetingHandoff } from '@/lib/ai/handoffGuard'
 import { orderPaymentLabel } from '@/lib/orders/paymentState'
@@ -974,6 +974,7 @@ async function preparePlanningState({
   const valueThreshold = highValueThreshold(features)
   let catalogEmpty = false
   let hasHighValue = false
+  let catalogProducts: any[] = []
   if (features.product_recommend !== false) {
     const { data: products } = await db
       .from('products')
@@ -981,6 +982,7 @@ async function preparePlanningState({
       .eq('shop_id', shop.id)
       .limit(30)
 
+    catalogProducts = products || []
     catalogEmpty = !products || products.length === 0
     if (products && products.length > 0) {
       productsContext =
@@ -1004,7 +1006,9 @@ async function preparePlanningState({
   let bookingPromptTemplates: any[] = []
   // Same default as the dashboard: on for booking/service shops unless switched off, off for others unless switched on
   const bookingOn = features.booking_system ?? ['booking', 'service'].includes(String(shop.business_type || ''))
-  if (bookingOn) {
+  // Q&A-only assistants list services as reference even without the booking
+  // system; the booking instructions built below are not sent in that mode.
+  if (bookingOn || qaOnly) {
     const { data: bookingTemplates } = await db
       .from('services')
       .select('name, booking_type, resource_label, staff_name, duration_minutes, available_days, start_time, end_time, buffer_minutes, capacity_per_slot, required_fields, deposit_amount, description')
@@ -1204,7 +1208,7 @@ async function preparePlanningState({
   const activeBotName = (shop.bot_name && !/botify/i.test(shop.bot_name)) ? shop.bot_name : 'น้อง DealMee'
   const staticSystemPrompt = qaOnly ? `${QA_ONLY_PROMPT}
 ชื่อผู้ช่วย: ${activeBotName}
-หน่วยงาน: ${shop.name}` : `คุณคือ "${activeBotName}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
+หน่วยงาน: ${shop.name}${formatQaCatalogContext({ description: shop.description, products: catalogProducts, services: bookingPromptTemplates })}` :`คุณคือ "${activeBotName}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
 บุคลิกภาพ: ${shop.personality || 'สุภาพ เรียบร้อย มืออาชีพ เป็นมิตรและมีไหวพริบในการขายสูง'}
 คำอธิบายร้าน: ${shop.description || 'ร้านค้าออนไลน์'}
 

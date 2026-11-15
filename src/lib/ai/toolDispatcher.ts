@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { normalizeProductSearchKeyword } from '@/lib/ai/productSearchKeyword'
 import generatePayload from 'promptpay-qr'
 import qrcode from 'qrcode'
 import type { AgentToolName } from './salesAgentEngine'
@@ -81,20 +82,6 @@ export type ToolExecutor = (
 
 const NO_OP: ToolExecutionResult = { resultForAi: 'ดำเนินการเรียบร้อยแล้ว', immediateMessages: [] }
 
-const GENERIC_PRODUCT_SEARCH_WORDS = [
-  'สินค้า',
-  'รายการสินค้า',
-  'สินค้าทั้งหมด',
-  'ทั้งหมด',
-  'ทุกอย่าง',
-  'อะไรบ้าง',
-  'มีอะไร',
-  'ของขาย',
-  'ของ',
-  'products',
-  'product',
-  'all',
-]
 
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
@@ -354,27 +341,6 @@ function getNearestSlots(targetTime: string, slots: string[], limit = 2) {
 
 function formatSlotCadence(intervalMinutes: number) {
   return `ระบบเปิดรอบจองทุก ${intervalMinutes} นาทีตามเวลาที่ร้านตั้งไว้`
-}
-export function normalizeProductSearchKeyword(rawKeyword: unknown): string {
-  if (typeof rawKeyword !== 'string') return ''
-
-  let keyword = rawKeyword
-    .toLowerCase()
-    .replace(/["'`“”‘’!?？,，.。:;()[\]{}]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-  for (const word of [...GENERIC_PRODUCT_SEARCH_WORDS].sort((a, b) => b.length - a.length)) {
-    keyword = keyword.replaceAll(word, ' ')
-  }
-
-  keyword = keyword
-    .replace(/\b(please|show|list|what|do|you|have)\b/g, ' ')
-    .replace(/(ครับ|ค่ะ|คะ|จ้า|หน่อย|ขอ|ช่วย|แนะนำ|ดู|ให้|มี)/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-  return keyword.length >= 2 ? keyword : ''
 }
 
 export function applyProductSearchFilters(query: any, args: Record<string, any>) {
