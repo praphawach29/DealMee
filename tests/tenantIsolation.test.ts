@@ -3,10 +3,12 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { documentDownloadPath, documentViewPath } from '../src/lib/docs/acceptToken.ts'
 import { redactLivePayment } from '../src/lib/live/redactLivePayment.ts'
+import { overlayPath, signOverlayKey, verifyOverlayKey } from '../src/lib/live/overlayKey.ts'
 import { facebookPageConflictMessage } from '../src/lib/shop/channelOwnership.ts'
 import {
   documentReadable,
   exactlyOne,
+  liveOverlayDecision,
   liveShopDecision,
   orderVisibleToShop,
 } from '../src/lib/security/tenantScope.ts'
@@ -97,9 +99,12 @@ test('shop A cannot read shop B live state or its PromptPay payload', () => {
   const route = readFileSync(new URL('../src/app/api/live/comment/route.ts', import.meta.url), 'utf8')
   assert.match(route, /liveShopDecision\(auth\.shopId/)
   assert.match(route, /redactLivePayment/)
-  assert.doesNotMatch(route, /getLiveSessionState\(shopId\)/)
+  // The shop read must come from the session or a verified overlay key, never straight from the query.
+  assert.doesNotMatch(route, /getLiveSessionState\(\s*(?:params|req\.nextUrl\.searchParams)\.get/)
+  assert.match(route, /liveOverlayDecision\(params\.get\('shop_id'\), params\.get\('key'\), verifyOverlayKey\)/)
   const overlay = readFileSync(new URL('../src/app/live/overlay/[shop_id]/page.tsx', import.meta.url), 'utf8')
   assert.match(overlay, /shop\.id !== shop_id/)
+  assert.match(overlay, /verifyOverlayKey\(shop_id, key\)/)
   assert.match(overlay, /redactLivePayment/)
 })
 
@@ -134,4 +139,51 @@ test('evaluation metrics check the super-admin allowlist before the service role
   const adminAt = fn.indexOf('createAdminClient')
   assert.ok(checkAt >= 0 && adminAt > checkAt)
   assert.match(fn, /isSuperAdmin/)
+})
+
+test('the OBS overlay key opens only the shop it was signed for', () => {
+  const old = { overlay: process.env.LIVE_OVERLAY_SECRET, doc: process.env.DOC_ACCEPT_SECRET }
+  try {
+    delete process.env.LIVE_OVERLAY_SECRET
+    delete process.env.DOC_ACCEPT_SECRET
+    // No secret: no key is issued and none verifies, so there is never a public unkeyed URL.
+    assert.equal(signOverlayKey(SHOP_A), null)
+    assert.equal(overlayPath(SHOP_A), null)
+    assert.equal(verifyOverlayKey(SHOP_A, 'anything'), false)
+
+    process.env.DOC_ACCEPT_SECRET = 'doc-secret-for-tests'
+    const keyA = signOverlayKey(SHOP_A)
+    assert.ok(keyA)
+    assert.equal(verifyOverlayKey(SHOP_A, keyA), true)
+    assert.equal(verifyOverlayKey(SHOP_B, keyA), false)
+    assert.equal(verifyOverlayKey(SHOP_A, ''), false)
+    assert.equal(verifyOverlayKey(SHOP_A, keyA!.slice(0, -1) + (keyA!.endsWith('A') ? 'B' : 'A')), false)
+    assert.equal(overlayPath(SHOP_A), `/live/overlay/${SHOP_A}?key=${encodeURIComponent(keyA!)}`)
+
+    // A dedicated secret takes over and revokes the keys signed with the fallback.
+    process.env.LIVE_OVERLAY_SECRET = 'overlay-secret-for-tests'
+    assert.equal(verifyOverlayKey(SHOP_A, keyA), false)
+    assert.equal(verifyOverlayKey(SHOP_A, signOverlayKey(SHOP_A)), true)
+
+    const valid = (shopId: string, key: string) => verifyOverlayKey(shopId, key)
+    const keyNow = signOverlayKey(SHOP_A)!
+    assert.deepEqual(liveOverlayDecision(SHOP_A, keyNow, valid), { status: 'ok', shopId: SHOP_A })
+    assert.deepEqual(liveOverlayDecision(SHOP_B, keyNow, valid), { status: 403 })
+    assert.deepEqual(liveOverlayDecision('', keyNow, valid), { status: 403 })
+    assert.deepEqual(liveOverlayDecision(SHOP_B, '', valid), { status: 'session' })
+  } finally {
+    if (old.overlay === undefined) delete process.env.LIVE_OVERLAY_SECRET
+    else process.env.LIVE_OVERLAY_SECRET = old.overlay
+    if (old.doc === undefined) delete process.env.DOC_ACCEPT_SECRET
+    else process.env.DOC_ACCEPT_SECRET = old.doc
+  }
+})
+
+test('Live Studio hands out the keyed overlay URL for OBS', () => {
+  const page = readFileSync(new URL('../src/app/dashboard/live-studio/page.tsx', import.meta.url), 'utf8')
+  assert.match(page, /overlayPath=\{overlayPath\(shop\.id\)\}/)
+  const client = readFileSync(new URL('../src/app/dashboard/live-studio/LiveStudioClient.tsx', import.meta.url), 'utf8')
+  assert.match(client, /\$\{window\.location\.origin\}\$\{overlayHref\}/)
+  const overlayClient = readFileSync(new URL('../src/app/live/overlay/[shop_id]/LiveOverlayClient.tsx', import.meta.url), 'utf8')
+  assert.match(overlayClient, /query\.set\('key', overlayKey\)/)
 })

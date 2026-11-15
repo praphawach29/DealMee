@@ -36,9 +36,11 @@ import { LiveSessionState, LiveHostPitch } from '@/lib/live/liveStudioEngine'
 interface LiveStudioClientProps {
   shop: any
   initialLiveState: LiveSessionState
+  /** Keyed OBS URL path, signed on the server. Null when no signing secret is set. */
+  overlayPath: string | null
 }
 
-export default function LiveStudioClient({ shop, initialLiveState }: LiveStudioClientProps) {
+export default function LiveStudioClient({ shop, initialLiveState, overlayPath }: LiveStudioClientProps) {
   const [liveState, setLiveState] = useState<LiveSessionState>(initialLiveState)
   const [copiedUrl, setCopiedUrl] = useState(false)
   const [simUsername, setSimUsername] = useState('คุณส้มโอ (TikTok Live)')
@@ -205,9 +207,11 @@ export default function LiveStudioClient({ shop, initialLiveState }: LiveStudioC
   }, [])
 
   // Construct absolute OBS overlay URL
+  // OBS has no DealMee login, so the URL must carry the shop's overlay key.
+  const overlayHref = overlayPath || `/live/overlay/${shop.id}`
   const obsOverlayUrl = mounted && typeof window !== 'undefined'
-    ? `${window.location.origin}/live/overlay/${shop.id}`
-    : `https://dealmee.app/live/overlay/${shop.id}`
+    ? `${window.location.origin}${overlayHref}`
+    : `https://dealmee.app${overlayHref}`
 
   const handleCopyObsUrl = () => {
     navigator.clipboard.writeText(obsOverlayUrl)
@@ -350,7 +354,7 @@ export default function LiveStudioClient({ shop, initialLiveState }: LiveStudioC
               <span>{copiedUrl ? 'คัดลอกเรียบร้อย!' : 'คัดลอกลิงก์ OBS'}</span>
             </button>
             <a
-              href={`/live/overlay/${shop.id}`}
+              href={overlayHref}
               target="_blank"
               rel="noreferrer"
               className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-all"

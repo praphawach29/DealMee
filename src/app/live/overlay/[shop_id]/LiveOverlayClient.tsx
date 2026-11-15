@@ -6,10 +6,12 @@ import { LiveSessionState, LiveCommentItem, LiveOrderSummary } from '@/lib/live/
 
 interface LiveOverlayClientProps {
   shopId: string
+  /** From the OBS URL. Null when the signed-in owner opened the overlay. */
+  overlayKey: string | null
   initialState: LiveSessionState
 }
 
-export default function LiveOverlayClient({ shopId, initialState }: LiveOverlayClientProps) {
+export default function LiveOverlayClient({ shopId, overlayKey, initialState }: LiveOverlayClientProps) {
   const [state, setState] = useState<LiveSessionState>(initialState)
   const [isAnimating, setIsAnimating] = useState(false)
   const [latestComment, setLatestComment] = useState<LiveCommentItem | null>(
@@ -27,7 +29,9 @@ export default function LiveOverlayClient({ shopId, initialState }: LiveOverlayC
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/live/comment?shop_id=${shopId}`)
+        const query = new URLSearchParams({ shop_id: shopId })
+        if (overlayKey) query.set('key', overlayKey)
+        const res = await fetch(`/api/live/comment?${query}`)
         if (res.ok) {
           const data = await res.json()
           if (data.state) {

@@ -29,6 +29,23 @@ export function liveShopDecision(
   return { status: 'ok', shopId: sessionShopId }
 }
 
+/**
+ * The OBS overlay has no session, so it sends shop_id plus the overlay key from
+ * its URL. A key opens only the shop it was signed for. Without a key the caller
+ * falls back to the signed-in check above (status 'session').
+ */
+export function liveOverlayDecision(
+  requestedShopId: string | null | undefined,
+  overlayKey: string | null | undefined,
+  keyValidFor: (shopId: string, key: string) => boolean
+): { status: 'ok'; shopId: string } | { status: 403 } | { status: 'session' } {
+  const key = overlayKey?.trim() || ''
+  if (!key) return { status: 'session' }
+  const requested = requestedShopId?.trim() || ''
+  if (!requested || !keyValidFor(requested, key)) return { status: 403 }
+  return { status: 'ok', shopId: requested }
+}
+
 /** A document is readable with a valid unguessable token, or by the owning shop's session. */
 export function documentReadable(input: {
   documentShopId: string | null | undefined

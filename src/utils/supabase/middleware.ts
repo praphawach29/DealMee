@@ -80,6 +80,12 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/api/demo') &&
     !request.nextUrl.pathname.startsWith('/doc') &&
     !request.nextUrl.pathname.startsWith('/api/doc') &&
+    // The OBS overlay has no login. Requests carrying an overlay key pass through;
+    // the page and GET /api/live/comment verify the key against the shop id.
+    !(
+      request.nextUrl.searchParams.has('key') &&
+      (request.nextUrl.pathname.startsWith('/live/overlay/') || request.nextUrl.pathname === '/api/live/comment')
+    ) &&
     request.nextUrl.pathname !== '/'
   ) {
     // Keep the page they asked for, including /dashboard?playground=1, through the login form.
