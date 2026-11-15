@@ -14,6 +14,7 @@ import { carrierName, trackingLink } from '@/lib/orders/tracking'
 import { adminPausePayload } from '@/lib/inbox/adminPause'
 import { quotationAcceptPath } from '@/lib/docs/acceptToken'
 import { searchKnowledgeForTool } from '@/lib/knowledge/retrieve'
+import { buildKnowledgeQuery } from '@/lib/ai/knowledgeQuery'
 import { toProductCards } from '@/lib/ai/productCards'
 import { orderPaymentLabel, PAID_ORDER_STATUSES } from '@/lib/orders/paymentState'
 import { SHADOW_READ_TOOLS, shadowBlockedToolMessage } from '@/lib/ai/shadowSandbox'
@@ -25,6 +26,8 @@ export interface ToolExecutionContext {
   userId: string
   conversationId: string
   shop: any
+  /** True when this shop has no product catalog and answers offers from knowledge. */
+  catalogEmpty?: boolean
   /** Anon-key client — same RLS-scoped instance the webhook already uses for DB reads/writes. */
   supabase: SupabaseClient
   /** Service-role client — only needed for Supabase Storage (QR upload). */
@@ -1267,7 +1270,8 @@ export async function executeTool(
       }
     }
     try {
-      const resultForAi = await searchKnowledgeForTool(supabase, shopId, rawQuery)
+      const knowledgeQuery = buildKnowledgeQuery(rawQuery, { catalogEmpty: ctx.catalogEmpty })
+      const resultForAi = await searchKnowledgeForTool(supabase, shopId, knowledgeQuery)
       return { resultForAi, immediateMessages: [] }
     } catch (err) {
       console.error('[search_knowledge_base]', err)

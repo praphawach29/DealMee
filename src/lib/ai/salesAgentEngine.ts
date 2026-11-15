@@ -1514,6 +1514,7 @@ ${historyContext}`
   const executor = guardQaOnlyExecutor(qaOnly, shadowReplay ? createShadowExecutor(baseExecutor) : baseExecutor)
   const toolCtx: ToolExecutionContext = {
     shopId: shop.id,
+    catalogEmpty,
     userId,
     conversationId,
     language,
