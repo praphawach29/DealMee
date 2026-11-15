@@ -22,6 +22,24 @@ const CONCRETE = /ส่งฟรี|จัดส่งฟรี|ฟรีค่
 
 const UNKNOWN_REPLY = /ไม่ทราบ|ไม่มีข้อมูล|ไม่พบข้อมูล|ให้แอดมิน|แอดมินช่วย|ไม่แน่ใจ|i don't have|don't know|not sure/i
 
+/**
+ * Questions that are not about the shop at all ("วันนี้อากาศดีไหม", "ดูดวงให้หน่อย").
+ * They used to fall under "no information, hand off", so a customer making
+ * conversation got "เรื่องนี้ยังไม่มีในข้อมูลของร้าน" and an admin alert. The model
+ * answers them from general knowledge instead and brings the chat back to the shop.
+ * Shop facts are still never guessed: this covers only things the shop's data
+ * could not hold anyway.
+ */
+export const OFF_TOPIC_RULES = `[คำถามนอกเรื่องร้าน — ตอบได้ แล้ววกกลับ]
+ถ้าลูกค้าคุยเล่นหรือถามเรื่องทั่วไปที่ไม่เกี่ยวกับร้าน เช่น อากาศ ทักทายถามสารทุกข์ อาหาร ความรู้ทั่วไป ดูดวง กีฬา
+- ตอบคำถามนั้นก่อนเสมอ 1-2 ประโยค อย่างเป็นมิตรและเป็นธรรมชาติ ห้ามเมินคำถาม ห้ามตอบว่าไม่มีข้อมูลของร้าน
+- เรื่องนี้ไม่ต้องเรียก search_knowledge_base และห้ามเรียก request_human_agent
+- คุณไม่มีข้อมูลสด (อากาศวันนี้ ข่าว ผลบอล ราคาหุ้น ทองคำ) ห้ามแต่งตัวเลข อุณหภูมิ หรือเหตุการณ์ ให้ตอบแบบชวนคุย อวยพร หรือแนะนำทั่วไปแทน เช่น "ช่วงนี้อากาศร้อน ดื่มน้ำเยอะๆ นะคะ"
+- ดูดวง: ตอบสนุกๆ เชิงให้กำลังใจได้ โดยไม่ทำนายเรื่องจริงจัง
+- สุขภาพ กฎหมาย การลงทุน: ให้ข้อมูลทั่วไปสั้นๆ และแนะนำให้ปรึกษาผู้เชี่ยวชาญ การเมืองและศาสนา: ไม่แสดงความเห็น ตอบสุภาพสั้นๆ
+- จากนั้นวกกลับเข้าเรื่องร้านในประโยคสุดท้าย ด้วยคำถามหรือข้อเสนอ 1 ข้อที่เกี่ยวกับสิ่งที่ร้านช่วยได้ ให้ต่อเนื่องจากสิ่งที่ลูกค้าพูด ไม่ใช่โฆษณายัดเยียด
+- ทั้งข้อความไม่เกิน 3-4 บรรทัด และห้ามสอดแทรกราคา โปร หรือข้อเท็จจริงของร้านที่ไม่มีในข้อมูล`
+
 export const GROUNDING_RULES = `[ข้อเท็จจริงของร้าน — ห้ามเดา]
 ราคา สต็อก สเปก โปรโมชั่น นโยบาย การจัดส่ง เวลาทำการ และช่องทางชำระเงิน ต้องมาจากข้อความในพรอมต์นี้ หรือจากผลเครื่องมือในเทิร์นนี้เท่านั้น
 - ราคาและจำนวนสินค้า: ใช้ตัวเลขจาก [แคตตาล็อกสินค้าของร้าน] หรือผล search_products / check_stock ห้ามจำราคาเอง
@@ -31,8 +49,10 @@ export const GROUNDING_RULES = `[ข้อเท็จจริงของร�
 - การบอกว่าสินค้าหมดต้องมีผลเช็คสต็อกหรือแคตตาล็อกที่ระบุว่าหมดหรือเหลือ 0 ห้ามเดาจากความจำ
 - ถ้าลูกค้าขอเวลาที่ไม่อยู่ในรอบว่าง ให้บอกว่ารอบนั้นยังไม่มี แล้วเสนอเฉพาะรอบที่ผลเครื่องมือระบุว่าว่าง ห้ามส่งต่อแอดมินเพียงเพราะเอ่ยเวลาที่ไม่มี
 - ทักทาย ถามความต้องการ ขอชื่อ เบอร์ ที่อยู่ และชวนเลือกสินค้าได้ตามปกติ โดยไม่ต้องอ้างแหล่งข้อมูล
-- ถ้าไม่มีข้อมูล ให้บอกอย่างสุภาพว่าจะให้แอดมินช่วยตรวจ แล้วเรียก request_human_agent ห้ามแต่งคำตอบ
-- เมื่อตอบข้อเท็จจริง ให้ปิดท้ายหนึ่งบรรทัดภายในรูปแบบ [[cite:chunk:<chunk_id>,tool:<ชื่อเครื่องมือ>]] ใส่เฉพาะ chunk_id หรือเครื่องมือที่มีจริงในเทิร์นนี้ ลูกค้าจะไม่เห็นบรรทัดนี้`
+- ถ้าเป็นคำถามเกี่ยวกับร้าน (สินค้า บริการ ราคา นโยบาย การใช้งาน) แต่ไม่มีข้อมูล ให้บอกอย่างสุภาพว่าจะให้แอดมินช่วยตรวจ แล้วเรียก request_human_agent ห้ามแต่งคำตอบ
+- เมื่อตอบข้อเท็จจริง ให้ปิดท้ายหนึ่งบรรทัดภายในรูปแบบ [[cite:chunk:<chunk_id>,tool:<ชื่อเครื่องมือ>]] ใส่เฉพาะ chunk_id หรือเครื่องมือที่มีจริงในเทิร์นนี้ ลูกค้าจะไม่เห็นบรรทัดนี้
+
+${OFF_TOPIC_RULES}`
 
 export const GROUNDING_HANDOFF = {
   th: 'เรื่องนี้ยังไม่มีในข้อมูลของร้านค่ะ เดี๋ยวส่งให้แอดมินช่วยตรวจสอบ แล้วจะติดต่อกลับนะคะ',
@@ -134,7 +154,7 @@ export function checkGrounding(input: GroundingInput): GroundingVerdict {
   }
 
   if (factSentences.length === 0) {
-    const unanswered = Boolean(input.knowledgeMiss) && UNKNOWN_REPLY.test(visible)
+    const unanswered = Boolean(input.knowledgeMiss) && UNKNOWN_REPLY.test(visible) && !isOffTopicQuestion(question)
     return {
       ...base,
       skipped: !unanswered,
@@ -168,6 +188,17 @@ export function checkGrounding(input: GroundingInput): GroundingVerdict {
     shouldLog: true,
     reason: invented ? 'invented_citation' : 'unsupported_shop_fact',
   }
+}
+
+/**
+ * Small talk the shop's data could never answer. Saying "I can't check today's
+ * weather" is a fine reply to it, not a knowledge gap for the admin.
+ */
+// "อากาศ" alone would also match products such as "เครื่องฟอกอากาศ", so only weather phrasings count.
+const OFF_TOPIC_CUE = /สภาพอากาศ|อากาศ(?:วันนี้|ดี|ร้อน|หนาว|เย็น|เป็นยังไง|เป็นไง|แย่)|ฝนตก|ฝนจะตก|ร้อนจัง|หนาวจัง|ดูดวง|ดวงวันนี้|ผลบอล|ฟุตบอล|หวย|ข่าววันนี้|กินข้าวยัง|กินอะไรดี|สบายดีไหม|สบายดีมั้ย|weather|horoscope|tell me a joke|เล่ามุก/i
+
+export function isOffTopicQuestion(message: string): boolean {
+  return OFF_TOPIC_CUE.test(message || '')
 }
 
 function stripCitations(draft: string): { visible: string; citedChunkIds: string[] } {
