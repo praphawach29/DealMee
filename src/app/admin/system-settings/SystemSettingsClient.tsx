@@ -31,6 +31,40 @@ function SourceBadge({ source }: { source: SecretStatus['source'] }) {
   return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cls}`}>{label}</span>
 }
 
+interface SecretInputProps {
+  status: SecretStatus
+  value: string
+  blocked: boolean
+  onChange: (val: string) => void
+}
+
+function SecretInputField({ status, value, blocked, onChange }: SecretInputProps) {
+  if (status.options) {
+    return (
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={inputClass}>
+        <option value="">— เลือก —</option>
+        {status.options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    )
+  }
+
+  return (
+    <input
+      type={status.secret ? 'password' : 'text'}
+      autoComplete="off"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={status.secret ? 'วาง key ใหม่' : status.placeholder || 'ค่าใหม่'}
+      className={inputClass}
+      disabled={blocked}
+    />
+  )
+}
+
 function SecretRow({ status, canEncrypt }: { status: SecretStatus; canEncrypt: boolean }) {
   const router = useRouter()
   const [value, setValue] = useState('')
@@ -38,30 +72,60 @@ function SecretRow({ status, canEncrypt }: { status: SecretStatus; canEncrypt: b
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
   const blocked = status.secret && !canEncrypt
 
-  const run = async (kind: 'test' | 'save' | 'clear') => {
-    setBusy(kind)
+  const handleTest = async () => {
+    setBusy('test')
     setNotice(null)
     try {
-      if (kind === 'test') {
-        const res = await testSecretAction(status.name, value)
-        setNotice({ ok: res.ok, text: res.message })
-      } else if (kind === 'save') {
-        if (status.secret && TESTABLE.has(status.name)) {
-          const res = await testSecretAction(status.name, value)
-          if (!res.ok && !confirm(`ทดสอบไม่ผ่าน: ${res.message}\nบันทึกต่อหรือไม่?`)) return
+      const res = await testSecretAction(status.name, value)
+      setNotice({ ok: res.ok, text: res.message })
+    } catch (err: any) {
+      setNotice({ ok: false, text: err.message })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleSave = async () => {
+    if (status.secret && TESTABLE.has(status.name)) {
+      setBusy('test')
+      try {
+        const testRes = await testSecretAction(status.name, value)
+        if (!testRes.ok && !confirm(`ทดสอบไม่ผ่าน: ${testRes.message}\nบันทึกต่อหรือไม่?`)) {
+          setBusy(null)
+          return
         }
-        const res = await saveSecretAction(status.name, value)
-        if (!res.success) throw new Error(res.error)
-        setValue('')
-        setNotice({ ok: true, text: 'บันทึกแล้ว มีผลภายใน 1 นาที' })
-        router.refresh()
-      } else {
-        if (!confirm(`ลบค่าที่ตั้งในหน้านี้ของ ${status.label}? ระบบจะกลับไปใช้ค่าจาก Vercel (ถ้ามี)`)) return
-        const res = await clearSecretAction(status.name)
-        if (!res.success) throw new Error(res.error)
-        setNotice({ ok: true, text: 'ลบแล้ว' })
-        router.refresh()
+      } catch (err: any) {
+        if (!confirm(`ทดสอบเกิดข้อผิดพลาด: ${err.message}\nบันทึกต่อหรือไม่?`)) {
+          setBusy(null)
+          return
+        }
       }
+    }
+
+    setBusy('save')
+    setNotice(null)
+    try {
+      const res = await saveSecretAction(status.name, value)
+      if (!res.success) throw new Error(res.error)
+      setValue('')
+      setNotice({ ok: true, text: 'บันทึกแล้ว มีผลภายใน 1 นาที' })
+      router.refresh()
+    } catch (err: any) {
+      setNotice({ ok: false, text: err.message })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleClear = async () => {
+    if (!confirm(`ลบค่าที่ตั้งในหน้านี้ของ ${status.label}? ระบบจะกลับไปใช้ค่าจาก Vercel (ถ้ามี)`)) return
+    setBusy('clear')
+    setNotice(null)
+    try {
+      const res = await clearSecretAction(status.name)
+      if (!res.success) throw new Error(res.error)
+      setNotice({ ok: true, text: 'ลบแล้ว' })
+      router.refresh()
     } catch (err: any) {
       setNotice({ ok: false, text: err.message })
     } finally {
@@ -83,30 +147,16 @@ function SecretRow({ status, canEncrypt }: { status: SecretStatus; canEncrypt: b
         </p>
       )}
       <div className="flex flex-col sm:flex-row gap-2">
-        {status.options ? (
-          <select value={value} onChange={(e) => setValue(e.target.value)} className={inputClass}>
-            <option value="">— เลือก —</option>
-            {status.options.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            type={status.secret ? 'password' : 'text'}
-            autoComplete="off"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={status.secret ? 'วาง key ใหม่' : status.placeholder || 'ค่าใหม่'}
-            className={inputClass}
-            disabled={blocked}
-          />
-        )}
+        <SecretInputField
+          status={status}
+          value={value}
+          blocked={blocked}
+          onChange={setValue}
+        />
         <div className="flex gap-2 shrink-0">
           {TESTABLE.has(status.name) && (
             <button
-              onClick={() => run('test')}
+              onClick={handleTest}
               disabled={!value.trim() || busy !== null}
               className={`${buttonClass} bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200`}
             >
@@ -114,7 +164,7 @@ function SecretRow({ status, canEncrypt }: { status: SecretStatus; canEncrypt: b
             </button>
           )}
           <button
-            onClick={() => run('save')}
+            onClick={handleSave}
             disabled={!value.trim() || busy !== null || blocked}
             className={`${buttonClass} bg-indigo-600 hover:bg-indigo-700 text-white`}
           >
@@ -122,7 +172,7 @@ function SecretRow({ status, canEncrypt }: { status: SecretStatus; canEncrypt: b
           </button>
           {status.source === 'dashboard' && (
             <button
-              onClick={() => run('clear')}
+              onClick={handleClear}
               disabled={busy !== null}
               className={`${buttonClass} bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 hover:text-rose-600`}
               title="ลบค่าที่ตั้งในหน้านี้ แล้วกลับไปใช้ค่าจาก Vercel"

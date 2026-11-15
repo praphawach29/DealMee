@@ -50,3 +50,8 @@ supabase/.temp/
 scratch/
 brag-*/
 brag-output/
+
+# repowise local index and caches
+.repowise/
+# per-machine MCP server paths
+.vscode/mcp.json

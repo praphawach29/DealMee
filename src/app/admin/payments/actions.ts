@@ -9,7 +9,6 @@ import {
 } from '@/lib/billing/manualBilling'
 import { isSuperAdminEmail } from '@/lib/auth/superAdmin'
 import { signSlipUrls } from '@/lib/billing/slipStorage'
-import qrcode from 'qrcode'
 import { notifyPlatformOwner } from '@/lib/billing/platformAlerts'
 import {
   ensureLinkCode,
@@ -17,6 +16,15 @@ import {
   getPlatformLineConfig,
   savePlatformLineConfig,
 } from '@/lib/billing/platformLineAlerts'
+import {
+  RawPaymentRecord,
+  formatPaymentRecord,
+  buildPlatformLineDeepLinkAndQr,
+} from '@/lib/admin/paymentsHelper'
+
+// A 'use server' file may export only async functions (each becomes a server
+// action callable from the browser). Import helpers from src/lib/admin directly.
+export type { RawPaymentRecord }
 
 async function assertSuperAdmin() {
   const supabase = await createClient()
@@ -79,14 +87,10 @@ export async function getPaymentsList(statusFilter?: string) {
     return []
   }
 
-  const signed = await signSlipUrls(admin, (data || []).map((p: any) => p.slip_url))
+  const records = (data || []) as unknown as RawPaymentRecord[]
+  const signed = await signSlipUrls(admin, records.map((p) => p.slip_url))
 
-  return (data || []).map((p: any) => ({
-    ...p,
-    slip_url: p.slip_url ? signed.get(p.slip_url) || '' : '',
-    shop_name: p.shops?.name || 'ไม่ระบุชื่อร้าน',
-    shop_bot_name: p.shops?.bot_name,
-  }))
+  return records.map((p) => formatPaymentRecord(p, signed))
 }
 
 export async function verifyPaymentAction(paymentId: string) {
@@ -216,15 +220,8 @@ export async function getPlatformLineStatusAction(): Promise<PlatformLineStatus>
   }
 
   const linkCode = await ensureLinkCode(config)
-  const deepLink = config?.bot_basic_id
-    ? `https://line.me/R/oaMessage/@${config.bot_basic_id}/?${encodeURIComponent('/admin-link ' + linkCode)}`
-    : null
-  let qrDataUrl: string | null = null
-  if (deepLink) {
-    try {
-      qrDataUrl = await qrcode.toDataURL(deepLink, { width: 280, margin: 2, color: { dark: '#0F172A', light: '#FFFFFF' } })
-    } catch {}
-  }
+  const { deepLink, qrDataUrl } = await buildPlatformLineDeepLinkAndQr(config?.bot_basic_id, linkCode)
+
   return { ready: true, connected, basicId: config?.bot_basic_id || null, linked, adminName: null, linkCode, deepLink, qrDataUrl }
 }
 
