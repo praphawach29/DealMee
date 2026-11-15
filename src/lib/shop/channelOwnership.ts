@@ -43,6 +43,16 @@ export async function lineOaUsedByOtherShop(shopId: string, token: string, botUs
   return Boolean(byBot.data?.length)
 }
 
+/** Unique-index failures from a direct shops update, in the same words as the settings screen. */
+export function facebookPageConflictMessage(error: { code?: string; message?: string } | null | undefined): string | null {
+  if (!error || error.code !== '23505') return null
+  const message = error.message || ''
+  if (/facebook_page_id/i.test(message) || /shops_facebook_page_id_key/i.test(message)) {
+    return 'เพจ Facebook นี้เชื่อมกับร้านอื่นใน DealMee อยู่แล้ว 1 เพจใช้ได้กับ 1 ร้านเท่านั้น'
+  }
+  return null
+}
+
 export async function facebookPageUsedByOtherShop(shopId: string, pageId: string): Promise<boolean> {
   const { data } = await createAdminClient().from('shops').select('id').neq('id', shopId).eq('facebook_page_id', pageId).limit(1)
   return Boolean(data?.length)

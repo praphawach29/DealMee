@@ -12,7 +12,7 @@ import { notifyShopAdmin } from '@/lib/billing/ownerAlerts'
 import { codOrderRefusal, isCodPaymentMethod, shopCodEnabled } from '@/lib/ai/codPolicy'
 import { carrierName, trackingLink } from '@/lib/orders/tracking'
 import { adminPausePayload } from '@/lib/inbox/adminPause'
-import { quotationAcceptPath } from '@/lib/docs/acceptToken'
+import { documentDownloadPath, documentViewPath, quotationAcceptPath } from '@/lib/docs/acceptToken'
 import { searchKnowledgeForTool } from '@/lib/knowledge/retrieve'
 import { buildKnowledgeQuery } from '@/lib/ai/knowledgeQuery'
 import { toProductCards } from '@/lib/ai/productCards'
@@ -1416,9 +1416,10 @@ export async function executeTool(
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.dealmee.app'
-    const docUrl = `${baseUrl.replace(/\/$/, '')}${quotationAcceptPath(doc.id)}`
-    const wordUrl = `${baseUrl.replace(/\/$/, '')}/api/doc/${doc.id}/download?format=docx`
-    const excelUrl = `${baseUrl.replace(/\/$/, '')}/api/doc/${doc.id}/download?format=xlsx`
+    const origin = baseUrl.replace(/\/$/, '')
+    const docUrl = `${origin}${quotationAcceptPath(doc.id)}`
+    const wordUrl = `${origin}${documentDownloadPath(doc.id, 'docx')}`
+    const excelUrl = `${origin}${documentDownloadPath(doc.id, 'xlsx')}`
 
     const flexQuotation = buildLineFlexQuotationMessage({
       shopName: shopData?.name || 'ร้านค้า',
@@ -1656,8 +1657,9 @@ export async function executeTool(
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.dealmee.app'
-    const docUrl = `${baseUrl.replace(/\/$/, '')}/doc/official/${doc.id}`
-    const wordUrl = `${baseUrl.replace(/\/$/, '')}/api/doc/${doc.id}/download?format=docx`
+    const origin = baseUrl.replace(/\/$/, '')
+    const docUrl = `${origin}${documentViewPath(doc.id, 'official')}`
+    const wordUrl = `${origin}${documentDownloadPath(doc.id, 'docx')}`
 
     const flexLetter = buildLineFlexOfficialLetterMessage({
       shopName: shopData?.name || 'หน่วยงาน',

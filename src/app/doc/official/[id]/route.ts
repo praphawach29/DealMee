@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { denyDocumentRead } from '@/lib/docs/documentAccess'
+import { verifyDocAcceptToken } from '@/lib/docs/acceptToken'
 
 export async function GET(
   req: NextRequest,
@@ -18,6 +20,11 @@ export async function GET(
     if (docError || !doc) {
       return new NextResponse('ไม่พบเอกสารราชการที่ต้องการ', { status: 404 })
     }
+
+    const denied = await denyDocumentRead(req, doc)
+    if (denied) return denied
+    const suppliedToken = (req.nextUrl.searchParams.get('accept') || req.nextUrl.searchParams.get('token') || '').trim()
+    const fileAccess = verifyDocAcceptToken(id, suppliedToken).ok ? `&accept=${encodeURIComponent(suppliedToken)}` : ''
 
     let letterData: any = {}
     try {
@@ -100,7 +107,7 @@ export async function GET(
         <span class="text-xs text-gray-500 font-mono">${docNumber}</span>
       </div>
       <div class="grid grid-cols-2 gap-2 w-full sm:w-auto sm:flex sm:items-center">
-        <a href="/api/doc/${id}/download?format=docx&openExternalBrowser=1" download class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs sm:text-sm font-semibold border border-indigo-200/80 transition flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center">
+        <a href="/api/doc/${id}/download?format=docx&openExternalBrowser=1${fileAccess}" download class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs sm:text-sm font-semibold border border-indigo-200/80 transition flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
@@ -192,7 +199,7 @@ export async function GET(
       <div class="space-y-2 pt-1">
         <!-- Direct External Browser Option for LINE users -->
         <div id="lineOpenExternalBox" class="hidden">
-          <a href="/doc/official/${id}?openExternalBrowser=1&autoDownloadPdf=1" target="_blank" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer no-underline active:scale-95 text-center mb-1">
+          <a href="/doc/official/${id}?openExternalBrowser=1&autoDownloadPdf=1${fileAccess}" target="_blank" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer no-underline active:scale-95 text-center mb-1">
             <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
             <span>🌐 เปิดใน Chrome เพื่อบันทึก PDF ทันที</span>
           </a>
@@ -219,7 +226,7 @@ export async function GET(
           <span>🖨️ สั่งพิมพ์ออกกระดาษ (Print)</span>
         </button>
 
-        <a href="/api/doc/${id}/download?format=docx&openExternalBrowser=1" download class="w-full py-2 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer no-underline active:scale-95 text-center">
+        <a href="/api/doc/${id}/download?format=docx&openExternalBrowser=1${fileAccess}" download class="w-full py-2 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer no-underline active:scale-95 text-center">
           <svg class="w-4 h-4 text-indigo-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
           <span>ดาวน์โหลดไฟล์ Word (.docx)</span>
         </a>

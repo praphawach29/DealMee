@@ -57,9 +57,22 @@ export function verifyDocAcceptToken(
   return { ok: true }
 }
 
+/** Public document path. The token is what lets a customer open it without a shop session. */
+export function documentViewPath(docId: string, kind: 'quotation' | 'official' = 'quotation'): string {
+  const token = trySignDocAcceptToken(docId)
+  const path = kind === 'official' ? `/doc/official/${docId}` : `/doc/quotation/${docId}`
+  if (!token) return path
+  return `${path}?accept=${encodeURIComponent(token)}`
+}
+
+export function documentDownloadPath(docId: string, format: 'docx' | 'xlsx' = 'docx'): string {
+  const token = trySignDocAcceptToken(docId)
+  const path = `/api/doc/${docId}/download?format=${format}`
+  if (!token) return path
+  return `${path}&accept=${encodeURIComponent(token)}`
+}
+
 /** Public quotation path that can approve the document. View-only when the secret is unset. */
 export function quotationAcceptPath(docId: string): string {
-  const token = trySignDocAcceptToken(docId)
-  if (!token) return `/doc/quotation/${docId}`
-  return `/doc/quotation/${docId}?accept=${encodeURIComponent(token)}`
+  return documentViewPath(docId, 'quotation')
 }

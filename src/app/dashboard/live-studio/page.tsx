@@ -4,6 +4,7 @@ import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { getLiveSessionState } from '@/lib/live/liveStudioEngine'
 import LiveStudioClient from './LiveStudioClient'
 import { liveStudioEnabled } from '@/lib/live/liveStudioAccess'
+import { overlayPath } from '@/lib/live/overlayKey'
 
 export const metadata = {
   title: 'AI Live Studio — DealMee AI',
@@ -38,7 +39,7 @@ export default async function LiveStudioPage() {
 
   return (
     <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6 max-w-[1440px] mx-auto w-full">
-      <LiveStudioClient shop={shop} initialLiveState={liveState} />
+      <LiveStudioClient shop={shop} initialLiveState={liveState} overlayPath={overlayPath(shop.id)} />
     </div>
   )
 }

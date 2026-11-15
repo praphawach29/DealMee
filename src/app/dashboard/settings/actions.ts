@@ -11,7 +11,7 @@ import {
   planningAckMessage,
 } from '@/lib/ai/salesAgentEngine'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
-import { facebookPageUsedByOtherShop, fetchLineBotInfo, lineOaUsedByOtherShop } from '@/lib/shop/channelOwnership'
+import { facebookPageConflictMessage, facebookPageUsedByOtherShop, fetchLineBotInfo, lineOaUsedByOtherShop } from '@/lib/shop/channelOwnership'
 import { buildAutoGreeting } from '@/lib/businessGreeting'
 import { upsertCustomerProfile } from '@/lib/customerMemory'
 
@@ -153,7 +153,7 @@ export async function updateChannelSettings(formData: FormData) {
     .eq('id', shop.id)
 
   if (error) {
-    return { error: `บันทึกไม่สำเร็จ: ${error.message}` }
+    return { error: facebookPageConflictMessage(error) || `บันทึกไม่สำเร็จ: ${error.message}` }
   }
 
   // Synchronize Facebook channel account in channel_accounts table

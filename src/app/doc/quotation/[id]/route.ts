@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyDocAcceptToken } from '@/lib/docs/acceptToken'
+import { denyDocumentRead } from '@/lib/docs/documentAccess'
 
 export async function GET(
   req: NextRequest,
@@ -22,6 +23,9 @@ export async function GET(
     if (docError || !doc) {
       return new NextResponse('ไม่พบเอกสารที่ต้องการ', { status: 404 })
     }
+
+    const denied = await denyDocumentRead(req, doc)
+    if (denied) return denied
 
     const isInvoice = doc.doc_type === 'invoice'
     const isSalesOrder = doc.doc_type === 'sales_order'
@@ -99,6 +103,7 @@ export async function GET(
     const suppliedToken = (url.searchParams.get('accept') || url.searchParams.get('token') || '').trim()
     const tokenCheck = verifyDocAcceptToken(id, suppliedToken)
     const acceptToken = tokenCheck.ok ? suppliedToken : ''
+    const fileAccess = acceptToken ? `&accept=${encodeURIComponent(acceptToken)}` : ''
     const acceptBlockedMessage =
       !tokenCheck.ok && tokenCheck.reason === 'expired'
         ? 'ลิงก์ยืนยันหมดอายุแล้ว กรุณาขอลิงก์ใหม่จากร้านค้าเพื่อกดตกลงสั่งซื้อ'
@@ -308,7 +313,7 @@ export async function GET(
         <span class="text-base">💡</span>
         <span>เปิดผ่าน LINE: หากต้องการบันทึก PDF หรือ Word แนะนำให้เปิดในเบราว์เซอร์เครื่องค่ะ</span>
       </div>
-      <a href="/doc/quotation/${id}?openExternalBrowser=1" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg shrink-0 no-underline text-[11px] shadow-xs active:scale-95 transition">
+      <a href="/doc/quotation/${id}?openExternalBrowser=1${fileAccess}" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg shrink-0 no-underline text-[11px] shadow-xs active:scale-95 transition">
         เปิดใน Chrome
       </a>
     </div>
@@ -344,13 +349,13 @@ export async function GET(
 
         ${showAdminDownloads ? `
         <!-- Word (Admin Only) -->
-        <a href="/api/doc/${id}/download?format=docx" download="${isInvoice ? 'Invoice' : isSalesOrder ? 'SalesOrder' : 'Quotation'}_${safeDocNo}.docx" onclick="handleDocDownload(event, 'docx')" class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl border border-indigo-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
+        <a href="/api/doc/${id}/download?format=docx${fileAccess}" download="${isInvoice ? 'Invoice' : isSalesOrder ? 'SalesOrder' : 'Quotation'}_${safeDocNo}.docx" onclick="handleDocDownload(event, 'docx')" class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl border border-indigo-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
           <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
           <span>Word</span>
         </a>
 
         <!-- Excel (Admin Only) -->
-        <a href="/api/doc/${id}/download?format=xlsx" download="${isInvoice ? 'Invoice' : isSalesOrder ? 'SalesOrder' : 'Quotation'}_${safeDocNo}.xlsx" onclick="handleDocDownload(event, 'xlsx')" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl border border-emerald-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
+        <a href="/api/doc/${id}/download?format=xlsx${fileAccess}" download="${isInvoice ? 'Invoice' : isSalesOrder ? 'SalesOrder' : 'Quotation'}_${safeDocNo}.xlsx" onclick="handleDocDownload(event, 'xlsx')" class="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl border border-emerald-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer no-underline active:scale-95 text-center shadow-xs">
           <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
           <span>Excel</span>
         </a>
@@ -787,7 +792,7 @@ export async function GET(
       <div class="space-y-2 pt-1">
         <!-- Direct External Browser Option for LINE users -->
         <div id="lineOpenExternalBox" class="hidden">
-          <a href="/doc/quotation/${id}?openExternalBrowser=1&autoDownloadPdf=1" target="_blank" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer no-underline active:scale-95 text-center mb-1">
+          <a href="/doc/quotation/${id}?openExternalBrowser=1&autoDownloadPdf=1${fileAccess}" target="_blank" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer no-underline active:scale-95 text-center mb-1">
             <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
             <span>🌐 เปิดใน Chrome เพื่อบันทึก PDF ทันที</span>
           </a>
@@ -819,7 +824,7 @@ export async function GET(
         <!-- Word & Excel Options Grid -->
         <div class="grid grid-cols-2 gap-2 pt-1">
           <div class="flex flex-col gap-1">
-            <a href="/api/doc/${id}/download?format=docx" download="Quotation_${safeDocNo}.docx" class="py-2.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-1.5 no-underline active:scale-95 text-center border border-indigo-200/60 shadow-xs">
+            <a href="/api/doc/${id}/download?format=docx${fileAccess}" download="Quotation_${safeDocNo}.docx" class="py-2.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-1.5 no-underline active:scale-95 text-center border border-indigo-200/60 shadow-xs">
               <svg class="w-3.5 h-3.5 text-indigo-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
               <span>โหลด Word</span>
             </a>
@@ -829,7 +834,7 @@ export async function GET(
           </div>
 
           <div class="flex flex-col gap-1">
-            <a href="/api/doc/${id}/download?format=xlsx" download="Quotation_${safeDocNo}.xlsx" class="py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-1.5 no-underline active:scale-95 text-center border border-emerald-200/60 shadow-xs">
+            <a href="/api/doc/${id}/download?format=xlsx${fileAccess}" download="Quotation_${safeDocNo}.xlsx" class="py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-1.5 no-underline active:scale-95 text-center border border-emerald-200/60 shadow-xs">
               <svg class="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
               <span>โหลด Excel</span>
             </a>

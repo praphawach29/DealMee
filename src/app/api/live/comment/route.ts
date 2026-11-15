@@ -1,25 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLiveSessionState, processLiveComment, updateLiveBaskets } from '@/lib/live/liveStudioEngine'
+import { redactLivePayment } from '@/lib/live/redactLivePayment'
 import { requireShop } from '@/lib/auth/requireShop'
 import { liveStudioGuard } from '@/lib/live/liveStudioAccess'
+import { liveOverlayDecision, liveShopDecision } from '@/lib/security/tenantScope'
+import { verifyOverlayKey } from '@/lib/live/overlayKey'
 
 /**
- * GET /api/live/comment?shop_id=...
- * Returns current live session state and active product card.
- * Public on purpose: the OBS overlay page (/live/overlay/[shop_id]) polls it without a login.
+ * GET /api/live/comment
+ * Two callers:
+ * - The OBS overlay, which has no login: shop_id plus the overlay key from the
+ *   URL Live Studio gave the shop. A key opens only the shop it was signed for.
+ * - The signed-in shop: a shop_id query is accepted only when it is that same
+ *   shop; another shop gets 403 and no session state.
+ * PromptPay data is stripped either way.
  */
 export async function GET(req: NextRequest) {
   try {
-    const searchParams = req.nextUrl.searchParams
-    const shopId = searchParams.get('shop_id')
-
-    if (!shopId) {
-      return NextResponse.json({ error: 'Missing shop_id query parameter' }, { status: 400 })
+    const params = req.nextUrl.searchParams
+    let shopId: string
+    const overlay = liveOverlayDecision(params.get('shop_id'), params.get('key'), verifyOverlayKey)
+    if (overlay.status === 403) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    if (overlay.status === 'ok') {
+      shopId = overlay.shopId
+    } else {
+      const auth = await requireShop()
+      if (auth.error) return auth.error
+      const decision = liveShopDecision(auth.shopId, params.get('shop_id'))
+      if (decision.status !== 'ok') {
+        return NextResponse.json({ error: 'Forbidden' }, { status: decision.status })
+      }
+      shopId = decision.shopId
     }
     const liveBlocked = await liveStudioGuard(shopId)
     if (liveBlocked) return liveBlocked
 
-    const state = await getLiveSessionState(shopId)
+    const state = redactLivePayment(await getLiveSessionState(shopId))
     return NextResponse.json({ success: true, state })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Server error' }, { status: 500 })

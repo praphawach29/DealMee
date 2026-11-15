@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { facebookPageUsedByOtherShop } from '@/lib/shop/channelOwnership'
+import { facebookPageConflictMessage, facebookPageUsedByOtherShop } from '@/lib/shop/channelOwnership'
 import { FB_PAGES_COOKIE, facebookAppConfig, listPages, openCookie, subscribePage, unsubscribePage } from '@/lib/facebook/connect'
 
 type PendingPages = { shopId: string; fbUserId: string; userToken: string }
@@ -86,7 +86,7 @@ export async function connectFacebookPage(pageId: string): Promise<{ success: st
       updated_at: new Date().toISOString(),
     })
     .eq('id', shop.id)
-  if (error) return { error: `บันทึกไม่สำเร็จ: ${error.message}` }
+  if (error) return { error: facebookPageConflictMessage(error) || `บันทึกไม่สำเร็จ: ${error.message}` }
 
   ;(await cookies()).delete(FB_PAGES_COOKIE)
   revalidatePath('/dashboard/settings')
