@@ -1,10 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import ShopsManagement from './ShopsManagement'
+import ShopsManagement, { ShopItem } from './ShopsManagement'
 
-export default async function AdminShopsPage() {
-  const admin = createAdminClient()
-
-  // Fetch shops and registered user owners
+async function fetchEnrichedShops(admin: ReturnType<typeof createAdminClient>): Promise<ShopItem[]> {
   const [shopsRes, usersRes] = await Promise.all([
     admin
       .from('shops')
@@ -15,7 +12,6 @@ export default async function AdminShopsPage() {
       .select('id, workspace_id, email, name')
   ])
 
-  // Map workspace_id (shop_id) to user owner details
   const userMap = new Map<string, { email: string; name?: string | null }>()
   for (const u of usersRes.data || []) {
     if (u.workspace_id && u.email) {
@@ -23,7 +19,7 @@ export default async function AdminShopsPage() {
     }
   }
 
-  const enrichedShops = (shopsRes.data || []).map((s) => {
+  return (shopsRes.data || []).map((s) => {
     const owner = userMap.get(s.id)
     return {
       id: s.id,
@@ -40,7 +36,12 @@ export default async function AdminShopsPage() {
       facebook_page_id: s.facebook_page_id || null,
     }
   })
+}
 
+export default async function AdminShopsPage() {
+  const admin = createAdminClient()
+  const enrichedShops = await fetchEnrichedShops(admin)
   return <ShopsManagement initialShops={enrichedShops} />
 }
+
 

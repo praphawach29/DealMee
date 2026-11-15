@@ -2,9 +2,10 @@
 
 import { useState } from 'react'
 import { toggleShopStatus, updateShopPlan, impersonateShop } from '../actions'
-import { Mail, Copy, Check } from 'lucide-react'
+import { ShopMobileCard } from './components/ShopMobileCard'
+import { ShopTableRow } from './components/ShopTableRow'
 
-interface ShopItem {
+export interface ShopItem {
   id: string
   name: string
   plan: string | null
@@ -34,12 +35,15 @@ export default function ShopsManagement({ initialShops }: { initialShops: ShopIt
     }, 2000)
   }
 
-  const filteredShops = shops.filter((s) =>
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (s.owner_email && s.owner_email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (s.owner_name && s.owner_name.toLowerCase().includes(searchTerm.toLowerCase()))
-  )
+  const filteredShops = shops.filter((s) => {
+    const term = searchTerm.toLowerCase()
+    return (
+      s.name.toLowerCase().includes(term) ||
+      s.id.toLowerCase().includes(term) ||
+      (s.owner_email && s.owner_email.toLowerCase().includes(term)) ||
+      (s.owner_name && s.owner_name.toLowerCase().includes(term))
+    )
+  })
 
   const handleToggleStatus = async (shop: ShopItem) => {
     setLoadingShopId(shop.id)
@@ -139,146 +143,18 @@ export default function ShopsManagement({ initialShops }: { initialShops: ShopIt
 
       {/* Mobile & Tablet Card Grid View (Hidden on Desktop LG) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:hidden gap-3.5 sm:gap-4">
-        {filteredShops.map((shop) => {
-          const isLoading = loadingShopId === shop.id
-          const isSuspended = shop.status === 'suspended'
-
-          return (
-            <div
-              key={shop.id}
-              className="bg-surface border border-outline-variant/40 rounded-2xl p-4 shadow-sm space-y-3.5 hover:shadow-md transition-shadow flex flex-col justify-between"
-            >
-              <div className="space-y-3">
-                <div className="flex items-start justify-between gap-2 border-b border-outline-variant/20 pb-3">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-heading font-semibold text-sm sm:text-base text-on-surface truncate">{shop.name}</h3>
-                    <div className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 font-medium mt-1 truncate">
-                      <Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      <span className="truncate select-all">{shop.owner_email || 'ไม่ระบุอีเมล'}</span>
-                      {shop.owner_email && shop.owner_email !== 'ไม่ระบุอีเมล' && (
-                        <button
-                          type="button"
-                          onClick={() => handleCopyEmail(shop.owner_email!, shop.id)}
-                          className="hover:text-blue-700 p-0.5 rounded cursor-pointer shrink-0"
-                          title="คัดลอกอีเมล"
-                        >
-                          {copiedEmailId === shop.id ? (
-                            <Check className="h-3 w-3 text-emerald-500" />
-                          ) : (
-                            <Copy className="h-3 w-3 text-slate-400" />
-                          )}
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-outline font-mono truncate mt-0.5 opacity-60">
-                      ID: {shop.id}
-                    </p>
-                  </div>
-                  <span
-                    className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase shrink-0 ${
-                      isSuspended
-                        ? 'bg-error-red/10 text-error-red border border-error-red/20'
-                        : 'bg-success-green/10 text-success-green border border-success-green/20'
-                    }`}
-                  >
-                    {isSuspended ? 'ระงับชั่วคราว' : 'เปิดใช้งาน'}
-                  </span>
-                </div>
-
-                {/* Connected Channels Badges */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] text-outline font-medium">ช่องทาง:</span>
-                  <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                      shop.has_line
-                        ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
-                        : 'bg-slate-500/10 text-slate-400 border border-slate-500/20 opacity-70'
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${shop.has_line ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
-                    <span>LINE OA</span>
-                  </span>
-
-                  <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                      shop.has_facebook
-                        ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
-                        : 'bg-slate-500/10 text-slate-400 border border-slate-500/20 opacity-70'
-                    }`}
-                    title={shop.facebook_page_id ? `Page ID: ${shop.facebook_page_id}` : undefined}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${shop.has_facebook ? 'bg-blue-500' : 'bg-slate-400'}`}></span>
-                    <span>Facebook</span>
-                    {shop.facebook_page_id && (
-                      <span className="text-[9px] opacity-70 font-mono">({shop.facebook_page_id.slice(-4)})</span>
-                    )}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-xs bg-merchant-bg p-3 rounded-xl border border-outline-variant/30">
-                  <div>
-                    <span className="text-[10px] text-outline block font-medium">แพ็กเกจ</span>
-                    <select
-                      value={shop.plan || 'free'}
-                      disabled={isLoading}
-                      onChange={(e) => handlePlanChange(shop.id, e.target.value)}
-                      className="font-bold uppercase text-xs bg-transparent text-amber-600 outline-none cursor-pointer mt-0.5"
-                    >
-                      <option value="free">FREE</option>
-                      <option value="starter">STARTER</option>
-                      <option value="pro">PRO</option>
-                      <option value="agency">AGENCY</option>
-                      <option value="byok">BYOK</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] text-outline block font-medium">ข้อความที่ใช้</span>
-                    <span className="font-bold font-mono text-on-surface mt-0.5 block">
-                      {(shop.msg_used || 0).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] text-outline px-1">
-                  <span>วันที่สมัคร:</span>
-                  <span className="font-medium text-on-surface-variant">
-                    {new Date(shop.created_at).toLocaleDateString('th-TH')}
-                  </span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-outline-variant/20">
-                <button
-                  type="button"
-                  onClick={() => handleImpersonate(shop.id)}
-                  disabled={isLoading}
-                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-electric-blue/10 hover:bg-electric-blue/20 text-electric-blue font-bold text-xs rounded-xl transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <span className="material-symbols-outlined text-[16px]">key</span>
-                  <span>สวมบทบาท</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleToggleStatus(shop)}
-                  disabled={isLoading}
-                  className={`flex items-center justify-center gap-1.5 py-2 px-3 font-bold text-xs rounded-xl transition-all cursor-pointer disabled:opacity-50 ${
-                    isSuspended
-                      ? 'bg-success-green/10 text-success-green hover:bg-success-green/20'
-                      : 'bg-error-red/10 text-error-red hover:bg-error-red/20'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[16px]">
-                    {isSuspended ? 'play_arrow' : 'block'}
-                  </span>
-                  <span>{isSuspended ? 'ปลดระงับ' : 'ระงับร้านค้า'}</span>
-                </button>
-              </div>
-            </div>
-          )
-        })}
+        {filteredShops.map((shop) => (
+          <ShopMobileCard
+            key={shop.id}
+            shop={shop}
+            isLoading={loadingShopId === shop.id}
+            copiedEmailId={copiedEmailId}
+            onCopyEmail={handleCopyEmail}
+            onPlanChange={handlePlanChange}
+            onImpersonate={handleImpersonate}
+            onToggleStatus={handleToggleStatus}
+          />
+        ))}
       </div>
 
       {/* Desktop View: Full Table (Only visible on Large Desktop LG+) */}
@@ -297,130 +173,18 @@ export default function ShopsManagement({ initialShops }: { initialShops: ShopIt
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/20">
-              {filteredShops.map((shop) => {
-                const isLoading = loadingShopId === shop.id
-                const isSuspended = shop.status === 'suspended'
-
-                return (
-                  <tr key={shop.id} className="hover:bg-surface-container-low/50 transition-colors">
-                    <td className="py-4 px-6">
-                      <p className="font-bold text-on-surface text-sm sm:text-base">{shop.name}</p>
-                      <div className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 font-medium mt-1 group">
-                        <Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                        <span className="select-all font-mono">{shop.owner_email || 'ไม่ระบุอีเมล'}</span>
-                        {shop.owner_email && shop.owner_email !== 'ไม่ระบุอีเมล' && (
-                          <button
-                            type="button"
-                            onClick={() => handleCopyEmail(shop.owner_email!, shop.id)}
-                            className="opacity-60 group-hover:opacity-100 hover:text-blue-700 transition-opacity p-0.5 rounded cursor-pointer"
-                            title="คัดลอกอีเมล"
-                          >
-                            {copiedEmailId === shop.id ? (
-                              <Check className="h-3.5 w-3.5 text-emerald-500" />
-                            ) : (
-                              <Copy className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600" />
-                            )}
-                          </button>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-outline font-mono mt-0.5 opacity-60">ID: {shop.id}</p>
-                    </td>
-
-                    <td className="py-4 px-4">
-                      <select
-                        value={shop.plan || 'free'}
-                        disabled={isLoading}
-                        onChange={(e) => handlePlanChange(shop.id, e.target.value)}
-                        className="font-bold text-xs uppercase bg-surface-container-high border border-outline-variant/40 rounded-lg px-2.5 py-1.5 text-amber-600 outline-none cursor-pointer hover:border-amber-500 transition-colors"
-                      >
-                        <option value="free">FREE</option>
-                        <option value="starter">STARTER</option>
-                        <option value="pro">PRO</option>
-                        <option value="agency">AGENCY</option>
-                        <option value="byok">BYOK</option>
-                      </select>
-                    </td>
-
-                    <td className="py-4 px-4">
-                      <div className="flex flex-col gap-1.5">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold w-fit ${
-                            shop.has_line
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                              : 'bg-slate-500/10 text-slate-400 border border-slate-500/20 opacity-60'
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${shop.has_line ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
-                          <span>LINE OA</span>
-                        </span>
-
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold w-fit ${
-                            shop.has_facebook
-                              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
-                              : 'bg-slate-500/10 text-slate-400 border border-slate-500/20 opacity-60'
-                          }`}
-                          title={shop.facebook_page_id ? `Page ID: ${shop.facebook_page_id}` : undefined}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${shop.has_facebook ? 'bg-blue-500' : 'bg-slate-400'}`}></span>
-                          <span>Facebook</span>
-                          {shop.facebook_page_id && (
-                            <span className="text-[9px] opacity-70 font-mono">({shop.facebook_page_id.slice(-4)})</span>
-                          )}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="py-4 px-4 font-mono font-bold text-on-surface">
-                      {(shop.msg_used || 0).toLocaleString()}
-                    </td>
-
-                    <td className="py-4 px-4">
-                      <span
-                        className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
-                          isSuspended
-                            ? 'bg-error-red/10 text-error-red border border-error-red/20'
-                            : 'bg-success-green/10 text-success-green border border-success-green/20'
-                        }`}
-                      >
-                        {isSuspended ? 'ระงับชั่วคราว' : 'เปิดใช้งาน'}
-                      </span>
-                    </td>
-
-                    <td className="py-4 px-4 text-xs text-on-surface-variant">
-                      {new Date(shop.created_at).toLocaleDateString('th-TH')}
-                    </td>
-
-                    <td className="py-4 px-6 text-right space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => handleImpersonate(shop.id)}
-                        disabled={isLoading}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-electric-blue/10 hover:bg-electric-blue/20 text-electric-blue font-bold text-xs rounded-xl transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">key</span>
-                        <span>สวมบทบาท</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStatus(shop)}
-                        disabled={isLoading}
-                        className={`inline-flex items-center gap-1 px-3 py-1.5 font-bold text-xs rounded-xl transition-all cursor-pointer disabled:opacity-50 ${
-                          isSuspended
-                            ? 'bg-success-green/10 text-success-green hover:bg-success-green/20'
-                            : 'bg-error-red/10 text-error-red hover:bg-error-red/20'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-[16px]">
-                          {isSuspended ? 'play_arrow' : 'block'}
-                        </span>
-                        <span>{isSuspended ? 'ปลดระงับ' : 'ระงับ'}</span>
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
+              {filteredShops.map((shop) => (
+                <ShopTableRow
+                  key={shop.id}
+                  shop={shop}
+                  isLoading={loadingShopId === shop.id}
+                  copiedEmailId={copiedEmailId}
+                  onCopyEmail={handleCopyEmail}
+                  onPlanChange={handlePlanChange}
+                  onImpersonate={handleImpersonate}
+                  onToggleStatus={handleToggleStatus}
+                />
+              ))}
             </tbody>
           </table>
         </div>

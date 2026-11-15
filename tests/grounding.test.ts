@@ -4,6 +4,8 @@ import { test } from 'node:test'
 import {
   GROUNDING_HANDOFF,
   GROUNDING_RULES,
+  OFF_TOPIC_RULES,
+  isOffTopicQuestion,
   assertGapShop,
   checkGrounding,
   chunksFromRetrievedText,
@@ -286,4 +288,38 @@ test('a wrong price beside a real headcount is still caught', () => {
   const verdict = check('11 คน เดือนละ 550 บาทค่ะ', { chunks: pricing, customerMessage: '11 คน' })
   assert.equal(verdict.grounded, false)
   assert.equal(verdict.text, GROUNDING_HANDOFF.th)
+})
+
+test('an off-topic question answered with "I cannot check that" is not a knowledge gap', () => {
+  const draft = 'น้องไม่ทราบสภาพอากาศสดค่ะ แต่ช่วงนี้แดดแรง ดื่มน้ำเยอะๆ นะคะ\nรับกาแฟเย็นสักแก้วไหมคะ'
+  const verdict = check(draft, { knowledgeMiss: true, customerMessage: 'วันนี้อากาศดีไหมคะ', chunks: [] })
+  assert.equal(verdict.shouldHandoff, false)
+  assert.equal(verdict.shouldLog, false)
+  assert.equal(verdict.reason, 'small_talk')
+  assert.equal(verdict.text, draft)
+})
+
+test('off-topic detection ignores products that merely contain the word อากาศ', () => {
+  assert.equal(isOffTopicQuestion('วันนี้อากาศดีไหม'), true)
+  assert.equal(isOffTopicQuestion('ช่วยดูดวงให้หน่อย'), true)
+  assert.equal(isOffTopicQuestion('กินข้าวยังครับ'), true)
+  assert.equal(isOffTopicQuestion('เครื่องฟอกอากาศมีประกันไหม'), false)
+  assert.equal(isOffTopicQuestion('มีสาขาเชียงใหม่ไหม'), false)
+  // A shop question the model cannot answer is still handed off.
+  const verdict = check('เรื่องนี้ยังไม่มีในข้อมูลร้านค่ะ เดี๋ยวให้แอดมินช่วยดูให้นะคะ', { knowledgeMiss: true, customerMessage: 'เครื่องฟอกอากาศมีประกันไหม', chunks: [] })
+  assert.equal(verdict.shouldHandoff, true)
+})
+
+test('off-topic replies still cannot invent shop facts', () => {
+  const verdict = check('อากาศดีแบบนี้ วันนี้ส่งฟรีทุกออเดอร์เลยค่ะ', { customerMessage: 'วันนี้อากาศดีไหม', chunks: [] })
+  assert.equal(verdict.shouldHandoff, true)
+  assert.equal(verdict.reason, 'unsupported_shop_fact')
+})
+
+test('the prompt tells the model to answer off-topic questions and steer back', () => {
+  assert.ok(GROUNDING_RULES.includes(OFF_TOPIC_RULES))
+  assert.match(OFF_TOPIC_RULES, /ห้ามเรียก request_human_agent/)
+  assert.match(OFF_TOPIC_RULES, /วกกลับเข้าเรื่องร้าน/)
+  assert.match(OFF_TOPIC_RULES, /ห้ามแต่งตัวเลข/)
+  assert.match(GROUNDING_RULES, /ถ้าเป็นคำถามเกี่ยวกับร้าน .* แต่ไม่มีข้อมูล/)
 })

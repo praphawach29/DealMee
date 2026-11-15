@@ -31,7 +31,7 @@ import { formatShopSkillsEvidence, formatShopSkillsPromptContext, retrieveActive
 import { redactPii } from '@/lib/ai/redactPii'
 import { createShadowExecutor } from '@/lib/ai/shadowSandbox'
 import { shadowSkillContext, type ShadowSkillReplay } from '@/lib/ai/shadowSkills'
-import { QA_ONLY_PROMPT, qaToolAllowed } from '@/lib/ai/assistantPolicy'
+import { QA_ONLY_PROMPT, qaToolAllowed, formatQaCatalogContext } from '@/lib/ai/assistantPolicy'
 import { codCloseExample, codObjectionLine, codPaymentRule, shopCodEnabled } from '@/lib/ai/codPolicy'
 import { shopSkillsRetrievalEnabled } from '@/lib/ai/shopSkillsRollout'
 import { greetingOnlyReply, shouldBlockGreetingHandoff } from '@/lib/ai/handoffGuard'
@@ -765,10 +765,12 @@ function filterTools(names: AgentToolName[]) {
   return MASTER_TOOLS.filter((t) => wanted.has(t.name))
 }
 
+const CATALOG_TOOL_NAMES = new Set<string>(['search_products', 'check_stock'])
+
 /**
  * Tools the model is allowed to see for this shop. Same filters as the planning
- * setup: Q&A-only keeps handoff, and a free plan or an empty catalog drops
- * sales-automation tools.
+ * setup: Q&A-only keeps handoff and knowledge search, a free plan or an empty
+ * catalog drops sales-automation tools, and an empty catalog drops catalog search.
  */
 export function toolsOfferedForShop(
   shop: { features?: Record<string, unknown> | null; plan?: string | null; plan_key?: string | null; trial_expires_at?: string | null; plan_expires_at?: string | null },
@@ -780,6 +782,9 @@ export function toolsOfferedForShop(
   if (qaOnly) toolSet = MASTER_TOOLS.filter((tool) => qaToolAllowed(tool.name))
   const salesLocked = !salesAutomationEnabled(shop) || options?.catalogEmpty === true
   if (salesLocked) toolSet = toolSet.filter((tool) => !SALES_AUTOMATION_TOOLS.has(tool.name))
+  // No products: searching the catalog can only answer "ไม่พบสินค้า", which the
+  // model repeated to customers of shops whose offer lives in the knowledge base.
+  if (options?.catalogEmpty === true) toolSet = toolSet.filter((tool) => !CATALOG_TOOL_NAMES.has(tool.name))
   return toolSet
 }
 
@@ -1058,6 +1063,7 @@ async function preparePlanningState({
   const valueThreshold = highValueThreshold(features)
   let catalogEmpty = false
   let hasHighValue = false
+  let catalogProducts: any[] = []
   if (features.product_recommend !== false) {
     const { data: products } = await db
       .from('products')
@@ -1065,6 +1071,7 @@ async function preparePlanningState({
       .eq('shop_id', shop.id)
       .limit(30)
 
+    catalogProducts = products || []
     catalogEmpty = !products || products.length === 0
     if (products && products.length > 0) {
       productsContext =
@@ -1088,7 +1095,9 @@ async function preparePlanningState({
   let bookingPromptTemplates: any[] = []
   // Same default as the dashboard: on for booking/service shops unless switched off, off for others unless switched on
   const bookingOn = features.booking_system ?? ['booking', 'service'].includes(String(shop.business_type || ''))
-  if (bookingOn) {
+  // Q&A-only assistants list services as reference even without the booking
+  // system; the booking instructions built below are not sent in that mode.
+  if (bookingOn || qaOnly) {
     const { data: bookingTemplates } = await db
       .from('services')
       .select('name, booking_type, resource_label, staff_name, duration_minutes, available_days, start_time, end_time, buffer_minutes, capacity_per_slot, required_fields, deposit_amount, description')
@@ -1300,7 +1309,7 @@ async function preparePlanningState({
   const codOn = shopCodEnabled(shop)
   const staticSystemPrompt = qaOnly ? `${QA_ONLY_PROMPT}
 ชื่อผู้ช่วย: ${activeBotName}
-หน่วยงาน: ${shop.name}
+หน่วยงาน: ${shop.name}${formatQaCatalogContext({ description: shop.description, products: catalogProducts, services: bookingPromptTemplates })}
 
 ${GROUNDING_RULES}` : `คุณคือ "${activeBotName}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
 บุคลิกภาพ: ${shop.personality || 'สุภาพ เรียบร้อย มืออาชีพ เป็นมิตรและมีไหวพริบในการขายสูง'}
