@@ -77,6 +77,19 @@ const product: EvalCase[] = [
   turn('กันแดดตัวนี้กันน้ำไหมคะ', 'beauty', 'product', 6, { scriptTools: ['search_products'], mustNotClaim: ['กันน้ำ'] }),
   turn('กาแฟดริปมีขายถุงไหม', 'cafe', 'product', 7, { scriptTools: ['search_products'] }),
   turn('มีสินค้าอะไรบ้างอ่ะ', 'fashion', 'product', 8, { scriptTools: ['search_products'], anyOfTools: ['search_products'] }),
+  {
+    id: 'product-09',
+    category: 'product',
+    shopId: 'cafe',
+    turns: [
+      { role: 'user', text: 'กาแฟดริปมีขายถุงไหม' },
+      { role: 'assistant', text: 'กาแฟดริปบ้านมีขายแบบถุงค่ะ' },
+      { role: 'user', text: 'แล้วมีขนมด้วยไหม' },
+    ],
+    scriptTools: ['search_products'],
+    expectHandoff: false,
+    mustNotClaim: ['มีขนม'],
+  },
 ]
 
 const priceStock: EvalCase[] = [
@@ -97,6 +110,32 @@ const priceStock: EvalCase[] = [
     scriptedReply: 'เสื้อยืดโอเวอร์ไซส์ยังมีอยู่ค่ะ เหลือ 12 ชิ้น',
     mustNotClaim: ['สินค้าหมด', 'ของหมด', 'หมดสต๊อก'],
   }),
+  {
+    id: 'price_stock-10',
+    category: 'price_stock',
+    shopId: 'fashion',
+    turns: [
+      { role: 'user', text: 'เสื้อยืดโอเวอร์ไซส์ราคาเท่าไหร่คะ' },
+      { role: 'assistant', text: 'เสื้อยืดโอเวอร์ไซส์ราคา 290 บาทค่ะ' },
+      { role: 'user', text: 'แล้วผ้าพันคอไหมกี่บาท' },
+    ],
+    scriptTools: ['search_products'],
+    expectHandoff: false,
+    mustNotClaim: ['290 บาท'],
+  },
+  {
+    id: 'price_stock-11',
+    category: 'price_stock',
+    shopId: 'beauty',
+    turns: [
+      { role: 'user', text: 'เซรั่มวิตามินซีตัวละเท่าไร' },
+      { role: 'assistant', text: 'เซรั่มวิตามินซี 590 บาทค่ะ' },
+      { role: 'user', text: 'ครีมกันแดด SPF50 เหลือกี่หลอด' },
+    ],
+    scriptTools: ['check_stock'],
+    expectHandoff: false,
+    mustNotClaim: ['590 บาท'],
+  },
 ]
 
 const ordering: EvalCase[] = [

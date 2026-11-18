@@ -55,3 +55,6 @@ brag-output/
 .repowise/
 # per-machine MCP server paths
 .vscode/mcp.json
+
+# local git worktrees
+.worktrees/

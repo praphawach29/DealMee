@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { EvalCategory } from './fixtures/cases.ts'
+import type { LocalReplyVerdict } from '../../src/lib/ai/localReplyGuard.ts'
 
 export interface CaseReport {
   id: string
@@ -13,6 +14,9 @@ export interface CaseReport {
   completionTokens: number
   totalTokens: number
   toolCalls: string[]
+  systemToolCalls?: string[]
+  modelToolCalls?: string[]
+  replyGuard?: LocalReplyVerdict
   transcript: { role: string; text: string }[]
 }
 
@@ -22,6 +26,9 @@ export interface EvalReport {
   model: string
   judge: boolean
   live: boolean
+  toolProfile?: 'full' | 'read_only'
+  catalogPrefetch?: boolean
+  localReplyGuard?: boolean
   summary: {
     total: number
     passed: number
@@ -39,6 +46,9 @@ export function buildReport(input: {
   model: string
   judge: boolean
   cases: CaseReport[]
+  toolProfile?: 'full' | 'read_only'
+  catalogPrefetch?: boolean
+  localReplyGuard?: boolean
 }): EvalReport {
   const byCategory: EvalReport['summary']['byCategory'] = {}
   for (const item of input.cases) {
@@ -57,6 +67,9 @@ export function buildReport(input: {
     model: input.model,
     judge: input.judge,
     live: true,
+    toolProfile: input.toolProfile || 'full',
+    catalogPrefetch: input.catalogPrefetch || false,
+    localReplyGuard: input.localReplyGuard || false,
     summary: {
       total: input.cases.length,
       passed,
@@ -75,6 +88,9 @@ export function reportMarkdown(report: EvalReport): string {
     '# DealMee Thai sales-agent eval',
     '',
     `Provider \`${report.provider}\`, model \`${report.model}\`, judge ${report.judge ? 'on' : 'off'}.`,
+    `Tool profile: \`${report.toolProfile || 'full'}\`. Read-only results do not certify ordering, payments or production readiness.`,
+    `System catalog prefetch: ${report.catalogPrefetch ? 'on' : 'off'}. System lookups are not model-initiated tool calls.`,
+    `Local reply guard: ${report.localReplyGuard ? 'on' : 'off'}. Reply guard applied to ${report.cases.filter((item) => item.replyGuard).length} cases; replaced ${report.cases.filter((item) => item.replyGuard && !item.replyGuard.draftAccepted).length} model drafts. Original model drafts are still scored; template replacements do not certify model accuracy. Language-only checks do not verify facts.`,
     `Pass rate **${report.summary.passed}/${report.summary.total}** (${Math.round(report.summary.passRate * 100)}%).`,
     `Tokens in ${report.summary.promptTokens}, out ${report.summary.completionTokens}. Latency ${report.summary.latencyMs} ms.`,
     '',

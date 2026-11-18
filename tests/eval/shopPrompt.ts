@@ -56,12 +56,13 @@ export function historyText(turns: { role: 'user' | 'assistant'; text: string }[
 }
 
 /** Prompt and evidence the live model and the grounding check both see. */
-export function buildShopContext(shop: FixtureShop, turns: { role: 'user' | 'assistant'; text: string }[]) {
+export function buildShopContext(shop: FixtureShop, turns: { role: 'user' | 'assistant'; text: string }[], options?: { omitCatalog?: boolean }) {
+  const catalog = options?.omitCatalog ? '' : catalogText(shop)
   const blocks = [
     shop.qaOnly
       ? `${QA_ONLY_PROMPT}\nชื่อผู้ช่วย: น้องดีลมี\nหน่วยงาน: ${shop.name}\n\n${GROUNDING_RULES}`
       : `คุณคือพนักงานขายของร้าน "${shop.name}" ตอบจากข้อมูลร้านเท่านั้น\n${GROUNDING_RULES}\n${codPaymentRule(shop.codEnabled)}`,
-    catalogText(shop),
+    catalog,
     paymentText(shop),
     serviceText(shop),
     knowledgeText(shop),
@@ -69,6 +70,6 @@ export function buildShopContext(shop: FixtureShop, turns: { role: 'user' | 'ass
     historyText(turns),
   ].filter((part) => part.trim())
   const prompt = blocks.join('\n\n')
-  const groundingTexts = [catalogText(shop), paymentText(shop), serviceText(shop), knowledgeText(shop), promotionText(shop)].filter((part) => part.trim())
+  const groundingTexts = [catalog, paymentText(shop), serviceText(shop), knowledgeText(shop), promotionText(shop)].filter((part) => part.trim())
   return { prompt, groundingTexts }
 }

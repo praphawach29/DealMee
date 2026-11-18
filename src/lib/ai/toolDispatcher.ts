@@ -18,6 +18,7 @@ import { buildKnowledgeQuery } from '@/lib/ai/knowledgeQuery'
 import { toProductCards } from '@/lib/ai/productCards'
 import { orderPaymentLabel, PAID_ORDER_STATUSES } from '@/lib/orders/paymentState'
 import { SHADOW_READ_TOOLS, shadowBlockedToolMessage } from '@/lib/ai/shadowSandbox'
+import type { CatalogSnapshot } from '@/lib/ai/catalogSnapshot'
 
 const QR_BUCKET = 'qr-codes'
 
@@ -78,6 +79,8 @@ export interface ToolExecutionResult {
     description?: string | null
     image_url?: string | null
   }>
+  /** search_products / check_stock only: the shop-scoped rows the AI's reply must be checked against before it reaches the customer. */
+  catalogSnapshot?: CatalogSnapshot
 }
 
 /** Function shape of executeTool() — lets a caller (e.g. the Chat Playground) supply a different implementation, such as a safe-preview version that never actually mutates orders/bookings/etc. */
@@ -88,6 +91,14 @@ export type ToolExecutor = (
 ) => Promise<ToolExecutionResult>
 
 const NO_OP: ToolExecutionResult = { resultForAi: 'ดำเนินการเรียบร้อยแล้ว', immediateMessages: [] }
+
+/** search_products / check_stock rows, already scoped to shopId by the query above, as evidence the reply guard can check prices and stock against. Capped at 5 like the eval fixture snapshot. */
+function buildCatalogSnapshot(shopId: string, rows: Array<{ id: string; name: string; price: number; stock: number }>): CatalogSnapshot {
+  return {
+    shopId,
+    products: rows.slice(0, 5).map((row) => ({ id: row.id, name: row.name, price: Number(row.price), stock: Number(row.stock) })),
+  }
+}
 
 
 
@@ -840,6 +851,7 @@ export async function executeTool(
       resultForAi: `สินค้าที่พบ: ${prods.map((p: any) => `${p.name} ราคา ${Number(p.price).toLocaleString()} บาท ${p.stock > 0 ? `เหลือ ${p.stock} ชิ้น` : 'หมดสต๊อก'}`).join('; ')}${cardNote}`,
       immediateMessages: [],
       ...(cards.length > 0 ? { productsData: cards } : {}),
+      catalogSnapshot: buildCatalogSnapshot(shopId, prods),
     }
   }
 
@@ -865,6 +877,7 @@ export async function executeTool(
       resultForAi: prods.map((p: any) => `${p.name} (รหัส SKU: ${p.master_sku || 'กลาง'}): ${p.stock > 0 ? `มีสินค้าพร้อมส่ง ${p.stock} ชิ้น` : 'สินค้าหมดสต๊อกชั่วคราว'}, ราคา ${Number(p.price).toLocaleString()} บาท`).join('; ') + cardNote,
       immediateMessages: [],
       ...(cards.length > 0 ? { productsData: cards } : {}),
+      catalogSnapshot: buildCatalogSnapshot(shopId, prods),
     }
   }
 

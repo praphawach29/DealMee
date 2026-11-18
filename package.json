@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "node --import ./tests/register-hooks.mjs --experimental-strip-types --test $(find tests -name '*.test.ts')",
     "eval:live": "node --import ./tests/register-hooks.mjs --experimental-strip-types tests/eval/run-live.ts",
+    "eval:local": "node --import ./tests/eval/local-env.mjs --import ./tests/register-hooks.mjs --experimental-strip-types tests/eval/run-live.ts",
     "schema:check": "node scripts/schema-snapshot.mjs check"
   },
   "dependencies": {

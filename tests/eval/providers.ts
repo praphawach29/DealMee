@@ -1,7 +1,8 @@
 import type { AgentToolName, ModelCaller, PlanningTurn } from '../../src/lib/ai/salesAgentEngine.ts'
 import { judgeReplyWithCaller, type JudgeVerdict } from '../../src/lib/ai/replyJudge.ts'
+import { createOllamaCaller, ollamaConfigFromEnv } from '../../src/lib/ai/providers/ollama.ts'
 
-export type EvalProviderName = 'gemini' | 'openrouter'
+export type EvalProviderName = 'gemini' | 'openrouter' | 'ollama'
 
 export interface ToolDeclaration {
   name: string
@@ -17,13 +18,15 @@ export interface ProviderUsage {
 const DEFAULT_MODELS: Record<EvalProviderName, string> = {
   gemini: 'gemini-2.5-flash',
   openrouter: 'google/gemini-2.5-flash',
+  ollama: 'qwen3:4b',
 }
 
 export function providerFromEnv(): { provider: EvalProviderName; model: string; apiKey: string } {
   const raw = (process.env.EVAL_PROVIDER || 'gemini').toLowerCase()
-  if (raw !== 'gemini' && raw !== 'openrouter') {
-    throw new Error(`EVAL_PROVIDER must be gemini or openrouter, got ${raw}`)
+  if (raw !== 'gemini' && raw !== 'openrouter' && raw !== 'ollama') {
+    throw new Error(`EVAL_PROVIDER must be gemini, openrouter or ollama, got ${raw}`)
   }
+  if (raw === 'ollama') return { provider: raw, model: ollamaConfigFromEnv().model, apiKey: '' }
   const provider = raw
   const model = process.env.EVAL_MODEL?.trim() || DEFAULT_MODELS[provider]
   const apiKey = provider === 'gemini'
@@ -120,6 +123,16 @@ export function createLiveCaller(input: {
   tools: ToolDeclaration[]
   usage: ProviderUsage
 }): ModelCaller {
+  if (input.provider === 'ollama') {
+    return createOllamaCaller({
+      config: ollamaConfigFromEnv({ ...process.env, EVAL_MODEL: input.model }),
+      tools: input.tools,
+      onUsage: (usage) => {
+        input.usage.promptTokens += usage.promptTokens
+        input.usage.completionTokens += usage.completionTokens
+      },
+    })
+  }
   return async (step) => {
     const selected = input.tools.filter((tool) => step.toolNames.includes(tool.name))
     if (input.provider === 'gemini') {

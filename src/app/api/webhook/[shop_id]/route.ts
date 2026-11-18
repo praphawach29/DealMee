@@ -427,7 +427,78 @@ async function processLineEvents({
           ).catch(err => console.error('[SlipVerify Error]', err))
         }
       } else {
-        if (replyToken && lineToken) {
+        const isAutoReplyEnabled = features.auto_reply !== false && botMayReplyNow(features)
+        if (isAutoReplyEnabled && lineToken) {
+          try {
+            await withLineLoading(userId, lineToken, async () => {
+              const imageRes = await fetch(`https://api-data.line.me/v2/bot/message/${messageId}/content`, {
+                headers: { Authorization: `Bearer ${lineToken}` },
+              })
+              if (!imageRes.ok) throw new Error('Failed to download image')
+              const base64 = Buffer.from(await imageRes.arrayBuffer()).toString('base64')
+              const mimeType = imageRes.headers.get('content-type') || 'image/jpeg'
+
+              let { data: conv } = await supabase
+                .from('conversations')
+                .select('*')
+                .eq('shop_id', shop_id)
+                .eq('user_id', userId)
+                .order('last_message_at', { ascending: false })
+                .limit(1)
+                .maybeSingle()
+
+              if (!conv) {
+                const { data: newConv } = await supabase
+                  .from('conversations')
+                  .insert({
+                    shop_id,
+                    user_id: userId,
+                    platform_sender_id: userId,
+                    customer_name: `ลูกค้า LINE (${userId.substring(0, 6)})`,
+                    platform: 'line',
+                    last_message: '[รูปภาพ]',
+                    status: 'ai',
+                    ai_mode: 'auto',
+                  })
+                  .select()
+                  .single()
+                conv = newConv
+              }
+
+              if (conv?.id) {
+                const { processSalesAgentChat } = await import('@/lib/ai/salesAgentEngine')
+                const agentResult = await processSalesAgentChat({
+                  shop,
+                  userQuery: '',
+                  attachments: [{
+                    type: 'image',
+                    mimeType,
+                    base64,
+                  }],
+                  userId,
+                  conversationId: conv.id,
+                  supabaseClient: supabase,
+                })
+
+                await deliverAgentResult({
+                  agentResult,
+                  conv,
+                  shop,
+                  shopId: shop_id,
+                  userId,
+                  lineToken,
+                  replyToken,
+                  useReplyForText: true,
+                })
+              }
+            })
+          } catch (err) {
+            console.error('[Webhook Image AI Error]:', err)
+            if (replyToken) {
+              await sendLineReply(replyToken, 'ได้รับรูปภาพเรียบร้อยแล้วค่ะ แอดมินจะเข้ามาตรวจสอบให้นะคะ 😊', lineToken)
+            }
+          }
+        } else if (replyToken && lineToken) {
           await sendLineReply(replyToken, 'ได้รับรูปภาพเรียบร้อยแล้วค่ะ แอดมินจะเข้ามาตรวจสอบให้นะคะ 😊', lineToken)
         }
       }
@@ -669,17 +740,58 @@ async function verifySlipAndNotify({
       await sendLinePush(userId, '❌ ไม่สามารถดาวน์โหลดรูปสลิปได้ค่ะ กรุณาส่งใหม่อีกครั้งนะคะ', lineToken)
       return
     }
+    const imageBase64 = Buffer.from(await imageRes.arrayBuffer()).toString('base64')
+    const mimeType = imageRes.headers.get('content-type') || 'image/jpeg'
+
     await settleSlipImage({
       shop,
       shopId,
       platform: 'line',
       userId,
       image: {
-        base64: Buffer.from(await imageRes.arrayBuffer()).toString('base64'),
-        mimeType: imageRes.headers.get('content-type') || 'image/jpeg',
+        base64: imageBase64,
+        mimeType,
       },
       imageRef: messageId,
       sendToCustomer: (text) => sendLinePush(userId, text, lineToken),
+      onNotPaymentSlip: async ({ conv }) => {
+        const features = (shop.features as Record<string, boolean>) || {}
+        const isAutoReplyEnabled = features.auto_reply !== false && botMayReplyNow(features)
+        if (!isAutoReplyEnabled || !conv?.id) {
+          const notPaymentReply = 'ได้รับรูปภาพแล้วค่ะ หากสนใจสินค้าชิ้นไหน พิมพ์ชื่อสินค้าที่ต้องการได้เลยนะคะ หากเป็นสลิปโอนเงิน แอดมินจะเข้ามาตรวจสอบให้นะคะ'
+          await sendLinePush(userId, notPaymentReply, lineToken)
+          return
+        }
+
+        const { processSalesAgentChat } = await import('@/lib/ai/salesAgentEngine')
+        const agentResult = await processSalesAgentChat({
+          shop,
+          userQuery: '',
+          attachments: [{
+            type: 'image',
+            mimeType,
+            base64: imageBase64,
+          }],
+          userId,
+          conversationId: conv.id,
+          supabaseClient: supabase,
+        })
+
+        if (conv.ai_mode === 'copilot') {
+          return
+        }
+
+        await deliverAgentResult({
+          agentResult,
+          conv,
+          shop,
+          shopId,
+          userId,
+          lineToken,
+          replyToken: undefined,
+          useReplyForText: false,
+        })
+      },
     })
   } catch (err) {
     console.error('[SlipVerify Exception]:', err)

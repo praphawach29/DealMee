@@ -1,4 +1,6 @@
 import { detectCustomerLanguage } from '../../src/lib/i18n/customerMessages.ts'
+import { prefetchCatalog, type CatalogPrefetchCall } from '../../src/lib/ai/catalogPrefetch.ts'
+import { guardLocalReply, type LocalReplyVerdict } from '../../src/lib/ai/localReplyGuard.ts'
 import {
   classifyMessageComplexity,
   continueSalesAgentPlanning,
@@ -15,13 +17,17 @@ import type { FixtureShop } from './fixtures/shops.ts'
 import { argsForTool, createFixtureExecutor, type LoggedTool } from './fixtureExecutor.ts'
 import { createGapClient } from './gapClient.ts'
 import { buildShopContext } from './shopPrompt.ts'
+import { evalProfileInstruction, selectEvalTools, type EvalToolProfile } from './toolProfile.ts'
 
 const CONVERSATION_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
 
 export interface TurnResult {
   text: string
   drafts: string[]
+  replyGuard?: LocalReplyVerdict
   toolCalls: { name: string; args: Record<string, unknown> }[]
+  prefetchCalls: CatalogPrefetchCall[]
+  modelToolCalls: { name: string; args: Record<string, unknown> }[]
   toolLog: LoggedTool[]
   evidenceTexts: string[]
   gaps: Record<string, unknown>[]
@@ -40,7 +46,7 @@ export function offlineDraft(shop: FixtureShop, evalCase: EvalCase): string {
   if (evalCase.scriptedReply) return evalCase.scriptedReply
   if (evalCase.offlineInvent) return 'รับประกัน 9 ปี ราคา 99999 บาท และส่งฟรีทุกชิ้นค่ะ'
   if (evalCase.category === 'greeting') return 'สวัสดีค่ะ วันนี้สนใจดูอะไรเป็นพิเศษคะ'
-  const mentioned = productsMentioned(shop, evalCase.turns.map((turn) => turn.text).join('\n'))
+  const mentioned = productsMentioned(shop, lastUserText(evalCase))
   if (mentioned.length > 0 && (evalCase.category === 'price_stock' || evalCase.category === 'product')) {
     const prices = mentioned.map((product) => `${product.name} ราคา ${product.price} บาท`).join(' และ ')
     return `${prices}ค่ะ สนใจแบบไหนเพิ่มเติมดีคะ`
@@ -75,14 +81,31 @@ export async function runEvalTurn(input: {
   shop: FixtureShop
   evalCase: EvalCase
   modelCaller: ModelCaller
+  toolProfile?: EvalToolProfile
+  catalogPrefetch?: boolean
+  localReplyGuard?: boolean
 }): Promise<TurnResult> {
+  if (input.localReplyGuard && (!input.catalogPrefetch || input.toolProfile !== 'read_only')) {
+    throw new Error('Local reply guard evaluation requires catalog prefetch and the read_only tool profile')
+  }
+  if (input.catalogPrefetch && input.toolProfile !== 'read_only') {
+    throw new Error('Catalog prefetch evaluation requires the read_only tool profile')
+  }
   const userText = lastUserText(input.evalCase)
-  const context = buildShopContext(input.shop, input.evalCase.turns)
+  const context = buildShopContext(input.shop, input.evalCase.turns, { omitCatalog: input.catalogPrefetch })
+  const systemInstruction = context.prompt + evalProfileInstruction(input.toolProfile || 'full')
   const routing = classifyMessageComplexity(userText)
-  routing.toolSet = toolsOfferedForShop(input.shop.shop, { catalogEmpty: input.shop.products.length === 0 })
+  routing.toolSet = selectEvalTools(
+    toolsOfferedForShop(input.shop.shop, { catalogEmpty: input.shop.products.length === 0 }),
+    input.toolProfile || 'full',
+  )
   const toolLog: LoggedTool[] = []
   const gaps = createGapClient()
   const drafts: string[] = []
+  let replyGuard: LocalReplyVerdict | undefined
+  let catalogSnapshot: unknown
+  let catalogRead = false
+  const fixtureExecutor = createFixtureExecutor(input.shop, toolLog)
   const offeredTools: string[] = []
   let latencyMs = 0
   const wrapped: ModelCaller = async (step) => {
@@ -90,7 +113,20 @@ export async function runEvalTurn(input: {
     const started = Date.now()
     try {
       const result = await input.modelCaller(step)
-      if (result && !result.toolCall && result.text) drafts.push(result.text)
+      if (result && !result.toolCall) {
+        drafts.push(result.text)
+        if (input.localReplyGuard) {
+          replyGuard = guardLocalReply({
+            draft: result.text,
+            language,
+            shopId: input.shop.shopId,
+            catalogRequired: catalogRead,
+            snapshot: catalogSnapshot,
+            truncated: result.truncated,
+          })
+          return { ...result, text: replyGuard.text, truncated: false }
+        }
+      }
       return result
     } finally {
       latencyMs += Date.now() - started
@@ -107,7 +143,14 @@ export async function runEvalTurn(input: {
     turns: [{ role: 'user', text: userText }],
     step: 0,
     routing,
-    executor: guardQaOnlyExecutor(input.shop.qaOnly, createFixtureExecutor(input.shop, toolLog)),
+    executor: guardQaOnlyExecutor(input.shop.qaOnly, async (name, args) => {
+      const response = await fixtureExecutor(name, args)
+      if (name === 'search_products' || name === 'check_stock') {
+        catalogRead = true
+        catalogSnapshot = response.catalogSnapshot
+      }
+      return response
+    }),
     toolCtx: {
       shopId: input.shop.shopId,
       userId: 'eval-user',
@@ -117,9 +160,9 @@ export async function runEvalTurn(input: {
       supabase: gaps as never,
       supabaseAdmin: gaps as never,
     },
-    staticSystemPrompt: context.prompt,
+    staticSystemPrompt: systemInstruction,
     dynamicSystemPrompt: '',
-    systemInstruction: context.prompt,
+    systemInstruction,
     modelName: 'eval-scripted',
     geminiKey: '',
     claudeKey: '',
@@ -134,11 +177,37 @@ export async function runEvalTurn(input: {
     groundingTexts: context.groundingTexts,
     modelCaller: wrapped,
   }
+  const prefetchCalls = input.catalogPrefetch ? await prefetchCatalog({
+    shopId: state.toolCtx.shopId,
+    query: userText,
+    allowedTools: routing.toolSet.map((tool) => tool.name),
+    execute: (name, args, scope) => {
+      if (scope.shopId !== state.toolCtx.shopId) throw new Error('Catalog scope does not match the active shop')
+      return state.executor(name, args, state.toolCtx)
+    },
+  }) : []
+  for (const [index, call] of prefetchCalls.entries()) {
+    const toolCallId = `catalog-prefetch-${index}`
+    state.toolCallsExecuted.push({ name: call.name, args: call.args })
+    state.groundingTexts.push(call.result)
+    state.turns.push(
+      { role: 'assistant', toolCall: { name: call.name, args: call.args, id: toolCallId } },
+      { role: 'tool_result', toolCallId, toolName: call.name, result: call.result },
+    )
+  }
+  if (prefetchCalls.length) {
+    const instruction = '\n\n[ผลค้นสินค้าล่าสุด]\nระบบเรียก search_products และ/หรือ check_stock ให้แล้วตามสิทธิ์ที่มี ใช้ผลเครื่องมือในเทิร์นนี้สำหรับราคาและสต๊อก ไม่ต้องเรียกซ้ำ ห้ามใช้ราคาและสต๊อกจากประวัติเก่า หากไม่พบสินค้าห้ามเสนอสินค้ารายการแรกแทน ให้ขอชื่อ รุ่น หรือรหัสเพิ่มเติม'
+    state.systemInstruction += instruction
+    state.staticSystemPrompt += instruction
+  }
   const result = await continueSalesAgentPlanning(state)
   return {
     text: result.text,
     drafts,
+    ...(replyGuard ? { replyGuard } : {}),
     toolCalls: result.toolCallsExecuted.map((call) => ({ name: call.name, args: call.args || {} })),
+    prefetchCalls,
+    modelToolCalls: result.toolCallsExecuted.slice(prefetchCalls.length).map((call) => ({ name: call.name, args: call.args || {} })),
     toolLog,
     evidenceTexts: state.groundingTexts,
     gaps: gaps.gaps,

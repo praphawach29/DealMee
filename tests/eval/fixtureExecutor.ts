@@ -4,6 +4,11 @@ import { computeShippingFee } from '../../src/lib/ai/catalogPricing.ts'
 import { codOrderRefusal } from '../../src/lib/ai/codPolicy.ts'
 import { NO_KNOWLEDGE_TOOL_RESULT } from '../../src/lib/knowledge/hybrid.ts'
 import type { FixtureProduct, FixtureShop } from './fixtures/shops.ts'
+import type { CatalogSnapshot } from '../../src/lib/ai/catalogSnapshot.ts'
+
+interface FixtureToolResult extends ToolExecutionResult {
+  catalogSnapshot?: CatalogSnapshot
+}
 
 export interface LoggedTool {
   name: string
@@ -16,7 +21,7 @@ function findProducts(shop: FixtureShop, keyword: string): FixtureProduct[] {
   if (!text) return shop.products.slice(0, 5)
   return shop.products.filter((product) => {
     const haystack = `${product.name} ${product.sku} ${product.aliases.join(' ')} ${product.category}`.toLowerCase()
-    return haystack.includes(text) || product.aliases.some((alias) => text.includes(alias.toLowerCase())) || text.includes(product.name.toLowerCase())
+    return haystack.includes(text) || product.aliases.some((alias) => alias.length >= 4 && text.includes(alias.toLowerCase())) || text.includes(product.name.toLowerCase())
   })
 }
 
@@ -38,17 +43,20 @@ function orderTotal(shop: FixtureShop, product: FixtureProduct, qty: number, add
 
 /** In-memory tools for the eval. Talks to fixture rows only, never the product database. */
 export function createFixtureExecutor(shop: FixtureShop, log: LoggedTool[]) {
-  return async (name: AgentToolName, args: Record<string, unknown>): Promise<ToolExecutionResult> => {
+  return async (name: AgentToolName, args: Record<string, unknown>): Promise<FixtureToolResult> => {
     let result = ''
+    let catalogSnapshot: CatalogSnapshot | undefined
     if (!shop.booking && (name === 'check_available_slots' || name === 'book_appointment' || name === 'reschedule_booking' || name === 'cancel_booking' || name === 'check_booking')) {
       result = 'ร้านนี้ไม่ได้เปิดระบบจองคิวผ่านแชท แจ้งลูกค้าอย่างสุภาพว่าแอดมินจะติดต่อกลับเพื่อนัดหมายให้'
     } else if (name === 'search_products') {
-      const found = findProducts(shop, String(args.keyword || ''))
+      const found = findProducts(shop, String(args.keyword || '')).slice(0, 5)
+      catalogSnapshot = { shopId: shop.shopId, products: found.map(({ id, name, price, stock }) => ({ id, name, price, stock })) }
       result = found.length === 0
         ? `ไม่พบสินค้าที่ตรงกับ "${String(args.keyword || '')}"`
         : `สินค้าที่พบ: ${found.map((product) => `${product.name} ราคา ${product.price} บาท ${product.stock > 0 ? `เหลือ ${product.stock} ชิ้น` : 'หมดสต๊อก'}`).join('; ')}`
     } else if (name === 'check_stock') {
-      const found = findProducts(shop, String(args.product_name || ''))
+      const found = findProducts(shop, String(args.product_name || '')).slice(0, 3)
+      catalogSnapshot = { shopId: shop.shopId, products: found.map(({ id, name, price, stock }) => ({ id, name, price, stock })) }
       result = found.length === 0
         ? `ไม่พบสินค้า "${String(args.product_name || '')}"`
         : found.map((product) => `${product.name} (รหัส SKU: ${product.sku}): ${product.stock > 0 ? `มีสินค้าพร้อมส่ง ${product.stock} ชิ้น` : 'สินค้าหมดสต๊อกชั่วคราว'}, ราคา ${product.price} บาท`).join('; ')
@@ -105,7 +113,7 @@ export function createFixtureExecutor(shop: FixtureShop, log: LoggedTool[]) {
       result = `เครื่องมือ ${name} ทำงานกับข้อมูลทดสอบแล้ว`
     }
     log.push({ name, args, result })
-    return { resultForAi: result, immediateMessages: [] }
+    return { resultForAi: result, immediateMessages: [], ...(catalogSnapshot ? { catalogSnapshot } : {}) }
   }
 }
 

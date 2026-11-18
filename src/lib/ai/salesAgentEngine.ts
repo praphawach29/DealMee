@@ -61,9 +61,17 @@ export const QUOTA_EXCEEDED_MESSAGE_TH = t('quotaExceeded', 'th')
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
+export interface ImageAttachment {
+  type: 'image'
+  mimeType: string
+  base64?: string
+  url?: string
+}
+
 export interface SalesAgentRequest {
   shop: any
   userQuery: string
+  attachments?: ImageAttachment[]
   userId: string
   conversationId: string
   /**
@@ -105,7 +113,7 @@ export interface SalesAgentRequest {
 
 /** One turn of the Planning Layer's provider-agnostic conversation state. Each callXApi function serializes this into its own wire format. */
 export type PlanningTurn =
-  | { role: 'user'; text: string }
+  | { role: 'user'; text: string; attachments?: ImageAttachment[] }
   | { role: 'assistant'; text?: string; toolCall?: IdentifiedToolCall }
   | { role: 'tool_result'; toolCallId?: string; toolName: string; result: string }
 
@@ -1021,10 +1029,11 @@ async function preparePlanningState({
   isPlayground,
   modelCaller,
   shadowReplay,
+  attachments,
 }: SalesAgentRequest): Promise<
   { quotaExceeded: true; language: CustomerLanguage } | { quotaExceeded: false; state: PlanningState }
 > {
-  const userQuery = shadowReplay ? redactPii(rawUserQuery || '') : rawUserQuery
+  const userQuery = shadowReplay ? redactPii(rawUserQuery || '') : (rawUserQuery || '')
   // A shadow replay is not a customer message: it must not spend quota.
   if (!shadowReplay && await isOverQuota(shop, isPlayground)) {
     // Language still matters on this path: the quota notice is the one
@@ -1532,7 +1541,7 @@ ${historyContext}`
       salesStage: initialSalesStage,
       isFirstCustomerTurn: recentCustomerMessages.length <= 1,
       language,
-      turns: [{ role: 'user', text: userQuery }],
+      turns: [{ role: 'user', text: userQuery, attachments }],
       step: 0,
       routing,
       executor,
@@ -2063,10 +2072,26 @@ function withLeadingContext(contents: any[], context: string): any[] {
   return [{ ...first, parts: [note, ...(first.parts || [])] }, ...rest]
 }
 
-function buildGeminiContents(turns: PlanningTurn[]): any[] {
+export function buildGeminiContents(turns: PlanningTurn[]): any[] {
   return turns.map((turn) => {
     if (turn.role === 'user') {
-      return { role: 'user', parts: [{ text: turn.text }] }
+      const parts: any[] = []
+      if (turn.attachments?.length) {
+        for (const att of turn.attachments) {
+          if (att.type === 'image' && att.base64) {
+            parts.push({
+              inlineData: {
+                mimeType: att.mimeType || 'image/jpeg',
+                data: att.base64,
+              },
+            })
+          }
+        }
+      }
+      if (turn.text || parts.length === 0) {
+        parts.push({ text: turn.text || '' })
+      }
+      return { role: 'user', parts }
     }
     if (turn.role === 'assistant') {
       const parts: any[] = []
@@ -2287,11 +2312,31 @@ async function callGeminiApi(
  * tool_use block) is echoed back exactly as received, then a new user
  * message carries ONLY a tool_result block referencing that tool_use's id.
  */
-function buildClaudeMessages(turns: PlanningTurn[]): any[] {
+export function buildClaudeMessages(turns: PlanningTurn[]): any[] {
   const messages: any[] = []
   for (const turn of turns) {
     if (turn.role === 'user') {
-      messages.push({ role: 'user', content: turn.text })
+      if (turn.attachments?.length) {
+        const content: any[] = []
+        for (const att of turn.attachments) {
+          if (att.type === 'image' && att.base64) {
+            content.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: att.mimeType || 'image/jpeg',
+                data: att.base64,
+              },
+            })
+          }
+        }
+        if (turn.text || content.length === 0) {
+          content.push({ type: 'text', text: turn.text || '' })
+        }
+        messages.push({ role: 'user', content })
+      } else {
+        messages.push({ role: 'user', content: turn.text })
+      }
     } else if (turn.role === 'assistant') {
       const content: any[] = []
       if (turn.text) content.push({ type: 'text', text: turn.text })
@@ -2432,11 +2477,34 @@ async function callClaudeApi(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Converts PlanningTurn[] into OpenAI's `messages` array (stable, long-standing format — assistant message with tool_calls, then a role:'tool' message per result). */
-function buildOpenAiMessages(systemInstruction: string, turns: PlanningTurn[]): any[] {
+export function buildOpenAiMessages(systemInstruction: string, turns: PlanningTurn[]): any[] {
   const messages: any[] = [{ role: 'system', content: systemInstruction }]
   for (const turn of turns) {
     if (turn.role === 'user') {
-      messages.push({ role: 'user', content: turn.text })
+      if (turn.attachments?.length) {
+        const content: any[] = []
+        if (turn.text) {
+          content.push({ type: 'text', text: turn.text })
+        }
+        for (const att of turn.attachments) {
+          if (att.type === 'image') {
+            if (att.base64) {
+              content.push({
+                type: 'image_url',
+                image_url: { url: `data:${att.mimeType || 'image/jpeg'};base64,${att.base64}` },
+              })
+            } else if (att.url) {
+              content.push({
+                type: 'image_url',
+                image_url: { url: att.url },
+              })
+            }
+          }
+        }
+        messages.push({ role: 'user', content: content.length > 0 ? content : turn.text })
+      } else {
+        messages.push({ role: 'user', content: turn.text })
+      }
     } else if (turn.role === 'assistant') {
       const msg: any = { role: 'assistant', content: turn.text || null }
       if (turn.toolCall) {

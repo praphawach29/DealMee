@@ -2,7 +2,7 @@
  * Live sales-agent eval. Calls the configured model through the real planning
  * loop and scores tool choice plus grounding. Fixture shops stay in memory.
  *
- *   EVAL_PROVIDER=gemini|openrouter
+ *   EVAL_PROVIDER=gemini|openrouter|ollama
  *   EVAL_MODEL=gemini-2.5-flash
  *   GEMINI_API_KEY=...          (or OPENROUTER_API_KEY)
  *   EVAL_JUDGE=1                optional second call
@@ -21,10 +21,25 @@ import { createLiveCaller, judgeReply, providerFromEnv } from './providers.ts'
 import { buildReport, reportMarkdown, writeReport, type CaseReport } from './report.ts'
 import { runEvalTurn } from './runTurn.ts'
 import { scoreEval } from './score.ts'
-import { buildShopContext } from './shopPrompt.ts'
+import { evalToolProfile, selectEvalTools } from './toolProfile.ts'
 
 const config = providerFromEnv()
-if (!config.apiKey) {
+const toolProfile = evalToolProfile(process.env.EVAL_TOOL_PROFILE)
+const catalogPrefetch = process.env.EVAL_CATALOG_PREFETCH === '1'
+const localReplyGuard = process.env.EVAL_LOCAL_REPLY_GUARD === '1'
+if (process.env.EVAL_LOCAL_REPLY_GUARD && !['0', '1'].includes(process.env.EVAL_LOCAL_REPLY_GUARD)) {
+  throw new Error('EVAL_LOCAL_REPLY_GUARD must be 0 or 1')
+}
+if (localReplyGuard && (config.provider !== 'ollama' || !catalogPrefetch || toolProfile !== 'read_only')) {
+  throw new Error('Local reply guard evaluation requires Ollama, catalog prefetch and the read_only tool profile')
+}
+if (process.env.EVAL_CATALOG_PREFETCH && !['0', '1'].includes(process.env.EVAL_CATALOG_PREFETCH)) {
+  throw new Error('EVAL_CATALOG_PREFETCH must be 0 or 1')
+}
+if (catalogPrefetch && toolProfile !== 'read_only') {
+  throw new Error('Catalog prefetch evaluation requires the read_only tool profile')
+}
+if (config.provider !== 'ollama' && !config.apiKey) {
   const keyName = config.provider === 'gemini' ? 'GEMINI_API_KEY' : 'OPENROUTER_API_KEY'
   console.error(`No ${keyName} in the environment, so the live eval did not run.`)
   process.exit(1)
@@ -49,12 +64,15 @@ const rows: CaseReport[] = []
 for (const evalCase of cases) {
   const shop = shopById(evalCase.shopId)
   const usage = { promptTokens: 0, completionTokens: 0 }
-  const tools = toolsOfferedForShop(shop.shop as never, { catalogEmpty: shop.products.length === 0 })
+  const tools = selectEvalTools(toolsOfferedForShop(shop.shop as never, { catalogEmpty: shop.products.length === 0 }), toolProfile)
   const started = Date.now()
   try {
     const result = await runEvalTurn({
       shop,
       evalCase,
+      toolProfile,
+      catalogPrefetch,
+      localReplyGuard,
       modelCaller: createLiveCaller({
         provider: config.provider,
         model: config.model,
@@ -63,7 +81,7 @@ for (const evalCase of cases) {
         usage,
       }),
     })
-    const evidence = buildShopContext(shop, evalCase.turns).groundingTexts.concat(result.toolLog.map((entry) => entry.result))
+    const evidence = result.evidenceTexts
     const judge = judgeOn
       ? await judgeReply({
           provider: config.provider,
@@ -94,9 +112,14 @@ for (const evalCase of cases) {
       completionTokens: usage.completionTokens,
       totalTokens: usage.promptTokens + usage.completionTokens,
       toolCalls: result.toolCalls.map((call) => call.name),
+      systemToolCalls: result.prefetchCalls.map((call) => call.name),
+      modelToolCalls: result.modelToolCalls.map((call) => call.name),
+      ...(result.replyGuard ? { replyGuard: result.replyGuard } : {}),
       transcript: [
         ...evalCase.turns,
-        { role: 'tools', text: result.toolCalls.map((call) => call.name).join(', ') || '(none)' },
+        { role: 'system_tools', text: result.prefetchCalls.map((call) => call.name).join(', ') || '(none)' },
+        { role: 'model_tools', text: result.modelToolCalls.map((call) => call.name).join(', ') || '(none)' },
+        ...(result.replyGuard ? [{ role: 'model_draft', text: result.drafts.at(-1) || '' }, { role: 'reply_guard', text: JSON.stringify(result.replyGuard) }] : []),
         { role: 'assistant', text: result.text },
       ],
     })
@@ -121,7 +144,7 @@ for (const evalCase of cases) {
   }
 }
 
-const report = buildReport({ provider: config.provider, model: config.model, judge: judgeOn, cases: rows })
+const report = buildReport({ provider: config.provider, model: config.model, judge: judgeOn, cases: rows, toolProfile, catalogPrefetch, localReplyGuard })
 const written = writeReport(report, process.env.EVAL_OUT || 'eval-reports')
 console.log(`\n${reportMarkdown(report)}`)
 console.log(`\nWrote ${written.jsonPath}`)

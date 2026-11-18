@@ -23,6 +23,8 @@ export interface SettleSlipInput {
   imageRef: string
   /** Sends a text message to the customer on their own channel */
   sendToCustomer: (text: string) => Promise<void>
+  /** Optional fallback when the image is determined not to be a payment slip */
+  onNotPaymentSlip?: (context: { conv: any }) => Promise<void>
 }
 
 /**
@@ -107,6 +109,10 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
   // No slip QR and no order waiting for payment: almost always a product photo or a
   // question, so answer it without spending a paid slip check
   if (!slipQr && !pendingOrder) {
+    if (input.onNotPaymentSlip) {
+      await input.onNotPaymentSlip({ conv })
+      return
+    }
     await logCustomerImage()
     await replyAndLog(notPaymentReply)
     return
@@ -148,6 +154,10 @@ export async function settleSlipImage(input: SettleSlipInput): Promise<void> {
   // No order waiting for payment and the picture isn't a readable slip: most likely a
   // product photo or a question, so don't answer it as a failed payment
   if (!pendingOrder && (verifyResult.manualReview || !verifyResult.success)) {
+    if (input.onNotPaymentSlip) {
+      await input.onNotPaymentSlip({ conv })
+      return
+    }
     await replyAndLog(notPaymentReply)
     return
   }
