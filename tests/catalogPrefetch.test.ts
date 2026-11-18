@@ -21,9 +21,9 @@ test('catalog prefetch runs only permitted read tools in order and scopes them t
     return { resultForAi: 'เสื้อยืด ราคา 290 บาท เหลือ 12 ชิ้น' }
   } })
   assert.deepEqual(executed, ['search_products', 'check_stock'])
-  // the trailing politeness particle is stripped so the keyword can still match a short product name
-  assert.equal(calls[0].args.keyword, 'มีเสื้อยืดไหม')
-  assert.equal(calls[1].args.product_name, 'มีเสื้อยืดไหม')
+  // trailing question/politeness particles and leading question prefixes are stripped so the keyword matches the product name
+  assert.equal(calls[0].args.keyword, 'เสื้อยืดไหม')
+  assert.equal(calls[1].args.product_name, 'เสื้อยืดไหม')
 })
 
 test('greetings, empty questions and shops without catalog permissions perform no reads', async () => {
@@ -41,7 +41,7 @@ test('broad catalog requests list products, but unknown names are never replaced
   }
   const query = 'มีรองเท้าไหมคะ'
   const calls = await prefetchCatalog({ shopId: 'shop-A', query, allowedTools, execute: async () => ({ resultForAi: 'ไม่พบสินค้า' }) })
-  assert.equal(calls[0].args.keyword, 'มีรองเท้าไหม')
+  assert.equal(calls[0].args.keyword, 'รองเท้าไหม')
 })
 
 test('prefetch does not cache results or mix shops when requests overlap', async () => {

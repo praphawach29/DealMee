@@ -14,16 +14,40 @@ export type CatalogReadTool = 'search_products' | 'check_stock'
 const TRAILING_QUESTION_SUFFIXES = [
   /\s*ราคา\s*เท่าไหร่\s*(?:คะ|ครับ|ค่ะ)?[?？!.]*$/u,
   /\s*เท่าไหร่\s*(?:คะ|ครับ|ค่ะ)?[?？!.]*$/u,
+  /\s*ตัวละ\s*เท่าไร\s*(?:คะ|ครับ|ค่ะ)?[?？!.]*$/u,
+  /\s*ถุงละ\s*กี่บาท\s*(?:คะ|ครับ|ค่ะ)?[?？!.]*$/u,
   /\s*เหลือ\s*กี่\s*(?:ชิ้น|ตัว|อัน|ขวด|ถุง|หลอด|กล่อง)?\s*(?:คะ|ครับ|ค่ะ)?[?？!.]*$/u,
   /\s*กี่\s*บาท\s*(?:คะ|ครับ|ค่ะ)?[?？!.]*$/u,
   /\s*(?:คะ|ครับ|ค่ะ)[?？!.]*$/u,
+  /\s*(?:หน่อย|บ้าง)[?？!.]*$/u,
+]
+
+const LEADING_QUESTION_PREFIXES = [
+  /^(?:แล้วมี|แล้ว|มี|ขอดู|ดู|สนใจ|รบกวนดู|เปลี่ยนเป็น)\s+/u,
+  /^(?:แล้วมี|ขอดู|ดู|สนใจ|รบกวนดู|เปลี่ยนเป็น)/u,
+  /^(?:แล้ว|มี)(?!(?:สินค้า|รายการสินค้า|บริการ|แพ็กเกจ|แพ็คเกจ))/u,
 ]
 
 export function extractSearchKeyword(query: string): string {
-  const trimmed = query.trim()
-  for (const suffix of TRAILING_QUESTION_SUFFIXES) {
-    const stripped = trimmed.replace(suffix, '').trim()
-    if (stripped && stripped !== trimmed) return stripped
+  let trimmed = query.trim()
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const suffix of TRAILING_QUESTION_SUFFIXES) {
+      const stripped = trimmed.replace(suffix, '').trim()
+      if (stripped && stripped !== trimmed) {
+        trimmed = stripped
+        changed = true
+        break
+      }
+    }
+  }
+  for (const prefix of LEADING_QUESTION_PREFIXES) {
+    const stripped = trimmed.replace(prefix, '').trim()
+    if (stripped && stripped !== trimmed) {
+      trimmed = stripped
+      break
+    }
   }
   return trimmed
 }
