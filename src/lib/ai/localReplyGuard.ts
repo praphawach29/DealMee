@@ -12,21 +12,24 @@ export interface LocalReplyVerdict {
 
 function safeNotice(language: 'th' | 'en'): string {
   return language === 'th'
-    ? 'ขออภัยค่ะ ข้อมูลคำตอบนี้ยังยืนยันไม่ได้ กรุณาระบุชื่อสินค้าหรือรายละเอียดเพิ่มเติมค่ะ'
+    ? 'ขออภัยด้วยนะคะ ข้อมูลส่วนนี้ยังยืนยันจากระบบไม่ได้ค่ะ คุณลูกค้าสามารถพิมพ์ชื่อสินค้า สเปก หรือรุ่นที่สนใจเพิ่มเติม เพื่อให้แอดมินช่วยตรวจสอบให้ได้เลยนะคะ 🙏'
     : 'Sorry, I cannot verify this answer yet. Please provide the product name or more details.'
 }
 
 function catalogText(snapshot: CatalogSnapshot, language: 'th' | 'en'): string {
   if (!snapshot.products.length) {
     return language === 'th'
-      ? 'ยังไม่พบสินค้าที่ตรงกับคำค้นนี้ค่ะ กรุณาระบุชื่อหรือรุ่นเพิ่มเติมค่ะ'
+      ? 'ยังไม่พบสินค้าที่ตรงกับคำค้นนี้เลยค่ะ 🥺 คุณลูกค้าลองพิมพ์ชื่อรุ่น สี หรือประเภทสินค้าเพิ่มเติม หรือให้แอดมินช่วยค้นหาได้เลยนะคะ'
       : 'No matching products were found. Please provide a product name or model.'
   }
   const format = new Intl.NumberFormat(language === 'th' ? 'th-TH' : 'en-US', { maximumFractionDigits: 2 })
   const lines = snapshot.products.map((product) => language === 'th'
-    ? `${product.name}: ราคา ${format.format(product.price)} บาท — ${product.stock > 0 ? `คงเหลือ ${format.format(product.stock)} ชิ้น` : 'หมดสต๊อก'}`
+    ? `✨ ${product.name}: ราคา ${format.format(product.price)} บาท — ${product.stock > 0 ? `คงเหลือ ${format.format(product.stock)} ชิ้น (มีของพร้อมส่งค่ะ)` : 'หมดสต๊อก'}`
     : `${product.name}: THB ${format.format(product.price)} — ${product.stock > 0 ? `${format.format(product.stock)} in stock` : 'out of stock'}`)
-  return [language === 'th' ? 'ข้อมูลที่ยืนยันได้จากรายการล่าสุด:' : 'Verified information from the latest results:', ...lines].join('\n')
+  const bridge = language === 'th'
+    ? '\nสนใจรับกี่ชิ้น หรือต้องการให้แอดมินแนะนำรุ่นไหนเพิ่มเติม แจ้งได้เลยนะคะ 😊'
+    : ''
+  return [language === 'th' ? 'ข้อมูลสินค้าพร้อมส่งจากแคตตาล็อกร้านค่ะ:' : 'Verified information from the latest results:', ...lines, bridge].filter(Boolean).join('\n')
 }
 
 function hasUnexpectedScript(text: string, language: 'th' | 'en', snapshot?: CatalogSnapshot): boolean {

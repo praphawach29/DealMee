@@ -414,6 +414,35 @@ async function handleMessengerImage(args: {
       image: { base64: buffer.toString('base64'), mimeType: res.headers.get('content-type') || 'image/jpeg' },
       imageRef: mid || 'unknown',
       sendToCustomer: send,
+      onNotPaymentSlip: async ({ conv }) => {
+        const features = (shop.features as Record<string, boolean>) || {}
+        const isAutoReplyEnabled = features.auto_reply !== false
+        if (!isAutoReplyEnabled || !conv?.id) {
+          await send('ได้รับรูปภาพเรียบร้อยแล้วค่ะ 😊 หากสนใจสินค้าในรูป หรือต้องการสอบถามรายละเอียดเพิ่มเติม พิมพ์บอกแอดมินได้เลยนะคะ 🙏')
+          return
+        }
+
+        const agentResult = await processSalesAgentChat({
+          shop,
+          userQuery: '',
+          attachments: [{
+            type: 'image',
+            mimeType: res.headers.get('content-type') || 'image/jpeg',
+            base64: buffer.toString('base64'),
+          }],
+          userId: psid,
+          conversationId: conv.id,
+          supabaseClient: supabase,
+        })
+
+        if (conv.ai_mode === 'copilot') {
+          return
+        }
+
+        if (agentResult.text) {
+          await send(agentResult.text)
+        }
+      },
     })
   } catch (err) {
     console.error('[FB SlipVerify Exception]:', err)

@@ -758,7 +758,7 @@ async function verifySlipAndNotify({
         const features = (shop.features as Record<string, boolean>) || {}
         const isAutoReplyEnabled = features.auto_reply !== false && botMayReplyNow(features)
         if (!isAutoReplyEnabled || !conv?.id) {
-          const notPaymentReply = 'ได้รับรูปภาพแล้วค่ะ หากสนใจสินค้าชิ้นไหน พิมพ์ชื่อสินค้าที่ต้องการได้เลยนะคะ หากเป็นสลิปโอนเงิน แอดมินจะเข้ามาตรวจสอบให้นะคะ'
+          const notPaymentReply = 'ได้รับรูปภาพเรียบร้อยแล้วค่ะ 😊 หากสนใจสินค้าในรูป หรือมีชื่อรุ่น/รายละเอียดที่ต้องการ พิมพ์สอบถามแอดมินได้เลยนะคะ หรือหากเป็นสลิปโอนเงิน แอดมินจะรีบตรวจสอบและแจ้งผลให้ทันทีค่ะ 🙏'
           await sendLinePush(userId, notPaymentReply, lineToken)
           return
         }
