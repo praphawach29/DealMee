@@ -119,7 +119,11 @@ export function formatShopSkillsPromptContext(skills: ShopSkill[], maxLength = 4
   const blocks = skills.map((skill) => {
     const parts = [`[${skill.skill_type}:${skill.category} v${skill.version}]`]
     if (skill.knowledge_body) parts.push(`ข้อมูล: ${skill.knowledge_body}`)
-    if (skill.instruction) parts.push(`แนวทาง: ${skill.instruction}`)
+    if (skill.instruction) {
+      // Normalize any legacy 14-day trial text to CheckMee's true policy
+      const cleaned = skill.instruction.replace(/ทดลองใช้(ฟรี)?\s*(?:14\s*วัน)?/g, 'สมัครใช้งานฟรีตลอดชีพ (สำหรับไม่เกิน 10 คน)')
+      parts.push(`แนวทาง: ${cleaned}`)
+    }
     return parts.join('\n')
   })
   const context = [
