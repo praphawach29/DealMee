@@ -29,6 +29,32 @@ const supabase = createAdminClient()
 // LINE gets its 200 immediately; this bounds the after() work (AI planning, slip checks)
 export const maxDuration = 60
 
+/**
+ * Fetches user's display name and profile image from LINE Messaging API.
+ * Returns null if not a real LINE user (e.g. U[0-9a-f]{32}) or if API request fails.
+ */
+async function fetchLineUserProfile(
+  userId: string,
+  lineToken: string | undefined
+): Promise<{ displayName?: string; pictureUrl?: string } | null> {
+  if (!lineToken || !userId || !userId.startsWith('U')) return null
+  try {
+    const res = await fetch(`https://api.line.me/v2/bot/profile/${encodeURIComponent(userId)}`, {
+      headers: { Authorization: `Bearer ${lineToken}` },
+    })
+    if (res.ok) {
+      const data = await res.json()
+      return {
+        displayName: data.displayName || undefined,
+        pictureUrl: data.pictureUrl || undefined,
+      }
+    }
+  } catch (err) {
+    console.warn(`[fetchLineUserProfile] Error fetching profile for ${userId}:`, err)
+  }
+  return null
+}
+
 async function buildFollowGreeting(shop: any) {
   if (!isDefaultGreeting(shop.greeting_message)) return shop.greeting_message
 
@@ -143,6 +169,47 @@ async function processLineEvents({
       if (replyToken && lineToken) {
         await sendLineReply(replyToken, greeting, lineToken)
       }
+      try {
+        const lineProfile = await fetchLineUserProfile(userId, lineToken)
+        const customerName = lineProfile?.displayName || `ลูกค้า LINE (${userId.substring(0, 6)})`
+        const customerAvatar = lineProfile?.pictureUrl || null
+
+        const { data: existingConv } = await supabase
+          .from('conversations')
+          .select('id, customer_name, customer_avatar')
+          .eq('shop_id', shop_id)
+          .eq('platform', 'line')
+          .eq('user_id', userId)
+          .maybeSingle()
+
+        if (!existingConv) {
+          await supabase.from('conversations').insert({
+            shop_id,
+            user_id: userId,
+            platform_sender_id: userId,
+            customer_name: customerName,
+            customer_avatar: customerAvatar,
+            platform: 'line',
+            last_message: '[เพิ่มเพื่อน]',
+            status: 'ai',
+            ai_mode: 'auto',
+          })
+          await upsertCustomerProfile(shop_id, userId, customerName)
+        } else if (lineProfile) {
+          const updates: Record<string, any> = {}
+          if (lineProfile.displayName && (!existingConv.customer_name || existingConv.customer_name.startsWith('ลูกค้า LINE'))) {
+            updates.customer_name = lineProfile.displayName
+          }
+          if (lineProfile.pictureUrl && !existingConv.customer_avatar) {
+            updates.customer_avatar = lineProfile.pictureUrl
+          }
+          if (Object.keys(updates).length > 0) {
+            await supabase.from('conversations').update(updates).eq('id', existingConv.id)
+          }
+        }
+      } catch (e) {
+        console.warn('[LINE Follow] Profile sync failed:', e)
+      }
       continue
     }
 
@@ -170,13 +237,18 @@ async function processLineEvents({
       }
 
       if (!conv) {
+        const lineProfile = await fetchLineUserProfile(userId, lineToken)
+        const customerName = lineProfile?.displayName || `ลูกค้า LINE (${userId.substring(0, 6)})`
+        const customerAvatar = lineProfile?.pictureUrl || null
+
         const { data: newConv } = await supabase
           .from('conversations')
           .insert({
             shop_id,
             user_id: userId,
             platform_sender_id: userId,
-            customer_name: `ลูกค้า LINE (${userId.substring(0, 6)})`,
+            customer_name: customerName,
+            customer_avatar: customerAvatar,
             platform: 'line',
             last_message: userText,
             status: 'ai',
@@ -187,12 +259,28 @@ async function processLineEvents({
 
         conv = newConv
       } else {
+        const updatePayload: Record<string, any> = {
+          last_message: userText,
+          last_message_at: new Date().toISOString(),
+        }
+
+        if (!conv.customer_avatar || !conv.customer_name || conv.customer_name.startsWith('ลูกค้า LINE')) {
+          const lineProfile = await fetchLineUserProfile(userId, lineToken)
+          if (lineProfile) {
+            if (lineProfile.displayName && (!conv.customer_name || conv.customer_name.startsWith('ลูกค้า LINE'))) {
+              updatePayload.customer_name = lineProfile.displayName
+              conv.customer_name = lineProfile.displayName
+            }
+            if (lineProfile.pictureUrl && !conv.customer_avatar) {
+              updatePayload.customer_avatar = lineProfile.pictureUrl
+              conv.customer_avatar = lineProfile.pictureUrl
+            }
+          }
+        }
+
         await supabase
           .from('conversations')
-          .update({
-            last_message: userText,
-            last_message_at: new Date().toISOString(),
-          })
+          .update(updatePayload)
           .eq('id', conv.id)
       }
 
@@ -210,7 +298,7 @@ async function processLineEvents({
           conversation_id: conv.id,
           shop_id,
           sender_type: 'user',
-          sender_name: 'ลูกค้า',
+          sender_name: conv.customer_name || 'ลูกค้า',
           message: userText,
           platform: 'line',
           ...(skillsTelemetryEnabled ? { intent: detectIntent(userText, []) } : {}),
@@ -448,13 +536,18 @@ async function processLineEvents({
                 .maybeSingle()
 
               if (!conv) {
+                const lineProfile = await fetchLineUserProfile(userId, lineToken)
+                const customerName = lineProfile?.displayName || `ลูกค้า LINE (${userId.substring(0, 6)})`
+                const customerAvatar = lineProfile?.pictureUrl || null
+
                 const { data: newConv } = await supabase
                   .from('conversations')
                   .insert({
                     shop_id,
                     user_id: userId,
                     platform_sender_id: userId,
-                    customer_name: `ลูกค้า LINE (${userId.substring(0, 6)})`,
+                    customer_name: customerName,
+                    customer_avatar: customerAvatar,
                     platform: 'line',
                     last_message: '[รูปภาพ]',
                     status: 'ai',
@@ -463,6 +556,22 @@ async function processLineEvents({
                   .select()
                   .single()
                 conv = newConv
+              } else if (!conv.customer_avatar || !conv.customer_name || conv.customer_name.startsWith('ลูกค้า LINE')) {
+                const lineProfile = await fetchLineUserProfile(userId, lineToken)
+                if (lineProfile) {
+                  const updates: Record<string, any> = {}
+                  if (lineProfile.displayName && (!conv.customer_name || conv.customer_name.startsWith('ลูกค้า LINE'))) {
+                    updates.customer_name = lineProfile.displayName
+                    conv.customer_name = lineProfile.displayName
+                  }
+                  if (lineProfile.pictureUrl && !conv.customer_avatar) {
+                    updates.customer_avatar = lineProfile.pictureUrl
+                    conv.customer_avatar = lineProfile.pictureUrl
+                  }
+                  if (Object.keys(updates).length > 0) {
+                    await supabase.from('conversations').update(updates).eq('id', conv.id)
+                  }
+                }
               }
 
               if (conv?.id) {

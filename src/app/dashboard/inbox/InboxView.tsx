@@ -36,6 +36,45 @@ function resumeTimeText(pausedUntil?: string | null): string {
   return at.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.'
 }
 
+function CustomerAvatar({
+  name,
+  avatarUrl,
+  sizeClass = 'w-9 h-9 sm:w-10 sm:h-10 text-xs sm:text-sm',
+  indicator,
+}: {
+  name: string
+  avatarUrl?: string | null
+  sizeClass?: string
+  indicator?: React.ReactNode
+}) {
+  const [imgFailed, setImgFailed] = useState(false)
+
+  useEffect(() => {
+    setImgFailed(false)
+  }, [avatarUrl])
+
+  const initial = (name || 'ล').trim().charAt(0) || 'ล'
+
+  return (
+    <div
+      className={`${sizeClass} rounded-full bg-electric-blue/10 text-electric-blue flex items-center justify-center font-bold shrink-0 relative select-none`}
+    >
+      {avatarUrl && !imgFailed ? (
+        <img
+          src={avatarUrl}
+          alt={name}
+          className="w-full h-full rounded-full object-cover"
+          referrerPolicy="no-referrer"
+          onError={() => setImgFailed(true)}
+        />
+      ) : (
+        <span>{initial}</span>
+      )}
+      {indicator}
+    </div>
+  )
+}
+
 export default function InboxView({ conversations, messagesMap, botMuted = null }: InboxViewProps) {
   const router = useRouter()
   const [selectedConvId, setSelectedConvId] = useState<string | null>(
@@ -351,17 +390,20 @@ export default function InboxView({ conversations, messagesMap, botMuted = null 
                       : 'hover:bg-surface-container'
                   }`}
                 >
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-electric-blue/10 text-electric-blue flex items-center justify-center font-bold shrink-0 text-xs sm:text-sm relative">
-                    {conv.customer_name.charAt(0)}
-                    {/* Platform mini indicator on avatar */}
-                    <span
-                      className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border border-surface flex items-center justify-center text-[8px] font-bold text-white shadow-xs"
-                      style={{ backgroundColor: platConfig.color }}
-                      title={platConfig.name}
-                    >
-                      {platConfig.shortLabel.charAt(0)}
-                    </span>
-                  </div>
+                  <CustomerAvatar
+                    name={conv.customer_name}
+                    avatarUrl={conv.customer_avatar}
+                    sizeClass="w-9 h-9 sm:w-10 sm:h-10 text-xs sm:text-sm"
+                    indicator={
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border border-surface flex items-center justify-center text-[8px] font-bold text-white shadow-xs"
+                        style={{ backgroundColor: platConfig.color }}
+                        title={platConfig.name}
+                      >
+                        {platConfig.shortLabel.charAt(0)}
+                      </span>
+                    }
+                  />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
@@ -450,16 +492,20 @@ export default function InboxView({ conversations, messagesMap, botMuted = null 
                       <span className="material-symbols-outlined text-[20px]">arrow_back</span>
                     </button>
 
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-electric-blue/10 text-electric-blue flex items-center justify-center font-bold text-xs sm:text-sm shrink-0 relative">
-                      {activeConv.customer_name.charAt(0)}
-                      <span
-                        className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border border-surface flex items-center justify-center text-[8px] font-bold text-white shadow-xs"
-                        style={{ backgroundColor: activePlatConfig.color }}
-                        title={activePlatConfig.name}
-                      >
-                        {activePlatConfig.shortLabel.charAt(0)}
-                      </span>
-                    </div>
+                    <CustomerAvatar
+                      name={activeConv.customer_name}
+                      avatarUrl={activeConv.customer_avatar}
+                      sizeClass="w-8 h-8 sm:w-10 sm:h-10 text-xs sm:text-sm"
+                      indicator={
+                        <span
+                          className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border border-surface flex items-center justify-center text-[8px] font-bold text-white shadow-xs"
+                          style={{ backgroundColor: activePlatConfig.color }}
+                          title={activePlatConfig.name}
+                        >
+                          {activePlatConfig.shortLabel.charAt(0)}
+                        </span>
+                      }
+                    />
 
                     <div className="min-w-0 flex-1">
                       <h2 className="font-heading text-xs sm:text-sm font-semibold text-on-surface flex items-center gap-1.5 truncate">
@@ -756,15 +802,19 @@ export default function InboxView({ conversations, messagesMap, botMuted = null 
             return (
               <>
                 <div className="text-center space-y-2 pb-4 border-b border-outline-variant/30">
-                  <div className="w-14 h-14 rounded-full bg-electric-blue/10 text-electric-blue flex items-center justify-center font-bold text-xl mx-auto relative">
-                    {activeConv.customer_name.charAt(0)}
-                    <span
-                      className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-surface flex items-center justify-center text-[9px] font-bold text-white shadow-xs"
-                      style={{ backgroundColor: sidePlatConfig.color }}
-                    >
-                      {sidePlatConfig.shortLabel.charAt(0)}
-                    </span>
-                  </div>
+                  <CustomerAvatar
+                    name={activeConv.customer_name}
+                    avatarUrl={activeConv.customer_avatar}
+                    sizeClass="w-14 h-14 text-xl mx-auto"
+                    indicator={
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-surface flex items-center justify-center text-[9px] font-bold text-white shadow-xs"
+                        style={{ backgroundColor: sidePlatConfig.color }}
+                      >
+                        {sidePlatConfig.shortLabel.charAt(0)}
+                      </span>
+                    }
+                  />
                   <h3 className="font-bold text-on-surface text-sm truncate">{activeConv.customer_name}</h3>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border inline-block ${sidePlatConfig.badgeClass}`}>
                     {sidePlatConfig.name}
