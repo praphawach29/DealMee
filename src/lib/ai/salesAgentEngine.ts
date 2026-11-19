@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { businessHoursPromptContext } from '@/lib/shop/businessHours'
 import { effectivePlanKey, salesAutomationEnabled, SALES_AUTOMATION_TOOLS, SALES_LOCKED_PROMPT } from '@/lib/billing/trial'
 import { getShopAiKey, SHOP_AI_PROVIDERS, type ShopAiProvider } from '@/lib/billing/shopAiKey'
+import { notifyByokKeyFailure } from '@/lib/billing/ownerAlerts'
 import { highValueThreshold, isHighValue, HIGH_VALUE_TAG, INFO_ONLY_PROMPT, highValuePrompt } from '@/lib/ai/salesModes'
 import { getPlanLimits, getAddonRemaining, consumeAddonCredit } from '@/lib/billing/planLimits'
 import { loadKnowledgeContext } from '@/lib/knowledge/retrieve'
@@ -1763,10 +1764,15 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
     // A customer never sees provider errors. The chat goes to the shop's admin
     // (human mode + LINE alert, same as request_human_agent) and the customer is told so.
     const reason = state.byok
-      ? 'AI key ของร้าน (BYOK) ใช้งานไม่ได้ บอทจึงตอบลูกค้าไม่ได้ กรุณาตรวจสอบ key ที่หน้าตั้งค่าบอท'
+      ? `AI key ของร้าน (${(state.byokProvider || 'BYOK').toUpperCase()}) ใช้งานไม่ได้ (${state.lastProviderError || 'เกิดข้อผิดพลาด'}) บอทจึงตอบลูกค้าไม่ได้ กรุณาตรวจสอบสถานะ key หรือยอดเงินคงเหลือ`
       : 'ระบบ AI ตอบกลับไม่ได้ชั่วคราว บอทจึงส่งลูกค้าคนนี้ให้แอดมินดูแล'
     try {
       await state.executor('request_human_agent', { reason }, state.toolCtx)
+      if (state.byok && state.shop) {
+        notifyByokKeyFailure(state.shop, state.byokProvider || 'BYOK', state.lastProviderError || 'Key ขัดข้องหรือโควต้าหมด').catch((err) => {
+          console.error('[DealMee Planning Loop] notifyByokKeyFailure error:', err)
+        })
+      }
     } catch (handoffErr) {
       console.error('[DealMee Planning Loop] handoff after provider failure failed:', handoffErr)
     }

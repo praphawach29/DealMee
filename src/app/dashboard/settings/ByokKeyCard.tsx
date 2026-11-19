@@ -1,19 +1,57 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { KeyRound, Loader2, Trash2, Settings2 } from 'lucide-react'
+import { KeyRound, Loader2, Trash2, Settings2, ExternalLink } from 'lucide-react'
 import type { ShopAiKeyStatus } from '@/lib/billing/shopAiKey'
 import { clearByokKeyAction, getByokStatusAction, saveByokKeyAction } from './byokActions'
 
 const PROVIDERS = [
-  { value: 'gemini', label: 'Google Gemini (แนะนำ)' },
-  { value: 'groq', label: 'Groq (Llama 3.3 70B - เร็วสูงสุด/ประหยัดมาก)' },
-  { value: 'deepseek', label: 'DeepSeek (V3 - คุณภาพสูง/ราคาประหยัด)' },
-  { value: 'openrouter', label: 'OpenRouter (รวมทุกค่าย: Claude, GPT, Llama)' },
-  { value: 'openai', label: 'OpenAI (ChatGPT)' },
-  { value: 'claude', label: 'Anthropic Claude' },
-  { value: 'ollama', label: 'Ollama (Local AI ในเครื่อง/โฮสต์เอง)' },
-  { value: 'custom_openai', label: 'Custom OpenAI-Compatible (vLLM / LM Studio / อื่นๆ)' },
+  {
+    value: 'gemini',
+    label: 'Google Gemini (แนะนำ)',
+    link: 'https://aistudio.google.com/app/apikey',
+    linkText: 'รับ API Key ฟรีจาก Google AI Studio',
+  },
+  {
+    value: 'groq',
+    label: 'Groq (Llama 3.3 70B - เร็วสูงสุด/ประหยัดมาก)',
+    link: 'https://console.groq.com/keys',
+    linkText: 'รับ API Key ฟรีจาก Groq Console (เร็วสุด 0.5 วินาที)',
+  },
+  {
+    value: 'deepseek',
+    label: 'DeepSeek (V3 - คุณภาพสูง/ราคาประหยัด)',
+    link: 'https://platform.deepseek.com/api_keys',
+    linkText: 'รับ API Key จาก DeepSeek Platform',
+  },
+  {
+    value: 'openrouter',
+    label: 'OpenRouter (รวมทุกค่าย: Claude, GPT, Llama)',
+    link: 'https://openrouter.ai/keys',
+    linkText: 'รับ API Key เดียวใช้ได้ทุกค่ายที่ OpenRouter',
+  },
+  {
+    value: 'openai',
+    label: 'OpenAI (ChatGPT)',
+    link: 'https://platform.openai.com/api-keys',
+    linkText: 'รับ API Key จาก OpenAI Platform',
+  },
+  {
+    value: 'claude',
+    label: 'Anthropic Claude',
+    link: 'https://console.anthropic.com/',
+    linkText: 'รับ API Key จาก Anthropic Console',
+  },
+  {
+    value: 'ollama',
+    label: 'Ollama (Local AI ในเครื่อง/โฮสต์เอง)',
+    link: 'https://ollama.com/',
+    linkText: 'ดาวน์โหลด Ollama รันโมเดลบนเครื่องตนเองฟรี',
+  },
+  {
+    value: 'custom_openai',
+    label: 'Custom OpenAI-Compatible (vLLM / LM Studio / อื่นๆ)',
+  },
 ]
 
 /** Shown only on the BYOK plan: the shop's own AI key, which the bot then uses instead of DealMee's. */
@@ -28,6 +66,7 @@ export default function ByokKeyCard() {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
 
+  const activeProviderMeta = PROVIDERS.find((p) => p.value === provider)
   const isCustomOrLocal = provider === 'ollama' || provider === 'custom_openai'
   const allowsCustomModel = isCustomOrLocal || ['groq', 'deepseek', 'openrouter'].includes(provider)
 
@@ -81,7 +120,7 @@ export default function ByokKeyCard() {
       </div>
       <p className="text-[11px] text-on-surface-variant leading-relaxed">
         แพ็กเกจ BYOK ให้บอทใช้ key ของร้านเองเท่านั้น ค่า AI จ่ายตรงกับผู้ให้บริการ รองรับทั้ง Google Gemini, Groq, DeepSeek, OpenRouter, OpenAI, Claude หรือ Local AI (Ollama)
-        key ถูกเข้ารหัสก่อนเก็บ และแสดงแค่ 4 ตัวท้าย
+        key ถูกเข้ารหัสก่อนเก็บ และแสดงแค่ 4 ตัวท้าย หาก key มีปัญหาหรือโควตาหมด ระบบจะแจ้งเตือนและส่งต่อแชตให้แอดมินดูแลทันที
       </p>
 
       {status ? (
@@ -145,6 +184,20 @@ export default function ByokKeyCard() {
           </button>
         )}
       </div>
+
+      {activeProviderMeta?.link && (
+        <div className="flex items-center gap-1 text-[11px] text-electric-blue">
+          <ExternalLink className="w-3 h-3" />
+          <a
+            href={activeProviderMeta.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:underline"
+          >
+            {activeProviderMeta.linkText}
+          </a>
+        </div>
+      )}
 
       {(allowsCustomModel || isCustomOrLocal) && (
         <div className="pt-1">

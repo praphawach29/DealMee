@@ -128,3 +128,28 @@ export async function notifyQuotaExhausted(shop: Shop): Promise<void> {
   )
   await setFeatureFlag(shop.id, 'quota_alert_period', period)
 }
+
+/**
+ * Alerts the shop owner when their BYOK AI key fails (invalid, out of credits, or provider down),
+ * notifying them that chats are being handed off to human admins. Throttled to at most once per 2 hours.
+ */
+export async function notifyByokKeyFailure(shop: Shop, provider: string, reason: string): Promise<boolean> {
+  const lastAlertKey = 'byok_alert_last'
+  const lastAlert = shop.features?.[lastAlertKey]
+  const now = Date.now()
+  if (lastAlert && now - Number(lastAlert) < 2 * 3600 * 1000) return false
+
+  if (shop.features) {
+    shop.features[lastAlertKey] = now
+  }
+  const ok = await pushToOwner(
+    shop,
+    `⚠️ แจ้งเตือน API Key (${provider.toUpperCase()}) ของร้านขัดข้อง\nสาเหตุ: ${reason}\n\nขณะนี้ระบบได้ส่งต่อแชตลูกค้าให้แอดมินดูแลแทนแล้ว กรุณาตรวจสอบยอดเงินคงเหลือหรือเปลี่ยน Key ได้ที่หน้าตั้งค่าบอท: ${APP_URL}/dashboard/settings`
+  )
+  try {
+    await setFeatureFlag(shop.id, lastAlertKey, now)
+  } catch {
+    // Offline or test environment
+  }
+  return ok
+}

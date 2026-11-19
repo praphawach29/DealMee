@@ -9,6 +9,8 @@ import {
   callOpenAiCompatibleApi,
   buildOpenAiMessages,
 } from '../src/lib/ai/salesAgentEngine.ts'
+import { testProviderAiKey } from '../src/lib/platformSecrets.ts'
+import { notifyByokKeyFailure } from '../src/lib/billing/ownerAlerts.ts'
 
 test('Universal Providers: SHOP_AI_PROVIDERS includes groq, deepseek, openrouter, ollama, custom_openai', () => {
   assert.ok(SHOP_AI_PROVIDERS.includes('groq'))
@@ -177,6 +179,63 @@ test('Universal Providers: callOpenAiCompatibleApi parses tool calls properly', 
     assert.equal(result.toolCall.name, 'check_stock')
     assert.deepEqual(result.toolCall.args, { product_id: 'p123' })
     assert.equal(result.toolCall.id, 'tc_999')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('Universal Providers: testProviderAiKey validates responses and error codes', async () => {
+  const originalFetch = globalThis.fetch
+  try {
+    // 1. Success 200
+    globalThis.fetch = (async () => ({ ok: true, status: 200 })) as any
+    const resSuccess = await testProviderAiKey('groq', 'gsk_valid_key')
+    assert.equal(resSuccess.ok, true)
+    assert.equal(resSuccess.message, 'key ใช้งานได้')
+
+    // 2. 401 Unauthorized
+    globalThis.fetch = (async () => ({ ok: false, status: 401 })) as any
+    const resAuth = await testProviderAiKey('deepseek', 'sk_invalid_key')
+    assert.equal(resAuth.ok, false)
+    assert.ok(resAuth.message.includes('401'))
+
+    // 3. 429 Rate limited / Out of quota
+    globalThis.fetch = (async () => ({ ok: false, status: 429 })) as any
+    const resQuota = await testProviderAiKey('openrouter', 'sk-or-rate-limited')
+    assert.equal(resQuota.ok, true)
+    assert.ok(resQuota.message.includes('429'))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('Universal Providers: notifyByokKeyFailure sends alert and respects 2-hour throttling', async () => {
+  const originalFetch = globalThis.fetch
+  try {
+    let pushCalls = 0
+    let pushedBody: any = null
+
+    globalThis.fetch = (async (_url: any, init: any) => {
+      pushCalls++
+      pushedBody = JSON.parse(init.body)
+      return { ok: true } as any
+    }) as any
+
+    const fakeShop = {
+      id: 'shop_test_123',
+      line_token: 'fake_line_token',
+      owner_line_id: 'U1234567890',
+      features: {},
+    }
+
+    await notifyByokKeyFailure(fakeShop, 'groq', 'โควตาข้อความหมด')
+    assert.equal(pushCalls, 1)
+    assert.ok(pushedBody.messages[0].text.includes('GROQ'))
+    assert.ok(pushedBody.messages[0].text.includes('โควตาข้อความหมด'))
+
+    // Second call within 2 hours must be throttled
+    await notifyByokKeyFailure(fakeShop, 'groq', 'โควตาข้อความหมดรอบสอง')
+    assert.equal(pushCalls, 1) // should not increase
   } finally {
     globalThis.fetch = originalFetch
   }
