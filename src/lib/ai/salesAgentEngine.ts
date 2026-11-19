@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { businessHoursPromptContext } from '@/lib/shop/businessHours'
 import { effectivePlanKey, salesAutomationEnabled, SALES_AUTOMATION_TOOLS, SALES_LOCKED_PROMPT } from '@/lib/billing/trial'
-import { getShopAiKey } from '@/lib/billing/shopAiKey'
+import { getShopAiKey, SHOP_AI_PROVIDERS, type ShopAiProvider } from '@/lib/billing/shopAiKey'
 import { highValueThreshold, isHighValue, HIGH_VALUE_TAG, INFO_ONLY_PROMPT, highValuePrompt } from '@/lib/ai/salesModes'
 import { getPlanLimits, getAddonRemaining, consumeAddonCredit } from '@/lib/billing/planLimits'
 import { loadKnowledgeContext } from '@/lib/knowledge/retrieve'
@@ -118,7 +118,7 @@ export type PlanningTurn =
   | { role: 'tool_result'; toolCallId?: string; toolName: string; result: string }
 
 export type ComplexityLevel = 'LOW' | 'HIGH'
-export type AiProvider = 'gemini' | 'claude' | 'openai'
+export type AiProvider = 'gemini' | 'claude' | 'openai' | 'groq' | 'deepseek' | 'openrouter' | 'ollama' | 'custom_openai'
 
 export type AgentToolName =
   | 'send_payment_qr'
@@ -297,6 +297,10 @@ export interface PlanningState {
   isPlayground?: boolean
   /** The shop runs on its own AI key only (no platform fallback) */
   byok?: boolean
+  byokProvider?: ShopAiProvider
+  byokKey?: string
+  byokModel?: string
+  byokBaseUrl?: string
   /** Chunks and shop text the grounding check may quote. Tool results are appended as the plan runs. */
   groundingChunks: EvidenceChunk[]
   groundingTexts: string[]
@@ -1053,8 +1057,8 @@ async function preparePlanningState({
   const onByokPlan = effectivePlanKey(shop) === 'byok'
   const ownKey = onByokPlan && shop?.id ? await getShopAiKey(shop.id) : null
   const shopKey = ownKey?.key || String(shop?.custom_ai_key || shop?.ai_key || '').trim()
-  const shopProvider = ownKey?.provider || String(shop?.custom_ai_provider || shop?.ai_provider || '').toLowerCase()
-  const byok = onByokPlan || (Boolean(shopKey) && ['gemini', 'claude', 'openai'].includes(shopProvider))
+  const shopProvider = (ownKey?.provider || String(shop?.custom_ai_provider || shop?.ai_provider || '')).toLowerCase() as ShopAiProvider
+  const byok = onByokPlan || (Boolean(shopKey) && (SHOP_AI_PROVIDERS as readonly string[]).includes(shopProvider))
   const [geminiKey, claudeKey, openAiKey] = byok
     ? [shopProvider === 'gemini' ? shopKey : '', shopProvider === 'claude' ? shopKey : '', shopProvider === 'openai' ? shopKey : '']
     : await Promise.all([platformSecret('GEMINI_API_KEY'), platformSecret('CLAUDE_API_KEY'), platformSecret('OPENAI_API_KEY')])
@@ -1566,6 +1570,10 @@ ${historyContext}`
       claudeKey,
       openAiKey,
       byok,
+      byokProvider: byok ? shopProvider : undefined,
+      byokKey: byok ? shopKey : undefined,
+      byokModel: byok ? ownKey?.model : undefined,
+      byokBaseUrl: byok ? ownKey?.baseUrl : undefined,
       allUsage: [],
       immediateMessages: [],
       toolCallsExecuted: [],
@@ -1614,6 +1622,97 @@ async function callCurrentStep(state: PlanningState): Promise<ProviderStepResult
     })
   }
 
+  // 0. BYOK Universal Providers:
+  if (state.byok && state.byokProvider && state.byokKey) {
+    if (state.byokProvider === 'groq') {
+      const candidateModels = [state.byokModel, 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'].filter(Boolean) as string[]
+      return await callOpenAiCompatibleApi({
+        providerName: 'groq',
+        baseUrl: 'https://api.groq.com/openai/v1/chat/completions',
+        apiKey: state.byokKey,
+        candidateModels,
+        systemInstruction,
+        turns,
+        toolSet: activeToolSet,
+        state,
+      })
+    }
+    if (state.byokProvider === 'deepseek') {
+      const candidateModels = [state.byokModel, 'deepseek-chat'].filter(Boolean) as string[]
+      return await callOpenAiCompatibleApi({
+        providerName: 'deepseek',
+        baseUrl: 'https://api.deepseek.com/chat/completions',
+        apiKey: state.byokKey,
+        candidateModels,
+        systemInstruction,
+        turns,
+        toolSet: activeToolSet,
+        state,
+      })
+    }
+    if (state.byokProvider === 'openrouter') {
+      const candidateModels = [state.byokModel, 'deepseek/deepseek-chat', 'meta-llama/llama-3.3-70b-instruct'].filter(Boolean) as string[]
+      return await callOpenAiCompatibleApi({
+        providerName: 'openrouter',
+        baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
+        apiKey: state.byokKey,
+        candidateModels,
+        extraHeaders: { 'HTTP-Referer': 'https://dealmee.app', 'X-Title': 'DealMee AI' },
+        systemInstruction,
+        turns,
+        toolSet: activeToolSet,
+        state,
+      })
+    }
+    if (state.byokProvider === 'ollama') {
+      const defaultEndpoint = (state.byokBaseUrl || 'http://localhost:11434/v1').replace(/\/+$/, '') + '/chat/completions'
+      const candidateModels = [state.byokModel, 'llama3.2', 'deepseek-r1'].filter(Boolean) as string[]
+      return await callOpenAiCompatibleApi({
+        providerName: 'ollama',
+        baseUrl: defaultEndpoint,
+        apiKey: state.byokKey || 'ollama',
+        candidateModels,
+        systemInstruction,
+        turns,
+        toolSet: activeToolSet,
+        state,
+      })
+    }
+    if (state.byokProvider === 'custom_openai') {
+      const defaultEndpoint = (state.byokBaseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '') + '/chat/completions'
+      const candidateModels = [state.byokModel, 'gpt-4o-mini'].filter(Boolean) as string[]
+      return await callOpenAiCompatibleApi({
+        providerName: 'custom_openai',
+        baseUrl: defaultEndpoint,
+        apiKey: state.byokKey,
+        candidateModels,
+        systemInstruction,
+        turns,
+        toolSet: activeToolSet,
+        state,
+      })
+    }
+    if (state.byokProvider === 'gemini') {
+      return await callGeminiApi(systemInstruction, turns, state.byokModel || modelName, state.byokKey, activeToolSet, state)
+    }
+    if (state.byokProvider === 'claude') {
+      return await callClaudeApi(staticSystemPrompt, dynamicSystemPrompt, turns, state.byokKey, activeToolSet, state)
+    }
+    if (state.byokProvider === 'openai') {
+      const candidateModels = [state.byokModel, 'gpt-4o-mini'].filter(Boolean) as string[]
+      return await callOpenAiCompatibleApi({
+        providerName: 'openai',
+        baseUrl: 'https://api.openai.com/v1/chat/completions',
+        apiKey: state.byokKey,
+        candidateModels,
+        systemInstruction,
+        turns,
+        toolSet: activeToolSet,
+        state,
+      })
+    }
+  }
+
   // 1. Primary Engine: Gemini 3.8 Flash (High Speed & Accurate Tool Calling)
   if (geminiKey) {
     const result = await callGeminiApi(systemInstruction, turns, modelName, geminiKey, activeToolSet, state)
@@ -1648,7 +1747,7 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
 
   if (!response) {
     // All configured providers failed this step
-    const hasAnyKey = !!(state.geminiKey || state.claudeKey || state.openAiKey)
+    const hasAnyKey = !!(state.geminiKey || state.claudeKey || state.openAiKey || state.byokKey)
     const noKeyDetail = state.byok
       ? 'ยังไม่ได้ใส่ API Key ของร้าน (แพ็กเกจ BYOK) ที่หน้าตั้งค่าบอท'
       : 'ยังไม่ได้ตั้งค่า API Key ของ AI ในระบบ (กรุณาตั้งค่า GEMINI_API_KEY)'
@@ -2534,41 +2633,36 @@ export function buildOpenAiMessages(systemInstruction: string, turns: PlanningTu
   return messages
 }
 
-async function callOpenAiApi(
-  systemInstruction: string,
-  turns: PlanningTurn[],
-  apiKey: string,
-  toolSet: typeof MASTER_TOOLS,
+export interface CallOpenAiCompatibleParams {
+  providerName: string
+  baseUrl: string
+  apiKey: string
+  candidateModels: string[]
+  systemInstruction: string
+  turns: PlanningTurn[]
+  toolSet: typeof MASTER_TOOLS
+  extraHeaders?: Record<string, string>
   state?: PlanningState
-): Promise<ProviderStepResult | null> {
-  const candidateModels = Array.from(
-    new Set(
-      [
-        await platformSecret('OPENAI_MODEL'),
-        'gpt-5.6-luna',
-        'gpt-4o-mini',
-      ].filter(Boolean)
-    )
-  ) as string[]
+}
 
-  // One budget for every model this provider tries: a provider that hangs (Gemini
-  // once took 32s to answer 503) should hand over to the next one, not hold the customer
+export async function callOpenAiCompatibleApi(params: CallOpenAiCompatibleParams): Promise<ProviderStepResult | null> {
+  const { providerName, baseUrl, apiKey, candidateModels, systemInstruction, turns, toolSet, extraHeaders, state } = params
   const deadline = AbortSignal.timeout(FALLBACK_TIMEOUT_MS)
+
   for (const model of candidateModels) {
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await fetch(baseUrl, {
         method: 'POST',
         signal: deadline,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
+          ...(extraHeaders || {}),
         },
         body: JSON.stringify({
           model,
           messages: buildOpenAiMessages(systemInstruction, turns),
           ...(toolSet.length > 0 ? { tools: toOpenAITools(toolSet), tool_choice: 'auto' } : {}),
-          // GPT-5.x rejects max_tokens and only allows function tools in Chat Completions
-          // with reasoning turned off; older models (gpt-4o-mini) take the classic params.
           ...(/^gpt-5/.test(model)
             ? { max_completion_tokens: MAX_OUTPUT_TOKENS, reasoning_effort: 'none' }
             : { max_tokens: MAX_OUTPUT_TOKENS }),
@@ -2577,9 +2671,9 @@ async function callOpenAiApi(
 
       if (!response.ok) {
         const errText = await response.text()
-        console.error(`[OpenAI Error] ${response.status} model=${model}:`, errText.slice(0, 500))
+        console.error(`[${providerName} Error] ${response.status} model=${model}:`, errText.slice(0, 500))
         if (state) {
-          state.lastProviderError = `OpenAI (${model}) ${response.status}: ${errText.slice(0, 150)}`
+          state.lastProviderError = `${providerName} (${model}) ${response.status}: ${errText.slice(0, 150)}`
         }
         if (response.status === 404 || response.status === 400) {
           continue
@@ -2604,13 +2698,13 @@ async function callOpenAiApi(
               id: tc.id,
             }
           } catch {
-            console.error('[OpenAI] tool_call parse error')
+            console.error(`[${providerName}] tool_call parse error`)
           }
         }
       }
 
       if (!replyText && !toolCall) {
-        if (state) state.lastProviderError = `OpenAI (${model}): ตอบกลับเป็นข้อความว่าง`
+        if (state) state.lastProviderError = `${providerName} (${model}): ตอบกลับเป็นข้อความว่าง`
         continue
       }
 
@@ -2626,22 +2720,51 @@ async function callOpenAiApi(
 
       const truncated = data.choices?.[0]?.finish_reason === 'length'
       if (truncated) {
-        console.warn(`[OpenAI] Response hit max_tokens (${MAX_OUTPUT_TOKENS}) — reply was cut off mid-sentence.`)
+        console.warn(`[${providerName}] Response hit max_tokens (${MAX_OUTPUT_TOKENS}) — reply was cut off mid-sentence.`)
       }
 
       return { text: replyText.trim(), toolCall, usage, truncated }
     } catch (err: any) {
       if (isTimeout(err)) {
-        console.error(`[OpenAI Timeout] model=${model} after ${FALLBACK_TIMEOUT_MS}ms`)
-        if (state) state.lastProviderError = `OpenAI timeout`
+        console.error(`[${providerName} Timeout] model=${model} after ${FALLBACK_TIMEOUT_MS}ms`)
+        if (state) state.lastProviderError = `${providerName} timeout`
         return null
       }
-      console.error(`[OpenAI Exception] model=${model}:`, err)
+      console.error(`[${providerName} Exception] model=${model}:`, err)
       if (state) {
-        state.lastProviderError = `OpenAI (${model}) exception: ${err?.message || String(err)}`
+        state.lastProviderError = `${providerName} (${model}) exception: ${err?.message || String(err)}`
       }
     }
   }
 
   return null
+}
+
+async function callOpenAiApi(
+  systemInstruction: string,
+  turns: PlanningTurn[],
+  apiKey: string,
+  toolSet: typeof MASTER_TOOLS,
+  state?: PlanningState
+): Promise<ProviderStepResult | null> {
+  const candidateModels = Array.from(
+    new Set(
+      [
+        await platformSecret('OPENAI_MODEL'),
+        'gpt-5.6-luna',
+        'gpt-4o-mini',
+      ].filter(Boolean)
+    )
+  ) as string[]
+
+  return callOpenAiCompatibleApi({
+    providerName: 'openai',
+    baseUrl: 'https://api.openai.com/v1/chat/completions',
+    apiKey,
+    candidateModels,
+    systemInstruction,
+    turns,
+    toolSet,
+    state,
+  })
 }

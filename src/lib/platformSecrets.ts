@@ -301,3 +301,62 @@ export async function testPlatformSecret(name: SecretName, value: string): Promi
   if (res.status === 429) return { ok: true, message: 'key ถูกต้อง แต่ตอนนี้ติดโควตา/ใช้เกินจำนวน (HTTP 429)' }
   return { ok: false, message: `ผู้ให้บริการตอบ HTTP ${res.status}` }
 }
+
+
+/** Tests an AI provider key for BYOK shops across major and alternate providers */
+export async function testProviderAiKey(
+  provider: string,
+  value: string,
+  options?: { baseUrl?: string }
+): Promise<{ ok: boolean; message: string }> {
+  const key = value.trim()
+  const timeout = AbortSignal.timeout(10_000)
+  let res: Response
+  try {
+    switch (provider) {
+      case 'gemini':
+        res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`, { signal: timeout })
+        break
+      case 'openai':
+        res = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${key}` }, signal: timeout })
+        break
+      case 'claude':
+        res = await fetch('https://api.anthropic.com/v1/models', {
+          headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+          signal: timeout,
+        })
+        break
+      case 'groq':
+        res = await fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: `Bearer ${key}` }, signal: timeout })
+        break
+      case 'deepseek':
+        res = await fetch('https://api.deepseek.com/models', { headers: { Authorization: `Bearer ${key}` }, signal: timeout })
+        break
+      case 'openrouter':
+        res = await fetch('https://openrouter.ai/api/v1/auth/key', { headers: { Authorization: `Bearer ${key}` }, signal: timeout })
+        break
+      case 'ollama': {
+        const base = options?.baseUrl || 'http://127.0.0.1:11434'
+        res = await fetch(`${base}/api/tags`, { signal: timeout })
+        break
+      }
+      case 'custom_openai': {
+        const base = options?.baseUrl || 'http://127.0.0.1:11434/v1'
+        res = await fetch(`${base}/models`, {
+          headers: key ? { Authorization: `Bearer ${key}` } : {},
+          signal: timeout,
+        })
+        break
+      }
+      default:
+        return { ok: false, message: `ไม่รองรับผู้ให้บริการ ${provider}` }
+    }
+  } catch (err: any) {
+    return { ok: false, message: `เชื่อมต่อผู้ให้บริการไม่ได้: ${err?.message || err}` }
+  }
+
+  if (res.ok) return { ok: true, message: 'key ใช้งานได้' }
+  if (res.status === 401 || res.status === 403) return { ok: false, message: `ผู้ให้บริการปฏิเสธ key นี้ (HTTP ${res.status})` }
+  if (res.status === 429) return { ok: true, message: 'key ถูกต้อง แต่ติดอัตราเรียกใช้/เครดิตจำกัด (HTTP 429)' }
+  return { ok: false, message: `ผู้ให้บริการตอบ HTTP ${res.status}` }
+}

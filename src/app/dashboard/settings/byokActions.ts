@@ -3,7 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { getOrCreateShopForUser } from '@/lib/shopHelper'
 import { effectivePlanKey } from '@/lib/billing/trial'
-import { canEncrypt, testPlatformSecret } from '@/lib/platformSecrets'
+import { canEncrypt, testProviderAiKey } from '@/lib/platformSecrets'
 import {
   clearShopAiKey,
   getShopAiKeyStatus,
@@ -11,9 +11,8 @@ import {
   SHOP_AI_PROVIDERS,
   type ShopAiProvider,
   type ShopAiKeyStatus,
+  type ShopAiKeyOptions,
 } from '@/lib/billing/shopAiKey'
-
-const TEST_NAME = { gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY', claude: 'CLAUDE_API_KEY' } as const
 
 async function currentShop() {
   const supabase = await createClient()
@@ -33,20 +32,24 @@ export async function getByokStatusAction(): Promise<{ onByokPlan: boolean; stat
 }
 
 /** Tests the key with the provider, then saves it encrypted. */
-export async function saveByokKeyAction(provider: string, key: string): Promise<{ success: string } | { error: string }> {
+export async function saveByokKeyAction(
+  provider: string,
+  key: string,
+  options?: ShopAiKeyOptions
+): Promise<{ success: string } | { error: string }> {
   const shop = await currentShop()
   if (!shop) return { error: 'ไม่พบข้อมูลร้านค้า' }
   if (effectivePlanKey(shop) !== 'byok') return { error: 'ใช้ได้กับแพ็กเกจ BYOK เท่านั้น' }
   if (!SHOP_AI_PROVIDERS.includes(provider as ShopAiProvider)) return { error: 'ผู้ให้บริการไม่ถูกต้อง' }
   const value = key.trim()
-  if (value.length < 20) return { error: 'API Key สั้นเกินไป กรุณาตรวจสอบอีกครั้ง' }
+  if (provider !== 'ollama' && value.length < 8) return { error: 'API Key สั้นเกินไป กรุณาตรวจสอบอีกครั้ง' }
   if (!canEncrypt()) return { error: 'ระบบยังบันทึก key ไม่ได้ กรุณาติดต่อทีมงาน DealMee' }
 
-  const test = await testPlatformSecret(TEST_NAME[provider as ShopAiProvider], value)
+  const test = await testProviderAiKey(provider as ShopAiProvider, value, options)
   if (test && !test.ok) return { error: `ทดสอบ key ไม่ผ่าน: ${test.message}` }
 
   try {
-    await setShopAiKey(shop.id, provider as ShopAiProvider, value)
+    await setShopAiKey(shop.id, provider as ShopAiProvider, value, options)
   } catch (err: any) {
     return { error: err.message }
   }
