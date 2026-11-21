@@ -1,0 +1,759 @@
+[
+  {
+    "coverage_id": "profile%2Fdeep%2Fout-of-scope%2Fmemory::none::none::MEMORY-SAFETY-AND-BINARY.md%23Core%20discipline",
+    "canonical_refs": {
+      "surface": "profile/deep/out-of-scope/memory",
+      "boundary": "none",
+      "subsystem": "none",
+      "attack_class": "MEMORY-SAFETY-AND-BINARY.md#Core discipline"
+    },
+    "surface": "Native memory safety",
+    "boundary": "None in this codebase",
+    "subsystem": "Out of scope",
+    "attack_class": "Memory safety",
+    "starting_paths": [
+      "package.json"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "The reviewed application is TypeScript on Next.js and SQL. No native parser or unsafe runtime is in the tenant-isolation scope."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "out_of_scope",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [
+      "Scoped run excludes native and binary attack classes."
+    ]
+  },
+  {
+    "coverage_id": "src%2Fapp%2Fadmin%2Fevaluation%2Factions.ts%23getEvaluationMetrics::super-admin%20gate%20on%20service-role%20aggregates::src%2Fapp%2Fadmin%2Fevaluation::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/app/admin/evaluation/actions.ts#getEvaluationMetrics",
+      "boundary": "super-admin gate on service-role aggregates",
+      "subsystem": "src/app/admin/evaluation",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "Evaluation metrics server action",
+    "boundary": "Cross-shop aggregates require the super-admin allowlist",
+    "subsystem": "Admin",
+    "attack_class": "Missing authorization on a service-role read",
+    "starting_paths": [
+      "src/app/admin/evaluation/actions.ts",
+      "src/app/admin/layout.tsx"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Derived-data and disclosure attack classes",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "audit-parent",
+    "reviewed_paths": [
+      "src/app/admin/evaluation/actions.ts",
+      "src/app/admin/evaluation/page.tsx",
+      "src/app/admin/layout.tsx"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "audit-parent",
+        "reviewed_paths": [
+          "src/app/admin/evaluation/actions.ts",
+          "src/app/admin/evaluation/page.tsx",
+          "src/app/admin/layout.tsx"
+        ],
+        "invariant": "A non-admin cannot obtain platform-wide conversation, order, and token aggregates.",
+        "method": "source",
+        "result": "getEvaluationMetrics calls the service role with no session check and returns only aggregates. The page is a server component. Whether Next.js 16 exposes this export as a client-invocable action was not established from source.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "admin.evaluation-metrics.missing-auth"
+    ],
+    "unresolved": [
+      "Next.js 16 action-id exposure for a server-component-only use-server export is not visible in this repo."
+    ]
+  },
+  {
+    "coverage_id": "src%2Fapp%2Fapi%2Fcron%2Ffollow-up%2Froute.ts%23handleFollowUpCron::CRON_SECRET%20bearer::src%2Fapp%2Fapi%2Fcron::CLOUD-AND-DEPLOYMENT.md%23Managed%20storage%2C%20events%2C%20and%20edge%20attack%20classes",
+    "canonical_refs": {
+      "surface": "src/app/api/cron/follow-up/route.ts#handleFollowUpCron",
+      "boundary": "CRON_SECRET bearer",
+      "subsystem": "src/app/api/cron",
+      "attack_class": "CLOUD-AND-DEPLOYMENT.md#Managed storage, events, and edge attack classes"
+    },
+    "surface": "Follow-up cron",
+    "boundary": "The cron handler runs only with the shared bearer secret",
+    "subsystem": "Vercel cron",
+    "attack_class": "Unauthenticated cron",
+    "starting_paths": [
+      "src/app/api/cron/follow-up/route.ts",
+      "src/proxy.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "CLOUD-AND-DEPLOYMENT.md#Core discipline",
+      "CLOUD-AND-DEPLOYMENT.md#Managed storage, events, and edge attack classes",
+      "CLOUD-AND-DEPLOYMENT.md#Universal moves",
+      "CLOUD-AND-DEPLOYMENT.md#Validation rules",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#API-key and mTLS attack classes",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "audit-parent",
+    "reviewed_paths": [
+      "src/app/api/cron/follow-up/route.ts",
+      "src/proxy.ts",
+      "src/utils/supabase/middleware.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "audit-parent",
+        "reviewed_paths": [
+          "src/app/api/cron/follow-up/route.ts",
+          "src/proxy.ts",
+          "src/utils/supabase/middleware.ts"
+        ],
+        "invariant": "A caller without CRON_SECRET cannot start the cross-shop cron.",
+        "method": "source",
+        "result": "Middleware skips auth for /api/cron. The handler returns 503 when CRON_SECRET is unset and 401 when the Authorization bearer does not match. No /api/cron/skill-review route exists in this tree.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2Fapp%2Fapi%2Flive%2Fcomment%2Froute.ts%23GET::live%20session%20state%20authorization::src%2Flib%2Flive::WEB-PROTOCOL-AND-AUTH.md%23Browser-session%20attack%20classes",
+    "canonical_refs": {
+      "surface": "src/app/api/live/comment/route.ts#GET",
+      "boundary": "live session state authorization",
+      "subsystem": "src/lib/live",
+      "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Browser-session attack classes"
+    },
+    "surface": "Unauthenticated live session GET",
+    "boundary": "Live GET shop_id must match the session shop",
+    "subsystem": "Live studio API",
+    "attack_class": "Unauthenticated read of another shop",
+    "starting_paths": [
+      "src/app/api/live/comment/route.ts",
+      "src/lib/live/liveStudioEngine.ts",
+      "src/lib/live/liveStudioAccess.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Tenant and object-isolation attack classes",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Derived-data and disclosure attack classes",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Browser-session attack classes",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "No memory-unsafe runtime in the reviewed TypeScript and SQL paths."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "audit-parent",
+    "reviewed_paths": [
+      "src/app/api/live/comment/route.ts",
+      "src/lib/live/liveStudioAccess.ts",
+      "src/lib/live/liveStudioEngine.ts",
+      "src/proxy.ts",
+      "src/utils/supabase/middleware.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "audit-parent",
+        "reviewed_paths": [
+          "src/app/api/live/comment/route.ts",
+          "src/lib/live/liveStudioAccess.ts",
+          "src/lib/live/liveStudioEngine.ts",
+          "src/proxy.ts",
+          "src/utils/supabase/middleware.ts"
+        ],
+        "invariant": "A signed-in merchant cannot read another shop's live session by supplying its shop id.",
+        "method": "source",
+        "result": "Middleware redirects a caller with no session. A signed-in caller of any shop can pass another shop_id. liveStudioGuard only checks features.live_studio. getLiveSessionState returns that shop's products and the stored session, including comments, revenue, and the PromptPay payload.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "live-studio.get.unauthenticated-shop-state"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2Fapp%2Fapi%2Fwebhook%2F%5Bshop_id%5D%2Froute.ts%23POST::channel%20signature%20before%20shop%20processing::src%2Fapp%2Fapi%2Fwebhook::WEB-PROTOCOL-AND-AUTH.md%23API-key%20and%20mTLS%20attack%20classes",
+    "canonical_refs": {
+      "surface": "src/app/api/webhook/[shop_id]/route.ts#POST",
+      "boundary": "channel signature before shop processing",
+      "subsystem": "src/app/api/webhook",
+      "attack_class": "WEB-PROTOCOL-AND-AUTH.md#API-key and mTLS attack classes"
+    },
+    "surface": "LINE, Messenger, Shopee, and TikTok webhooks",
+    "boundary": "An event is applied only after the destination shop's channel secret verifies it",
+    "subsystem": "Inbound webhooks",
+    "attack_class": "Forged webhook into another shop",
+    "starting_paths": [
+      "src/app/api/webhook/[shop_id]/route.ts",
+      "src/app/api/webhook/facebook/route.ts",
+      "src/app/api/webhook/facebook/[shop_id]/route.ts",
+      "src/app/api/webhook/shopee/[shop_id]/route.ts",
+      "src/app/api/webhook/tiktok/[shop_id]/route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#API-key and mTLS attack classes",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Tenant and object-isolation attack classes",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "audit-parent",
+    "reviewed_paths": [
+      "src/app/api/webhook/[shop_id]/route.ts",
+      "src/app/api/webhook/facebook/route.ts",
+      "src/app/api/webhook/facebook/[shop_id]/route.ts",
+      "src/app/api/webhook/shopee/[shop_id]/route.ts",
+      "src/app/api/webhook/tiktok/[shop_id]/route.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "audit-parent",
+        "reviewed_paths": [
+          "src/app/api/webhook/[shop_id]/route.ts",
+          "src/app/api/webhook/facebook/route.ts",
+          "src/app/api/webhook/facebook/[shop_id]/route.ts",
+          "src/app/api/webhook/shopee/[shop_id]/route.ts",
+          "src/app/api/webhook/tiktok/[shop_id]/route.ts"
+        ],
+        "invariant": "A forged event cannot run another shop's bot.",
+        "method": "source",
+        "result": "LINE rejects a missing or bad x-line-signature against that shop's line_secret. Per-shop Facebook rejects a missing or bad app secret. The platform Facebook webhook verifies the platform app secret, then maps entry.id to facebook_page_id. Shopee and TikTok reject a missing or bad shop secret before creating conversations.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2Fapp%2Fapi%2Fwebhook%2Ffacebook%2Froute.ts%23POST::shops.facebook_page_id%20uniqueness::src%2Fapp%2Fapi%2Fwebhook%2Ffacebook::DATA-ISOLATION-AND-LIFECYCLE.md%23Tenant%20and%20object-isolation%20attack%20classes",
+    "canonical_refs": {
+      "surface": "src/app/api/webhook/facebook/route.ts#POST",
+      "boundary": "shops.facebook_page_id uniqueness",
+      "subsystem": "src/app/api/webhook/facebook",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Tenant and object-isolation attack classes"
+    },
+    "surface": "Platform Facebook webhook shop mapping",
+    "boundary": "One Facebook page id maps to one shop, enforced where the row is written",
+    "subsystem": "Messenger webhook",
+    "attack_class": "Channel identity collision",
+    "starting_paths": [
+      "src/app/api/webhook/facebook/route.ts",
+      "src/lib/shop/channelOwnership.ts",
+      "src/app/dashboard/settings/actions.ts",
+      "supabase/migrations/20261029000000_facebook_connect.sql"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Tenant and object-isolation attack classes",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "No memory-unsafe runtime in the reviewed TypeScript and SQL paths."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "audit-parent",
+    "reviewed_paths": [
+      "src/app/api/webhook/facebook/route.ts",
+      "src/lib/shop/channelOwnership.ts",
+      "src/app/dashboard/settings/actions.ts",
+      "src/app/dashboard/settings/facebookActions.ts",
+      "supabase/migrations/20260701000000_initial_schema.sql",
+      "supabase/migrations/20261029000000_facebook_connect.sql"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "audit-parent",
+        "reviewed_paths": [
+          "src/app/api/webhook/facebook/route.ts",
+          "src/lib/shop/channelOwnership.ts",
+          "src/app/dashboard/settings/actions.ts",
+          "src/app/dashboard/settings/facebookActions.ts",
+          "supabase/migrations/20260701000000_initial_schema.sql",
+          "supabase/migrations/20261029000000_facebook_connect.sql"
+        ],
+        "invariant": "A merchant cannot attach another shop's public Facebook page id to their own shop.",
+        "method": "source",
+        "result": "The duplicate check runs only inside connectFacebookPage and the settings action. shops UPDATE RLS allows the owner to change facebook_page_id. The index is not unique. The platform webhook uses maybeSingle on facebook_page_id plus oauth and drops the event when that lookup does not return one row.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "shops.facebook-page-id.uniqueness-bypass"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2Fapp%2Fdoc%2Fquotation%2F%5Bid%5D%2Froute.ts%23GET::document%20id%20as%20access%20capability::src%2Fapp%2Fdoc::DATA-ISOLATION-AND-LIFECYCLE.md%23Derived-data%20and%20disclosure%20attack%20classes",
+    "canonical_refs": {
+      "surface": "src/app/doc/quotation/[id]/route.ts#GET",
+      "boundary": "document id as access capability",
+      "subsystem": "src/app/doc",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Derived-data and disclosure attack classes"
+    },
+    "surface": "Public quotation and download routes",
+    "boundary": "A document is readable only by the intended recipient or the owning shop",
+    "subsystem": "Public document pages",
+    "attack_class": "Unauthenticated document read",
+    "starting_paths": [
+      "src/app/doc/quotation/[id]/route.ts",
+      "src/app/api/doc/[id]/download/route.ts",
+      "src/app/api/doc/[id]/accept/route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Derived-data and disclosure attack classes",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "audit-parent",
+    "reviewed_paths": [
+      "src/app/doc/quotation/[id]/route.ts",
+      "src/app/api/doc/[id]/download/route.ts",
+      "src/app/api/doc/[id]/accept/route.ts",
+      "src/utils/supabase/middleware.ts",
+      "supabase/migrations/20261102000000_close_public_policies.sql"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "audit-parent",
+        "reviewed_paths": [
+          "src/app/doc/quotation/[id]/route.ts",
+          "src/app/api/doc/[id]/download/route.ts",
+          "src/app/api/doc/[id]/accept/route.ts",
+          "src/utils/supabase/middleware.ts",
+          "supabase/migrations/20261102000000_close_public_policies.sql"
+        ],
+        "invariant": "Someone who does not already know a document id cannot read another shop's quotation.",
+        "method": "source",
+        "result": "GET renders the document and shop bank details with the service role and no accept token. Accept is token-gated. PostgREST public SELECT was dropped. No source path listing other shops' document ids was found, so cross-tenant reach depends on id leakage.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "documents.bearer-uuid-read"
+    ],
+    "unresolved": [
+      "No source path enumerates another shop's document ids. Cross-tenant impact depends on UUID leakage outside the intended recipient."
+    ]
+  },
+  {
+    "coverage_id": "src%2Flib%2Fauth%2FrequireShop.ts%23requireShop::service-role%20shop%20id%20comes%20from%20the%20session::src%2Fapp%2Fapi%2Fshop::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/lib/auth/requireShop.ts#requireShop",
+      "boundary": "service-role shop id comes from the session",
+      "subsystem": "src/app/api/shop",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "Shop API routes using the service role",
+    "boundary": "shop_id written to the service-role client is the session shop",
+    "subsystem": "Shop APIs",
+    "attack_class": "IDOR via body shop_id",
+    "starting_paths": [
+      "src/lib/auth/requireShop.ts",
+      "src/app/api/shop/skills/route.ts",
+      "src/app/api/shop/skills/[skillId]/route.ts",
+      "src/lib/test/authorizeSimulation.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Tenant and object-isolation attack classes",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "audit-parent",
+    "reviewed_paths": [
+      "src/lib/auth/requireShop.ts",
+      "src/app/api/shop/skills/route.ts",
+      "src/app/api/shop/skills/[skillId]/route.ts",
+      "src/app/api/shop/shadow-eval/route.ts",
+      "src/lib/test/authorizeSimulation.ts",
+      "src/app/api/copilot/chat/route.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "audit-parent",
+        "reviewed_paths": [
+          "src/lib/auth/requireShop.ts",
+          "src/app/api/shop/skills/route.ts",
+          "src/app/api/shop/skills/[skillId]/route.ts",
+          "src/app/api/shop/shadow-eval/route.ts",
+          "src/lib/test/authorizeSimulation.ts",
+          "src/app/api/copilot/chat/route.ts"
+        ],
+        "invariant": "A signed-in merchant cannot pass another shop id to these service-role routes.",
+        "method": "source",
+        "result": "requireShop loads the shop from the session. Skill, shadow-eval, and copilot routes ignore a body shop id. authorizeSimulationShop rejects a body shop_id that is not the session shop unless the email is the super-admin allowlist.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2Flib%2Fbilling%2FshopAiKey.ts%23getShopAiKey::per-shop%20AI%20key%20and%20response%20cache::src%2Flib%2Fbilling::CLOUD-AND-DEPLOYMENT.md%23Configuration%20and%20secret%20lifecycle%20attack%20classes",
+    "canonical_refs": {
+      "surface": "src/lib/billing/shopAiKey.ts#getShopAiKey",
+      "boundary": "per-shop AI key and response cache",
+      "subsystem": "src/lib/billing",
+      "attack_class": "CLOUD-AND-DEPLOYMENT.md#Configuration and secret lifecycle attack classes"
+    },
+    "surface": "BYOK keys and response cache",
+    "boundary": "One shop's Gemini key and cached answers are not readable as another shop's",
+    "subsystem": "AI credentials",
+    "attack_class": "Cross-tenant key or cache reuse",
+    "starting_paths": [
+      "src/lib/billing/shopAiKey.ts",
+      "src/lib/ai/responseCache.ts",
+      "src/lib/ai/geminiCache.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "CLOUD-AND-DEPLOYMENT.md#Core discipline",
+      "CLOUD-AND-DEPLOYMENT.md#Configuration and secret lifecycle attack classes",
+      "CLOUD-AND-DEPLOYMENT.md#Universal moves",
+      "CLOUD-AND-DEPLOYMENT.md#Validation rules",
+      "AI-AND-LLM.md#Core discipline",
+      "AI-AND-LLM.md#Context, retrieval, and memory attack classes",
+      "AI-AND-LLM.md#Universal moves",
+      "AI-AND-LLM.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "audit-parent",
+    "reviewed_paths": [
+      "src/lib/billing/shopAiKey.ts",
+      "src/lib/ai/responseCache.ts",
+      "src/lib/ai/responseCachePolicy.ts",
+      "src/lib/ai/geminiCache.ts",
+      "src/lib/ai/salesAgentEngine.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "audit-parent",
+        "reviewed_paths": [
+          "src/lib/billing/shopAiKey.ts",
+          "src/lib/ai/responseCache.ts",
+          "src/lib/ai/responseCachePolicy.ts",
+          "src/lib/ai/geminiCache.ts",
+          "src/lib/ai/salesAgentEngine.ts"
+        ],
+        "invariant": "Shop A's key and cached customer answers are not served to shop B.",
+        "method": "source",
+        "result": "shop_ai_keys is read with the service role by shop_id and only a hint is returned to the shop API. ai_response_cache is keyed by shop_id plus query hash. The Gemini prompt cache key is the hash of model, system text, and tools, so a different shop prompt is a different cache entry.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "src%2Flib%2Fknowledge%2Fretrieve.ts%23retrieveKnowledge::knowledge%20chunk%20shop%20filter::src%2Flib%2Fknowledge::AI-AND-LLM.md%23Context%2C%20retrieval%2C%20and%20memory%20attack%20classes",
+    "canonical_refs": {
+      "surface": "src/lib/knowledge/retrieve.ts#retrieveKnowledge",
+      "boundary": "knowledge chunk shop filter",
+      "subsystem": "src/lib/knowledge",
+      "attack_class": "AI-AND-LLM.md#Context, retrieval, and memory attack classes"
+    },
+    "surface": "Hybrid knowledge retrieval",
+    "boundary": "Retrieval returns chunks only for the shop bound by the caller",
+    "subsystem": "Sales agent RAG",
+    "attack_class": "Cross-tenant retrieval",
+    "starting_paths": [
+      "src/lib/knowledge/retrieve.ts",
+      "src/lib/knowledge/hybrid.ts",
+      "src/lib/ai/toolDispatcher.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Injection",
+    "selected_companion_blocks": [
+      "AI-AND-LLM.md#Core discipline",
+      "AI-AND-LLM.md#Context, retrieval, and memory attack classes",
+      "AI-AND-LLM.md#Universal moves",
+      "AI-AND-LLM.md#Validation rules",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Tenant and object-isolation attack classes",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "AI-AND-LLM.md#MCP and sub-agent trust classes",
+        "reason": "No MCP client or server in the sales agent path."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "audit-parent",
+    "reviewed_paths": [
+      "src/lib/knowledge/retrieve.ts",
+      "src/lib/knowledge/hybrid.ts",
+      "src/lib/ai/toolDispatcher.ts",
+      "supabase/migrations/20261031000000_knowledge_chunks_pgvector.sql"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "audit-parent",
+        "reviewed_paths": [
+          "src/lib/knowledge/retrieve.ts",
+          "src/lib/knowledge/hybrid.ts",
+          "src/lib/ai/toolDispatcher.ts",
+          "supabase/migrations/20261031000000_knowledge_chunks_pgvector.sql"
+        ],
+        "invariant": "A tool query or prompt cannot select another shop's chunks.",
+        "method": "source",
+        "result": "retrieveKnowledge requires a UUID shop id from the server context, SQL filters shop_id, RPCs are SECURITY INVOKER, and mergeHybridResults drops hits whose shopId differs. The model does not supply shop_id.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "supabase%2Fmigrations%2F20260701000000_initial_schema.sql%23orders%20policies::public.orders%20RLS%20shop_id%20OR%20workspace_id::supabase%2Fmigrations::DATA-ISOLATION-AND-LIFECYCLE.md%23Tenant%20and%20object-isolation%20attack%20classes",
+    "canonical_refs": {
+      "surface": "supabase/migrations/20260701000000_initial_schema.sql#orders policies",
+      "boundary": "public.orders RLS shop_id OR workspace_id",
+      "subsystem": "supabase/migrations",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Tenant and object-isolation attack classes"
+    },
+    "surface": "Orders table RLS",
+    "boundary": "Row is visible and writable when shop_id or workspace_id matches the caller",
+    "subsystem": "Postgres RLS",
+    "attack_class": "Missing tenant enforcement on orders",
+    "starting_paths": [
+      "supabase/migrations/20260701000000_initial_schema.sql",
+      "src/app/dashboard/orders/page.tsx",
+      "supabase/schema/production.json"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Tenant and object-isolation attack classes",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "No memory-unsafe runtime in the reviewed TypeScript and SQL paths."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "No desktop, mobile, or local IPC surface in this web SaaS."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "candidate",
+    "agent_id": "audit-parent",
+    "reviewed_paths": [
+      "supabase/migrations/20260701000000_initial_schema.sql",
+      "supabase/schema/production.json",
+      "src/app/dashboard/orders/page.tsx"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "audit-parent",
+        "reviewed_paths": [
+          "supabase/migrations/20260701000000_initial_schema.sql",
+          "supabase/schema/production.json",
+          "src/app/dashboard/orders/page.tsx"
+        ],
+        "invariant": "An authenticated merchant cannot insert or retarget an order into another shop.",
+        "method": "source",
+        "result": "INSERT and SELECT policies OR shop_id with workspace_id. The Oct 24 schema snapshot also has an UPDATE policy with the same OR and no separate WITH CHECK, plus INSERT/UPDATE/SELECT grants to authenticated. A row with the victim shop_id and the caller workspace_id satisfies the check. The orders page then selects that shop_id.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [
+      "orders.rls.workspace-or-shop-id"
+    ],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "supabase%2Fmigrations%2F20261020000000_wallet_billing.sql%23guard_user_privilege_columns::users.workspace_id%20and%20users.role::supabase%2Fmigrations::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "supabase/migrations/20261020000000_wallet_billing.sql#guard_user_privilege_columns",
+      "boundary": "users.workspace_id and users.role",
+      "subsystem": "supabase/migrations",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "Membership and super-admin assignment",
+    "boundary": "A merchant cannot move workspace_id or become super admin from the browser role",
+    "subsystem": "Authz",
+    "attack_class": "Tenant switch via profile update",
+    "starting_paths": [
+      "supabase/migrations/20261020000000_wallet_billing.sql",
+      "src/lib/auth/superAdmin.ts",
+      "supabase/migrations/20261102000400_profiles_no_self_update.sql"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Tenant and object-isolation attack classes",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules",
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Browser-session attack classes",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "covered",
+    "agent_id": "audit-parent",
+    "reviewed_paths": [
+      "supabase/migrations/20261020000000_wallet_billing.sql",
+      "supabase/migrations/20261024000000_single_super_admin.sql",
+      "supabase/migrations/20261102000400_profiles_no_self_update.sql",
+      "src/lib/auth/superAdmin.ts",
+      "src/app/admin/layout.tsx",
+      "src/app/admin/actions.ts"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "audit-parent",
+        "reviewed_paths": [
+          "supabase/migrations/20261020000000_wallet_billing.sql",
+          "supabase/migrations/20261024000000_single_super_admin.sql",
+          "supabase/migrations/20261102000400_profiles_no_self_update.sql",
+          "src/lib/auth/superAdmin.ts",
+          "src/app/admin/layout.tsx",
+          "src/app/admin/actions.ts"
+        ],
+        "invariant": "A normal account cannot point its user row at another shop or pass the super-admin gate.",
+        "method": "source",
+        "result": "guard_user_privilege_columns rejects role and workspace_id changes from anon and authenticated. Super admin is an email allowlist, not users.role. profiles INSERT/UPDATE/DELETE are revoked from anon and authenticated. Admin server actions that were read call verifySuperAdmin or assertSuperAdmin, except getEvaluationMetrics.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": []
+  },
+  {
+    "coverage_id": "supabase%2Fmigrations%2F20261102000300_private_payment_slips.sql%23storage.objects::storage%20bucket%20ACL::supabase%2Fstorage::CLOUD-AND-DEPLOYMENT.md%23Managed%20storage%2C%20events%2C%20and%20edge%20attack%20classes",
+    "canonical_refs": {
+      "surface": "supabase/migrations/20261102000300_private_payment_slips.sql#storage.objects",
+      "boundary": "storage bucket ACL",
+      "subsystem": "supabase/storage",
+      "attack_class": "CLOUD-AND-DEPLOYMENT.md#Managed storage, events, and edge attack classes"
+    },
+    "surface": "Storage buckets",
+    "boundary": "Private objects are not anonymously readable",
+    "subsystem": "Supabase storage",
+    "attack_class": "Public object read",
+    "starting_paths": [
+      "supabase/migrations/20261102000300_private_payment_slips.sql",
+      "src/lib/billing/slipStorage.ts",
+      "src/lib/ai/toolDispatcher.ts"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "CLOUD-AND-DEPLOYMENT.md#Core discipline",
+      "CLOUD-AND-DEPLOYMENT.md#Managed storage, events, and edge attack classes",
+      "CLOUD-AND-DEPLOYMENT.md#Universal moves",
+      "CLOUD-AND-DEPLOYMENT.md#Validation rules"
+    ],
+    "excluded_blocks": [],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "deferred",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [
+      "Bucket ACLs after the payment-slips migration were not re-checked against a live storage policy. The snapshot shows payment-slips private and qr-codes plus botify_audio public."
+    ]
+  }
+]
