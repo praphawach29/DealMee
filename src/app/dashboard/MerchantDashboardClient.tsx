@@ -58,6 +58,7 @@ export interface MerchantDashboardProps {
   orders?: DashboardOrder[]
   products?: DashboardProduct[]
   initialPlaygroundOpen?: boolean
+  pendingSkillProposals?: number
 }
 
 const PRESETS: { id: PeriodPreset; label: string }[] = [
@@ -86,6 +87,7 @@ export default function MerchantDashboardClient({
   orders = [],
   products = [],
   initialPlaygroundOpen = false,
+  pendingSkillProposals = 0,
 }: MerchantDashboardProps) {
   const router = useRouter()
   const [isPlaygroundOpen, setIsPlaygroundOpen] = useState(initialPlaygroundOpen)
@@ -214,6 +216,16 @@ export default function MerchantDashboardClient({
       </div>
 
       <SetupChecklistCard items={setupChecklist} />
+
+      {pendingSkillProposals > 0 && (
+        <Link
+          href="/dashboard/skills"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-950 shadow-card"
+        >
+          <span className="font-semibold">ข้อเสนอจากการรีวิวเมื่อคืน {pendingSkillProposals} รายการ</span>
+          <span className="shrink-0 font-semibold text-violet-700">ตรวจแล้วค่อยเปิดใช้</span>
+        </Link>
+      )}
 
       <section className="flex flex-col gap-4 rounded-2xl border border-outline-variant bg-white px-4 py-3 shadow-card lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
