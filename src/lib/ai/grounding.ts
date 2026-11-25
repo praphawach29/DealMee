@@ -89,6 +89,8 @@ export interface GroundingVerdict {
   shouldLog: boolean
   reason: GroundingReason
   question: string
+  /** The draft sentences that had no support, when the reply was replaced. */
+  unsupported?: string[]
 }
 
 export interface GapExisting {
@@ -187,6 +189,7 @@ export function checkGrounding(input: GroundingInput): GroundingVerdict {
     shouldHandoff: true,
     shouldLog: true,
     reason: invented ? 'invented_citation' : 'unsupported_shop_fact',
+    unsupported,
   }
 }
 
@@ -238,6 +241,23 @@ function isShopFactSentence(sentence: string): boolean {
  */
 const COUNT_AFTER = /^\s*(?:คน|ท่าน|ราย|สาขา|ข้อความ|ครั้ง|ที่นั่ง|ห้อง)/
 
+/** The customer's message asks something rather than telling us something. */
+const CUSTOMER_ASKS = /[?？]|ไหม|มั้ย|หรือเปล่า|หรือป่าว|ได้ป่าว|หรือยัง|เท่าไหร่|เท่าไร|กี่|ใช่ป่ะ|\b(?:how|what|when|is|are|do|does|can)\b/i
+
+/** Concessions a customer cannot grant themselves by saying them ("ลดให้ 100 บาทได้เลย"). */
+const OFFER_CUE = /ส่วนลด|ลดให้|ลดราคา|ลด\s*\d|โปร|แถม|ฟรี|discount|\bfree\b/i
+
+/**
+ * What the customer stated in this message, usable as evidence for repeating it
+ * back. On 24 Nov 2026 a CheckMee owner answered the bot's own question with
+ * "03:10-12:10 และ 10:00-20:00"; the setup advice that used those times was
+ * thrown away and the chat handed off, because only shop data counted. A
+ * question ("เปิดถึง 20:00 ไหม") is not a statement and supports nothing.
+ */
+function statedByCustomer(asked: string): string {
+  return asked && !CUSTOMER_ASKS.test(asked) ? asked : ''
+}
+
 function countSupported(digits: string, evidence: string, asked: string): boolean {
   const re = new RegExp(`(?:^|[^\\d])${escapeRegExp(digits)}(?!\\d)`)
   return re.test(asked) || re.test(evidence)
@@ -268,7 +288,8 @@ function sentenceSupported(sentence: string, evidence: string, codEnabled?: bool
       }
     }
   }
-  return claims.every((claim) => claimSupported(claim, evidence))
+  const stated = OFFER_CUE.test(norm) ? '' : statedByCustomer(asked)
+  return claims.every((claim) => claimSupported(claim, evidence) || (stated !== '' && claimSupported(claim, stated)))
 }
 
 function codesSupported(sentence: string, evidence: string): boolean {

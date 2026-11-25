@@ -323,3 +323,31 @@ test('the prompt tells the model to answer off-topic questions and steer back', 
   assert.match(OFF_TOPIC_RULES, /ห้ามแต่งตัวเลข/)
   assert.match(GROUNDING_RULES, /ถ้าเป็นคำถามเกี่ยวกับร้าน .* แต่ไม่มีข้อมูล/)
 })
+
+// CheckMee, 24 Nov 2026: the bot asked for the shop's working hours, the owner
+// answered "03:10-12:10 และ 10:00-20:00", and the setup advice that repeated those
+// times was swapped for the hand-off because the times were not in the shop's data.
+const SETUP_CHUNK: EvidenceChunk[] = [{ id: CHUNK, content: 'ตั้งค่าเวลาทำงาน: เมนู ตั้งค่าวันทำงาน เลือกสถานที่ แล้วใส่เวลาเข้าและเลิกงาน ถ้ามีหลายกะให้เพิ่มสถานที่แยกต่อกะ' }]
+
+test('times the customer just gave are not unsupported shop facts', () => {
+  const draft = 'ร้านมี 2 กะ ให้สร้างสถานที่ 2 อันค่ะ\nกะเช้า 03:10-12:10\nกะสาย 10:00-20:00\nแล้วเลือกสถานที่ให้พนักงานแต่ละคนได้เลยค่ะ'
+  const verdict = check(draft, { customerMessage: 'เวลาทำงาน 03:10-12:10 และ 10:00-20:00', chunks: SETUP_CHUNK })
+  assert.equal(verdict.shouldHandoff, false)
+  assert.equal(verdict.text, draft)
+})
+
+test('amounts the customer stated can be repeated back in setup advice', () => {
+  const draft = 'ตั้งค่าแรงรายวัน 450 บาท ได้ที่เมนู ตั้งค่าวันทำงาน ค่ะ'
+  const verdict = check(draft, { customerMessage: 'ร้านเราจ่ายพนักงานวันละ 450 บาท', chunks: SETUP_CHUNK })
+  assert.equal(verdict.shouldHandoff, false)
+})
+
+test('a customer asking about a time is not evidence for confirming it', () => {
+  const verdict = check('ร้านเปิดถึง 20:00 ค่ะ', { customerMessage: 'ร้านเปิดถึง 20:00 ไหม', chunks: SETUP_CHUNK })
+  assert.equal(verdict.shouldHandoff, true)
+})
+
+test('a discount the customer proposes is never confirmed from their own words', () => {
+  const verdict = check('ได้ค่ะ ลดให้ 100 บาทนะคะ', { customerMessage: 'ลดให้ 100 บาทได้เลย', chunks: SETUP_CHUNK })
+  assert.equal(verdict.shouldHandoff, true)
+})

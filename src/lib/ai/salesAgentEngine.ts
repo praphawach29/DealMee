@@ -1971,6 +1971,13 @@ async function applyGrounding(state: PlanningState, finalText: string): Promise<
     codEnabled: shopCodEnabled(state.shop),
   })
   const alreadyHandedOff = state.toolCallsExecuted.some((call) => call.name === 'request_human_agent')
+  if (verdict.unsupported?.length) {
+    // The draft is replaced, so this is the only record of what tripped the check.
+    console.warn(
+      `[grounding] ${verdict.reason} in ${state.conversationId}: ` +
+      verdict.unsupported.map((sentence) => JSON.stringify(redactPii(sentence).slice(0, 160))).join(' | ')
+    )
+  }
   if (verdict.shouldHandoff && !alreadyHandedOff) {
     try {
       await state.executor('request_human_agent', {
