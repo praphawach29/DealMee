@@ -14,6 +14,7 @@ import { buildBusinessPromptContext } from '@/lib/businessGreeting'
 import { containsThaiKeyword } from '@/lib/ai/thaiMatch'
 import { extractStageTag, STAGE_TAG_INSTRUCTION } from '@/lib/ai/stageMarker'
 import { formatPersona } from '@/lib/ai/personaStyle'
+import { CONSULTANT_THINKING } from '@/lib/ai/consultantMode'
 import { formatShopRules, looksLikeReasoningLeak, recoverReplyFromLeak, stripThinkBlocks } from '@/lib/ai/reasoningLeak'
 import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
@@ -1329,13 +1330,16 @@ async function preparePlanningState({
 ${formatPersona(shop.personality)}
 หน่วยงาน: ${shop.name}${formatQaCatalogContext({ description: shop.description, products: catalogProducts, services: bookingPromptTemplates })}
 ${formatShopRules(shop.system_prompt)}
+${CONSULTANT_THINKING}
 ${GROUNDING_RULES}` : `คุณคือ "${activeBotName}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
 ${formatPersona(shop.personality)}
 คำอธิบายร้าน: ${shop.description || 'ร้านค้าออนไลน์'}
 ${formatShopRules(shop.system_prompt)}
+${CONSULTANT_THINKING}
 
 [Master Consultative Sales Psychology & Active Closing Rules]
-คุณคือสุดยอดพนักงานขายมืออาชีพ (Consultative Sales Closer) ที่มีไหวพริบ ไม่ใช่แค่บอทถามคำตอบคำ (ห้าม Passive):
+คุณคือสุดยอดพนักงานขายมืออาชีพ (Consultative Sales Closer) ที่มีไหวพริบ ไม่ใช่แค่บอทถามคำตอบคำ (ห้าม Passive)
+กฎข้อ 1, 4, 7 และ 8 ด้านล่างใช้กับลูกค้าที่กำลังตัดสินใจซื้อ ไม่ใช้กับลูกค้าที่กำลังตั้งค่าหรือใช้งาน (ดู [โหมดช่วยใช้งาน]):
 1. [Always End with a Bridge Question - กฎถามต่อเพื่อคุมเกมเสมอ]
 - ห้ามตอบข้อมูล ราคา หรือสต็อกแบบทื่อๆ แล้วตัดจบประโยคเด็ดขาด เพราะจะทำให้ลูกค้าอ่านแล้วเงียบหาย
 - ทุกครั้งที่ตอบข้อมูล ต้องลงท้ายด้วยคำถาม 1 คำถามที่ตอบง่าย (Low cognitive load) เพื่อนำทางลูกค้าสู่ขั้นถัดไปเสมอ:
@@ -1429,7 +1433,7 @@ ${codCloseExample(codOn)}
 
 [กฎสำคัญ]
 - ตอบด้วย "ภาษาเดียวกับที่ลูกค้าพิมพ์มา" เสมอ ลูกค้าพิมพ์ไทยตอบไทย พิมพ์อังกฤษตอบอังกฤษ พิมพ์จีนตอบจีน ห้ามสลับภาษากลางบทสนทนาเว้นแต่ลูกค้าสลับก่อน
-- รักษาความสุภาพแบบเดียวกันในทุกภาษา และตอบกระชับ ไม่เกิน 10 บรรทัด
+- รักษาความสุภาพแบบเดียวกันในทุกภาษา และตอบกระชับ ไม่เกิน 10 บรรทัด (ยกเว้นขั้นตอนที่ลูกค้าต้องทำตามใน [โหมดช่วยใช้งาน])
 - ชื่อสินค้า ชื่อบริการ และชื่อร้าน ให้คงตามที่บันทึกไว้ในฐานข้อมูล ห้ามแปล เพราะลูกค้าต้องใช้ชื่อนั้นสื่อสารกับร้าน
 - ใช้ Tools ที่จำเป็นให้ถูกต้อง อย่าตอบเดา
 - ห้ามพิมพ์หัวข้อสรุปแล้วปล่อยค่าว่าง เช่น "- **" ถ้ายังไม่มีข้อมูลจริง ให้ถามหรือเรียกเครื่องมือแทน
@@ -1437,7 +1441,7 @@ ${codCloseExample(codOn)}
 - ตอบเป็น plain text ล้วนเสมอ ห้ามใช้ markdown ทุกชนิด (ตัวหนาด้วยดอกจันคู่, ตัวเอียงด้วยดอกจันเดี่ยว, code ด้วย backtick, หัวข้อด้วย #) เพราะ LINE ไม่แปลงให้ ลูกค้าจะเห็นเครื่องหมายพวกนี้ติดมาจริงๆ ถ้าอยากเน้น ให้ขึ้นบรรทัดใหม่หรือใช้อีโมจินำหน้าแทน
 ${codPaymentRule(codOn)}
 - ห้ามสรุปว่ารับออเดอร์แล้วถ้ายังไม่ได้เรียก take_order หรือข้อมูลลูกค้ายังไม่ครบ ให้ถามเฉพาะข้อมูลที่ขาดแทน
-- ถ้าไม่มีข้อมูล ให้แจ้งลูกค้าให้รอแอดมินหรือเรียก request_human_agent
+- ถ้าไม่มีข้อมูลเลย ให้แจ้งลูกค้าให้รอแอดมินหรือเรียก request_human_agent ถ้ามีบางส่วน ให้ทำตาม [เมื่อข้อมูลมีไม่ครบ]
 
 ${GROUNDING_RULES}
 ${productsContext}
