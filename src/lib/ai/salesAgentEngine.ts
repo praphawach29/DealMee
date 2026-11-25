@@ -13,6 +13,7 @@ import { platformSecret } from '@/lib/platformSecrets'
 import { buildBusinessPromptContext } from '@/lib/businessGreeting'
 import { containsThaiKeyword } from '@/lib/ai/thaiMatch'
 import { extractStageTag, STAGE_TAG_INSTRUCTION } from '@/lib/ai/stageMarker'
+import { formatPersona } from '@/lib/ai/personaStyle'
 import { formatShopRules, looksLikeReasoningLeak, recoverReplyFromLeak, stripThinkBlocks } from '@/lib/ai/reasoningLeak'
 import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
@@ -1325,10 +1326,11 @@ async function preparePlanningState({
   const codOn = shopCodEnabled(shop)
   const staticSystemPrompt = qaOnly ? `${QA_ONLY_PROMPT}
 ชื่อผู้ช่วย: ${activeBotName}
+${formatPersona(shop.personality)}
 หน่วยงาน: ${shop.name}${formatQaCatalogContext({ description: shop.description, products: catalogProducts, services: bookingPromptTemplates })}
 ${formatShopRules(shop.system_prompt)}
 ${GROUNDING_RULES}` : `คุณคือ "${activeBotName}" พนักงานขาย AI อัจฉริยะและผู้จัดการร้านมืออาชีพประจำร้าน "${shop.name}"
-บุคลิกภาพ: ${shop.personality || 'สุภาพ เรียบร้อย มืออาชีพ เป็นมิตรและมีไหวพริบในการขายสูง'}
+${formatPersona(shop.personality)}
 คำอธิบายร้าน: ${shop.description || 'ร้านค้าออนไลน์'}
 ${formatShopRules(shop.system_prompt)}
 
