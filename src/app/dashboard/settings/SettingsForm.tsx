@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { updateBotSettings } from './actions'
 import ChatPlaygroundModal from '../components/ChatPlaygroundModal'
 import ByokKeyCard from './ByokKeyCard'
+import { PERSONALITY_CHOICES } from '@/lib/ai/personaStyle'
 import {
   MessageSquare,
   Save,
@@ -180,6 +181,11 @@ export default function SettingsForm({ shop, onNavigateToChannels }: SettingsFor
             <option value="หญิง-น่ารัก">💄 หญิง - น่ารัก เป็นกันเอง มีอีโมจิ</option>
             <option value="ชาย-สุภาพ">💻 ชาย - สุภาพ มืออาชีพ (ลงท้ายครับ)</option>
             <option value="ชาย-เป็นกันเอง">💪 ชาย - เป็นกันเอง สนิทสนม</option>
+            {/* A value saved before this list existed: keep it selectable, or saving
+                the form would silently switch the shop to the first option. */}
+            {shop.personality && !PERSONALITY_CHOICES.includes(shop.personality) && (
+              <option value={shop.personality}>✏️ {shop.personality} (ค่าเดิม)</option>
+            )}
           </select>
         </div>
 

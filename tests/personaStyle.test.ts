@@ -25,6 +25,13 @@ test('a female voice gets no rewrite note', () => {
   assert.equal(isMalePersona('หญิง-น่ารัก'), false)
 })
 
+test('a choice saved with extra words keeps the choice rules and the words', () => {
+  const block = formatPersona('ชาย-สุภาพ กระชับ')
+  assert.match(block, /ห้ามใช้ "ค่ะ" "คะ"/)
+  assert.match(block, /เพิ่มเติม: กระชับ/)
+  assert.match(formatPersona('หญิง-สุภาพ อบอุ่น'), /"ค่ะ".*เพิ่มเติม: อบอุ่น/)
+})
+
 test('old free-text values pass through, and empty falls back to the default', () => {
   assert.match(formatPersona('ร่าเริง ใช้คำว่าจ้า'), /ร่าเริง ใช้คำว่าจ้า/)
   for (const empty of ['', null, undefined]) assert.match(formatPersona(empty), /สุภาพ เรียบร้อย มืออาชีพ/)

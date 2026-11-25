@@ -21,6 +21,9 @@ const PERSONAS: Record<string, string> = {
     'ผู้ชาย เป็นกันเอง สนิทสนมแต่ยังสุภาพ แทนตัวเองว่า "ผม" ลงท้ายด้วย "ครับ" หรือ "นะครับ" ห้ามใช้ "ค่ะ" "คะ" "นะคะ" ใช้อีโมจิได้ไม่เกิน 1 ตัวต่อข้อความ',
 }
 
+/** The values the settings dropdown offers. */
+export const PERSONALITY_CHOICES: readonly string[] = Object.keys(PERSONAS)
+
 const DEFAULT_PERSONA = 'สุภาพ เรียบร้อย มืออาชีพ เป็นมิตรและมีไหวพริบในการขายสูง'
 
 /** True when this persona is a male voice, so the female examples in the prompt must be rewritten. */
@@ -34,7 +37,13 @@ export function isMalePersona(personality: unknown): boolean {
  */
 export function formatPersona(personality: unknown): string {
   const raw = typeof personality === 'string' ? personality.trim() : ''
-  const rules = PERSONAS[raw] || raw || DEFAULT_PERSONA
+  // Older shops saved a choice plus their own words ("ชาย-สุภาพ กระชับ"): use the
+  // choice's rules and keep the words as an extra note.
+  const base = Object.keys(PERSONAS).find((key) => raw === key || raw.startsWith(`${key} `))
+  const extra = base ? raw.slice(base.length).trim() : ''
+  const rules = base
+    ? `${PERSONAS[base]}${extra ? ` เพิ่มเติม: ${extra}` : ''}`
+    : raw || DEFAULT_PERSONA
   const lines = [`บุคลิกภาพและน้ำเสียง: ${rules}`]
   if (isMalePersona(raw)) {
     lines.push('ตัวอย่างประโยคในคำสั่งด้านล่างเขียนลงท้ายแบบผู้หญิง (ค่ะ/คะ) ให้เปลี่ยนเป็น "ครับ" ทุกครั้งเวลาใช้จริง')
