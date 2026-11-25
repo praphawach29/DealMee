@@ -23,6 +23,7 @@ import {
   resolveChannelProductCards,
 } from '@/lib/ai/productCards'
 import { settleSlipImage } from '@/lib/slip/settleSlip'
+import { BATCH_WAIT_MS, mergeCustomerTexts, pendingCustomerTurn, supersededTextEvents } from '@/lib/line/messageBatch'
 
 const supabase = createAdminClient()
 
@@ -149,8 +150,12 @@ async function processLineEvents({
   const upsetChecks: Promise<void>[] = []
   const skillsTelemetryEnabled = shopSkillsTelemetryEnabled(features)
 
+  // Several messages from one customer in one delivery: only the last one answers
+  const batchingOn = features.message_batching !== false
+  const superseded = batchingOn ? supersededTextEvents(events) : new Set<number>()
+
   // Process each LINE event
-  for (const event of events) {
+  for (const [eventIndex, event] of events.entries()) {
     const userId = event.source?.userId
     const replyToken = event.replyToken
 
@@ -421,17 +426,44 @@ async function processLineEvents({
         continue
       }
 
+      if (superseded.has(eventIndex)) {
+        console.log(`[Webhook] Batching: a later message in this delivery answers for ${savedUserMsg?.id}`)
+        continue
+      }
+
       // 5. Call AI Sales Agent Engine (runs all planning steps including tool calls)
-      // with LINE's loading animation showing until the answer is ready
-      const agentResult = await withLineLoading(userId, lineToken, () =>
-        processSalesAgentChat({
+      // with LINE's loading animation showing until the answer is ready.
+      // With batching on, wait for the customer to finish typing first; a newer
+      // message's own webhook call then answers this one too (messageBatch.ts).
+      const agentResult = await withLineLoading(userId, lineToken, async () => {
+        let userQuery = userText
+        if (batchingOn && savedUserMsg?.id) {
+          await new Promise((resolve) => setTimeout(resolve, BATCH_WAIT_MS))
+          const { data: recent } = await supabase
+            .from('chat_messages')
+            .select('id, sender_type, message, created_at')
+            .eq('conversation_id', conv.id)
+            .order('created_at', { ascending: false })
+            .limit(20)
+          const turn = pendingCustomerTurn([...(recent || [])].reverse())
+          if (turn && turn.latestId !== savedUserMsg.id) {
+            console.log(`[Webhook] Batching: newer message ${turn.latestId} answers for ${savedUserMsg.id}`)
+            return null
+          }
+          if (turn && turn.texts.length > 1) {
+            userQuery = mergeCustomerTexts(turn.texts)
+            console.log(`[Webhook] Batching: answering ${turn.texts.length} messages together in ${conv.id}`)
+          }
+        }
+        return processSalesAgentChat({
           shop,
-          userQuery: userText,
+          userQuery,
           userId,
           conversationId: conv.id,
           supabaseClient: supabase,
         })
-      )
+      })
+      if (!agentResult) continue
 
       // If in Copilot mode: do not send to user directly, instead save as ai_suggested_reply
       if (conv.ai_mode === 'copilot') {
