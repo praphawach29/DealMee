@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { looksLikeReasoningLeak, recoverReplyFromLeak, stripThinkBlocks } from '../src/lib/ai/reasoningLeak.ts'
+import { formatShopRules, looksLikeReasoningLeak, recoverReplyFromLeak, SHOP_RULES_MAX_CHARS, stripThinkBlocks } from '../src/lib/ai/reasoningLeak.ts'
+
+test('the owner rules box reaches the prompt, with an instruction not to recite it', () => {
+  const block = formatShopRules('  ห้ามให้ส่วนลด\nตอบไม่เกิน 6 บรรทัด  ')
+  assert.match(block, /ห้ามให้ส่วนลด\nตอบไม่เกิน 6 บรรทัด\n/)
+  assert.match(block, /ไม่ต้องทวน/)
+})
+
+test('an empty or missing rules box adds nothing', () => {
+  for (const raw of ['', '   ', null, undefined]) assert.equal(formatShopRules(raw), '')
+})
+
+test('very long rules are cut to the limit', () => {
+  const block = formatShopRules('ก'.repeat(SHOP_RULES_MAX_CHARS + 500))
+  assert.ok(block.includes('ก'.repeat(SHOP_RULES_MAX_CHARS)))
+  assert.ok(!block.includes('ก'.repeat(SHOP_RULES_MAX_CHARS + 1)))
+})
 
 // The reply a CheckMee customer received on LINE, 25 Nov 2026.
 const FINAL = 'ดีเลยค่ะ ขั้นตอนเริ่มต้นใช้งานง่ายมากๆ ตามนี้เลยนะคะ 1. เข้าเว็บ checkmee.app แล้วกดสมัครใช้งาน 2. ตั้งชื่อบริษัทและข้อมูลเบื้องต้น 3. รับรหัสลงทะเบียนส่งให้พนักงานสแกนเข้าใช้งานใน LINE ได้ทันทีค่ะ สามารถดูคลิปเริ่มใช้งานครั้งแรกได้ที่ checkmee.app/#setup นะคะ ลองกดสมัครแล้ว ติดขัดขั้นตอนไหนสอบถามน้อง Check ได้ตลอดเลยนะคะ\n[[stage:closing]]'

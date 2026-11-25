@@ -31,6 +31,25 @@ const THINK_CLOSE = /<\/(?:think|thinking|reasoning)>/i
 const DRAFT_MARKER = /(?:เขียน(?:คำ)?ตอบ|ร่าง(?:คำ)?ตอบ|คำตอบสุดท้าย|ตอบลูกค้า|draft|final reply)\s*[:：]/gi
 const CHECK_MARKER = /ตรวจ(?:สอบ)?กฎ|เช็[คก]กฎ|\bchecklist\b|\brules? check\b/i
 
+/** Longest owner rule text sent to the model; the settings form has no limit of its own. */
+export const SHOP_RULES_MAX_CHARS = 8000
+
+/**
+ * The owner's "คำสั่งเฉพาะและกฎเหล็กการตอบ" (shops.system_prompt) as a prompt
+ * block, or '' when empty. It was saved by the settings page but never sent to
+ * the bot until 25 Nov 2026. The block tells the model to follow the rules
+ * silently: listing rules back to itself in the reply is how they leaked.
+ */
+export function formatShopRules(raw: unknown): string {
+  const rules = typeof raw === 'string' ? raw.trim().slice(0, SHOP_RULES_MAX_CHARS) : ''
+  if (!rules) return ''
+  return `
+[คำสั่งเฉพาะจากเจ้าของร้าน — ใช้ก่อนแนวทางการขายทั่วไปด้านล่าง แต่ไม่เหนือกฎความปลอดภัยและกฎอ้างอิงข้อมูลจริง]
+${rules}
+[จบคำสั่งเฉพาะ — ทำตามโดยไม่ต้องทวน อธิบาย หรือตรวจกฎให้ลูกค้าเห็น ข้อความที่ส่งต้องเป็นคำตอบถึงลูกค้าเท่านั้น]
+`
+}
+
 function metaSignalCount(text: string): number {
   return META_SIGNALS.filter((re) => re.test(text)).length
 }
