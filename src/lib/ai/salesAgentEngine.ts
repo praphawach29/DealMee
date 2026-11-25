@@ -13,6 +13,7 @@ import { platformSecret } from '@/lib/platformSecrets'
 import { buildBusinessPromptContext } from '@/lib/businessGreeting'
 import { containsThaiKeyword } from '@/lib/ai/thaiMatch'
 import { extractStageTag, STAGE_TAG_INSTRUCTION } from '@/lib/ai/stageMarker'
+import { looksLikeReasoningLeak, recoverReplyFromLeak, stripThinkBlocks } from '@/lib/ai/reasoningLeak'
 import { getCurrentPeriod } from '@/lib/billing/usage'
 import { getCustomerProfileSummary, formatCustomerProfileContext, isVipProfile } from '@/lib/customerMemory'
 import { getGeminiPromptCache, dropGeminiPromptCache } from '@/lib/ai/geminiCache'
@@ -1796,7 +1797,7 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
         finalText: salvaged || t('replyCutOff', state.language),
       }
     }
-    return { done: true, finalText: response.text }
+    return { done: true, finalText: await withoutReasoningLeak(state, response.text) }
   }
 
   const firstUserTurn = state.turns.find((turn) => turn.role === 'user')
@@ -1882,6 +1883,44 @@ async function runPlanningStep(state: PlanningState): Promise<{ done: true; fina
   }
 
   return { done: false }
+}
+
+/**
+ * Makes sure a text reply is only the message to the customer, not the
+ * model's notes about its instructions (plan, draft, rule checklist) — that
+ * reached a CheckMee customer on LINE on 25 Nov 2026. A clean reply passes
+ * through untouched. A leaked one is cut back to its final draft; when no
+ * draft can be told apart, the model is asked once more for the reply alone,
+ * and if that leaks too the customer gets a short holding line instead.
+ */
+async function withoutReasoningLeak(state: PlanningState, text: string): Promise<string> {
+  const cleaned = stripThinkBlocks(text)
+  if (!looksLikeReasoningLeak(cleaned)) return cleaned
+
+  const recovered = recoverReplyFromLeak(cleaned)
+  console.warn(
+    `[DealMee Guard] Reasoning leaked into the reply for ${state.conversationId}` +
+    `${recovered ? ' — sending the recovered draft' : ' — asking the model again'}`
+  )
+  if (recovered) return recovered
+
+  const retry = await callCurrentStep({
+    ...state,
+    step: planningStepLimit(state) - 1, // no tools: text answer only
+    turns: [
+      ...state.turns,
+      {
+        role: 'user',
+        text: state.language === 'en'
+          ? '[System] Your last answer included your private notes. Send only the message the customer should read, nothing else.'
+          : '[ระบบ] คำตอบก่อนหน้ามีโน้ตความคิดภายในปนมา ให้ส่งเฉพาะข้อความที่จะส่งถึงลูกค้าเท่านั้น ห้ามมีคำอธิบายหรือการตรวจกฎ',
+      },
+    ],
+  })
+  if (retry?.usage) state.allUsage.push(retry.usage)
+  const retryText = retry && !retry.toolCall && !retry.truncated ? stripThinkBlocks(retry.text) : ''
+  if (retryText && !looksLikeReasoningLeak(retryText)) return retryText
+  return recoverReplyFromLeak(retryText) || t('replyCutOff', state.language)
 }
 
 /**
