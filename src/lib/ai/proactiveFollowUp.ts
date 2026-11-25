@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { sendFacebookMessage } from '@/lib/facebook/messengerHelper'
 import { isOrderSettled } from '@/lib/orders/paymentState'
 import { backInStockStillWaitingMessage, restockIlikePattern } from '@/lib/ai/restockMessage'
+import { applyVoice } from '@/lib/ai/personaStyle'
 
 export interface FollowUpConfig {
   qr_recovery_enabled?: boolean
@@ -319,13 +320,19 @@ export function generateProactiveMessage({
   task: FollowUpTask
   shop: { name: string; personality?: string }
 }): string {
+  // Text the owner wrote goes out exactly as written; only our templates are re-voiced.
+  const ownerText = task.task_type === 'scheduled_message' ? String(task.payload?.message || '').trim() : ''
+  if (ownerText) return ownerText
+  // The templates are written in a female voice; a male-voice shop gets ครับ instead.
+  return applyVoice(followUpTemplate(task, shop.name || 'ทางร้าน'), shop.personality)
+}
+
+function followUpTemplate(task: FollowUpTask, shopName: string): string {
   const { payload } = task
-  const shopName = shop.name || 'ทางร้าน'
 
   switch (task.task_type) {
     case 'scheduled_message': {
-      const text = String(task.payload?.message || '').trim()
-      return text || `สวัสดีค่ะคุณลูกค้า ${shopName} ยินดีให้บริการนะคะ หากมีคำถามหรือต้องการสอบถามเพิ่มเติม สามารถพิมพ์แจ้งแอดมินได้เลยค่ะ 🙏`
+      return `สวัสดีค่ะคุณลูกค้า ${shopName} ยินดีให้บริการนะคะ หากมีคำถามหรือต้องการสอบถามเพิ่มเติม สามารถพิมพ์แจ้งแอดมินได้เลยค่ะ 🙏`
     }
     case 'qr_recovery': {
       const orderNo = payload.orderNumber ? `#${payload.orderNumber}` : ''
@@ -607,10 +614,10 @@ export async function processDueFollowUpTasks(limit = 25): Promise<{
             continue
           } else {
             // Max retries reached, send "still out of stock" message
-            payload.message = backInStockStillWaitingMessage(payload.product_name)
+            payload.message = applyVoice(backInStockStillWaitingMessage(payload.product_name), shop.personality)
           }
         } else if (product) {
-          payload.message = `👋 สวัสดีค่ะ ${product.name} ที่ถามไว้ ตอนนี้ของมาแล้วค่ะ! สนใจสั่งได้เลยนะ 😊`
+          payload.message = applyVoice(`👋 สวัสดีค่ะ ${product.name} ที่ถามไว้ ตอนนี้ของมาแล้วค่ะ! สนใจสั่งได้เลยนะ 😊`, shop.personality)
         }
         task.payload = payload
       }

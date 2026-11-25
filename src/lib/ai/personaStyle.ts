@@ -31,6 +31,27 @@ export function isMalePersona(personality: unknown): boolean {
   return typeof personality === 'string' && personality.trim().startsWith('ชาย')
 }
 
+const EMOJI = /\p{Extended_Pictographic}️?/gu
+
+/**
+ * Puts a message the system wrote itself (follow-up templates, written in a
+ * female voice) into the shop's chosen voice. Female voices are left as they
+ * are. Never use it on text the owner wrote: that is already in their voice.
+ */
+export function applyVoice(text: string, personality: unknown): string {
+  if (!isMalePersona(personality)) return text
+  let out = text
+    .replace(/นะคะ/g, 'นะครับ')
+    .replace(/ค่ะ/g, 'ครับ')
+    // คะ only as a sentence ending, never inside a word such as คะแนน
+    .replace(/คะ(?=$|[\s?!.,)\]"'”]|\p{Extended_Pictographic})/gmu, 'ครับ')
+  // ชาย-สุภาพ uses no emoji at all
+  if (String(personality).trim().startsWith('ชาย-สุภาพ')) {
+    out = out.replace(EMOJI, '').replace(/[ \t]+$/gm, '').replace(/[ \t]{2,}/g, ' ')
+  }
+  return out
+}
+
 /**
  * The persona block for the prompt. A dropdown value becomes explicit rules;
  * anything else (an old free-text value) is passed through as written.

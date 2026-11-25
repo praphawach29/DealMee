@@ -1,6 +1,24 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { formatPersona, isMalePersona } from '../src/lib/ai/personaStyle.ts'
+import { applyVoice, formatPersona, isMalePersona } from '../src/lib/ai/personaStyle.ts'
+
+const REMINDER = 'สวัสดีค่ะคุณลูกค้า ร้านเรา ขอแจ้งเตือนนัดหมายพรุ่งนี้นะคะ 🗓️\n\nสะดวกไหมคะ? ขอบคุณค่ะ 🙏'
+
+test('follow-up templates switch to ครับ for a male voice and drop emoji for ชาย-สุภาพ', () => {
+  assert.equal(
+    applyVoice(REMINDER, 'ชาย-สุภาพ กระชับ'),
+    'สวัสดีครับคุณลูกค้า ร้านเรา ขอแจ้งเตือนนัดหมายพรุ่งนี้นะครับ\n\nสะดวกไหมครับ? ขอบคุณครับ'
+  )
+})
+
+test('ชาย-เป็นกันเอง keeps its emoji, and female voices are untouched', () => {
+  assert.match(applyVoice(REMINDER, 'ชาย-เป็นกันเอง'), /นะครับ 🗓️/)
+  for (const voice of ['หญิง-สุภาพ', 'หญิง-น่ารัก', '', undefined]) assert.equal(applyVoice(REMINDER, voice), REMINDER)
+})
+
+test('คะ inside a word is never changed', () => {
+  assert.equal(applyVoice('ได้คะแนนเต็มค่ะ', 'ชาย-สุภาพ'), 'ได้คะแนนเต็มครับ')
+})
 
 test('each dropdown choice becomes explicit rules, not the bare value', () => {
   for (const value of ['หญิง-สุภาพ', 'หญิง-น่ารัก', 'ชาย-สุภาพ', 'ชาย-เป็นกันเอง']) {
