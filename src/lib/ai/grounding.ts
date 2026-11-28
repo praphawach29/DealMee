@@ -241,6 +241,14 @@ function isShopFactSentence(sentence: string): boolean {
  * sweep below read it as an 11-baht price and replaced a correct answer with the hand-off.
  */
 const COUNT_AFTER = /^\s*(?:คน|ท่าน|ราย|สาขา|ข้อความ|ครั้ง|ที่นั่ง|ห้อง)/
+/**
+ * The first number of a count range: the 11 in "11–20 คน", "11 - 20 คน", "11 ถึง 20 คน".
+ * 28 Nov 2026, CheckMee: "แพ็กเกจเล็ก 11–20 คน คนละ 60 บาท" was handed off as an 11-baht price,
+ * because only a number followed directly by คน counted as a headcount. The second number is
+ * followed by คน and is handled by COUNT_AFTER; both must still appear in the shop's data or
+ * the customer's message.
+ */
+const COUNT_RANGE_AFTER = /^\s*(?:[-–—~]|ถึง)\s*\d{1,7}\s*(?:คน|ท่าน|ราย|สาขา|ข้อความ|ครั้ง|ที่นั่ง|ห้อง)/
 
 /** The customer's message asks something rather than telling us something. */
 const CUSTOMER_ASKS = /[?？]|ไหม|มั้ย|หรือเปล่า|หรือป่าว|ได้ป่าว|หรือยัง|เท่าไหร่|เท่าไร|กี่|ใช่ป่ะ|\b(?:how|what|when|is|are|do|does|can)\b/i
@@ -279,7 +287,7 @@ function sentenceSupported(sentence: string, evidence: string, codEnabled?: bool
   if (/ราคา|บาท|฿|baht|\bprice\b/.test(norm)) {
     for (const match of norm.matchAll(/(?:^|[^\d])(\d{2,7})(?!\d)/g)) {
       const after = norm.slice((match.index ?? 0) + match[0].length)
-      if (COUNT_AFTER.test(after)) {
+      if (COUNT_AFTER.test(after) || COUNT_RANGE_AFTER.test(after)) {
         // A count is a fact only in that the shop or the customer said it.
         if (!countSupported(match[1], evidence, asked)) return false
         continue
@@ -480,7 +488,8 @@ function claimSupported(claim: NumberClaim, evidence: string): boolean {
   if (!claim.digits) return false
   if (claim.unit && claim.unit !== 'account') {
     const unit = claim.unit === '฿' ? '(?:฿|บาท)' : claim.unit
-    const re = new RegExp(`${escapeRegExp(claim.digits)}\\s*${unit}|${unit}\\s*${escapeRegExp(claim.digits)}`)
+    // Whole numbers only: "50 บาท" is not supported by "1,650 บาท" (normalised to "1650 บาท").
+    const re = new RegExp(`(?<![\\d.])${escapeRegExp(claim.digits)}\\s*${unit}|${unit}\\s*${escapeRegExp(claim.digits)}(?![\\d.])`)
     return re.test(evidence)
   }
   return new RegExp(`(?:^|[^\\d])${escapeRegExp(claim.digits)}(?!\\d)`).test(evidence)
