@@ -284,6 +284,69 @@ test('a count nobody said is still unsupported', () => {
   assert.equal(verdict.reason, 'unsupported_shop_fact')
 })
 
+// 28 Nov 2026, CheckMee: "ถ้าเกินล่ะ" was answered with the right price list and handed off,
+// because the 11 in "11–20 คน" (not followed directly by คน) was read as an 11-baht price.
+const tiers: EvidenceChunk[] = [
+  {
+    id: CHUNK,
+    content: [
+      '11–20 คน (แพ็กเกจเล็ก): 60 บาท/คน/เดือน ขั้นต่ำ 660 บาท/เดือน',
+      '21–30 คน (แพ็กเกจเริ่มต้น): 55 บาท/คน/เดือน ขั้นต่ำ 1,200 บาท/เดือน',
+      '31–100 คน (แพ็กเกจมาตรฐาน): 45 บาท/คน/เดือน ขั้นต่ำ 1,650 บาท/เดือน',
+      'เกิน 100 คน (แพ็กเกจไม่จำกัด): 35 บาท/คน/เดือน ขั้นต่ำ 4,500 บาท/เดือน',
+    ].join('\n'),
+  },
+]
+
+test('a headcount range beside a price is a count, not a price', () => {
+  const draft = [
+    'ถ้าเกิน 10 คน คิดตามจำนวนพนักงานค่ะ',
+    '11–20 คน (แพ็กเกจเล็ก): 60 บาท/คน/เดือน ขั้นต่ำ 660 บาท/เดือน',
+    '21–30 คน (แพ็กเกจเริ่มต้น): 55 บาท/คน/เดือน ขั้นต่ำ 1,200 บาท/เดือน',
+    '31–100 คน (แพ็กเกจมาตรฐาน): 45 บาท/คน/เดือน ขั้นต่ำ 1,650 บาท/เดือน',
+    'เกิน 100 คน (แพ็กเกจไม่จำกัด): 35 บาท/คน/เดือน ขั้นต่ำ 4,500 บาท/เดือน',
+  ].join('\n')
+  const verdict = check(draft, { chunks: tiers, customerMessage: 'ถ้าเกินล่ะ' })
+  assert.equal(verdict.grounded, true)
+  assert.equal(verdict.shouldHandoff, false)
+  assert.equal(verdict.text.includes('1,650'), true)
+})
+
+test('other ways of writing a range are counts too', () => {
+  for (const range of ['11 - 20 คน', '11 ถึง 20 คน', '11-20คน', '11 — 20 คน']) {
+    const verdict = check(`${range} คนละ 60 บาทค่ะ`, { chunks: tiers, customerMessage: 'ถ้าเกินล่ะ' })
+    assert.equal(verdict.grounded, true, range)
+  }
+})
+
+test('a range nobody wrote is still unsupported', () => {
+  const verdict = check('37–45 คน คนละ 60 บาทค่ะ', { chunks: tiers, customerMessage: 'ถ้าเกินล่ะ' })
+  assert.equal(verdict.grounded, false)
+  assert.equal(verdict.reason, 'unsupported_shop_fact')
+})
+
+test('a wrong price beside a real headcount range is still caught', () => {
+  const verdict = check('11–20 คน คนละ 50 บาทค่ะ', { chunks: tiers, customerMessage: 'ถ้าเกินล่ะ' })
+  assert.equal(verdict.grounded, false)
+  assert.equal(verdict.text, GROUNDING_HANDOFF.th)
+})
+
+test('a price is not supported by the end of a longer price', () => {
+  // "50 บาท" and "500 บาท" are the tail digits of "1,650 บาท" and "4,500 บาท".
+  for (const wrong of ['คนละ 50 บาทค่ะ', 'ขั้นต่ำ 500 บาทค่ะ']) {
+    const verdict = check(wrong, { chunks: tiers, customerMessage: 'ราคาเท่าไหร่' })
+    assert.equal(verdict.grounded, false, wrong)
+  }
+  assert.equal(check('ขั้นต่ำ 1,650 บาทค่ะ', { chunks: tiers, customerMessage: 'ราคาเท่าไหร่' }).grounded, true)
+  assert.equal(check('ราคา ฿290 ค่ะ', { customerMessage: 'ราคาเท่าไหร่' }).grounded, true)
+})
+
+test('a dash between two prices is not a headcount range', () => {
+  // No count unit after "60-99", so both numbers are still checked as prices.
+  const verdict = check('ราคา 60-99 บาทค่ะ', { chunks: tiers, customerMessage: 'ราคาเท่าไหร่' })
+  assert.equal(verdict.grounded, false)
+})
+
 test('a wrong price beside a real headcount is still caught', () => {
   const verdict = check('11 คน เดือนละ 550 บาทค่ะ', { chunks: pricing, customerMessage: '11 คน' })
   assert.equal(verdict.grounded, false)
